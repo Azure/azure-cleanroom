@@ -1,0 +1,56 @@
+name: Release CGS JS App
+description: Release CGS JS App
+
+inputs:
+  tag:
+    description: The tag
+    required: true
+  environment:
+    description: The environment being released to
+    required: true
+  registry-name:
+    description: The registry to which the images need to be pushed
+    required: true
+  client-id:
+    description: The client ID to connect to the registry
+    required: true
+  tenant-id:
+    description: The tenant ID of the registry
+    required: true
+  subscription-id:
+    description: The subscription ID of the registry
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+
+    # The azure/docker-login action currently does not support authentication using
+    # federated credentials - https://github.com/Azure/docker-login/issues/56. Hence,
+    # resorting to a manual login.
+    - shell: bash
+      run: az acr login --name ${{ inputs.registry-name }}
+
+    - uses: actions/download-artifact@v4
+      id: download-cgs-js-app
+      with:
+        name: cgs-js-app-${{ inputs.tag }}.json
+
+    - shell: pwsh
+      run: |
+        $bundle_digest = cat bundle.json | jq -S -j | sha256sum | cut -d ' ' -f 1
+        oras push ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/cgs-js-app:"${{ inputs.tag }},$bundle_digest,latest" ./bundle.json `
+          --annotation "cleanroom.version=${{ inputs.tag }}" `
+          --annotation "bundle.json.digest=sha256:$bundle_digest"
+
+    - uses: ./.github/actions/attest-artefact
+      with:
+        name: cgs-js-app
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        registry-name: ${{ inputs.registry-name }}

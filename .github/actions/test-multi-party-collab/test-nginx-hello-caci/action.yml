@@ -1,0 +1,96 @@
+name: Test nginx hello CACI
+description: Test nginx hello CACI
+inputs:
+  registry-url:
+    description: The registry URL
+    required: true
+  tag:
+    description: The tag for the built image
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Delete huge unnecessary tools folder # https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
+      shell: bash
+      run: rm -rf /opt/hostedtoolcache
+
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Add docker user
+      shell: bash
+      run: sudo usermod -aG docker $USER
+
+    - shell: pwsh
+      run: Install-Module -Name powershell-yaml -Force
+
+    - name: Login to Azure and refresh token
+      uses: ./.github/actions/login-to-azure
+      env:
+        CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
+        TENANT_ID: ${{ env.AZURE_TENANT_ID }}
+
+    - name: Login to Cleanroom Build ACR
+      shell: bash
+      run: az acr login --name cleanroombuild
+
+    - name: Log in to Azure Container Registry
+      shell: pwsh
+      run: az acr login -n ${{ inputs.registry-url}}
+
+    - name: Run collab scenario on caci
+      shell: pwsh
+      run: ./test/onebox/multi-party-collab/nginx-hello/run-collab-aci.ps1 -registry acr -registryUrl ${{ inputs.registry-url }} -tag ${{ inputs.tag }}
+
+    - name: Dump ccf-provider-client logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: docker logs ccf-provider-client-1
+
+    - name: Dump ob-nginx-client logs
+      if: ${{ !cancelled() }}
+      shell: pwsh
+      run: docker logs ob-nginx-client-cgs-client-1
+
+    - name: Dump ccr-client-proxy logs
+      if: ${{ !cancelled() }}
+      shell: pwsh
+      run: docker logs ccr-client-proxy
+
+    - name: Upload results
+      uses: actions/upload-artifact@v4
+      with:
+          name: results
+          path: ./test/onebox/multi-party-collab/nginx-hello/generated/results
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - name: Upload configurations
+      uses: actions/upload-artifact@v4
+      with:
+          name: configurations
+          path: ./test/onebox/multi-party-collab/nginx-hello/generated/configurations
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - name: Upload deployments
+      uses: actions/upload-artifact@v4
+      with:
+          name: deployments
+          path: ./test/onebox/multi-party-collab/nginx-hello/generated/deployments
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - name: Upload ccf
+      uses: actions/upload-artifact@v4
+      with:
+          name: ccf
+          path: ./test/onebox/multi-party-collab/generated/ccf
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - name: Delete resource groups
+      if: success()
+      shell: pwsh
+      run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-${{ env.JOB_ID }}-${{ env.RUN_ID }}"

@@ -1,0 +1,45 @@
+name: Login and Refresh Token
+description: Login and Refresh Token
+
+runs:
+  using: composite
+  steps:
+    - name: Move azcli to v2.63
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install apt-transport-https ca-certificates curl gnupg lsb-release
+        sudo mkdir -p /etc/apt/keyrings
+        curl -sLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /etc/apt/keyrings/microsoft.gpg > /dev/null
+        sudo chmod go+r /etc/apt/keyrings/microsoft.gpg
+        AZ_DIST=$(lsb_release -cs)
+        echo "Types: deb
+        URIs: https://packages.microsoft.com/repos/azure-cli/
+        Suites: ${AZ_DIST}
+        Components: main
+        Architectures: $(dpkg --print-architecture)
+        Signed-by: /etc/apt/keyrings/microsoft.gpg" | sudo tee /etc/apt/sources.list.d/azure-cli.sources
+        sudo apt-get install azure-cli=2.63.0-1~${AZ_DIST} -y --allow-downgrades
+
+    # The OIDC token expires every 5 minutes. Any login attempted post that will fail with
+    # "ERROR: AADSTS700024: Client assertion is not within its valid time range."
+    # To keep the OIDC token active, keep logging in every 4 minutes.
+    # https://github.com/Azure/azure-cli/issues/28708#issuecomment-2049014471.
+    - name: Fetch OID token every 4 mins
+      shell: bash
+      run: |
+        token_request=$ACTIONS_ID_TOKEN_REQUEST_TOKEN
+        token_uri=$ACTIONS_ID_TOKEN_REQUEST_URL
+        token=$(curl -H "Authorization: bearer $token_request" "${token_uri}&audience=api://AzureADTokenExchange" | jq .value -r)
+        az login --service-principal -u ${{ env.CLIENT_ID }} -t ${{ env.TENANT_ID }} --federated-token $token
+        while true; do
+          token=$(curl -H "Authorization: bearer $token_request" "${token_uri}&audience=api://AzureADTokenExchange" | jq .value -r)
+          az login --service-principal -u ${{ env.CLIENT_ID }} -t ${{ env.TENANT_ID }} --federated-token $token
+          # Sleep for 4 minutes
+          sleep 240
+        done &
+
+    - name: Check if OID token was fetched
+      shell: bash
+      run: |
+        az account show | jq ".user"

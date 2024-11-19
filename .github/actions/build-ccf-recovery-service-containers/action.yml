@@ -1,0 +1,45 @@
+name: Build CCF recovery service containers
+description: Build CCF recovery service containers
+
+inputs:
+  tag:
+    required: true
+    description: The tag
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccf-recovery-service
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.ccf-recovery-service
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccr-proxy
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.proxy
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccr-attestation
+        tag: ${{ inputs.tag }}
+        dockerfile: external/confidential-sidecar-containers/docker/attestation-container/Dockerfile
+        context: ${{ github.workspace }}/external/confidential-sidecar-containers
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccf-nginx
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.ccf-nginx
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: skr
+        tag: ${{ inputs.tag }}
+        dockerfile: external/confidential-sidecar-containers/docker/skr/Dockerfile.skr
+        context: ${{ github.workspace }}/external/confidential-sidecar-containers

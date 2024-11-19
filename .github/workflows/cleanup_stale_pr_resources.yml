@@ -1,0 +1,35 @@
+name: Cleanup stale resources created by PRs
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 1 * * *"
+
+permissions:
+  id-token: write
+  contents: read  # This is required for actions/checkout
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  cleanup-stale-resources:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    environment: pr
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Login to Azure
+      uses: azure/login@v2
+      with:
+        client-id: ${{ vars.AZURE_CLIENT_ID }}
+        tenant-id: ${{ vars.AZURE_TENANT_ID }}
+        subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Execute cleanup
+      env:
+        AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      run: pwsh ./.github/scripts/cleanup.ps1 -environment "pr"

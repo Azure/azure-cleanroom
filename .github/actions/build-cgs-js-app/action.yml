@@ -1,0 +1,23 @@
+name: Build CGS JS App
+description: Build CGS JS App
+
+inputs:
+  tag:
+    required: true
+    description: The tag
+
+runs:
+  using: composite
+  steps:
+    - uses: docker/build-push-action@v5
+      with:
+        file: ./build/docker/Dockerfile.governance.ccf-app
+        context: ${{ github.workspace }}/src/governance/ccf-app
+        target: dist
+        outputs: type=local,dest=.
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: cgs-js-app-${{ inputs.tag }}.json
+        path: ./bundle.json
+        overwrite: true

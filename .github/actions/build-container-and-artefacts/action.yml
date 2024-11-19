@@ -1,0 +1,97 @@
+name: Build container and related artefacts
+description: Build container and related artefacts
+inputs:
+  name:
+    description: Name of the container being built
+    required: true
+  tag:
+    description: The tag for the built image
+    required: true
+  dockerfile:
+    description: The Dockerfile to be used for building the container
+    required: true
+  context:
+    description: The context for docker builds
+    required: true
+  build-args:
+    description: The build arguments for the container
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: built-containers
+
+    - shell: pwsh
+      id: check-built-containers
+      run: |
+        $builtContainers = Get-Content built-containers.txt
+        if ($builtContainers -contains '${{ inputs.name }}') {
+          Write-Host "Container ${{ inputs.name }} already built. Skipping."
+          echo "container_built=true" >> $env:GITHUB_OUTPUT
+        }
+        else {
+          echo "container_built=false" >> $env:GITHUB_OUTPUT
+        }
+
+    - uses: docker/build-push-action@v5
+      if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
+      with:
+        tags: ${{ inputs.name }}:${{ inputs.tag }}
+        file: ${{ inputs.dockerfile }}
+        build-args: ${{ inputs.build-args }}
+        context: ${{ inputs.context }}
+
+    - shell: bash
+      if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
+      run: |
+        mkdir -p ${{ inputs.name }}-sbom
+        sbom-tool generate -di ${{ inputs.name }}:${{ inputs.tag }} -pn ${{ inputs.name }} -ps Microsoft -pv ${{ inputs.tag }} -m ${{ inputs.name }}-sbom -V Verbose
+
+    - shell: bash
+      if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
+      run: docker inspect ${{ inputs.name }}:${{ inputs.tag }} > ${{ inputs.name }}.json
+
+    # build-push-action cannot write to two outputs in one go (https://github.com/docker/build-push-action/?tab=readme-ov-file#inputs).
+    # We need the .tar for further steps and the actual image to generate the SBOM. To work
+    # around this, we let build-push-action create an image. Once the SBOM is generated
+    # and saved, we manually run a docker save on the image.
+    - shell: bash
+      if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
+      run: docker save --output ${{ inputs.name }}-${{ inputs.tag }}.tar ${{ inputs.name }}:${{ inputs.tag }}
+
+    - uses: actions/upload-artifact@v4
+      if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
+      with:
+        name: ${{ inputs.name }}
+        path: |
+          ${{ inputs.name }}-${{ inputs.tag }}.tar
+          ${{ inputs.name }}-sbom/_manifest/spdx_2.2/manifest.spdx.json
+          ${{ inputs.name }}-sbom/_manifest/spdx_2.2/manifest.spdx.json.sha256
+          ${{ inputs.name }}.json
+        overwrite: true
+
+    - shell: bash
+      run: docker images
+
+    # Delete the image and .tar to avoid running into "No space left on device".
+    - shell: pwsh
+      if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
+      run: |
+        docker rmi -f $(docker images -aq)
+        rm -rf ${{ inputs.name }}-${{ inputs.tag }}.tar
+        rm -rf ${{ inputs.name }}.json
+        rm -rf ${{ inputs.name }}-sbom
+
+    - shell: bash
+      if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
+      run: echo "${{ inputs.name }}" >> built-containers.txt
+
+    - uses: actions/upload-artifact@v4
+      if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
+      with:
+        name: built-containers
+        path: built-containers.txt
+        overwrite: true

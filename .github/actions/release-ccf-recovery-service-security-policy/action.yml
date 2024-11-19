@@ -1,0 +1,47 @@
+name: Release CCF Recovery Service Security Policy
+description: Release CCF Recovery Service Security Policy
+
+inputs:
+  tag:
+    description: The tag
+    required: true
+  environment:
+    description: The environment being released to
+    required: true
+  registry-name:
+    description: The registry to which the images need to be pushed
+    required: true
+  client-id:
+    description: The client ID to connect to the registry
+    required: true
+  tenant-id:
+    description: The tenant ID of the registry
+    required: true
+  subscription-id:
+    description: The subscription ID of the registry
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+
+    # The azure/docker-login action currently does not support authentication using
+    # federated credentials - https://github.com/Azure/docker-login/issues/56. Hence,
+    # resorting to a manual login.
+    - shell: bash
+      run: az acr login --name ${{ inputs.registry-name }}
+
+    - shell: pwsh
+      run: Install-Module -Name powershell-yaml -Force
+
+    - shell: pwsh
+      run: |
+        ./build/build-ccf-recovery-service-security-policy.ps1 `
+          -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom `
+          -tag ${{ inputs.tag }} `
+          -push

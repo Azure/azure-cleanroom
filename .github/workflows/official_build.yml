@@ -1,0 +1,164 @@
+name: Official Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The tag
+        required: false
+        type: string
+      build-type:
+        description: The build type
+        type: string
+        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers"
+  workflow_call:
+    inputs:
+      tag:
+        description: The tag
+        required: false
+        type: string
+      build-type:
+        description: The build type
+        type: string
+        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers"
+
+permissions:
+  contents: read  # This is required for actions/checkout
+  id-token: write # This is required for generating OIDC access token
+
+# If a build is triggered on the same tag/commit hash, cancel previous run.
+# See https://docs.github.com/en/actions/using-jobs/using-concurrency
+concurrency:
+  group: ${{ inputs.tag || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    environment: test
+    steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 6.0.x
+
+      - name: Install powershell-yaml
+        shell: pwsh
+        run: Install-Module -Name powershell-yaml -Force
+
+      # Generate SBOM for the container using
+      # https://github.com/microsoft/sbom-tool/blob/main/docs/setting-up-github-actions.md#adding-the-sbom-generation-task
+      - name: Setup SBOM tool
+        run: |
+          curl -Lo $RUNNER_TEMP/sbom-tool https://github.com/microsoft/sbom-tool/releases/latest/download/sbom-tool-linux-x64
+          chmod +x $RUNNER_TEMP/sbom-tool
+          sudo mv $RUNNER_TEMP/sbom-tool /usr/bin/sbom-tool
+
+      # https://github.com/Azure/azure-storage-fuse/blob/main/.github/workflows/trivy.yaml#L36
+      - name: Install blobfuse prerequisites
+        run: sudo apt-get install libfuse3-dev fuse3 -y
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-tags: true
+          ref: ${{ inputs.tag }}
+
+      - name: Generate short commit hash
+        if: ${{ inputs.tag == ''}}
+        id: get-short-commit-hash
+        run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Login to Azure
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+
+      - name: Login to Cleanroom Build ACR
+        shell: bash
+        run: az acr login --name cleanroombuild
+
+      - name: Build identity sidecar
+        if: ${{ contains(inputs.build-type, 'cleanroom-containers') }}
+        run: |
+          dotnet restore src/identity/Identity.sln
+          dotnet build --no-restore src/identity/Identity.sln
+
+      - name: Build blobfuse-launcher
+        if: ${{ contains(inputs.build-type, 'cleanroom-containers') }}
+        run: cd external/azure-storage-fuse && ./build.sh
+
+      - name: Build governance solution
+        if: ${{ contains(inputs.build-type, 'cleanroom-containers') || contains(inputs.build-type, 'governance-client-containers')}} 
+        run: |
+          dotnet restore src/governance/governance.sln
+          dotnet build --no-restore src/governance/governance.sln
+
+      - name: Build CCF solution
+        if: ${{ contains(inputs.build-type, 'ccf') }} 
+        run: |
+          dotnet restore src/ccf/ccf.sln
+          dotnet build --no-restore src/ccf/ccf.sln
+
+      - name: Create file to track built containers
+        run: touch built-containers.txt
+
+      - name: Upload built-containers artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-containers
+          path: built-containers.txt
+          overwrite: true
+
+      - name: Build cleanroom client artefacts
+        if: ${{ contains(inputs.build-type, 'cleanroom-containers') }}
+        uses: docker/build-push-action@v5
+        with:
+          file: ./build/docker/Dockerfile.azcliext.cleanroom
+          context: ${{ github.workspace }}
+          target: dist
+          outputs: type=local,dest=${{ github.workspace }}/src/tools/cleanroom-client/dist
+
+      - name: Build cleanroom containers
+        if: ${{ contains(inputs.build-type, 'cleanroom-containers') }}
+        uses: ./.github/actions/build-cleanroom-containers
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+
+      - name: Build governance client containers
+        if: ${{ contains(inputs.build-type, 'governance-client-containers') }}
+        uses: ./.github/actions/build-governance-client-containers
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+
+      - name: Build CGS JS App
+        if: ${{ contains(inputs.build-type, 'cgs-js-app') }}
+        uses: ./.github/actions/build-cgs-js-app
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+
+      - name: Build CGS constitution
+        if: ${{ contains(inputs.build-type, 'cgs-constitution') }}
+        uses: ./.github/actions/build-cgs-constitution
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+
+      - name: Build CCF provider client
+        if: ${{ contains(inputs.build-type, 'ccf-provider-client') }}
+        uses: ./.github/actions/build-ccf-provider-client
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+
+      - name: Build CCF network containers
+        if: ${{ contains(inputs.build-type, 'ccf-network-containers') }}
+        uses: ./.github/actions/build-ccf-network-containers
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+
+      - name: Build CCF recovery service containers
+        if: ${{ contains(inputs.build-type, 'ccf-recovery-service-containers') }}
+        uses: ./.github/actions/build-ccf-recovery-service-containers
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}

@@ -1,0 +1,159 @@
+name: Release cleanroom containers
+description: Release cleanroom containers
+inputs:
+  tag:
+    description: The tag
+    required: true
+  environment:
+    description: The environment being released to
+    required: true
+  artefact-name:
+    description: The name of the artefact associated with the container
+    required: true
+  registry-name:
+    description: The registry to which the images need to be pushed
+    required: true
+  client-id:
+    description: The client ID to connect to the registry
+    required: true
+  tenant-id:
+    description: The tenant ID of the registry
+    required: true
+  subscription-id:
+    description: The subscription ID of the registry
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/release-container
+      with:
+        name: ccr-init
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: ccr-init
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
+
+    - uses: ./.github/actions/release-container
+      with:
+        name: identity
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: identity
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
+
+    - uses: ./.github/actions/release-container
+      with:
+        name: blobfuse-launcher
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: blobfuse-launcher
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
+
+    - uses: ./.github/actions/release-container
+      with:
+        name: code-launcher
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: code-launcher
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
+
+    - uses: ./.github/actions/release-container
+      with:
+        name: otel-collector
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: otel-collector
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
+
+    - uses: ./.github/actions/release-container
+      with:
+        name: ccr-attestation
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: ccr-attestation
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
+
+    - uses: ./.github/actions/release-container
+      with:
+        name: ccr-secrets
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: ccr-secrets
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
+
+    - uses: ./.github/actions/release-container
+      with:
+        name: ccr-governance
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: ccr-governance
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
+
+    - uses: ./.github/actions/release-container
+      with:
+        name: cleanroom-client
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: cleanroom-client
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
+
+    - uses: ./.github/actions/release-container
+      with:
+        name: ccr-proxy
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: ccr-proxy
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
+
+    - uses: ./.github/actions/release-container
+      with:
+        name: ccr-proxy-ext-processor
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: ccr-proxy-ext-processor
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
+
+    - uses: ./.github/actions/release-container
+      with:
+        name: skr
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: skr
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
