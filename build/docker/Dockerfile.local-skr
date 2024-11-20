@@ -34,6 +34,7 @@ WORKDIR /app
 
 # Copy the published output from the build stage to the runtime stage
 COPY --from=build /app/publish .
+RUN chmod +x ./bootstrap.sh
 
 # Copy the key files and the maa request that will be used for SKR.
 COPY samples/governance/insecure-virtual/keys/ccr_gov_priv_key.pem .
