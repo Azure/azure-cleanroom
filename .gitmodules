@@ -1,9 +1,1 @@
-[submodule "external/azure-storage-fuse"]
-	path = external/azure-storage-fuse
-	url = https://github.com/Azure/azure-storage-fuse.git
-[submodule "external/rahasya"]
-	path = external/rahasya
-	url = https://github.com/Sahamati/rahasya.git
-[submodule "external/confidential-sidecar-containers"]
-	path = external/confidential-sidecar-containers
-	url = https://github.com/microsoft/confidential-sidecar-containers
+
