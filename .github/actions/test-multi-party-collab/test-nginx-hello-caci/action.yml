@@ -32,10 +32,6 @@ runs:
         TENANT_ID: ${{ env.AZURE_TENANT_ID }}
         SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-    - name: Login to Cleanroom Build ACR
-      shell: bash
-      run: az acr login --name cleanroombuild
-
     - name: Log in to Azure Container Registry
       shell: pwsh
       run: az acr login -n ${{ inputs.registry-url}}

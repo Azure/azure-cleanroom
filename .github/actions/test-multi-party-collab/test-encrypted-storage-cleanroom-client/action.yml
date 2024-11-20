@@ -21,10 +21,6 @@ runs:
     - shell: pwsh
       run: Install-Module -Name powershell-yaml -Force
 
-    - name: Login to Cleanroom Build ACR
-      shell: bash
-      run: az acr login --name cleanroombuild
-
     - name: Deploy Kind cluster
       shell: bash
       run: bash ./test/onebox/kind-up.sh

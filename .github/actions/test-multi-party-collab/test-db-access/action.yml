@@ -21,17 +21,9 @@ runs:
         TENANT_ID: ${{ env.AZURE_TENANT_ID }}
         SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-    - name: Login to Cleanroom Build ACR
-      shell: bash
-      run: az acr login --name cleanroombuild
-
     - name: Deploy Kind cluster
       shell: bash
       run: bash ./test/onebox/kind-up.sh
-
-    - name: Login to Cleanroom Samples ACR
-      shell: bash
-      run: az acr login --name cleanroomsamples
 
     - name: Build clean room containers
       shell: pwsh
