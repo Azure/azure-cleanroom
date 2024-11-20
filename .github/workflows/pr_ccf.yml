@@ -55,6 +55,7 @@ jobs:
         env:
           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to Azure Container Registry
         shell: pwsh
@@ -84,6 +85,8 @@ jobs:
         env:
           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Deploy local virtual CCF network via CCF provider
         run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1 -infraType virtual -nodeCount 3 -registryUrl ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
@@ -133,6 +136,7 @@ jobs:
 #         env:
 #           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
 #           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+#           SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 #       - name: Deploy local virtual CCF network via CCF provider
 #         run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1 -infraType virtual -nodeCount 3 -registryUrl ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
@@ -187,6 +191,8 @@ jobs:
         env:
           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Deploy local virtual CCF network via CCF provider
         run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1 -infraType virtual -nodeCount 3 -confidentialRecovery -registryUrl ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
@@ -258,6 +264,8 @@ jobs:
         env:
           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Deploy local virtual CCF network via CCF provider
         run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1 -infraType virtual -nodeCount 3 -confidentialRecovery -oneStepConfigureConfidentialRecovery -registryUrl ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
@@ -327,6 +335,8 @@ jobs:
         env:
           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Deploy a virtual ACI CCF network via CCF provider
         # TODO (gsinha): Passing nodeCount as 1 and -NoTest (which does scale up) as an N node cluster is at times failing to join the start node with an SSL error.
         run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1 -infraType virtualaci -nodeCount 1 -NoTest -registryUrl ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
@@ -371,6 +381,8 @@ jobs:
         env:
           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Deploy a CACI CCF network via CCF provider
         # TODO (gsinha): Passing nodeCount as 1 and as an N node cluster is at times failing to join the start node with an SSL error.
         run: >
@@ -424,6 +436,8 @@ jobs:
         env:
           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Deploy a CACI CCF network via CCF provider
         # TODO (gsinha): Passing nodeCount as 1 as creating an N node cluster is at times failing to join the start node with an SSL error.
         # Scaling up to N nodes after creating a 1 node network does not hit the issue.
@@ -499,6 +513,8 @@ jobs:
         env:
           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Deploy a CACI CCF network via CCF provider
         # TODO (gsinha): Passing nodeCount as 1 as creating an N node cluster is at times failing to join the start node with an SSL error.
         # Scaling up to N nodes after creating a 1 node network does not hit the issue.
@@ -569,6 +585,8 @@ jobs:
         env:
           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Deploy a CACI CCF network via CCF provider
         # TODO (gsinha): Passing nodeCount as 1 as creating an N node cluster is at times failing to join the start node with an SSL error.
         # Scaling up to N nodes after creating a 1 node network does not hit the issue.
@@ -650,6 +668,8 @@ jobs:
         env:
           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Deploy a CACI CCF network via CCF provider
         # TODO (gsinha): Passing nodeCount as 1 as creating an N node cluster is at times failing to join the start node with an SSL error.
         # Scaling up to N nodes after creating a 1 node network does not hit the issue.
@@ -722,6 +742,8 @@ jobs:
         env:
           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Deploy a CACI CCF network via CCF provider
         # TODO (gsinha): Passing nodeCount as 1 as creating an N node cluster is at times failing to join the start node with an SSL error.
         # Scaling up to N nodes after creating a 1 node network does not hit the issue.
@@ -792,6 +814,8 @@ jobs:
         env:
           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Deploy a CACI CCF network via CCF provider
         # TODO (gsinha): Passing nodeCount as 1 as creating an N node cluster is at times failing to join the start node with an SSL error.
         # Scaling up to N nodes after creating a 1 node network does not hit the issue.

@@ -26,6 +26,7 @@ jobs:
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -43,6 +44,7 @@ jobs:
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -60,6 +62,7 @@ jobs:
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -77,6 +80,7 @@ jobs:
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -106,6 +110,7 @@ jobs:
         env:
           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to Azure Container Registry
         shell: pwsh
@@ -131,6 +136,7 @@ jobs:
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -155,6 +161,7 @@ jobs:
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       TDP_HSM_RESOURCE_GROUP: 'pr-covidtraining-rg'
@@ -180,6 +187,7 @@ jobs:
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -198,6 +206,7 @@ jobs:
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"

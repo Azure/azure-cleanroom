@@ -26,6 +26,7 @@ runs:
       env:
         CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
         TENANT_ID: ${{ env.AZURE_TENANT_ID }}
+        SUBSCRIPTION_ID: ${{ env.SUBSCRIPTION_ID }}
 
     - name: Login to Cleanroom Build ACR
       shell: bash
