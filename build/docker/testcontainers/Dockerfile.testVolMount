@@ -1,7 +1,0 @@
-FROM cleanroombuild.azurecr.io/mirror/docker/library/bash:latest
-
-COPY --chmod=755 src/scripts/wait-for-file.sh /
-
-ENTRYPOINT /wait-for-file.sh
-
-CMD /wait-for-file.sh
