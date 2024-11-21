@@ -253,9 +253,9 @@ jobs:
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
-      TDP_MHSM_NAME: 'azcleanroombvthsm'
+      TDP_MHSM_NAME: 'azcleanroombvthsm2'
       TDC_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
-      TDC_MHSM_NAME: 'azcleanroombvthsm'
+      TDC_MHSM_NAME: 'azcleanroombvthsm2'
       USE_PREPROVISIONED_OIDC: "true"
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
