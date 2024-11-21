@@ -62,10 +62,6 @@ jobs:
         shell: pwsh
         run: az acr login -n ${{ vars.ACR_URL }}
 
-      - name: Login to Cleanroom Build ACR
-        shell: bash
-        run: az acr login --name cleanroombuild
-
       - name: Build CCF containers
         run: pwsh ./build/ccf/build-ccf-infra-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -pushPolicy
 

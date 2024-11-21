@@ -77,10 +77,6 @@ jobs:
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Login to Cleanroom Build ACR
-        shell: bash
-        run: az acr login --name cleanroombuild
-
       - name: Build identity sidecar
         if: ${{ contains(inputs.build-type, 'cleanroom-containers') }}
         run: |
