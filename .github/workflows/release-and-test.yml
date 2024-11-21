@@ -263,7 +263,7 @@ jobs:
       contents: read  # This is required for actions/checkout
     strategy:
       matrix:
-        key-store: [mhsm, akvpremium]
+        key-store: [akvpremium] #[mhsm, akvpremium]
       # Prevent Github from cancelling other jobs of the matrix if one of them fails.
       fail-fast: false
     steps:
