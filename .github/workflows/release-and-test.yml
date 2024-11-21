@@ -248,15 +248,14 @@ jobs:
     environment: test
     env:
       RELEASE_ACR_NAME: ${{ vars.RELEASE_ACR_NAME }}
-      BVT_MANAGED_IDENTITY_ARM_ID: ${{ vars.BVT_MANAGED_IDENTITY_ARM_ID}}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
-      TDP_HSM_RESOURCE_GROUP: 'bvt-covidtraining-rg'
-      TDP_MHSM_NAME: 'bvthsm2sea'
-      TDC_HSM_RESOURCE_GROUP: 'bvt-covidtraining-rg'
-      TDC_MHSM_NAME: 'bvthsm2sea'
+      TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
+      TDP_MHSM_NAME: 'azcleanroombvthsm'
+      TDC_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
+      TDC_MHSM_NAME: 'azcleanroombvthsm'
       USE_PREPROVISIONED_OIDC: "true"
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
@@ -293,7 +292,6 @@ jobs:
     environment: test
     env:
       RELEASE_ACR_NAME: ${{ vars.RELEASE_ACR_NAME }}
-      BVT_MANAGED_IDENTITY_ARM_ID: ${{ vars.BVT_MANAGED_IDENTITY_ARM_ID}}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       RUN_ID: ${{ github.run_id }}
@@ -328,7 +326,6 @@ jobs:
     environment: test
     env:
       RELEASE_ACR_NAME: ${{ vars.RELEASE_ACR_NAME }}
-      BVT_MANAGED_IDENTITY_ARM_ID: ${{ vars.BVT_MANAGED_IDENTITY_ARM_ID}}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       RUN_ID: ${{ github.run_id }}
