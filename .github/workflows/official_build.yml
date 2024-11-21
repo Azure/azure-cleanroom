@@ -21,7 +21,6 @@ on:
         description: The build type
         type: string
         default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers"
-  push:
 
 permissions:
   contents: read  # This is required for actions/checkout

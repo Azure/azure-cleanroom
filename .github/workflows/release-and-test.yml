@@ -22,7 +22,6 @@ on:
         description: The build type
         type: string
         default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers"
-  push:
 
 jobs:
   build:
@@ -250,6 +249,7 @@ jobs:
       RELEASE_ACR_NAME: ${{ vars.RELEASE_ACR_NAME }}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
@@ -294,6 +294,7 @@ jobs:
       RELEASE_ACR_NAME: ${{ vars.RELEASE_ACR_NAME }}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -328,6 +329,7 @@ jobs:
       RELEASE_ACR_NAME: ${{ vars.RELEASE_ACR_NAME }}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
