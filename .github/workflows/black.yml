@@ -7,6 +7,7 @@ on:
     branches:
     - main
     - release
+  push:
 
 # When a new revision is pushed to a PR, cancel all in-progress CI runs for that
 # PR. See https://docs.github.com/en/actions/using-jobs/using-concurrency
