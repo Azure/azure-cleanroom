@@ -22,6 +22,7 @@ on:
         description: The build type
         type: string
         default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers"
+  push:
 
 jobs:
   build:
