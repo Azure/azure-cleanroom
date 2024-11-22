@@ -25,7 +25,10 @@ function Deploy-Aci-Governance {
         [string]$projectName,
 
         [Parameter(Mandatory)]
-        [string]$initialMemberName
+        [string]$initialMemberName,
+
+        [ValidateSet('mcr', 'local', 'acr')]
+        [string]$registry = "local"
     )
 
     #https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
@@ -55,8 +58,10 @@ function Deploy-Aci-Governance {
 
     az container delete --name $CCF_NAME --resource-group $ISV_RESOURCE_GROUP -y
 
-    # Install az cli before deploying ccf so that we can invoke az cleanroom ccf.
-    pwsh $root/build/build-azcliext-cleanroom.ps1
+    if (!$NoBuild) {
+        # Install az cli before deploying ccf so that we can invoke az cleanroom ccf.
+        pwsh $root/build/build-azcliext-cleanroom.ps1
+    }
 
     Deploy-Ccf `
         -resourceGroup $ISV_RESOURCE_GROUP `
@@ -80,7 +85,8 @@ function Deploy-Aci-Governance {
         -outDir $outDir `
         -NoTest `
         -NoBuild:$NoBuild `
-        -ccfEndpoint $ccfEndpoint
+        -ccfEndpoint $ccfEndpoint `
+        -registry $registry
     $result = @{
         ccfEndpoint = $ccfEndpoint
     }

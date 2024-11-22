@@ -50,8 +50,7 @@ def validate_envs(ns):
         ns.env_vars = mounts_dict
 
 
-# TODO (gsinha): Update to "cached" once the security policy implementation is complete.
-default_security_policy_creation_option = "allow-all"
+default_security_policy_creation_option = "cached"
 
 
 def load_arguments(self, _):

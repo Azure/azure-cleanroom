@@ -1,0 +1,28 @@
+# Use the official .NET SDK image as the base image for .NET development
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+
+# Set the working directory inside the container for .NET development
+WORKDIR /app
+COPY . .
+
+RUN dotnet publish -o /app/publish -c Release /app/test/UnitTests/UnitTests.csproj
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0
+
+WORKDIR /app
+
+COPY --from=build /app/publish .
+
+# Copy test scripts
+COPY test/run-tests-and-upload-results.ps1 test/run-tests-and-upload-results.ps1
+COPY test/wait-for-tests.ps1 test/wait-for-tests.ps1
+
+RUN apt-get update && \
+    apt-get install -y \
+    curl \
+    gnupg \
+    apt-transport-https \
+    podman
+
+# Install az cli
+RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash

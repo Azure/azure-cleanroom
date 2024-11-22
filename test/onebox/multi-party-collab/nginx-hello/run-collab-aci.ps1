@@ -66,6 +66,7 @@ $result = Deploy-Aci-Governance `
     -ccfName $CCF_NAME `
     -location $ISV_RESOURCE_GROUP_LOCATION `
     -NoBuild:$NoBuild `
+    -registry $registry `
     -registryUrl $registryUrl `
     -registryTag $tag `
     -allowAll:$allowAll `

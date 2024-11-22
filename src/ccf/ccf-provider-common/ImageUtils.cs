@@ -172,7 +172,12 @@ public static class ImageUtils
 
     public static string SkrImage()
     {
-        return $"{McrRegistryUrl}/skr:{McrTag}";
+        return GetImage("CCF_PROVIDER_SKR_IMAGE") ?? $"{McrRegistryUrl}/skr";
+    }
+
+    public static string SkrTag()
+    {
+        return GetTag("CCF_PROVIDER_SKR_IMAGE") ?? $"{McrTag}";
     }
 
     public static string CredentialsProxyImage()

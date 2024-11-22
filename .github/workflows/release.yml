@@ -28,14 +28,14 @@ jobs:
 
   # Add release specific tests here
   release-tests:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
     needs: ["build-test-msint"]
     steps:
       - name: Run release test
         run: echo 'No release tests configured!'
 
   release-to-prod:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
     environment: production
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
@@ -230,9 +230,23 @@ jobs:
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
 
+  post-release-validation:
+    needs: ["release-to-prod"]
+    permissions:
+      id-token: write
+      contents: read  # This is required for actions/checkout
+      attestations: write
+      packages: write
+
+    # The call below does not specify a branch parameter since the default behaviour of reusable
+    # workflows is to work on the same commit/tag as the calling workflow. Assuming the current
+    # workflow is running on the 'release' branch, this validation also runs on the 'release' branch.
+    # https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_iduses
+    uses: ./.github/workflows/release_verification_nightly.yml
+
   create-github-release:
     runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
-    needs: ["release-to-prod"]
+    needs: ["release-to-prod", "post-release-validation"]
     # Permission and environment variables below are needed to create a GitHub release
     permissions:
       contents: write

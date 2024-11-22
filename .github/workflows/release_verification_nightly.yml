@@ -1,0 +1,123 @@
+name: No-build Verification Nightly
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  schedule:
+    - cron: '0 2 * * *'
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ml-training-nightly:
+    permissions:
+      id-token: write
+      contents: read  # This is required for actions/checkout
+    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    environment: test
+    env:
+      TDP_HSM_RESOURCE_GROUP: 'bvt-covidtraining-rg'
+      TDP_MHSM_NAME: 'bvthsm2sea'
+      TDC_HSM_RESOURCE_GROUP: 'bvt-covidtraining-rg'
+      TDC_MHSM_NAME: 'bvthsm2sea'
+      USE_PREPROVISIONED_OIDC: "true"
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+    strategy:
+      matrix:
+        key-store: [mhsm, akvpremium]
+      # Prevent Github from cancelling other jobs of the matrix if one of them fails.
+      fail-fast: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-tags: true
+
+      - name: Check prerequisites
+        run: |
+          az version
+          openssl version
+
+      - name: Install az cleanroom CLI
+        run: az extension add --source https://cleanroomazcli.blob.core.windows.net/azcli/cleanroom-0.0.7-py2.py3-none-any.whl -y --allow-preview true
+
+      - name: Run ml-training test
+        uses: ./.github/actions/test-multi-party-collab/test-ml-training-caci
+        with:
+          registry-url: mcr.microsoft.com/cleanroom
+          tag: 1.0.12
+          kvType: ${{ matrix.key-store }}
+
+  encrypted-storage-nightly:
+    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    environment: test
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      USE_PREPROVISIONED_OIDC: "true"
+    # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
+    permissions:
+      id-token: write
+      contents: read  # This is required for actions/checkout
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-tags: true
+
+      - name: Check prerequisites
+        run: |
+          az version
+          openssl version
+
+      - name: Install az cleanroom CLI
+        run: az extension add --source https://cleanroomazcli.blob.core.windows.net/azcli/cleanroom-0.0.7-py2.py3-none-any.whl -y --allow-preview true
+
+      - name: Run encrypted-storage test
+        uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-caci
+        with:
+          registry-url: mcr.microsoft.com/cleanroom
+          tag: 1.0.12
+
+  nginx-hello-nightly:
+    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    environment: test
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      USE_PREPROVISIONED_OIDC: "true"
+    # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
+    permissions:
+      id-token: write
+      contents: read  # This is required for actions/checkout
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-tags: true
+
+      - name: Check prerequisites
+        run: |
+          az version
+          openssl version
+
+      - name: Install az cleanroom CLI
+        run: az extension add --source https://cleanroomazcli.blob.core.windows.net/azcli/cleanroom-0.0.7-py2.py3-none-any.whl -y --allow-preview true
+
+      - name: Run nginx-hello test
+        uses: ./.github/actions/test-multi-party-collab/test-nginx-hello-caci
+        with:
+          registry-url: mcr.microsoft.com/cleanroom
+          tag: 1.0.12

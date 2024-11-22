@@ -19,7 +19,7 @@ param
     [switch]
     $y,
 
-    [ValidateSet('mcr', 'local')]
+    [ValidateSet('mcr', 'local', 'acr')]
     [string]$registry = "local",
 
     [string]$registryUrl = "localhost:5001",

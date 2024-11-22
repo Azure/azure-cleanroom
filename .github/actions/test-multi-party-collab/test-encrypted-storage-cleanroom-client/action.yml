@@ -12,7 +12,6 @@ runs:
       env:
         CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
         TENANT_ID: ${{ env.AZURE_TENANT_ID }}
-        SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
     - name: Add docker user
       shell: bash
@@ -20,6 +19,10 @@ runs:
 
     - shell: pwsh
       run: Install-Module -Name powershell-yaml -Force
+
+    - name: Login to Cleanroom Build ACR
+      shell: bash
+      run: az acr login --name cleanroombuild
 
     - name: Deploy Kind cluster
       shell: bash
@@ -62,6 +65,34 @@ runs:
       shell: pwsh
       if: ${{ !cancelled() }}
       run: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
+
+    - uses: actions/upload-artifact@v4
+      with:
+          name: results-encrypted-storage-cleanroom-client
+          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated/results
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - uses: actions/upload-artifact@v4
+      with:
+          name: configurations-encrypted-storage-cleanroom-client
+          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated/configurations
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - uses: actions/upload-artifact@v4
+      with:
+          name: deployments-encrypted-storage-cleanroom-client
+          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated/deployments
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - uses: actions/upload-artifact@v4
+      with:
+          name: ccf-encrypted-storage-cleanroom-client
+          path: ./test/onebox/multi-party-collab/generated/ccf
+          overwrite: true
+      if: ${{ !cancelled() }}
 
     - name: Delete resource groups
       shell: pwsh

@@ -30,7 +30,10 @@ runs:
       env:
         CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
         TENANT_ID: ${{ env.AZURE_TENANT_ID }}
-        SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Login to Cleanroom Build ACR
+      shell: bash
+      run: az acr login --name cleanroombuild
 
     - name: Deploy Kind cluster
       shell: bash
@@ -63,6 +66,30 @@ runs:
       if: ${{ !cancelled() }}
       shell: pwsh
       run: kubectl logs -l app=ccr-client-proxy --tail=-1 --all-containers --ignore-errors --prefix
+
+    - name: Upload configurations
+      uses: actions/upload-artifact@v4
+      with:
+          name: configurations-nginx-hello
+          path: ./test/onebox/multi-party-collab/nginx-hello/generated/configurations
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - name: Upload deployments
+      uses: actions/upload-artifact@v4
+      with:
+          name: deployments-nginx-hello
+          path: ./test/onebox/multi-party-collab/nginx-hello/generated/deployments
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - name: Upload ccf
+      uses: actions/upload-artifact@v4
+      with:
+          name: ccf-nginx-hello
+          path: ./test/onebox/multi-party-collab/generated/ccf
+          overwrite: true
+      if: ${{ !cancelled() }}
 
     - name: Delete resource groups
       if: success()

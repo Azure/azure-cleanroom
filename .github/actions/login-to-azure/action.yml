@@ -35,7 +35,6 @@ runs:
         while true; do
           token=$(curl -H "Authorization: bearer $token_request" "${token_uri}&audience=api://AzureADTokenExchange" | jq .value -r)
           az login --service-principal -u ${{ env.CLIENT_ID }} -t ${{ env.TENANT_ID }} --federated-token $token
-          az account set --subscription ${{ env.SUBSCRIPTION_ID }}
           # Sleep for 4 minutes
           sleep 240
         done &

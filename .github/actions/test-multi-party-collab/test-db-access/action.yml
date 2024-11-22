@@ -19,11 +19,18 @@ runs:
       env:
         CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
         TENANT_ID: ${{ env.AZURE_TENANT_ID }}
-        SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Login to Cleanroom Build ACR
+      shell: bash
+      run: az acr login --name cleanroombuild
 
     - name: Deploy Kind cluster
       shell: bash
       run: bash ./test/onebox/kind-up.sh
+
+    - name: Login to Cleanroom Samples ACR
+      shell: bash
+      run: az acr login --name cleanroomsamples
 
     - name: Build clean room containers
       shell: pwsh
@@ -52,6 +59,34 @@ runs:
       shell: pwsh
       if: ${{ !cancelled() }}
       run: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
+
+    - uses: actions/upload-artifact@v4
+      with:
+          name: results-db-access
+          path: ./test/onebox/multi-party-collab/db-access/generated/results
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - uses: actions/upload-artifact@v4
+      with:
+          name: configurations-db-access
+          path: ./test/onebox/multi-party-collab/db-access/generated/configurations
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - uses: actions/upload-artifact@v4
+      with:
+          name: deployments-db-access
+          path: ./test/onebox/multi-party-collab/db-access/generated/deployments
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - uses: actions/upload-artifact@v4
+      with:
+          name: ccf-db-access
+          path: ./test/onebox/multi-party-collab/generated/ccf
+          overwrite: true
+      if: ${{ !cancelled() }}
 
     - name: Delete resource groups
       shell: pwsh

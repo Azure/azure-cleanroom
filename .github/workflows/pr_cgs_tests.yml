@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   cgs-test:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
     environment: pr
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +32,6 @@ jobs:
         env:
           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy CGS
         run: pwsh ./src/governance/test/deploy-cgs.ps1

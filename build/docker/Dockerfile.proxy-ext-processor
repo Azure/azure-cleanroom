@@ -45,10 +45,8 @@ RUN apt-get -y update && \
 # Upgrade packages.
 RUN apt upgrade -y
 
-COPY --from=build-image /root/ccr-proxy-ext-processor/ccr-proxy-ext-processor/ccr-proxy-ext-processor ./ccr-proxy-ext-processor
-RUN chmod +x ./ccr-proxy-ext-processor
-COPY --from=build-image /root/ccr-proxy-ext-processor/ccr-proxy-ext-processor/run.sh ./run.sh
-RUN chmod +x ./run.sh
+COPY --chmod=0755 --from=build-image /root/ccr-proxy-ext-processor/ccr-proxy-ext-processor/ccr-proxy-ext-processor ./ccr-proxy-ext-processor
+COPY --chmod=0755 --from=build-image /root/ccr-proxy-ext-processor/ccr-proxy-ext-processor/run.sh ./run.sh
 
 ARG PORT=8281
 

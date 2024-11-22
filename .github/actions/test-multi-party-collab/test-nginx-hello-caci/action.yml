@@ -30,15 +30,26 @@ runs:
       env:
         CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
         TENANT_ID: ${{ env.AZURE_TENANT_ID }}
-        SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Login to Cleanroom Build ACR
+      if: ${{ !contains(inputs.registry-url, 'mcr.microsoft.com/cleanroom') }}
+      shell: bash
+      run: az acr login --name cleanroombuild
 
     - name: Log in to Azure Container Registry
+      if: ${{ !contains(inputs.registry-url, 'mcr.microsoft.com/cleanroom') }}
       shell: pwsh
       run: az acr login -n ${{ inputs.registry-url}}
 
     - name: Run collab scenario on caci
+      if: ${{ !contains(inputs.registry-url, 'mcr.microsoft.com/cleanroom') }}
       shell: pwsh
       run: ./test/onebox/multi-party-collab/nginx-hello/run-collab-aci.ps1 -registry acr -registryUrl ${{ inputs.registry-url }} -tag ${{ inputs.tag }}
+
+    - name: Run collab scenario on caci
+      if: ${{ contains(inputs.registry-url, 'mcr.microsoft.com/cleanroom') }}
+      shell: pwsh
+      run: ./test/onebox/multi-party-collab/nginx-hello/run-collab-aci.ps1 -registry mcr -registryUrl ${{ inputs.registry-url }} -tag ${{ inputs.tag }} -NoBuild
 
     - name: Dump ccf-provider-client logs
       shell: pwsh
@@ -55,18 +66,10 @@ runs:
       shell: pwsh
       run: docker logs ccr-client-proxy
 
-    - name: Upload results
-      uses: actions/upload-artifact@v4
-      with:
-          name: results
-          path: ./test/onebox/multi-party-collab/nginx-hello/generated/results
-          overwrite: true
-      if: ${{ !cancelled() }}
-
     - name: Upload configurations
       uses: actions/upload-artifact@v4
       with:
-          name: configurations
+          name: configurations-nginx-hello-caci
           path: ./test/onebox/multi-party-collab/nginx-hello/generated/configurations
           overwrite: true
       if: ${{ !cancelled() }}
@@ -74,7 +77,7 @@ runs:
     - name: Upload deployments
       uses: actions/upload-artifact@v4
       with:
-          name: deployments
+          name: deployments-nginx-hello-caci
           path: ./test/onebox/multi-party-collab/nginx-hello/generated/deployments
           overwrite: true
       if: ${{ !cancelled() }}
@@ -82,7 +85,7 @@ runs:
     - name: Upload ccf
       uses: actions/upload-artifact@v4
       with:
-          name: ccf
+          name: ccf-nginx-hello-caci
           path: ./test/onebox/multi-party-collab/generated/ccf
           overwrite: true
       if: ${{ !cancelled() }}

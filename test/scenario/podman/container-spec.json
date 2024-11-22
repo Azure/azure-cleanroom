@@ -1,0 +1,264 @@
+{
+    "containers": [
+        {
+            "name": "test-sidecar",
+            "properties": {
+                "command": [
+                    "pwsh",
+                    "test/run-tests-and-upload-results.ps1",
+                    "-test-id",
+                    "$WORKFLOW_ID",
+                    "-storage-account-name",
+                    "$STORAGE_ACCOUNT_NAME",
+                    "-container-name",
+                    "$TEST_RESULTS_CONTAINER_NAME",
+                    "-dotnet-test-filter",
+                    "$DOTNET_TEST_FILTER"
+                ],
+                "environmentVariables": [
+                    {
+                        "name": "ACI_CONTAINER_GROUP_ID",
+                        "value": "[resourceId('Microsoft.ContainerInstance/containerGroups/', parameters('containerGroupName'))]"
+                    }
+                ],
+                "volumeMounts": [
+                    {
+                        "name": "remotemounttarget",
+                        "mountPath": "/mnt/blobfuse_mnt"
+                    }
+                ],
+                "image": "$ACR_URL/testclient:$TAG",
+                "resources": {
+                    "requests": {
+                        "cpu": 1,
+                        "memoryInGB": 2
+                    }
+                },
+                "ports": [
+                    {
+                        "port": 9000
+                    }
+                ]
+            }
+        },
+        {
+            "name": "identity-sidecar",
+            "properties": {
+              "command": [],
+              "environmentVariables": [
+                {
+                  "name": "DOTNET_ENVIRONMENT",
+                  "value": "Development"
+                }
+              ],
+              "image": "$ACR_URL/identity:$TAG",
+              "resources": {
+                "requests": {
+                  "cpu": 0.5,
+                  "memoryInGB": 2
+                }
+              }
+            }
+        },
+        {
+            "name": "skr-sidecar",
+            "properties": {
+                "command": [
+                    "/skr.sh"
+                ],
+                "environmentVariables": [
+                    {
+                        "name": "SkrSideCarArgs",
+                        "value": "ewogICAiY2VydGNhY2hlIjogewogICAgICAiZW5kcG9pbnQiOiAiYW1lcmljYXMuYWNjY2FjaGUuYXp1cmUubmV0IiwKICAgICAgInRlZV90eXBlIjogIlNldlNucFZNIiwKICAgICAgImFwaV92ZXJzaW9uIjogImFwaS12ZXJzaW9uPTIwMjAtMTAtMTUtcHJldmlldyIKICAgfQp9"
+                    },
+                    {
+                        "name": "Port",
+                        "value": "8284"
+                    }
+                ],
+                "image": "$ACR_URL/skr:$TAG",
+                "resources": {
+                    "requests": {
+                        "cpu": 0.5,
+                        "memoryInGB": 1
+                    }
+                }
+            }
+        },
+        {
+            "name": "wait-for-file-container",
+            "properties": {
+                "command": [
+                    "./code_launcher.py",
+                    "--tenant-id", 
+                    "72f988bf-86f1-41af-91ab-2d7cd011db47",
+                    "--private-acr-fqdn", 
+                    "$PRIVATE_ACR_URL",
+                    "--encrypted-image",
+                    "$PRIVATE_ACR_URL/testvolmount:$TAG-jwe",
+                    "--skr-port",
+                    "8284",
+                    "--akv-endpoint",
+                    "cleanroommhsm.managedhsm.azure.net",
+                    "--kid",
+                    "imagekey",
+                    "--maa-endpoint",
+                    "sharedneu.neu.attest.azure.net",
+                    "--application-name",
+                    "wait-for-file-container",
+                    "--",
+                    "--name",
+                    "curl-container",
+                    "-v",
+                    "/mnt/blobfuse_mnt/:/tmp/",
+                    "-e",
+                    "WAITFORIT_FILEPATH=/tmp/testfile.txt",
+                    "$PRIVATE_ACR_URL/testvolmount:$TAG-jwe",
+                    "--timeout=120"
+                ],
+                "environmentVariables": [
+                    {
+                        "name": "DISABLE_GOV_EVENTS", 
+                        "value": "true"
+                    },
+                    {
+                        "name": "DISABLE_WAIT_FOR_SERVICES", 
+                        "value": "true"
+                    }
+                ],
+                "volumeMounts": [
+                    {
+                        "name": "remotemounttarget",
+                        "mountPath": "/mnt/blobfuse_mnt"
+                    }
+                ],
+                "securityContext": {
+                    "privileged": "true"
+                },
+                "image": "$ACR_URL/code-launcher:$TAG",
+                "resources": {
+                    "requests": {
+                        "cpu": 0.5,
+                        "memoryInGB": 1
+                    }
+                }
+            }
+        },
+        {
+            "name": "wait-for-file-container-failed",
+            "properties": {
+                "command": [
+                    "./code_launcher.py",
+                    "--tenant-id", 
+                    "72f988bf-86f1-41af-91ab-2d7cd011db47",
+                    "--private-acr-fqdn", 
+                    "$PRIVATE_ACR_URL",
+                    "--encrypted-image",
+                    "$PRIVATE_ACR_URL/testvolmount:$TAG-jwe",
+                    "--skr-port",
+                    "8284",
+                    "--akv-endpoint",
+                    "cleanroommhsm.managedhsm.azure.net",
+                    "--kid",
+                    "imagekey",
+                    "--maa-endpoint",
+                    "sharedneu.neu.attest.azure.net",
+                    "--application-name",
+                    "wait-for-file-container-failed",
+                    "--",
+                    "--name",
+                    "curl-container",
+                    "-v",
+                    "/mnt/blobfuse_mnt/:/tmp/",
+                    "-e",
+                    "WAITFORIT_FILEPATH=/tmp/doesnotexisit.txt",
+                    "$PRIVATE_ACR_URL/testvolmount:$TAG-jwe",
+                    "--timeout=120"
+                ],
+                "environmentVariables": [
+                    {
+                        "name": "DISABLE_GOV_EVENTS", 
+                        "value": "true"
+                    },
+                    {
+                        "name": "DISABLE_WAIT_FOR_SERVICES", 
+                        "value": "true"
+                    }
+                ],
+                "volumeMounts": [
+                    {
+                        "name": "remotemounttarget",
+                        "mountPath": "/mnt/blobfuse_mnt"
+                    }
+                ],
+                "securityContext": {
+                    "privileged": "true"
+                },
+                "image": "$ACR_URL/code-launcher:$TAG",
+                "resources": {
+                    "requests": {
+                        "cpu": 0.5,
+                        "memoryInGB": 1
+                    }
+                }
+            }
+        },
+        {
+            "name": "blobfuse-container",
+            "properties": {
+                "image": "$ACR_URL/blobfuse2:$TAG",
+                "resources": {
+                    "requests": {
+                        "cpu": 0.5,
+                        "memoryInGb": 1
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "name": "remotemounttarget",
+                        "mountPath": "/mnt/blobfuse_mnt"
+                    }
+                ],
+                "environmentVariables": [
+                    {
+                        "name": "AZURE_STORAGE_IDENTITY_CLIENT_ID",
+                        "value": "eabc0017-db41-4acc-b21b-58e583fa5fda"
+                    },
+                    {
+                        "name": "AZURE_STORAGE_ACCOUNT",
+                        "value": "$STORAGE_ACCOUNT_NAME"
+                    },
+                    {
+                        "name": "AZURE_STORAGE_ACCOUNT_CONTAINER",
+                        "value": "blobfuse2-test"
+                    }
+                ],
+                "securityContext": {
+                    "privileged": "true"
+                }
+            }
+        }
+    ],
+    "imageRegistryCredentials": [],
+    "confidentialComputeProperties": {
+        "ccePolicy": "$SECURITY_POLICY"
+    },
+    "osType": "Linux",
+    "restartPolicy": "Never",
+    "ipAddress": {
+        "type": "Public",
+        "ports": [
+            {
+                "protocol": "TCP",
+                "port": 9000
+            }
+        ]
+    },
+    "sku": "confidential",
+    "volumes": [
+        {
+            "name": "remotemounttarget",
+            "emptyDir": {}
+        }
+    ]    
+}

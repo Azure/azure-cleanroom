@@ -19,7 +19,7 @@ param
     [string]
     $outDir = "",
 
-    [ValidateSet('mcr', 'local')]
+    [ValidateSet('mcr', 'local', 'acr')]
     [string]$registry = "local",
 
     [string]

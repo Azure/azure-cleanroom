@@ -1,0 +1,7 @@
+FROM cleanroombuild.azurecr.io/mirror/docker/library/bash:latest
+
+COPY --chmod=755 src/scripts/wait-for-it.sh /
+
+ENTRYPOINT ["/wait-for-it.sh"]
+
+CMD ["/wait-for-it.sh"]

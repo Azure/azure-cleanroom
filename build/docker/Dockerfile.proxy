@@ -10,13 +10,10 @@ WORKDIR "/home/envoy"
 
 COPY src/proxy/ccr-proxy-config.yaml ccr-proxy-config.yaml
 COPY src/proxy/cleanroom.cnf cleanroom.cnf
-COPY src/proxy/bootstrap.sh bootstrap.sh
-RUN chmod +x bootstrap.sh
+COPY --chmod=755 src/proxy/bootstrap.sh bootstrap.sh
 
 COPY src/proxy/https-http/ccr-https-http-proxy-config.yaml https-http/ccr-https-http-proxy-config.yaml
 COPY src/proxy/https-http/cert-config.cnf https-http/cert-config.cnf
-COPY src/proxy/https-http/bootstrap.sh https-http/bootstrap.sh
-RUN chmod +x https-http/bootstrap.sh
+COPY --chmod=755 src/proxy/https-http/bootstrap.sh https-http/bootstrap.sh
 
-COPY src/scripts/wait-for-it.sh wait-for-it.sh
-RUN chmod +x wait-for-it.sh
+COPY --chmod=755 src/scripts/wait-for-it.sh wait-for-it.sh

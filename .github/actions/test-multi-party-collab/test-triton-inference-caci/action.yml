@@ -30,7 +30,10 @@ runs:
       env:
         CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
         TENANT_ID: ${{ env.AZURE_TENANT_ID }}
-        SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Login to Cleanroom Build ACR
+      shell: bash
+      run: az acr login --name cleanroombuild
 
     - name: Log in to Azure Container Registry
       shell: pwsh
@@ -43,7 +46,7 @@ runs:
     - name: Upload results
       uses: actions/upload-artifact@v4
       with:
-          name: results
+          name: results-triton-inference-caci
           path: ./test/onebox/multi-party-collab/triton-inference-server/generated/results
           overwrite: true
       if: ${{ !cancelled() }}
@@ -51,7 +54,7 @@ runs:
     - name: Upload configurations
       uses: actions/upload-artifact@v4
       with:
-          name: configurations
+          name: configurations-triton-inference-caci
           path: ./test/onebox/multi-party-collab/triton-inference-server/generated/configurations
           overwrite: true
       if: ${{ !cancelled() }}
@@ -59,7 +62,7 @@ runs:
     - name: Upload deployments
       uses: actions/upload-artifact@v4
       with:
-          name: deployments
+          name: deployments-triton-inference-caci
           path: ./test/onebox/multi-party-collab/triton-inference-server/generated/deployments
           overwrite: true
       if: ${{ !cancelled() }}
@@ -67,7 +70,7 @@ runs:
     - name: Upload ccf
       uses: actions/upload-artifact@v4
       with:
-          name: ccf
+          name: ccf-triton-inference-caci
           path: ./test/onebox/multi-party-collab/generated/ccf
           overwrite: true
       if: ${{ !cancelled() }}

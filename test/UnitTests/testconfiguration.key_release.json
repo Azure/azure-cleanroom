@@ -1,0 +1,6 @@
+{
+  "AKV_ENDPOINT": "cleanroommhsm.managedhsm.azure.net",
+  "MAA_ENDPOINT": "sharedneu.neu.attest.azure.net",
+  "KID": "testkey",
+  "SKR_PORT": "8080"
+}

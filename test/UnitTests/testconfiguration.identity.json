@@ -1,0 +1,8 @@
+{
+  "AKV_ENDPOINT": "cleanroommhsm.managedhsm.azure.net",
+  "MAA_ENDPOINT": "sharedneu.neu.attest.azure.net",
+  "KID": "testkey",
+  "SKR_PORT": "8080",
+  "IDENTITY_PORT": "8290",
+  "TENANT_ID": "72f988bf-86f1-41af-91ab-2d7cd011db47"
+}

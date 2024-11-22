@@ -1,0 +1,14 @@
+name: Setup test for covid training scenario
+description: Setup test for covid training scenario
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - shell: bash
+      run: |
+        chmod +x ./samples/covid-data/install-prerequisites.sh
+        ./samples/covid-data/install-prerequisites.sh

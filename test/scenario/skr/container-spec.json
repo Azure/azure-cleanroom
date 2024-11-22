@@ -1,0 +1,76 @@
+{
+  "containers": [
+    {
+      "name": "test-sidecar",
+      "properties": {
+        "command": [
+          "pwsh",
+          "test/run-tests-and-upload-results.ps1",
+          "-test-id",
+          "$WORKFLOW_ID",
+          "-storage-account-name",
+          "$STORAGE_ACCOUNT_NAME",
+          "-container-name",
+          "$TEST_RESULTS_CONTAINER_NAME",
+          "-dotnet-test-filter",
+          "$DOTNET_TEST_FILTER"
+        ],
+        "environmentVariables": [
+          {
+            "name": "TEST_CONFIGURATION_FILE",
+            "value": "$TEST_CONFIGURATION_FILE"
+          }
+        ],
+        "image": "$ACR_URL/testclient:$TAG",
+        "resources": {
+          "requests": {
+            "cpu": 1,
+            "memoryInGB": 2
+          }
+        },
+        "ports": [
+          {
+            "port": 9000
+          }
+        ]
+      }
+    },
+    {
+      "name": "skr-sidecar",
+      "properties": {
+        "command": [
+          "/skr.sh"
+        ],
+        "environmentVariables": [
+          {
+            "name": "SkrSideCarArgs",
+            "value": "ewogICAiY2VydGNhY2hlIjogewogICAgICAiZW5kcG9pbnQiOiAiYW1lcmljYXMuYWNjY2FjaGUuYXp1cmUubmV0IiwKICAgICAgInRlZV90eXBlIjogIlNldlNucFZNIiwKICAgICAgImFwaV92ZXJzaW9uIjogImFwaS12ZXJzaW9uPTIwMjAtMTAtMTUtcHJldmlldyIKICAgfQp9"
+          }
+        ],
+        "image": "$ACR_URL/skr:$TAG",
+        "resources": {
+          "requests": {
+            "cpu": 1,
+            "memoryInGB": 2
+          }
+        }
+      }
+    }
+  ],
+  "imageRegistryCredentials": [],
+  "confidentialComputeProperties": {
+    "ccePolicy": "$SECURITY_POLICY"
+  },
+  "osType": "Linux",
+  "restartPolicy": "Never",
+  "ipAddress": {
+    "type": "Public",
+    "ports": [
+      {
+        "protocol": "TCP",
+        "port": 9000
+      }
+    ]
+  },
+  "sku": "confidential"
+}

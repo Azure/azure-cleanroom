@@ -19,7 +19,10 @@ runs:
     env:
       CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
       TENANT_ID: ${{ env.AZURE_TENANT_ID }}
-      SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+  - name: Login to Cleanroom Build ACR
+    shell: bash
+    run: az acr login --name cleanroombuild
 
   - name: Deploy Kind cluster
     shell: bash
@@ -52,6 +55,34 @@ runs:
     if: ${{ !cancelled() }}
     shell: pwsh
     run: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
+
+  - uses: actions/upload-artifact@v4
+    with:
+      name: results-encrypted-storage
+      path: ./test/onebox/multi-party-collab/encrypted-storage/generated/results-decrypted
+      overwrite: true
+    if: ${{ !cancelled() }}
+
+  - uses: actions/upload-artifact@v4
+    with:
+        name: configurations-encrypted-storage
+        path: ./test/onebox/multi-party-collab/encrypted-storage/generated/configurations
+        overwrite: true
+    if: ${{ !cancelled() }}
+
+  - uses: actions/upload-artifact@v4
+    with:
+        name: deployments-encrypted-storage
+        path: ./test/onebox/multi-party-collab/encrypted-storage/generated/deployments
+        overwrite: true
+    if: ${{ !cancelled() }}
+
+  - uses: actions/upload-artifact@v4
+    with:
+        name: ccf-encrypted-storage
+        path: ./test/onebox/multi-party-collab/generated/ccf
+        overwrite: true
+    if: ${{ !cancelled() }}
 
   - name: Delete resource groups
     if: success()

@@ -1,0 +1,24 @@
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:20.04 AS build-image
+
+# Install prerequisities.
+RUN apt-get update -y && \
+    DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install \
+    software-properties-common build-essential ca-certificates wget
+RUN \
+    DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install \
+    libfuse3-dev gcc
+
+# Build the blobfuse2 binary.
+COPY external/azure-storage-fuse azure-storage-fuse
+COPY build/go_installer.sh .
+RUN chmod +x go_installer.sh
+RUN ./go_installer.sh .
+RUN cd azure-storage-fuse && ./build.sh
+
+# Copy files required by azure-storage-fuse/docker/Dockerfile which then become part of the
+# blobfuse2 container image.
+FROM scratch as binaries
+COPY --from=build-image /azure-storage-fuse/blobfuse2 ./
+COPY --from=build-image /azure-storage-fuse/setup/11-blobfuse2.conf ./
+COPY --from=build-image /azure-storage-fuse/setup/blobfuse2-logrotate ./
+COPY --from=build-image /azure-storage-fuse/docker/config.yaml ./
