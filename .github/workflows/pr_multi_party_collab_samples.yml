@@ -20,12 +20,13 @@ concurrency:
 
 jobs:
   encrypted-storage:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       TEST_ENVIRONMENT: PR
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -38,12 +39,13 @@ jobs:
         uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage
 
   encrypted-storage-cleanroom-client:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       TEST_ENVIRONMENT: PR
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -56,12 +58,13 @@ jobs:
         uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-cleanroom-client
 
   db-access:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       TEST_ENVIRONMENT: PR
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -74,12 +77,13 @@ jobs:
         uses: ./.github/actions/test-multi-party-collab/test-db-access
 
   build-containers-caci:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       TEST_ENVIRONMENT: PR
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -109,14 +113,11 @@ jobs:
         env:
           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to Azure Container Registry
         shell: pwsh
         run: az acr login -n ${{ vars.ACR_URL }}
-
-      - name: Login to Cleanroom Build ACR
-        shell: bash
-        run: az acr login --name cleanroombuild
 
       - name: Build ccf containers
         run: pwsh ./build/ccf/build-ccf-infra-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push
@@ -128,13 +129,14 @@ jobs:
         run: pwsh ./build/ccf/build-ccf-infra-containers-policy.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push
 
   encrypted-storage-caci:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-containers-caci]
     env:
       TEST_ENVIRONMENT: PR
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -150,7 +152,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   ml-training-caci:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-containers-caci]
     strategy:
@@ -160,12 +162,13 @@ jobs:
       TEST_ENVIRONMENT: PR
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
-      TDP_HSM_RESOURCE_GROUP: 'pr-covidtraining-rg'
-      TDP_MHSM_NAME: 'prcovidtrainingmhsm4'
-      TDC_HSM_RESOURCE_GROUP: 'pr-covidtraining-rg'
-      TDC_MHSM_NAME: 'prcovidtrainingmhsm4'
+      TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-pr-rg'
+      TDP_MHSM_NAME: 'azcleanroompublichsm'
+      TDC_HSM_RESOURCE_GROUP: 'azcleanroom-public-pr-rg'
+      TDC_MHSM_NAME: 'azcleanroompublichsm'
       USE_PREPROVISIONED_OIDC: "true"
     steps:
       - uses: actions/checkout@v4
@@ -180,12 +183,13 @@ jobs:
           kvType: ${{ matrix.key-store }}
 
   nginx-hello:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       TEST_ENVIRONMENT: PR
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -198,13 +202,14 @@ jobs:
         uses: ./.github/actions/test-multi-party-collab/test-nginx-hello
 
   nginx-hello-caci:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-containers-caci]
     env:
       TEST_ENVIRONMENT: PR
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -220,13 +225,14 @@ jobs:
           tag: ${{ github.run_id }}
 
   # triton-inference-server-caci:
-  #   runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
   #   environment: pr
   #   needs: [build-containers-caci]
   #   env:
   #     TEST_ENVIRONMENT: PR
   #     AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
   #     AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  #     AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
   #     RUN_ID: ${{ github.run_id }}
   #     JOB_ID: ${{ github.job }}
   #     COLLAB_FORCE_MANAGED_IDENTITY: "true"

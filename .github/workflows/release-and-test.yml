@@ -34,7 +34,7 @@ jobs:
       build-type: ${{ inputs.release-type }}
 
   release-to-test:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: test
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
@@ -241,21 +241,20 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
   bvt-ml-training:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     needs: [build, release-to-test]
     environment: test
     env:
       RELEASE_ACR_NAME: ${{ vars.RELEASE_ACR_NAME }}
-      BVT_MANAGED_IDENTITY_ARM_ID: ${{ vars.BVT_MANAGED_IDENTITY_ARM_ID}}
-      TEST_ENVIRONMENT: BVT
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
-      TDP_HSM_RESOURCE_GROUP: 'bvt-covidtraining-rg'
-      TDP_MHSM_NAME: 'bvthsm2sea'
-      TDC_HSM_RESOURCE_GROUP: 'bvt-covidtraining-rg'
-      TDC_MHSM_NAME: 'bvthsm2sea'
+      TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
+      TDP_MHSM_NAME: 'azcleanroombvthsm2'
+      TDC_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
+      TDC_MHSM_NAME: 'azcleanroombvthsm2'
       USE_PREPROVISIONED_OIDC: "true"
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
@@ -263,7 +262,7 @@ jobs:
       contents: read  # This is required for actions/checkout
     strategy:
       matrix:
-        key-store: [mhsm, akvpremium]
+        key-store:  [akvpremium] #[mhsm, akvpremium]
       # Prevent Github from cancelling other jobs of the matrix if one of them fails.
       fail-fast: false
     steps:
@@ -287,15 +286,14 @@ jobs:
           kvType: ${{ matrix.key-store }}
 
   bvt-encrypted-storage:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     needs: [build, release-to-test]
     environment: test
     env:
       RELEASE_ACR_NAME: ${{ vars.RELEASE_ACR_NAME }}
-      BVT_MANAGED_IDENTITY_ARM_ID: ${{ vars.BVT_MANAGED_IDENTITY_ARM_ID}}
-      TEST_ENVIRONMENT: BVT
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -323,15 +321,14 @@ jobs:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
 
   bvt-nginx-hello:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     needs: [build, release-to-test]
     environment: test
     env:
       RELEASE_ACR_NAME: ${{ vars.RELEASE_ACR_NAME }}
-      BVT_MANAGED_IDENTITY_ARM_ID: ${{ vars.BVT_MANAGED_IDENTITY_ARM_ID}}
-      TEST_ENVIRONMENT: BVT
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -359,15 +356,14 @@ jobs:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
 
   # bvt-triton-inference:
-  #   runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
   #   needs: [build, release-to-test]
   #   environment: test
   #   env:
   #     RELEASE_ACR_NAME: ${{ vars.RELEASE_ACR_NAME }}
-  #     BVT_MANAGED_IDENTITY_ARM_ID: ${{ vars.BVT_MANAGED_IDENTITY_ARM_ID}}
-  #     TEST_ENVIRONMENT: BVT
   #     AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
   #     AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  #     AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
   #     RUN_ID: ${{ github.run_id }}
   #     JOB_ID: ${{ github.job }}
   #     USE_PREPROVISIONED_OIDC: "true"

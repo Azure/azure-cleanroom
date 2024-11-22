@@ -28,14 +28,14 @@ jobs:
 
   # Add release specific tests here
   release-tests:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     needs: ["build-test-msint"]
     steps:
       - name: Run release test
         run: echo 'No release tests configured!'
 
   release-to-prod:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: production
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
@@ -245,7 +245,7 @@ jobs:
     uses: ./.github/workflows/release_verification_nightly.yml
 
   create-github-release:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     needs: ["release-to-prod", "post-release-validation"]
     # Permission and environment variables below are needed to create a GitHub release
     permissions:

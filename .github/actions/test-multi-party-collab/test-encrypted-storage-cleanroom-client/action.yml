@@ -12,6 +12,7 @@ runs:
       env:
         CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
         TENANT_ID: ${{ env.AZURE_TENANT_ID }}
+        SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
     - name: Add docker user
       shell: bash
@@ -19,10 +20,6 @@ runs:
 
     - shell: pwsh
       run: Install-Module -Name powershell-yaml -Force
-
-    - name: Login to Cleanroom Build ACR
-      shell: bash
-      run: az acr login --name cleanroombuild
 
     - name: Deploy Kind cluster
       shell: bash

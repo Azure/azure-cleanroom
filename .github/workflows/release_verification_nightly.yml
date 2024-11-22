@@ -15,21 +15,22 @@ jobs:
     permissions:
       id-token: write
       contents: read  # This is required for actions/checkout
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: test
     env:
-      TDP_HSM_RESOURCE_GROUP: 'bvt-covidtraining-rg'
-      TDP_MHSM_NAME: 'bvthsm2sea'
-      TDC_HSM_RESOURCE_GROUP: 'bvt-covidtraining-rg'
-      TDC_MHSM_NAME: 'bvthsm2sea'
+      TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
+      TDP_MHSM_NAME: 'azcleanroombvthsm2'
+      TDC_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
+      TDC_MHSM_NAME: 'azcleanroombvthsm2'
       USE_PREPROVISIONED_OIDC: "true"
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
     strategy:
       matrix:
-        key-store: [mhsm, akvpremium]
+        key-store:  [akvpremium] #[mhsm, akvpremium]
       # Prevent Github from cancelling other jobs of the matrix if one of them fails.
       fail-fast: false
     steps:
@@ -55,11 +56,12 @@ jobs:
           kvType: ${{ matrix.key-store }}
 
   encrypted-storage-nightly:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: test
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
@@ -89,11 +91,12 @@ jobs:
           tag: 1.0.12
 
   nginx-hello-nightly:
-    runs-on: ["self-hosted", "1ES.Pool=ubuntu2204-pool"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: test
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       USE_PREPROVISIONED_OIDC: "true"
