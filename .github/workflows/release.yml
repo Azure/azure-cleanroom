@@ -25,6 +25,8 @@ jobs:
     with:
       tag: ${{ inputs.tag }}
       release-type: ${{ inputs.release-type }}
+      needs-attestation: true
+      registry-name: ${{ secrets.RELEASE_ACR_NAME }}
 
   # Add release specific tests here
   release-tests:

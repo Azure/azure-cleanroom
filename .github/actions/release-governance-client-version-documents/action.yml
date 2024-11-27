@@ -19,6 +19,9 @@ inputs:
   subscription-id:
     description: The subscription ID of the registry
     required: true
+  needs-attestation:
+    description: Whether the container needs attestation
+    required: true
 
 runs:
   using: composite
@@ -40,6 +43,7 @@ runs:
         ./.github/scripts/release-governance-client-version-documents.ps1 -tag ${{ inputs.tag }} -environment ${{ inputs.environment }} -registryName ${{ inputs.registry-name }}
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: versions/cgs-client
         tag: latest
@@ -47,6 +51,7 @@ runs:
         registry-name: ${{ inputs.registry-name }}
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: versions/cgs-ui
         tag: latest

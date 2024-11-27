@@ -19,6 +19,9 @@ inputs:
   subscription-id:
     description: The subscription ID of the registry
     required: true
+  needs-attestation:
+    description: Whether the container needs attestation
+    required: true
 
 runs:
   using: composite
@@ -49,6 +52,7 @@ runs:
         overwrite: true
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/blobfuse-launcher-policy
         tag: ${{ inputs.tag }}
@@ -56,6 +60,7 @@ runs:
         registry-name: ${{ inputs.registry-name }}
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/ccr-attestation-policy
         tag: ${{ inputs.tag }}
@@ -63,6 +68,7 @@ runs:
         registry-name: ${{ inputs.registry-name }}
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/ccr-governance-policy
         tag: ${{ inputs.tag }}
@@ -70,6 +76,7 @@ runs:
         registry-name: ${{ inputs.registry-name }}
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/ccr-init-policy
         tag: ${{ inputs.tag }}
@@ -77,6 +84,7 @@ runs:
         registry-name: ${{ inputs.registry-name }}
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/ccr-secrets-policy
         tag: ${{ inputs.tag }}
@@ -84,6 +92,7 @@ runs:
         registry-name: ${{ inputs.registry-name }}
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/ccr-proxy-policy
         tag: ${{ inputs.tag }}
@@ -91,6 +100,7 @@ runs:
         registry-name: ${{ inputs.registry-name }}
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/ccr-proxy-ext-processor-policy
         tag: ${{ inputs.tag }}
@@ -98,6 +108,7 @@ runs:
         registry-name: ${{ inputs.registry-name }}
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/code-launcher-policy
         tag: ${{ inputs.tag }}
@@ -105,6 +116,7 @@ runs:
         registry-name: ${{ inputs.registry-name }}
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/identity-policy
         tag: ${{ inputs.tag }}
@@ -112,6 +124,7 @@ runs:
         registry-name: ${{ inputs.registry-name }}
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/otel-collector-policy
         tag: ${{ inputs.tag }}
@@ -119,6 +132,7 @@ runs:
         registry-name: ${{ inputs.registry-name }}
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/skr-policy
         tag: ${{ inputs.tag }}
@@ -126,6 +140,7 @@ runs:
         registry-name: ${{ inputs.registry-name }}
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: sidecar-digests
         tag: ${{ inputs.tag }}

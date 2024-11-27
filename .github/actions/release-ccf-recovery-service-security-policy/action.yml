@@ -20,6 +20,9 @@ inputs:
   subscription-id:
     description: The subscription ID of the registry
     required: true
+  needs-attestation:
+    description: Whether the container needs attestation
+    required: true
 
 runs:
   using: composite
@@ -45,3 +48,11 @@ runs:
           -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom `
           -tag ${{ inputs.tag }} `
           -push
+
+    - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
+      with:
+        name: policies/ccf/ccf-recovery-service-security-policy
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        registry-name: ${{ inputs.registry-name }}

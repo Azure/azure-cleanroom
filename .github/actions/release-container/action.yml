@@ -25,6 +25,9 @@ inputs:
   subscription-id:
     description: The subscription ID of the registry
     required: true
+  needs-attestation:
+    description: Whether the container needs attestation
+    required: true
 
 runs:
   using: composite
@@ -77,7 +80,7 @@ runs:
         docker push ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/${{ inputs.name }}:latest
 
     - uses: ./.github/actions/attest-artefact
-      if: ${{ steps.check-released-containers.outputs.container_released != 'true' }}
+      if: ${{ inputs.needs-attestation == 'true' && steps.check-released-containers.outputs.container_released != 'true' }}
       with:
         name: ${{ inputs.name }}
         tag: ${{ inputs.tag }}

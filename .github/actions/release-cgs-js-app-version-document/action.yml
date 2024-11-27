@@ -19,6 +19,9 @@ inputs:
   subscription-id:
     description: The subscription ID of the registry
     required: true
+  needs-attestation:
+    description: Whether the container needs attestation
+    required: true
 
 runs:
   using: composite
@@ -33,6 +36,7 @@ runs:
       run: pwsh ./.github/scripts/release-ccf-artefact-version-document.ps1 -containerName cgs-js-app -tag ${{ inputs.tag }} -environment ${{ inputs.environment }} -registryName ${{ inputs.registry-name }}
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: versions/cgs-js-app
         tag: latest

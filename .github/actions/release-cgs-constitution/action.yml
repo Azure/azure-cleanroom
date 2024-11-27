@@ -20,6 +20,9 @@ inputs:
   subscription-id:
     description: The subscription ID of the registry
     required: true
+  needs-attestation:
+    description: Whether the container needs attestation
+    required: true
 
 runs:
   using: composite
@@ -50,6 +53,7 @@ runs:
           --annotation "constitution.js.digest=sha256:$constitution_digest"
 
     - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: cgs-constitution
         tag: ${{ inputs.tag }}

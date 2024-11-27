@@ -22,6 +22,9 @@ inputs:
   subscription-id:
     description: The subscription ID of the registry
     required: true
+  needs-attestation:
+    description: Whether the container needs attestation
+    required: true
 
 runs:
   using: composite
@@ -36,6 +39,7 @@ runs:
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
         subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}
 
     - uses: ./.github/actions/release-container
       with:
@@ -47,6 +51,7 @@ runs:
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
         subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}
 
     - uses: ./.github/actions/release-container
       with:
@@ -58,6 +63,7 @@ runs:
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
         subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}
 
     - uses: ./.github/actions/release-container
       with:
@@ -69,6 +75,7 @@ runs:
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
         subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}
 
     - uses: ./.github/actions/release-container
       with:
@@ -80,6 +87,7 @@ runs:
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
         subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}
 
     - uses: ./.github/actions/release-container
       with:
@@ -91,6 +99,7 @@ runs:
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
         subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}
 
     - uses: ./.github/actions/release-container
       with:
@@ -102,6 +111,7 @@ runs:
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
         subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}
 
     - uses: ./.github/actions/release-container
       with:
@@ -113,6 +123,7 @@ runs:
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
         subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}
 
     - uses: ./.github/actions/release-container
       with:
@@ -124,6 +135,7 @@ runs:
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
         subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}
 
     - uses: ./.github/actions/release-container
       with:
@@ -135,6 +147,7 @@ runs:
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
         subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}
 
     - uses: ./.github/actions/release-container
       with:
@@ -146,6 +159,7 @@ runs:
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
         subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}
 
     - uses: ./.github/actions/release-container
       with:
@@ -157,3 +171,4 @@ runs:
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
         subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}
