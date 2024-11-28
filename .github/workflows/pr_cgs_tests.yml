@@ -1,0 +1,55 @@
+name: "PR Validation: CGS CCF Tests"
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+      - release
+
+permissions:
+  id-token: write
+  contents: read  # This is required for actions/checkout
+  checks: write   # This is required to generate the test report
+
+# When a new revision is pushed to a PR, cancel all in-progress CI runs for that
+# PR. See https://docs.github.com/en/actions/using-jobs/using-concurrency
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cgs-test:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    environment: pr
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy CGS
+        run: pwsh ./src/governance/test/deploy-cgs.ps1
+
+      - name: Deploy CGS for roles testing
+        run: pwsh ./src/governance/test/roles/deploy-cgs.ps1
+
+      - name: Deploy CGS for testing with headers
+        run: pwsh ./src/governance/test/multi-ccf/deploy-cgs.ps1
+
+      - name: Run CGS unit tests
+        run: pwsh ./src/governance/test/test-cgs.ps1
+
+      - name: CGS test reporter
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Test report-CGS  # Name of the check run which will be created
+          path: ./src/governance/test/TestResults/TestRunResult-CGS.trx    # Path to test results
+          reporter: dotnet-trx

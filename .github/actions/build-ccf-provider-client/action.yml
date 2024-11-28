@@ -1,0 +1,17 @@
+name: Build CCF provider client
+description: Build CCF provider client
+
+inputs:
+  tag:
+    required: true
+    description: The tag
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccf-provider-client
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.ccf-provider-client
+        context: ${{ github.workspace }}

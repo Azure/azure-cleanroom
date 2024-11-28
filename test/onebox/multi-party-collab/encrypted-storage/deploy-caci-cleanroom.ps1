@@ -44,6 +44,7 @@ if (!$nowait) {
 
 if (!$skiplogs) {
     mkdir -p $outDir/results
+    mkdir -p $outDir/results-decrypted
     az cleanroom datastore download `
         --config $datastoreOutdir/encrypted-storage-consumer-datastore-config `
         --name consumer-output `
@@ -59,6 +60,24 @@ if (!$skiplogs) {
         --datastore-config $datastoreOutdir/encrypted-storage-publisher-datastore-config `
         --target-folder $outDir/results
 
+    az cleanroom datastore decrypt `
+        --config $datastoreOutdir/encrypted-storage-consumer-datastore-config `
+        --name consumer-output `
+        --source-path $outDir/results `
+        --destination-path $outDir/results-decrypted
+
+    az cleanroom logs decrypt `
+        --cleanroom-config $outDir/configurations/publisher-config `
+        --datastore-config $datastoreOutdir/encrypted-storage-publisher-datastore-config `
+        --source-path $outDir/results `
+        --destination-path $outDir/results-decrypted
+        
+    az cleanroom telemetry decrypt `
+        --cleanroom-config $outDir/configurations/publisher-config `
+        --datastore-config $datastoreOutdir/encrypted-storage-publisher-datastore-config `
+        --source-path $outDir/results `
+        --destination-path $outDir/results-decrypted        
+
     Write-Host "Application logs:"
-    cat $outDir/results/application-telemetry*/demo-app.log
+    cat $outDir/results-decrypted/application-telemetry*/demo-app.log
 }

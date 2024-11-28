@@ -19,7 +19,7 @@
       },
       {
         "name": "LogLevel",
-        "value": "debug"
+        "value": "Info"
       }
     ],
     "image": "$containerRegistryUrl/skr@$digest",

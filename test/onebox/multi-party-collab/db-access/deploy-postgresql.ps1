@@ -31,6 +31,9 @@ function Deploy-PostgreSQL {
         --secure-environment-variables POSTGRES_PASSWORD=$password `
         --ports 5432 `
         --dns-name-label cl-testdb-$uniqueString `
+        --os-type Linux `
+        --cpu 1 `
+        --memory 1 `
         --registry-username "anonymous" `
         --registry-password "*"
 

@@ -27,12 +27,9 @@ if ($registry -eq "mcr") {
     $usingRegistry = "mcr"
     $registryArg = "mcr"
 }
-else {
-    $registryArg = "local"
-    if ($registryUrl -eq "") {
-        throw "-registryUrl must be specified for acr option."
-    }
+if ($registry -eq "acr") {
     $usingRegistry = $registryUrl
+    $registryArg = "acr"
 }
 
 rm -rf $PSScriptRoot/generated
@@ -68,6 +65,7 @@ $result = Deploy-Aci-Governance `
     -location $ISV_RESOURCE_GROUP_LOCATION `
     -ccfName $CCF_NAME `
     -NoBuild:$NoBuild `
+    -registry $registry `
     -registryUrl $registryUrl `
     -registryTag $tag `
     -allowAll:$allowAll `

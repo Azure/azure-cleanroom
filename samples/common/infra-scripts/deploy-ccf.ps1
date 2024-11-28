@@ -21,6 +21,7 @@ function Deploy-Ccf {
     $env:AZCLI_CCF_PROVIDER_CLIENT_IMAGE = "$registryUrl/ccf/ccf-provider-client:$registryTag"
     $env:AZCLI_CCF_PROVIDER_PROXY_IMAGE = "$registryUrl/ccr-proxy:$registryTag"
     $env:AZCLI_CCF_PROVIDER_ATTESTATION_IMAGE = "$registryUrl/ccr-attestation:$registryTag"
+    $env:AZCLI_CCF_PROVIDER_SKR_IMAGE = "$registryUrl/skr:$registryTag"
     $env:AZCLI_CCF_PROVIDER_NGINX_IMAGE = "$registryUrl/ccf/ccf-nginx:$registryTag"
     $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_VIRTUAL_IMAGE = "$registryUrl/ccf/app/run-js/virtual:$registryTag"
     $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_SNP_IMAGE = "$registryUrl/ccf/app/run-js/snp:$registryTag"
@@ -29,6 +30,11 @@ function Deploy-Ccf {
     $env:AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL = "$registryUrl"
     $env:AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL = "$registryUrl/policies/ccf/ccf-network-security-policy:$registryTag"
     $env:AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_SECURITY_POLICY_DOCUMENT_URL = "$registryUrl/policies/ccf/ccf-recovery-service-security-policy:$registryTag"
+
+    $env:AZCLI_CGS_CLIENT_IMAGE = "$registryUrl/cgs-client:$registryTag"
+    $env:AZCLI_CGS_UI_IMAGE = "$registryUrl/cgs-ui:$registryTag"
+    $env:AZCLI_CGS_JSAPP_IMAGE = "$registryUrl/cgs-js-app:$registryTag"
+    $env:AZCLI_CGS_CONSTITUTION_IMAGE = "$registryUrl/cgs-constitution:$registryTag"
 
     $policyOption = $allowAll ? "allow-all" : "cached"
     Write-Host "Starting deployment of CCF $ccfName on CACI in RG $resourceGroup with $policyOption security policy."

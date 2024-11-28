@@ -1,0 +1,99 @@
+name: Release container
+description: Release container
+inputs:
+  name:
+    description: Name of the container
+    required: true
+  tag:
+    description: The tag
+    required: true
+  environment:
+    description: The environment being released to
+    required: true
+  artefact-name:
+    description: The name of the artefact associated with the container
+    required: true
+  registry-name:
+    description: The registry to which the images need to be pushed
+    required: true
+  client-id:
+    description: The client ID to connect to the registry
+    required: true
+  tenant-id:
+    description: The tenant ID of the registry
+    required: true
+  subscription-id:
+    description: The subscription ID of the registry
+    required: true
+  needs-attestation:
+    description: Whether the container needs attestation
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: released-containers-${{ inputs.environment }}
+
+    - shell: pwsh
+      id: check-released-containers
+      run: |
+        $releasedContainers = Get-Content released-containers-${{ inputs.environment }}.txt
+        if ($releasedContainers -contains '${{ inputs.name }}') {
+          Write-Host "Container ${{ inputs.name }} already released. Skipping."
+          echo "container_released=true" >> $env:GITHUB_OUTPUT
+        }
+        else {
+          echo "container_released=false" >> $env:GITHUB_OUTPUT
+        }
+
+    - uses: azure/login@v2
+      if: ${{ steps.check-released-containers.outputs.container_released != 'true' }}
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+
+    # The azure/docker-login action currently does not support authentication using
+    # federated credentials - https://github.com/Azure/docker-login/issues/56. Hence,
+    # resorting to a manual login.
+    - shell: bash
+      if: ${{ steps.check-released-containers.outputs.container_released != 'true' }}
+      run: az acr login --name ${{ inputs.registry-name }}
+
+    - uses: actions/download-artifact@v4
+      if: ${{ steps.check-released-containers.outputs.container_released != 'true' }}
+      id: download-artefact
+      with:
+        name: ${{ inputs.artefact-name }}
+
+    - shell: bash
+      if: ${{ steps.check-released-containers.outputs.container_released != 'true' }}
+      run: |
+        docker load -i ${{ steps.download-artefact.outputs.download-path }}/${{ inputs.artefact-name }}-${{ inputs.tag }}.tar
+        docker tag ${{ inputs.artefact-name }}:${{ inputs.tag }} ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/${{ inputs.name }}:${{ inputs.tag }}
+        docker push ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/${{ inputs.name }}:${{ inputs.tag }}
+        oras attach --artifact-type application/spdx+json ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/${{ inputs.name }}:${{ inputs.tag }} ${{ steps.download-artefact.outputs.download-path }}/${{ inputs.artefact-name }}-sbom/_manifest/spdx_2.2/manifest.spdx.json --disable-path-validation
+
+        docker tag ${{ inputs.artefact-name }}:${{ inputs.tag }} ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/${{ inputs.name }}:latest
+        docker push ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/${{ inputs.name }}:latest
+
+    - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' && steps.check-released-containers.outputs.container_released != 'true' }}
+      with:
+        name: ${{ inputs.name }}
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        registry-name: ${{ inputs.registry-name }}
+
+    - shell: bash
+      if: ${{ steps.check-released-containers.outputs.container_released != 'true' }}
+      run: echo "${{ inputs.name }}" >> released-containers-${{ inputs.environment }}.txt
+
+    - uses: actions/upload-artifact@v4
+      if: ${{ steps.check-released-containers.outputs.container_released != 'true' }}
+      with:
+        name: released-containers-${{ inputs.environment }}
+        path: released-containers-${{ inputs.environment }}.txt
+        overwrite: true

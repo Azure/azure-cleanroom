@@ -1,0 +1,238 @@
+name: "PR Validation: Multi-party Collab Samples"
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+      - release
+
+permissions:
+  contents: read  # This is required for actions/checkout
+  checks: write   # This is required to generate the test report
+  id-token: write # This is required for generating OIDC access token
+
+# When a new revision is pushed to a PR, cancel all in-progress CI runs for that
+# PR. See https://docs.github.com/en/actions/using-jobs/using-concurrency
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  encrypted-storage:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run encrypted storage test
+        uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage
+
+  encrypted-storage-cleanroom-client:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run encrypted storage test
+        uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-cleanroom-client
+
+  db-access:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run db access
+        uses: ./.github/actions/test-multi-party-collab/test-db-access
+
+  build-containers-caci:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - name: Delete huge unnecessary tools folder # https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
+        run: rm -rf /opt/hostedtoolcache
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Add docker user
+        shell: bash
+        run: sudo usermod -aG docker $USER
+
+      - shell: pwsh
+        run: Install-Module -Name powershell-yaml -Force
+
+      - name: Install confcom extension
+        shell: pwsh
+        run: |
+          az extension add --name confcom -y --allow-preview true
+          az version
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        shell: pwsh
+        run: az acr login -n ${{ vars.ACR_URL }}
+
+      - name: Build ccf containers
+        run: pwsh ./build/ccf/build-ccf-infra-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push
+
+      - name: Build clean room containers
+        run: pwsh ./build/onebox/build-local-cleanroom-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -withRegoPolicy
+
+      - name: Build ccf containers policy
+        run: pwsh ./build/ccf/build-ccf-infra-containers-policy.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push
+
+  encrypted-storage-caci:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    environment: pr
+    needs: [build-containers-caci]
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run encrypted storage CACI
+        uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-caci
+        with:
+          registry-url: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+
+  ml-training-caci:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    environment: pr
+    needs: [build-containers-caci]
+    strategy:
+      matrix:
+        key-store: [mhsm, akvpremium]
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-pr-rg'
+      TDP_MHSM_NAME: 'azcleanroompublichsm'
+      TDC_HSM_RESOURCE_GROUP: 'azcleanroom-public-pr-rg'
+      TDC_MHSM_NAME: 'azcleanroompublichsm'
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run ml-training test
+        uses: ./.github/actions/test-multi-party-collab/test-ml-training-caci
+        with:
+          registry-url: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+          kvType: ${{ matrix.key-store }}
+
+  nginx-hello:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run nginx hello test
+        uses: ./.github/actions/test-multi-party-collab/test-nginx-hello
+
+  nginx-hello-caci:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    environment: pr
+    needs: [build-containers-caci]
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run nginx hello test
+        uses: ./.github/actions/test-multi-party-collab/test-nginx-hello-caci
+        with:
+          registry-url: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+
+  # triton-inference-server-caci:
+  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+  #   environment: pr
+  #   needs: [build-containers-caci]
+  #   env:
+  #     AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  #     AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  #     AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  #     RUN_ID: ${{ github.run_id }}
+  #     JOB_ID: ${{ github.job }}
+  #     COLLAB_FORCE_MANAGED_IDENTITY: "true"
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         submodules: recursive
+  #     - name: Run nginx hello test
+  #       uses: ./.github/actions/test-multi-party-collab/test-triton-inference-caci
+  #       with:
+  #         registry-url: ${{ vars.ACR_URL }}
+  #         tag: ${{ github.run_id }}

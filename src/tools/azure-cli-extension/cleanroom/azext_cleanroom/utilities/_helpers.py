@@ -14,7 +14,7 @@ from ..models.model import *
 
 DEFAULT_CLEANROOM_CONTAINER_REGISTRY_URL = "mcr.microsoft.com/cleanroom"
 DEFAULT_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = (
-    "mcr.microsoft.com/cleanroom/sidecar-digests:1.0.12"
+    "mcr.microsoft.com/cleanroom/sidecar-digests:2.0.0"
 )
 CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_NAME = "sidecar-digests.yaml"
 

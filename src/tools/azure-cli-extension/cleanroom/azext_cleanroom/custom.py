@@ -32,8 +32,8 @@ from .secretstore_cmd import *
 
 MCR_CLEANROOM_VERSIONS_REGISTRY = "mcr.microsoft.com/cleanroom"
 MCR_CGS_REGISTRY = "mcr.microsoft.com/cleanroom"
-mcr_cgs_constitution_url = f"{MCR_CGS_REGISTRY}/cgs-constitution:1.0.12"
-mcr_cgs_jsapp_url = f"{MCR_CGS_REGISTRY}/cgs-js-app:1.0.12"
+mcr_cgs_constitution_url = f"{MCR_CGS_REGISTRY}/cgs-constitution:2.0.0"
+mcr_cgs_jsapp_url = f"{MCR_CGS_REGISTRY}/cgs-js-app:2.0.0"
 
 compose_file = (
     f"{os.path.dirname(__file__)}{os.path.sep}data{os.path.sep}docker-compose.yaml"

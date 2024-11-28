@@ -1,0 +1,24 @@
+name: Build cleanroom governance client containers
+description: Build cleanroom governance client containers
+
+inputs:
+  tag:
+    required: true
+    description: The tag
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: cgs-client
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.cgs-client
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: cgs-ui
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.cgs-ui
+        context: ${{ github.workspace }}

@@ -1,0 +1,104 @@
+name: Test covid training scenario
+description: Test covid training scenario
+inputs:
+  registry-url:
+    description: The registry URL
+    required: true
+  tag:
+    description: The tag for the built image
+    required: true
+  kvType:
+    description: The Key Vault Type
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Delete huge unnecessary tools folder # https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
+      shell: bash
+      run: rm -rf /opt/hostedtoolcache
+
+    - name: Add docker user
+      shell: bash
+      run: sudo usermod -aG docker $USER
+
+    - shell: pwsh
+      run: Install-Module -Name powershell-yaml -Force
+
+    - name: Login to Azure and refresh token
+      uses: ./.github/actions/login-to-azure
+      env:
+        CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
+        TENANT_ID: ${{ env.AZURE_TENANT_ID }}
+        SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Log in to Azure Container Registry
+      if: ${{ !contains(inputs.registry-url, 'mcr.microsoft.com/cleanroom') }}
+      shell: pwsh
+      run: az acr login -n ${{ inputs.registry-url}}
+
+    - name: Run collab scenario on caci
+      if: ${{ !contains(inputs.registry-url, 'mcr.microsoft.com/cleanroom') }}
+      shell: pwsh
+      run: |
+        $env:TDP_HSM_RESOURCE_GROUP='${{ env.TDP_HSM_RESOURCE_GROUP }}'
+        $env:TDP_MHSM_NAME='${{ env.TDP_MHSM_NAME }}'
+        $env:TDC_HSM_RESOURCE_GROUP='${{ env.TDC_HSM_RESOURCE_GROUP }}'
+        $env:TDC_MHSM_NAME='${{ env.TDC_MHSM_NAME }}'
+        ./test/onebox/multi-party-collab/ml-training/run-collab-aci.ps1 -registry acr -registryUrl ${{ inputs.registry-url }} -tag ${{ inputs.tag }} -kvType "${{ inputs.kvType }}"
+
+    - name: Run collab scenario on caci
+      if: ${{ contains(inputs.registry-url, 'mcr.microsoft.com/cleanroom') }}
+      shell: pwsh
+      run: |
+        $env:TDP_HSM_RESOURCE_GROUP='${{ env.TDP_HSM_RESOURCE_GROUP }}'
+        $env:TDP_MHSM_NAME='${{ env.TDP_MHSM_NAME }}'
+        $env:TDC_HSM_RESOURCE_GROUP='${{ env.TDC_HSM_RESOURCE_GROUP }}'
+        $env:TDC_MHSM_NAME='${{ env.TDC_MHSM_NAME }}'
+        ./test/onebox/multi-party-collab/ml-training/run-collab-aci.ps1 -registry mcr -registryUrl ${{ inputs.registry-url }} -tag ${{ inputs.tag }} -kvType "${{ inputs.kvType }}" -NoBuild
+
+    - name: Dump ccf-provider-client logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: docker logs ccf-provider-client-1
+
+    - name: Dump ob-isv-client logs
+      if: ${{ !cancelled() }}
+      shell: pwsh
+      run: docker logs ob-isv-client-cgs-client-1
+
+    - name: Upload results
+      uses: actions/upload-artifact@v4
+      with:
+          name: results-ml-training-caci
+          path: ./test/onebox/multi-party-collab/ml-training/generated/results
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - name: Upload configurations
+      uses: actions/upload-artifact@v4
+      with:
+          name: configurations-ml-training-caci
+          path: ./test/onebox/multi-party-collab/ml-training/generated/configurations
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - name: Upload deployments
+      uses: actions/upload-artifact@v4
+      with:
+          name: deployments-ml-training-caci
+          path: ./test/onebox/multi-party-collab/ml-training/generated/deployments
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - name: Upload ccf
+      uses: actions/upload-artifact@v4
+      with:
+          name: ccf-ml-training-caci
+          path: ./test/onebox/multi-party-collab/generated/ccf
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - name: Delete resource groups
+      shell: pwsh
+      if: success()
+      run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-${{ inputs.kvType }}-${{ env.JOB_ID }}-${{ env.RUN_ID }}" 

@@ -1,0 +1,97 @@
+name: Test Encrypted Storage scenario with Cleanroom Client
+description: Test Encrypted Storage scenario with Cleanroom Client
+runs:
+  using: composite
+  steps:
+    - name: Delete huge unnecessary tools folder # https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
+      shell: bash
+      run: rm -rf /opt/hostedtoolcache
+
+    - name: Login to Azure and refresh token
+      uses: ./.github/actions/login-to-azure
+      env:
+        CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
+        TENANT_ID: ${{ env.AZURE_TENANT_ID }}
+        SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Add docker user
+      shell: bash
+      run: sudo usermod -aG docker $USER
+
+    - shell: pwsh
+      run: Install-Module -Name powershell-yaml -Force
+
+    - name: Deploy Kind cluster
+      shell: bash
+      run: bash ./test/onebox/kind-up.sh
+
+    - name: Build clean room containers
+      shell: pwsh
+      run: ./build/onebox/build-local-cleanroom-containers.ps1
+
+    - name: Run collab scenario on Kind
+      shell: pwsh
+      run: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/run-collab.ps1
+
+    - name: Dump credentials-proxy logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: docker logs credentials-proxy
+
+    - name: Dump cleanroom-client logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: docker logs cleanroom-client
+
+    - name: Dump ob-consumer-client logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: docker logs ob-consumer-client-cgs-client-1
+
+    - name: Dump ob-publisher-client logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: docker logs ob-publisher-client-cgs-client-1
+
+    - name: Dump ccf logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: docker logs ob-ccf-ccf-1
+
+    - name: Dump virtual-cleanroom logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
+
+    - uses: actions/upload-artifact@v4
+      with:
+          name: results-encrypted-storage-cleanroom-client
+          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated/results
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - uses: actions/upload-artifact@v4
+      with:
+          name: configurations-encrypted-storage-cleanroom-client
+          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated/configurations
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - uses: actions/upload-artifact@v4
+      with:
+          name: deployments-encrypted-storage-cleanroom-client
+          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated/deployments
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - uses: actions/upload-artifact@v4
+      with:
+          name: ccf-encrypted-storage-cleanroom-client
+          path: ./test/onebox/multi-party-collab/generated/ccf
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - name: Delete resource groups
+      shell: pwsh
+      if: success()
+      run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-${{ env.JOB_ID }}-${{ env.RUN_ID }}"

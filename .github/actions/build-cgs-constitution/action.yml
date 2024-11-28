@@ -1,0 +1,26 @@
+name: Build CGS constitution
+description: Build CGS constitution
+
+inputs:
+  tag:
+    required: true
+    description: The tag
+
+runs:
+  using: composite
+  steps:
+    - name: Build constitution
+      shell: pwsh
+      run: |
+        $ccfConstitutionDir="${{ github.workspace }}/src/ccf/ccf-provider-common/constitution"
+        $cgsConstitutionDir="${{ github.workspace }}/src/governance/ccf-app/constitution"
+        $content=""
+        Get-ChildItem $ccfConstitutionDir -Filter *.js | Foreach-Object { $content += Get-Content $_.FullName -Raw }
+        Get-ChildItem $cgsConstitutionDir -Filter *.js | Foreach-Object { $content += Get-Content $_.FullName -Raw }
+        $content | ConvertTo-Json | Out-File ./constitution.json
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: cgs-constitution-${{ inputs.tag }}.json
+        path: ./constitution.json
+        overwrite: true
