@@ -22,10 +22,6 @@ on:
         description: The build type
         type: string
         default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers"
-      registry-name:
-        description: The registry name
-        required: false
-        type: string
       needs-attestation:
         description: Whether to attest released artefacts
         required: false
