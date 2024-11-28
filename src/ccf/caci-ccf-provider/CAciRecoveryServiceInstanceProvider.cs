@@ -322,7 +322,7 @@ public class CAciRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstancePr
                     },
                     {
                         AciConstants.ContainerName.Skr,
-                        ImageUtils.SkrImage()
+                        $"{ImageUtils.SkrImage()}:{ImageUtils.SkrTag()}"
                     },
                     {
                         AciConstants.ContainerName.CcrProxy,

@@ -1,0 +1,40 @@
+name: Release attestation for an artefact
+description: Release attestation for an artefact
+inputs:
+  name:
+    description: Name of the container
+    required: true
+  tag:
+    description: The tag
+    required: true
+  environment:
+    description: The environment being released to
+    required: true
+  registry-name:
+    description: The registry to which the images need to be pushed
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: pwsh
+      id: get-digest
+      run: |
+        . build/helpers.ps1
+        $digest = Get-Digest -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom -containerName ${{ inputs.name }} -tag ${{ inputs.tag }}
+        Write-Host "Digest: $digest"
+        echo "digest=$digest" >> $env:GITHUB_OUTPUT
+
+    - name: Generate artefact attestation (internal images)
+      if: ${{ inputs.environment == 'internal' }}
+      uses: actions/attest-build-provenance@v1
+      with:
+        subject-name: ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/${{ inputs.name }}
+        subject-digest: ${{ steps.get-digest.outputs.digest }}
+
+    - name: Generate artefact attestation (unlisted images)
+      if: ${{ inputs.environment == 'unlisted' }}
+      uses: actions/attest-build-provenance@v1
+      with:
+        subject-name: mcr.microsoft.com/cleanroom/${{ inputs.name }}
+        subject-digest: ${{ steps.get-digest.outputs.digest }}

@@ -1,0 +1,44 @@
+name: Release CGS constitution version document
+description: Release CGS constitution version document
+inputs:
+  tag:
+    description: The tag
+    required: true
+  environment:
+    description: The environment being released to
+    required: true
+  registry-name:
+    description: The registry to which the images need to be pushed
+    required: true
+  client-id:
+    description: The client ID to connect to the registry
+    required: true
+  tenant-id:
+    description: The tenant ID of the registry
+    required: true
+  subscription-id:
+    description: The subscription ID of the registry
+    required: true
+  needs-attestation:
+    description: Whether the container needs attestation
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+
+    - shell: pwsh
+      run: pwsh ./.github/scripts/release-ccf-artefact-version-document.ps1 -containerName cgs-constitution -tag ${{ inputs.tag }} -environment ${{ inputs.environment }} -registryName ${{ inputs.registry-name }}
+
+    - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
+      with:
+        name: versions/cgs-constitution
+        tag: latest
+        environment: ${{ inputs.environment }}
+        registry-name: ${{ inputs.registry-name }}

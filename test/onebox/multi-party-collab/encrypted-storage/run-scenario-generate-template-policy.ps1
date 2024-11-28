@@ -19,7 +19,7 @@ param
     [switch]
     $y,
 
-    [ValidateSet('mcr', 'local')]
+    [ValidateSet('mcr', 'local', 'acr')]
     [string]$registry = "local",
 
     [string]$registryUrl = "localhost:5001",
@@ -418,8 +418,8 @@ az cleanroom governance contract vote `
 # }
 
 mkdir -p $outDir/deployments
-# Set overrides if local registry is to be used for clean room container images.
-if ($registry -eq "local") {
+# Set overrides if a non-mcr registry is to be used for clean room container images.
+if ($registry -ne "mcr") {
     $env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL = $registryUrl
     $env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = "${registryUrl}/sidecar-digests:$registryTag"
 }

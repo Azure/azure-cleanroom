@@ -1,0 +1,52 @@
+name: Build CCF network containers
+description: Build CCF network containers
+
+inputs:
+  tag:
+    required: true
+    description: The tag
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccf-app-run-js-snp
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.ccf_run_js_app.snp
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccf-app-run-js-virtual
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.ccf_run_js_app.virtual
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccr-proxy
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.proxy
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccr-attestation
+        tag: ${{ inputs.tag }}
+        dockerfile: external/confidential-sidecar-containers/docker/attestation-container/Dockerfile
+        context: ${{ github.workspace }}/external/confidential-sidecar-containers
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccf-recovery-agent
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.ccf-recovery-agent
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccf-nginx
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.ccf-nginx
+        context: ${{ github.workspace }}

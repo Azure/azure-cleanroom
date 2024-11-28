@@ -24,7 +24,13 @@ $clientContainers = @(
 
 $ccrContainers = @(
     "ccr-proxy",
-    "ccr-attestation"
+    "ccr-attestation",
+    "skr"
+)
+
+$govClientContainers = @(
+    "cgs-client",
+    "cgs-ui"
 )
 
 $root = git rev-parse --show-toplevel
@@ -50,3 +56,14 @@ foreach ($container in $clientContainers) {
 if ($pushPolicy) {
     pwsh $buildroot/ccf/build-ccf-infra-containers-policy.ps1 -tag $tag -repo $repo -push:$push
 }
+
+$index = 0
+foreach ($container in $govClientContainers) {
+    $index++
+    Write-Host -ForegroundColor DarkGreen "Building $container container ($index/$($govClientContainers.Count))"
+    pwsh $buildroot/cgs/build-$container.ps1 -tag $tag -repo $repo -push:$push
+    CheckLastExitCode
+    Write-Host -ForegroundColor DarkGray "================================================================="
+}
+
+pwsh $buildRoot/cgs/build-cgs-ccf-artefacts.ps1 -tag $tag -repo $repo -push:$push

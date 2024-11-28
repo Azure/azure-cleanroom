@@ -15,6 +15,7 @@
 
 # Mono auto generated files
 mono_crash.*
+.mono/
 
 # Build results
 [Dd]ebug/
@@ -31,6 +32,7 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+out/
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
@@ -383,6 +385,7 @@ FodyWeavers.xsd
 !.vscode/launch.json
 !.vscode/extensions.json
 *.code-workspace
+launchSettings.json
 
 # Local History for Visual Studio Code
 .history/
@@ -396,3 +399,21 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Sample training files generated
+.mono/registry/CurrentUser/software/microsoft/csdevkit/v1/pids/*/values.xml
+.mono/registry/CurrentUser/software/microsoft/csdevkit/telemetry/persistentpropertybag/microsoft.visualstudio.code.servicehost/values.xml
+sandbox_common/
+
+# AzCli extension development related
+dist
+.azcli-env
+src/tools/azure-cli-extension/cleanroom/cleanroom.egg-info
+src/tools/azure-cli-extension/cleanroom/build/
+src/tools/aes_encryptor/aes_encryptor.h
+src/tools/aes_encryptor/aes_encryptor.so
+
+.venv*
+sidecar-digests.yaml
+.ccf-network-security-policy
+.ccf-recovery-service-security-policy

@@ -8,7 +8,7 @@ The quickest way to develop or build and run sample applications is to checkout 
 
 ## Multi-party Collaboration
 
-- See [readme](https://github.com/Azure/azure-cleanroom-samples) for a multi-party data sharing and processing samples.
+- See [readme](https://github.com/Azure-Samples/azure-cleanroom-samples) for a multi-party data sharing and processing samples.
 
 ## Governance
 

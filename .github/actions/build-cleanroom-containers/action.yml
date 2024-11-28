@@ -1,0 +1,95 @@
+name: Build all cleanroom containers
+description: Build all cleanroom containers
+
+inputs:
+  tag:
+    required: true
+    description: The tag
+
+runs:
+  using: composite
+  steps:
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccr-init
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.ccr-init
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: identity
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.identity
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: blobfuse-launcher
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.blobfuse-launcher
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: code-launcher
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.code-launcher
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: otel-collector
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.otel-collector
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccr-attestation
+        tag: ${{ inputs.tag }}
+        dockerfile: external/confidential-sidecar-containers/docker/attestation-container/Dockerfile
+        context: ${{ github.workspace }}/external/confidential-sidecar-containers
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccr-secrets
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.ccr-secrets
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccr-governance
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.ccr-governance
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: cleanroom-client
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.cleanroom-client
+        context: ${{ github.workspace }}/src/tools/cleanroom-client
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccr-proxy
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.proxy
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ccr-proxy-ext-processor
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.proxy-ext-processor
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: skr
+        tag: ${{ inputs.tag }}
+        dockerfile: external/confidential-sidecar-containers/docker/skr/Dockerfile.skr
+        context: ${{ github.workspace }}/external/confidential-sidecar-containers

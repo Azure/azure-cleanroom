@@ -167,7 +167,7 @@ def ccf_network_up(
     sa_name = f"ccf{unique_string}sa"
     logger.warning(f"Creating storage account {sa_name}.")
     az_cli(
-        f"storage account create --name {sa_name} --resource-group {resource_group} --allow-shared-key-access true"
+        f"storage account create --name {sa_name} --resource-group {resource_group} --allow-shared-key-access true --allow-blob-public-access false"
     )
 
     sa_id = az_cli(
@@ -200,6 +200,10 @@ def ccf_network_up(
             keygen_cmd,
             capture_output=True,
         )
+
+        if not os.path.exists(operator_cert_pem_file):
+            logger.warning(result)
+            raise CLIError(f"Failed to generate {operator_cert_pem_file}.")
     else:
         logger.warning(f"operator member cert/key already exists.")
 
@@ -1104,11 +1108,8 @@ def get_provider_client_name(cli_ctx, provider_client_name):
 
 def set_docker_compose_env_params():
     os.environ["AZCLI_CCF_PROVIDER_CLIENT_WORKSPACE_DIR"] = ccf_provider_workspace_dir
-    from pwd import getpwnam
-    from grp import getgrnam
-
-    uid = getpwnam(os.environ["USER"]).pw_uid
-    gid = getgrnam(os.environ["USER"]).gr_gid
+    uid = os.getuid()
+    gid = os.getgid()
     os.environ["AZCLI_CCF_PROVIDER_UID"] = str(uid)
     os.environ["AZCLI_CCF_PROVIDER_GID"] = str(gid)
 
@@ -1128,6 +1129,8 @@ def set_docker_compose_env_params():
         os.environ["AZCLI_CCF_PROVIDER_PROXY_IMAGE"] = ""
     if "AZCLI_CCF_PROVIDER_ATTESTATION_IMAGE" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_ATTESTATION_IMAGE"] = ""
+    if "AZCLI_CCF_PROVIDER_SKR_IMAGE" not in os.environ:
+        os.environ["AZCLI_CCF_PROVIDER_SKR_IMAGE"] = ""
     if "AZCLI_CCF_PROVIDER_NGINX_IMAGE" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_NGINX_IMAGE"] = ""
     if "AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL" not in os.environ:
