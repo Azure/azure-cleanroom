@@ -12,15 +12,6 @@ on:
         description: The release type
         type: string
         default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers"
-      registry-name:
-        description: The registry name
-        required: false
-        type: string
-      needs-attestation:
-        description: Whether to attest released artefacts
-        required: false
-        type: boolean
-        default: false
   workflow_call:
     inputs:
       tag:
@@ -40,6 +31,10 @@ on:
         required: false
         type: boolean
         default: false
+    secrets:
+      registry-name:
+        description: The registry name
+        required: false
 
 jobs:
   build:
@@ -100,7 +95,7 @@ jobs:
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
-          registry-name: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -112,7 +107,7 @@ jobs:
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
-          registry-name: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -124,7 +119,7 @@ jobs:
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
-          registry-name: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -136,7 +131,7 @@ jobs:
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
-          registry-name: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -148,7 +143,7 @@ jobs:
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
-          registry-name: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -160,7 +155,7 @@ jobs:
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
-          registry-name: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -172,7 +167,7 @@ jobs:
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
-          registry-name: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -184,7 +179,7 @@ jobs:
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
-          registry-name: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -196,7 +191,7 @@ jobs:
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
-          registry-name: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -208,7 +203,7 @@ jobs:
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
-          registry-name: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -220,7 +215,7 @@ jobs:
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
-          registry-name: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -232,7 +227,7 @@ jobs:
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
-          registry-name: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -244,7 +239,7 @@ jobs:
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
-          registry-name: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -256,7 +251,7 @@ jobs:
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
-          registry-name: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -269,7 +264,7 @@ jobs:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag}}
           release-type: ${{ inputs.release-type }}
           environment: internal
-          registry-name: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -279,7 +274,7 @@ jobs:
     needs: [build, release-to-test]
     environment: test
     env:
-      RELEASE_ACR_NAME: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+      RELEASE_ACR_NAME: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -315,7 +310,7 @@ jobs:
       - name: Run ml-training test
         uses: ./.github/actions/test-multi-party-collab/test-ml-training-caci
         with:
-          registry-url: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/cleanroom
+          registry-url: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/cleanroom
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           kvType: ${{ matrix.key-store }}
 
@@ -324,7 +319,7 @@ jobs:
     needs: [build, release-to-test]
     environment: test
     env:
-      RELEASE_ACR_NAME: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+      RELEASE_ACR_NAME: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -351,7 +346,7 @@ jobs:
       - name: Run encrypted-storage test
         uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-caci
         with:
-          registry-url: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/cleanroom
+          registry-url: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/cleanroom
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
 
   bvt-nginx-hello:
@@ -359,7 +354,7 @@ jobs:
     needs: [build, release-to-test]
     environment: test
     env:
-      RELEASE_ACR_NAME: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+      RELEASE_ACR_NAME: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -386,7 +381,7 @@ jobs:
       - name: Run nginx-hello test
         uses: ./.github/actions/test-multi-party-collab/test-nginx-hello-caci
         with:
-          registry-url: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/cleanroom
+          registry-url: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/cleanroom
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
 
   # bvt-triton-inference:
@@ -394,7 +389,7 @@ jobs:
   #   needs: [build, release-to-test]
   #   environment: test
   #   env:
-  #     RELEASE_ACR_NAME: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}
+  #     RELEASE_ACR_NAME: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
   #     AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
   #     AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
   #     AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -421,5 +416,5 @@ jobs:
   #     - name: Run triton-inference test
   #       uses: ./.github/actions/test-multi-party-collab/test-triton-inference-caci
   #       with:
-  #         registry-url: ${{ inputs.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/cleanroom
+  #         registry-url: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/cleanroom
   #         tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
