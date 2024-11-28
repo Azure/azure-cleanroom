@@ -2074,6 +2074,7 @@ def ccf_network_up_cmd(
     location,
     security_policy_creation_option,
     recovery_mode,
+    provider_client_name,
 ):
     from .custom_ccf import ccf_network_up
 
@@ -2086,6 +2087,7 @@ def ccf_network_up_cmd(
         location,
         security_policy_creation_option,
         recovery_mode,
+        provider_client_name,
     )
 
 

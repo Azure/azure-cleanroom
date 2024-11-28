@@ -126,6 +126,7 @@ def ccf_network_up(
     location,
     security_policy_creation_option,
     recovery_mode,
+    provider_client_name
 ):
     if not location:
         location = az_cli(
@@ -230,7 +231,6 @@ def ccf_network_up(
     with open(provider_config_file, "w") as f:
         f.write(json.dumps(provider_config, indent=2))
 
-    provider_client_name = "ccf-provider"
     az_cli(f"cleanroom ccf provider deploy --name {provider_client_name}")
 
     recovery_service_name = ""
