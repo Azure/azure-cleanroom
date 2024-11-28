@@ -26,7 +26,7 @@ COPY .editorconfig /app
 
 # Publish the application
 RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/governance/sidecar/ccr-governance.csproj
-COPY --chmod=755 src/governance/sidecar/bootstrap.sh /app/publish/bootstrap.sh
+COPY src/governance/sidecar/bootstrap.sh /app/publish/bootstrap.sh
 
 # Use the official .NET Core runtime as the base image for the final stage
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
@@ -39,6 +39,7 @@ WORKDIR /app
 
 # Copy the published output from the build stage to the runtime stage
 COPY --from=build /app/publish .
+RUN chmod +x ./bootstrap.sh
 
 # Listen on 8300 within the container.
 ARG PORT=8300

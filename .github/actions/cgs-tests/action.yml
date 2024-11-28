@@ -1,0 +1,34 @@
+name: CGS CCF Tests
+description: CGS CCF Tests
+
+runs:
+  using: composite
+  steps:
+    - name: Deploy CGS
+      shell: pwsh
+      run: ./src/governance/test/deploy-cgs.ps1
+
+    - name: Deploy CGS for roles testing
+      shell: pwsh
+      run: ./src/governance/test/roles/deploy-cgs.ps1
+
+    - name: Run CGS unit tests
+      shell: pwsh
+      run: ./src/governance/test/test-cgs.ps1
+
+    - name: CGS test reporter
+      if: always()
+      uses: dorny/test-reporter@v1
+      with:
+        name: Test report-CGS  # Name of the check run which will be created
+        path: ./src/governance/test/TestResults/TestRunResult-CGS.trx    # Path to test results
+        reporter: dotnet-trx 
+
+    - name: Cleanup local container images
+      shell: pwsh
+      run: |
+        ./src/governance/test/remove-cgs.ps1
+        ./src/governance/test/roles/remove-cgs.ps1
+        docker rmi cgs-client:latest
+        docker rmi cgs-ui:latest
+        docker rmi ccr-governance:latest

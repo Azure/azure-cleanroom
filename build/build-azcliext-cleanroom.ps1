@@ -8,7 +8,7 @@ param(
     [string]$output = "$PSScriptRoot/bin/azext_cleanroom/dist"
 )
 
-$version = "0.0.7"
+$version = "1.0.0"
 
 if (!$localenv) {
     . $PSScriptRoot/helpers.ps1

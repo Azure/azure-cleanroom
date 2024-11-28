@@ -1,0 +1,40 @@
+name: Verify attestation for artefacts released to MCR
+description: Verify attestation for artefacts released to MCR
+
+inputs:
+  tag:
+    description: The tag
+    required: true
+  release-type:
+    description: The release type
+    required: true
+  environment:
+    description: The release environment
+    required: true
+  registry-name:
+    description: The registry to which the images need to be pushed
+    required: true
+  client-id:
+    description: The client ID to connect to the registry
+    required: true
+  tenant-id:
+    description: The tenant ID of the registry
+    required: true
+  subscription-id:
+    description: The subscription ID of the registry
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+
+    - shell: pwsh
+      run: ./.github/scripts/verify-attestation.ps1 `
+        -tag "${{ inputs.tag }}" `
+        -releaseType "${{ inputs.release-type }}" `
+        -environment "${{ inputs.environment }}"

@@ -26,7 +26,7 @@ RUN chmod 755 /usr/bin/azcopy
 COPY ./dist /dist
 
 # Installing with --system flag so that container if running as non-root user is able to use the extension.
-RUN az extension add -y --source /dist/cleanroom-0.0.7-py2.py3-none-any.whl --allow-preview true --system
+RUN az extension add -y --source /dist/cleanroom-1.0.0-py2.py3-none-any.whl --allow-preview true --system
 
 # So that az login is able to write here if container is running as non-root user.
 RUN mkdir /.azure

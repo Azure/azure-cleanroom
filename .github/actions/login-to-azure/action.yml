@@ -1,0 +1,29 @@
+name: Login and Refresh Token
+description: Login and Refresh Token
+
+runs:
+  using: composite
+  steps:
+    # The OIDC token expires every 5 minutes. Any login attempted post that will fail with
+    # "ERROR: AADSTS700024: Client assertion is not within its valid time range."
+    # To keep the OIDC token active, keep logging in every 4 minutes.
+    # https://github.com/Azure/azure-cli/issues/28708#issuecomment-2049014471.
+    - name: Fetch OID token every 4 mins
+      shell: bash
+      run: |
+        token_request=$ACTIONS_ID_TOKEN_REQUEST_TOKEN
+        token_uri=$ACTIONS_ID_TOKEN_REQUEST_URL
+        token=$(curl -H "Authorization: bearer $token_request" "${token_uri}&audience=api://AzureADTokenExchange" | jq .value -r)
+        az login --service-principal -u ${{ env.CLIENT_ID }} -t ${{ env.TENANT_ID }} --federated-token $token
+        while true; do
+          token=$(curl -H "Authorization: bearer $token_request" "${token_uri}&audience=api://AzureADTokenExchange" | jq .value -r)
+          az login --service-principal -u ${{ env.CLIENT_ID }} -t ${{ env.TENANT_ID }} --federated-token $token
+          az account set --subscription ${{ env.SUBSCRIPTION_ID }}
+          # Sleep for 4 minutes
+          sleep 240
+        done &
+
+    - name: Check if OID token was fetched
+      shell: bash
+      run: |
+        az account show | jq ".user"

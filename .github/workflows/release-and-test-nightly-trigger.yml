@@ -1,0 +1,15 @@
+name: Trigger release to test and run BVT
+run-name: Nightly test - ${{ github.sha }}
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  nightly-test:
+    permissions:
+      id-token: write
+      contents: read  # This is required for actions/checkout
+      attestations: write
+      packages: write
+    uses: ./.github/workflows/release-and-test.yml # Do not pass parameters, so that the default values are used
