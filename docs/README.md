@@ -9,7 +9,7 @@ this reference implementation currently uses Azure for deployment and for the im
 backend services (e.g., for key management), but each such instance has an accompanying interface to
 allow alternative implementations.
 
-We actively welcome contributions and feedback from the community.
+We actively welcome contributions and feedback from the community. Test.
 
 ## Components
 
