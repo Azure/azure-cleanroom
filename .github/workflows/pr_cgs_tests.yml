@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   pull_request:
     branches:
-      - main
+      - develop
       - release
 
 permissions:
@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   cgs-test:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
     steps:
       - uses: actions/checkout@v4
