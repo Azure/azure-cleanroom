@@ -48,6 +48,9 @@ jobs:
       - name: Install az cleanroom CLI
         run: az extension add --source https://cleanroomazcli.blob.core.windows.net/azcli/cleanroom-1.0.0-py2.py3-none-any.whl -y --allow-preview true
 
+      - name: Enabling az cli telemetry collection
+        run: az config set core.collect_telemetry=true
+
       - name: Run ml-training test
         uses: ./.github/actions/test-multi-party-collab/test-ml-training-caci
         with:
@@ -84,6 +87,9 @@ jobs:
       - name: Install az cleanroom CLI
         run: az extension add --source https://cleanroomazcli.blob.core.windows.net/azcli/cleanroom-1.0.0-py2.py3-none-any.whl -y --allow-preview true
 
+      - name: Enabling az cli telemetry collection
+        run: az config set core.collect_telemetry=true
+
       - name: Run encrypted-storage test
         uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-caci
         with:
@@ -118,6 +124,9 @@ jobs:
 
       - name: Install az cleanroom CLI
         run: az extension add --source https://cleanroomazcli.blob.core.windows.net/azcli/cleanroom-1.0.0-py2.py3-none-any.whl -y --allow-preview true
+
+      - name: Enabling az cli telemetry collection
+        run: az config set core.collect_telemetry=true
 
       - name: Run nginx-hello test
         uses: ./.github/actions/test-multi-party-collab/test-nginx-hello-caci
