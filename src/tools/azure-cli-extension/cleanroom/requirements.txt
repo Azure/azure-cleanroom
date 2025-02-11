@@ -4,7 +4,7 @@ azure-cli-core==2.60.0
 python-on-whales==0.71.0
 oras==0.1.29
 pydantic==2.8.2
-cryptography==43.0.1
+cryptography==44.0.1
 pycryptodome==3.19.1
 rich==13.8.0
 docker
