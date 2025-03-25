@@ -104,13 +104,13 @@ else {
         # Install clean room extension that corresponds to the MCR images.
         $version = (az extension show --name cleanroom --query "version" --output tsv 2>$null)
         if ($version -ne "0.0.1") {
-            oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:2.0.0
+            oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:3.0.0
 
             Write-Host "Installing az cleanroom cli"
             az extension remove --name cleanroom 2>$null
             az extension add `
                 --allow-preview true `
-                --source ./cleanroom-2.0.0-py2.py3-none-any.whl -y
+                --source ./cleanroom-3.0.0-py2.py3-none-any.whl -y
         }
         else {
             Write-Host "az cleanroom cli version: $version already installed."
