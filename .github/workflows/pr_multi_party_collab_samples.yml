@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   build-ccf-containers:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     strategy:
       matrix:
@@ -59,7 +59,7 @@ jobs:
         run: pwsh ./build/ccf/build-ccf-infra-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -containers ${{ matrix.container }}
 
   build-ccr-containers:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     strategy:
       matrix:
@@ -98,7 +98,7 @@ jobs:
         run: pwsh ./build/onebox/build-local-cleanroom-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -containers ${{ matrix.container }}
 
   build-ccf-container-policies:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     strategy:
       matrix:
@@ -143,7 +143,7 @@ jobs:
         run: pwsh ./build/ccf/build-ccf-infra-containers-policy.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -containers ${{ matrix.container }}
 
   build-ccr-container-policies:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccr-containers]
     env:
@@ -183,7 +183,7 @@ jobs:
         run: pwsh ./build/build-ccr-digests.ps1 -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }} -push
 
   build-azcliext-cleanroom:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -213,7 +213,7 @@ jobs:
         run: pwsh ./build/build-azcliext-cleanroom.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push
 
   cleanroom-client-test:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccr-container-policies, build-azcliext-cleanroom]
     # TODO (anrdesai): The following env vars are overrides until the latest containers (ver 2.0.1)
@@ -247,7 +247,7 @@ jobs:
           pytest -v
 
   encrypted-storage:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
     env:
@@ -270,7 +270,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   encrypted-storage-cleanroom-client:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom, cleanroom-client-test]
     env:
@@ -293,7 +293,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   db-access:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
     env:
@@ -316,7 +316,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   mongo-db-access:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
     env:
@@ -339,7 +339,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   quote-of-the-day:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
     env:
@@ -362,7 +362,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   encrypted-storage-caci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
     env:
@@ -385,7 +385,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   encrypted-storage-cleanroom-client-caci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
     env:
@@ -408,7 +408,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   ml-training-caci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
     strategy:
@@ -441,7 +441,7 @@ jobs:
           kvType: ${{ matrix.key-store }}
 
   nginx-hello:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
     env:
@@ -464,7 +464,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   nginx-hello-caci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
     env:
@@ -487,7 +487,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   # triton-inference-server-caci:
-  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
   #   environment: pr
   #   needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
   #   env:

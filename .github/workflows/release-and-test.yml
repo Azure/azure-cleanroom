@@ -43,7 +43,7 @@ jobs:
       build-type: ${{ inputs.release-type }}
 
   release-to-test:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: test
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
@@ -290,7 +290,7 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
   bvt-ml-training:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     needs: [build, release-to-test]
     environment: test
     env:
@@ -335,7 +335,7 @@ jobs:
           kvType: ${{ matrix.key-store }}
 
   bvt-encrypted-storage:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     needs: [build, release-to-test]
     environment: test
     env:
@@ -370,7 +370,7 @@ jobs:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
 
   bvt-nginx-hello:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     needs: [build, release-to-test]
     environment: test
     env:
@@ -405,7 +405,7 @@ jobs:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
 
   # bvt-triton-inference:
-  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
   #   needs: [build, release-to-test]
   #   environment: test
   #   env:

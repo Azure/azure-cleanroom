@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   build-ccf-containers:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     strategy:
       matrix:
@@ -56,7 +56,7 @@ jobs:
         run: pwsh ./build/ccf/build-ccf-infra-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -containers ${{ matrix.container }}
 
   build-ccf-container-policies:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     strategy:
       matrix:
@@ -101,7 +101,7 @@ jobs:
         run: pwsh ./build/ccf/build-ccf-infra-containers-policy.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -containers ${{ matrix.container }}
 
   build-azcliext-cleanroom:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -131,7 +131,7 @@ jobs:
         run: pwsh ./build/build-azcliext-cleanroom.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push
 
   docker-operator-recovery:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     strategy:
@@ -202,7 +202,7 @@ jobs:
         run: docker logs ccf-provider-client-1
 
   docker-confidential-recovery:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
@@ -294,7 +294,7 @@ jobs:
         run: pwsh ./samples/ccf/azcli/show-docker-logs.ps1 -label "ccf-recovery-service/type=recovery-service"
 
   docker-confidential-recovery-onestep:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
@@ -387,7 +387,7 @@ jobs:
         run: pwsh ./samples/ccf/azcli/show-docker-logs.ps1 -label "ccf-recovery-service/type=recovery-service"
 
   aci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
@@ -433,7 +433,7 @@ jobs:
         run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
 
   caci-operator-recovery:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
@@ -526,7 +526,7 @@ jobs:
         run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
 
   caci-confidential-recovery:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
@@ -607,7 +607,7 @@ jobs:
         run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
 
   caci-confidential-recovery-ccf-upgrade:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
@@ -706,7 +706,7 @@ jobs:
         run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
 
   caci-confidential-recovery-recsvc-upgrade:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
@@ -789,7 +789,7 @@ jobs:
         run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
 
   caci-allow-all-confidential-recovery:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
@@ -870,7 +870,7 @@ jobs:
         run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
 
   caci-confidential-recovery-onestep:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:

@@ -34,7 +34,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: test
     steps:
       - name: Setup .NET
