@@ -2,6 +2,8 @@
 param
 (
 )
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
 
 $root = git rev-parse --show-toplevel
 
@@ -14,10 +16,8 @@ if ($env:GITHUB_ACTIONS -ne "true") {
 }
 else {
     dotnet test $root/src/governance/test/cgs-tests.csproj --logger "trx;LogFileName=TestRunResult-CGS.trx" --logger "console;verbosity=normal"
-    CheckLastExitCode
 }
 
 # Run this after CGS tests as below adds a member and leaves it in Accepted state. This interferes
 # with our tests as contract proposal acceptance requires no members that are yet to become active.
 pwsh $root/src/governance/test/test-ccf-operator-actions.ps1 -WithWorkaround
-CheckLastExitCode

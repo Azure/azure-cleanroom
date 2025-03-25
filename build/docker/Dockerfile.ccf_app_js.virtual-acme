@@ -1,8 +1,8 @@
 # Build
-FROM ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-dev2 AS builder
+FROM ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-rc1 AS builder
 
 # Run
-FROM ghcr.io/microsoft/ccf/app/run-js/virtual:ccf-6.0.0-dev2
+FROM ghcr.io/microsoft/ccf/app/run-js/virtual:ccf-6.0.0-rc1
 
 # Note: libjs_generic.virtual is not included in run-js container
 COPY --from=builder /opt/ccf_virtual/lib/libjs_generic.virtual.so /usr/lib/ccf
@@ -11,7 +11,7 @@ COPY --from=builder /opt/ccf_virtual/bin/*.js /app/
 RUN true # https://github.com/moby/moby/issues/37965
 COPY --from=builder /opt/ccf_virtual/bin/keygenerator.sh /app/ 
 
-COPY ./src/governance/ccf-app/config/cchost_config_virtual_js-acme.json /app/
+COPY ./src/governance/ccf-app/js/config/cchost_config_virtual_js-acme.json /app/
 
 COPY ./samples/governance/acme-tls/sandbox_common/member0_cert.pem /app/
 COPY ./samples/governance/acme-tls/sandbox_common/member0_privk.pem /app/

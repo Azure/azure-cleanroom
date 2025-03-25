@@ -9,8 +9,15 @@ param(
     [switch]$push,
 
     [parameter(Mandatory = $false)]
-    [switch]$pushPolicy
+    [switch]$pushPolicy,
+
+    [parameter(Mandatory = $false)]
+    [string[]]
+    $containers
 )
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
+
 . $PSScriptRoot/../helpers.ps1
 
 $clientContainers = @(
@@ -19,7 +26,8 @@ $clientContainers = @(
     "ccf-recovery-service",
     "ccf-nginx",
     "ccf-runjs-app-virtual",
-    "ccf-runjs-app-snp"
+    "ccf-runjs-app-snp",
+    "ccf-runjs-app-sandbox"
 )
 
 $ccrContainers = @(
@@ -33,24 +41,30 @@ $govClientContainers = @(
     "cgs-ui"
 )
 
+$ccfArtefacts = @(
+    "cgs-ccf-artefacts"
+)
+
 $root = git rev-parse --show-toplevel
 $buildRoot = "$root/build"
 $index = 0
 foreach ($container in $ccrContainers) {
     $index++
-    Write-Host -ForegroundColor DarkGreen "Building $container container ($index/$($ccrContainers.Count))"
-    pwsh $buildroot/ccr/build-$container.ps1 -tag $tag -repo $repo -push:$push
-    CheckLastExitCode
-    Write-Host -ForegroundColor DarkGray "================================================================="
+    if ($null -eq $containers -or $containers.Contains($container)) {
+        Write-Host -ForegroundColor DarkGreen "Building $container container ($index/$($ccrContainers.Count))"
+        pwsh $buildroot/ccr/build-$container.ps1 -tag $tag -repo $repo -push:$push
+        Write-Host -ForegroundColor DarkGray "================================================================="
+    }
 }
 
 $index = 0
 foreach ($container in $clientContainers) {
     $index++
-    Write-Host -ForegroundColor DarkGreen "Building $container container ($index/$($clientContainers.Count))"
-    pwsh $buildroot/ccf/build-$container.ps1 -tag $tag -repo $repo -push:$push
-    CheckLastExitCode
-    Write-Host -ForegroundColor DarkGray "================================================================="
+    if ($null -eq $containers -or $containers.Contains($container)) {
+        Write-Host -ForegroundColor DarkGreen "Building $container container ($index/$($clientContainers.Count))"
+        pwsh $buildroot/ccf/build-$container.ps1 -tag $tag -repo $repo -push:$push
+        Write-Host -ForegroundColor DarkGray "================================================================="
+    }
 }
 
 if ($pushPolicy) {
@@ -60,10 +74,17 @@ if ($pushPolicy) {
 $index = 0
 foreach ($container in $govClientContainers) {
     $index++
-    Write-Host -ForegroundColor DarkGreen "Building $container container ($index/$($govClientContainers.Count))"
-    pwsh $buildroot/cgs/build-$container.ps1 -tag $tag -repo $repo -push:$push
-    CheckLastExitCode
-    Write-Host -ForegroundColor DarkGray "================================================================="
+    if ($null -eq $containers -or $containers.Contains($container)) {
+        Write-Host -ForegroundColor DarkGreen "Building $container container ($index/$($govClientContainers.Count))"
+        pwsh $buildroot/cgs/build-$container.ps1 -tag $tag -repo $repo -push:$push
+        Write-Host -ForegroundColor DarkGray "================================================================="
+    }
 }
 
-pwsh $buildRoot/cgs/build-cgs-ccf-artefacts.ps1 -tag $tag -repo $repo -push:$push
+$index = 0
+foreach ($artefact in $ccfArtefacts) {
+    $index++
+    if ($null -eq $containers -or $containers.Contains($artefact)) {
+        pwsh $buildRoot/cgs/build-$artefact.ps1 -tag $tag -repo $repo -push:$push
+    }
+}

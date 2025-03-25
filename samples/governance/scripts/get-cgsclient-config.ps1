@@ -11,5 +11,4 @@ Function Get-CgsClient-Config {
   $port = GetPortOrDie($port)
 
   curl -sS -X GET localhost:$port/show | jq
-  CheckLastExitCode
 }

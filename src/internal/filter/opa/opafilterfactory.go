@@ -6,10 +6,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
-	"github.com/azure/azure-cleanroom/internal/configuration"
-	"github.com/azure/azure-cleanroom/internal/filter"
+	"github.com/azure/azure-cleanroom/src/internal/configuration"
+	"github.com/azure/azure-cleanroom/src/internal/filter"
 	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/download"
 	"github.com/open-policy-agent/opa/keys"
@@ -99,9 +100,20 @@ func NewHttpFilterFactory(
 			return nil, err
 		}
 
+		bundleProtocol := "https"
+
+		envUseHttp, present := os.LookupEnv("USE_HTTP")
+		if present {
+			var useHttp bool
+			useHttp, err = strconv.ParseBool(envUseHttp)
+			if err == nil && useHttp {
+				bundleProtocol = "http"
+			}
+		}
+
 		bundleServiceUrl := config.BundleServiceUrl
 		if bundleServiceUrl == "" {
-			bundleServiceUrl = "https://" + strings.Split(config.BundleResource, "/")[0]
+			bundleServiceUrl = bundleProtocol + "://" + strings.Split(config.BundleResource, "/")[0]
 		}
 
 		var restConfig []byte
@@ -258,10 +270,10 @@ func preparePolicyEval(
 	return preparedQuery, nil
 }
 
-func isSevSnp() (bool) {
+func isSevSnp() bool {
 	return !isInsecureVirtualEnvironment()
 }
 
-func isInsecureVirtualEnvironment() (bool) {
+func isInsecureVirtualEnvironment() bool {
 	return os.Getenv("INSECURE_VIRTUAL_ENVIRONMENT") == "true"
 }

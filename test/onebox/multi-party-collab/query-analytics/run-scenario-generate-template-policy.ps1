@@ -4,8 +4,9 @@ param
     [string]
     $outDir = "$PSScriptRoot/generated",
 
+    [Parameter(Mandatory)]
     [string]
-    $ccfEndpoint = "https://host.docker.internal:9081",
+    $ccfEndpoint,
 
     [string]
     $ccfOutDir = "",
@@ -13,15 +14,12 @@ param
     [string]
     $contractId = "collab1",
 
-    [switch]
-    $y,
-
-    [ValidateSet('mcr', 'local')]
+    [ValidateSet('mcr', 'local', 'acr')]
     [string]$registry = "local",
 
-    [string]$registryUrl = "localhost:5001",
+    [string]$repo = "localhost:5000",
 
-    [string]$registryTag = "latest",
+    [string]$tag = "latest",
 
     [switch]
     $withSecurityPolicy
@@ -39,7 +37,7 @@ $consumerDataSamplePath = "$root/samples/multi-party-collab/scenarios/analytics/
 $publisherDataSamplePath = "$root/samples/multi-party-collab/scenarios/analytics/publisher-demo/publisher-input"
 
 if ($ccfOutDir -eq "") {
-    $ccfOutDir = "$root/test/onebox/multi-party-collab/generated/ccf"
+    $ccfOutDir = "$root/test/onebox/multi-party-collab/query-analytics/generated/ccf"
 }
 
 $serviceCert = $ccfOutDir + "/service_cert.pem"
@@ -47,15 +45,10 @@ if (-not (Test-Path -Path $serviceCert)) {
     throw "serviceCert at $serviceCert does not exist."
 }
 
-if ($env:GITHUB_ACTIONS -eq "true" -and $ccfEndpoint -eq "https://host.docker.internal:9081") {
-    # 172.17.0.1: https://stackoverflow.com/questions/48546124/what-is-the-linux-equivalent-of-host-docker-internal
-    $ccfEndpoint = "https://172.17.0.1:9081"
-}
-
 mkdir -p "$outDir/configurations"
 $publisherConfig = "$outDir/configurations/publisher-config"
 $consumerConfig = "$outDir/configurations/consumer-config"
-$datastoreOutdir = "$root/test/onebox/multi-party-collab/generated/datastores"
+$datastoreOutdir = "$outDir/datastores"
 mkdir -p "$datastoreOutdir"
 $publisherDatastoreConfig = "$datastoreOutdir/analytics-publisher-datastore-config"
 $consumerDatastoreConfig = "$datastoreOutdir/analytics-consumer-datastore-config"
@@ -90,13 +83,9 @@ az cleanroom governance proposal vote `
     --action accept `
     --governance-client "ob-consumer-client"
 
-# if (!$y) {
-#     Read-Host "Press Enter to continue or Ctrl+C to quit" | Out-Null
-# }
-
 # Publisher identity creation.
 if (-not (Test-Path -Path "$ccfOutDir/publisher_cert.pem")) {
-    az cleanroom governance member keygenerator-sh | bash -s -- --name "publisher" --out "$ccfOutDir"
+    az cleanroom governance member keygenerator-sh | bash -s -- --name "publisher" --gen-enc-key --out "$ccfOutDir"
 }
 
 # Invite publisher to the consortium.
@@ -105,6 +94,7 @@ $publisherTenantId = az account show --query "tenantId" --output tsv
 # "consumer" member makes a proposal for adding the new member "publisher".
 $proposalId = (az cleanroom governance member add `
         --certificate $ccfOutDir/publisher_cert.pem `
+        --encryption-public-key $ccfOutDir/publisher_enc_pubk.pem `
         --identifier "publisher" `
         --tenant-id $publisherTenantId `
         --query "proposalId" `
@@ -117,16 +107,16 @@ az cleanroom governance proposal vote `
     --action accept `
     --governance-client "ob-consumer-client"
 
-# if (!$y) {
-#     Read-Host "Press Enter to continue or Ctrl+C to quit" | Out-Null
-# }
-
 # "publisher" deploys client-side containers to interact with the governance service as the new member.
 # Set overrides if local registry is to be used for CGS images.
 if ($registry -eq "local") {
-    $tag = cat "$ccfOutDir/local-registry-tag.txt"
-    $env:AZCLI_CGS_CLIENT_IMAGE = "localhost:5000/cgs-client:$tag"
-    $env:AZCLI_CGS_UI_IMAGE = "localhost:5000/cgs-ui:$tag"
+    $localTag = cat "$ccfOutDir/local-registry-tag.txt"
+    $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$localTag"
+    $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$localTag"
+}
+elseif ($registry -eq "acr") {
+    $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$tag"
+    $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$tag"
 }
 
 az cleanroom governance client deploy `
@@ -136,12 +126,35 @@ az cleanroom governance client deploy `
     --service-cert $ccfOutDir/service_cert.pem `
     --name "ob-publisher-client"
 
-# if (!$y) {
-#     Read-Host "Press Enter to continue or Ctrl+C to quit" | Out-Null
-# }
-
 # "publisher" accepts the invitation and becomes an active member in the consortium.
 az cleanroom governance member activate --governance-client "ob-publisher-client"
+
+# Update the recovery threshold of the network to include all the active members.
+$newThreshold = 2
+$proposalId = (az cleanroom governance network set-recovery-threshold `
+        --recovery-threshold $newThreshold `
+        --query "proposalId" `
+        --output tsv `
+        --governance-client "ob-publisher-client")
+
+# Vote on the above proposal to accept the new threshold.
+az cleanroom governance proposal vote `
+    --proposal-id $proposalId `
+    --action accept `
+    --governance-client "ob-publisher-client"
+
+az cleanroom governance proposal vote `
+    --proposal-id $proposalId `
+    --action accept `
+    --governance-client "ob-consumer-client"
+
+$recoveryThreshold = (az cleanroom governance network show `
+        --query "configuration.recoveryThreshold" `
+        --output tsv `
+        --governance-client "ob-publisher-client")
+if ($recoveryThreshold -ne $newThreshold) {
+    throw "Expecting recovery threshold to be $newThreshold but value is $recoveryThreshold."
+}
 
 # Create storage account, KV and MI resources.
 pwsh $collabSamplePath/prepare-resources.ps1 `
@@ -150,10 +163,6 @@ pwsh $collabSamplePath/prepare-resources.ps1 `
     -kvType akvpremium `
     -outDir $outDir
 $result = Get-Content "$outDir/$publisherResourceGroup/resources.generated.json" | ConvertFrom-Json
-# if (!$y) {
-#     Read-Host "prepare-resources done. Press Enter to continue or Ctrl+C to quit" | Out-Null
-# }
-
 az cleanroom datastore add `
     --name publisher-input `
     --config $publisherDatastoreConfig `
@@ -220,10 +229,6 @@ az cleanroom config set-telemetry `
     --datastore-keystore $publisherKeyStore `
     --encryption-mode CPK `
     --container-suffix $containerSuffix
-
-# if (!$y) {
-#     Read-Host "Press Enter to continue or Ctrl+C to quit" | Out-Null
-# }
 
 # Create storage account, KV and MI resources.
 pwsh $collabSamplePath/prepare-resources.ps1 `
@@ -298,8 +303,8 @@ az cleanroom config add-application `
     --name demo-app `
     --image "cleanroomsamples.azurecr.io/azure-cleanroom-samples/demos/analytics@sha256:260becd228b930c4bbaca348b1c226a563f58af7d97c67a963db6a1bf4a48212" `
     --command "python3.10 ./analytics.py" `
-    --mounts "src=publisher-input,dst=/mnt/remote/publisher-input" `
-    "src=consumer-input,dst=/mnt/remote/consumer-input" `
+    --datasources "publisher-input=/mnt/remote/publisher-input" `
+    "consumer-input=/mnt/remote/consumer-input" `
     --env-vars STORAGE_PATH_1=/mnt/remote/publisher-input `
     STORAGE_PATH_2=/mnt/remote/consumer-input `
     --cpu 0.5 `
@@ -316,10 +321,6 @@ az cleanroom config view `
     --cleanroom-config $consumerConfig `
     --configs $publisherConfig `
     --out-file $outDir/configurations/cleanroom-config
-
-# if (!$y) {
-#     Read-Host "Press Enter to continue or Ctrl+C to quit" | Out-Null
-# }
 
 az cleanroom config validate --cleanroom-config $outDir/configurations/cleanroom-config
 
@@ -363,15 +364,11 @@ az cleanroom governance contract vote `
     --action accept `
     --governance-client "ob-consumer-client"
 
-# if (!$y) {
-#     Read-Host "Press Enter to continue or Ctrl+C to quit" | Out-Null
-# }
-
 mkdir -p $outDir/deployments
 # Set overrides if local registry is to be used for clean room container images.
-if ($registry -eq "local") {
-    $env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL = $registryUrl
-    $env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = "${registryUrl}/sidecar-digests:$registryTag"
+if ($registry -ne "mcr") {
+    $env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL = $repo
+    $env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = "${repo}/sidecar-digests:$tag"
 }
 
 if ($withSecurityPolicy) {
@@ -530,15 +527,6 @@ az cleanroom governance proposal vote `
     --action accept `
     --governance-client $clientName
 
-# if (!$y) {
-#     Read-Host "Press Enter to continue or Ctrl+C to quit" | Out-Null
-# }
-
-$usePreprovisionedOIDC = $false
-if ($env:USE_PREPROVISIONED_OIDC -eq "true") {
-    $usePreprovisionedOIDC = $true
-}
-
 # Creates a KEK with SKR policy, wraps DEKs with the KEK and put in kv.
 az cleanroom config wrap-deks `
     --contract-id $contractId `
@@ -553,8 +541,7 @@ pwsh $collabSamplePath/setup-access.ps1 `
     -contractId $contractId  `
     -kvType akvpremium `
     -outDir $outDir `
-    -governanceClient "ob-publisher-client" `
-    -usePreprovisionedOIDC:$usePreprovisionedOIDC
+    -governanceClient "ob-publisher-client"
 
 # Creates a KEK with SKR policy, wraps DEKs with the KEK and put in kv.
 az cleanroom config wrap-deks `
@@ -570,8 +557,7 @@ pwsh $collabSamplePath/setup-access.ps1 `
     -contractId $contractId `
     -kvType akvpremium `
     -outDir $outDir `
-    -governanceClient "ob-consumer-client" `
-    -usePreprovisionedOIDC:$usePreprovisionedOIDC
+    -governanceClient "ob-consumer-client"
 
 # defining query
 $data = "SELECT author, COUNT(*) AS Number_Of_Mentions FROM COMBINED_TWEETS WHERE mentions LIKE '%MikeDoesBigData%'  GROUP BY author ORDER BY Number_Of_Mentions DESC"

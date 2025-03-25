@@ -35,7 +35,6 @@ WORKDIR /app
 
 # Copy the published output from the build stage to the runtime stage
 COPY --from=build /app/publish .
-RUN chmod 755 /app/Scripts/gencacert.sh
 
 # Set the entry point for the container
 ENTRYPOINT ["dotnet", "cgs-client.dll"]

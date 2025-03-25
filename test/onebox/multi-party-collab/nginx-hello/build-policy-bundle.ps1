@@ -1,7 +1,9 @@
 param(
     [Parameter( Mandatory = $true,
         HelpMessage = "The registry url.")]
-    $registryUrl,
+    $repo,
+
+    $tag = "latest",
 
     [switch]$skipPush = $false
 )
@@ -44,7 +46,7 @@ if (!$skipPush) {
     # then oras pull fails with "Error: failed to resolve path for writing: path traversal disallowed"
     Push-Location
     Set-Location $outputPath
-    oras push $registryUrl/nginx-hello-policy:latest `
+    oras push $repo/nginx-hello-policy:$tag `
         --config $policyFilesPath/config.json:application/vnd.oci.image.config.v1+json `
         ./nginx-hello-policy.tar.gz:application/vnd.oci.image.layer.v1.tar+gzip
     Pop-Location

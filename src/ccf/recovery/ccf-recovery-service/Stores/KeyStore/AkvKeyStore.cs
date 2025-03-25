@@ -113,7 +113,7 @@ public class AkvKeyStore : IKeyStore
         else
         {
             var attestationJson = await File.ReadAllTextAsync(
-                "insecure-virtual/encryption_key_attestation.json");
+                "/app/insecure-virtual/encryption_key_attestation.json");
             encKeyAndReport = JsonSerializer.Deserialize<AttestationReportKey>(attestationJson)!;
         }
 
@@ -237,7 +237,7 @@ public class AkvKeyStore : IKeyStore
         else
         {
             var attestationJson = await File.ReadAllTextAsync(
-                "insecure-virtual/signing_key_attestation.json");
+                "/app/insecure-virtual/signing_key_attestation.json");
             signingKeyAndReport =
                 JsonSerializer.Deserialize<AttestationReportKeyCert>(attestationJson)!;
         }

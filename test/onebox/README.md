@@ -13,7 +13,6 @@ would help in speeding up development and also increase familiarity with the und
 > does not provide any security guarantees and should be used for development purposes only.
 
 ## Prerequisites <!-- omit from toc -->
-- The same pre-requisites as mentioned [here](../../samples/multi-party-collab/README.md#3-prerequisites) apply.
 - Kind: see steps [here](https://kind.sigs.k8s.io/docs/user/quick-start/) to install it.
 
 ## Differences compared to CACI deployment <!-- omit from toc -->
@@ -28,7 +27,7 @@ would help in speeding up development and also increase familiarity with the und
 Follow the below steps to create a local setup.
 
 ## 1. Create Kind cluster and a local registry
-Below creates a kind cluster named `kind-cleanroom` and also starts a local registry container named `kind-registry`. The cluster is configured so that it can reach the registry endpoint at `localhost:5001` from within the cluster.
+Below creates a kind cluster named `kind-cleanroom` and also starts a local registry container named `ccr-registry`. The cluster is configured so that it can reach the registry endpoint at `localhost:5000` from within the cluster.
 ```powershell
 $root = git rev-parse --show-toplevel
 bash $root/test/onebox/kind-up.sh
@@ -87,7 +86,7 @@ pwsh $root/build/ccf/build-ccf-infra-containers.ps1 `
 $scenario = "nginx-hello"
 pwsh $root/test/onebox/multi-party-collab/$scenario/run-collab-aci.ps1 `
   -registry acr `
-  -registryUrl $repo `
+  -repo $repo `
   -tag $tag `
   -allowAll:(!$withCcePolicy)
 ```

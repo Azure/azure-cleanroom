@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   pull_request:
     branches:
-      - main
+      - develop
       - release
 
 permissions:
@@ -19,74 +19,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  encrypted-storage:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+  build-ccf-containers:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
+    strategy:
+      matrix:
+        container: [ccf-provider-client, ccf-recovery-agent, ccf-recovery-service, ccf-nginx, ccf-runjs-app-virtual, ccf-runjs-app-snp, ccf-runjs-app-sandbox, ccr-proxy, ccr-attestation, skr, cgs-client, cgs-ui, cgs-ccf-artefacts]
+      # Prevent Github from cancelling other jobs of the matrix if one of them fails.
+      fail-fast: false
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Run encrypted storage test
-        uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage
-
-  encrypted-storage-cleanroom-client:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
-    environment: pr
-    env:
-      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      RUN_ID: ${{ github.run_id }}
-      JOB_ID: ${{ github.job }}
-      USE_PREPROVISIONED_OIDC: "true"
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Run encrypted storage test
-        uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-cleanroom-client
-
-  db-access:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
-    environment: pr
-    env:
-      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      RUN_ID: ${{ github.run_id }}
-      JOB_ID: ${{ github.job }}
-      USE_PREPROVISIONED_OIDC: "true"
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Run db access
-        uses: ./.github/actions/test-multi-party-collab/test-db-access
-
-  build-containers-caci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
-    environment: pr
-    env:
-      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      RUN_ID: ${{ github.run_id }}
-      JOB_ID: ${{ github.job }}
-      USE_PREPROVISIONED_OIDC: "true"
-    steps:
-      - name: Delete huge unnecessary tools folder # https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
-        run: rm -rf /opt/hostedtoolcache
-
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -95,8 +44,83 @@ jobs:
         shell: bash
         run: sudo usermod -aG docker $USER
 
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        shell: pwsh
+        run: az acr login -n ${{ vars.ACR_URL }}
+
+      - name: Build ccf containers
+        run: pwsh ./build/ccf/build-ccf-infra-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -containers ${{ matrix.container }}
+
+  build-ccr-containers:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    strategy:
+      matrix:
+        container: ["blobfuse-launcher", "ccr-attestation", "ccr-governance", "ccr-governance-virtual", "ccr-init", "ccr-secrets", "ccr-proxy", "ccr-proxy-ext-processor", "ccr-client-proxy", "code-launcher", "identity", "otel-collector", "local-skr", "skr", "ccr-governance-opa-policy"]
+      # Prevent Github from cancelling other jobs of the matrix if one of them fails.
+      fail-fast: false
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Add docker user
+        shell: bash
+        run: sudo usermod -aG docker $USER
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        shell: pwsh
+        run: az acr login -n ${{ vars.ACR_URL }}
+
+      - name: Build clean room containers
+        run: pwsh ./build/onebox/build-local-cleanroom-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -containers ${{ matrix.container }}
+
+  build-ccf-container-policies:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    strategy:
+      matrix:
+        container: [ccf-network, ccf-recovery-service]
+      # Prevent Github from cancelling other jobs of the matrix if one of them fails.
+      fail-fast: false
+    needs: [build-ccf-containers]
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - shell: pwsh
-        run: Install-Module -Name powershell-yaml -Force
+        run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
 
       - name: Install confcom extension
         shell: pwsh
@@ -115,25 +139,239 @@ jobs:
         shell: pwsh
         run: az acr login -n ${{ vars.ACR_URL }}
 
-      - name: Build ccf containers
-        run: pwsh ./build/ccf/build-ccf-infra-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push
+      - name: Build ${{ matrix.container }} policy
+        run: pwsh ./build/ccf/build-ccf-infra-containers-policy.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -containers ${{ matrix.container }}
 
-      - name: Build clean room containers
-        run: pwsh ./build/onebox/build-local-cleanroom-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -withRegoPolicy
-
-      - name: Build ccf containers policy
-        run: pwsh ./build/ccf/build-ccf-infra-containers-policy.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push
-
-  encrypted-storage-caci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+  build-ccr-container-policies:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
-    needs: [build-containers-caci]
+    needs: [build-ccr-containers]
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - shell: pwsh
+        run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
+
+      - name: Install confcom extension
+        shell: pwsh
+        run: |
+          az extension add --name confcom -y --allow-preview true
+          az version
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        shell: pwsh
+        run: az acr login -n ${{ vars.ACR_URL }}
+
+      - name: Build ccr containers policy
+        run: pwsh ./build/build-ccr-digests.ps1 -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }} -push
+
+  build-azcliext-cleanroom:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        shell: pwsh
+        run: az acr login -n ${{ vars.ACR_URL }}
+
+      - name: Build cleanroom az cli extension
+        run: pwsh ./build/build-azcliext-cleanroom.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push
+
+  cleanroom-client-test:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    needs: [build-ccr-container-policies, build-azcliext-cleanroom]
+    # TODO (anrdesai): The following env vars are overrides until the latest containers (ver 2.0.1)
+    # and artefacts are available on MCR.
+    env:
+      AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL: ${{ vars.ACR_URL }}
+      AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL: ${{ vars.ACR_URL }}/sidecar-digests:${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Add docker user
+        run: sudo usermod -aG docker $USER
+
+      - name: Build cleanroom client
+        run: pwsh ./build/ccr/build-cleanroom-client.ps1
+
+      - name: Pip install requirements
+        run: |
+          cd src/tools/cleanroom-client/tests
+          pip install -r requirements.txt
+
+      - name: Run cleanroom client tests
+        run: |
+          cd src/tools/cleanroom-client
+          pytest -v
+
+  encrypted-storage:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run encrypted storage test
+        uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+
+  encrypted-storage-cleanroom-client:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom, cleanroom-client-test]
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run encrypted storage test
+        uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-cleanroom-client
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+
+  db-access:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run db access
+        uses: ./.github/actions/test-multi-party-collab/test-db-access
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+
+  mongo-db-access:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run mongo db access
+        uses: ./.github/actions/test-multi-party-collab/test-mongo-db-access
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+
+  quote-of-the-day:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run quote of the day
+        uses: ./.github/actions/test-multi-party-collab/test-quote-of-the-day
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+
+  encrypted-storage-caci:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
       - uses: actions/checkout@v4
@@ -143,26 +381,52 @@ jobs:
       - name: Run encrypted storage CACI
         uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-caci
         with:
-          registry-url: ${{ vars.ACR_URL }}
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+
+  encrypted-storage-cleanroom-client-caci:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: enc-storage-cl-client-caci
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run encrypted storage CACI
+        uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-cleanroom-client-caci
+        with:
+          repo: ${{ vars.ACR_URL }}
           tag: ${{ github.run_id }}
 
   ml-training-caci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
-    needs: [build-containers-caci]
+    needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
     strategy:
       matrix:
         key-store: [mhsm, akvpremium]
+      # Prevent Github from cancelling other jobs of the matrix if one of them fails.
+      fail-fast: false
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
-      TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-pr-rg'
-      TDP_MHSM_NAME: 'azcleanroompublichsm'
-      TDC_HSM_RESOURCE_GROUP: 'azcleanroom-public-pr-rg'
-      TDC_MHSM_NAME: 'azcleanroompublichsm'
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      TDP_HSM_RESOURCE_GROUP: 'azcleanroom-emu-pr-rg'
+      TDP_MHSM_NAME: 'azcleanroomemuhsm2'
+      TDC_HSM_RESOURCE_GROUP: 'azcleanroom-emu-pr-rg'
+      TDC_MHSM_NAME: 'azcleanroomemuhsm2'
       USE_PREPROVISIONED_OIDC: "true"
     steps:
       - uses: actions/checkout@v4
@@ -172,19 +436,21 @@ jobs:
       - name: Run ml-training test
         uses: ./.github/actions/test-multi-party-collab/test-ml-training-caci
         with:
-          registry-url: ${{ vars.ACR_URL }}
+          repo: ${{ vars.ACR_URL }}
           tag: ${{ github.run_id }}
           kvType: ${{ matrix.key-store }}
 
   nginx-hello:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
+    needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
       - uses: actions/checkout@v4
@@ -193,17 +459,21 @@ jobs:
 
       - name: Run nginx hello test
         uses: ./.github/actions/test-multi-party-collab/test-nginx-hello
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
 
   nginx-hello-caci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
-    needs: [build-containers-caci]
+    needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
       - uses: actions/checkout@v4
@@ -213,13 +483,13 @@ jobs:
       - name: Run nginx hello test
         uses: ./.github/actions/test-multi-party-collab/test-nginx-hello-caci
         with:
-          registry-url: ${{ vars.ACR_URL }}
+          repo: ${{ vars.ACR_URL }}
           tag: ${{ github.run_id }}
 
   # triton-inference-server-caci:
-  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
   #   environment: pr
-  #   needs: [build-containers-caci]
+  #   needs: [build-ccf-container-policies, build-ccr-container-policies, build-azcliext-cleanroom]
   #   env:
   #     AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
   #     AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -234,5 +504,5 @@ jobs:
   #     - name: Run nginx hello test
   #       uses: ./.github/actions/test-multi-party-collab/test-triton-inference-caci
   #       with:
-  #         registry-url: ${{ vars.ACR_URL }}
+  #         repo: ${{ vars.ACR_URL }}
   #         tag: ${{ github.run_id }}

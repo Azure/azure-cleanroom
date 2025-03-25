@@ -1,0 +1,13 @@
+{% import 'inbound_http_listener.template.yaml.jinja' as inbound_http_listener_template -%}
+{% import 'outbound_http_listener.template.yaml.jinja' as outbound_http_listener_template -%}
+{% import 'outbound_tcp_listener.template.yaml.jinja' as outbound_tcp_listener_template -%}
+resources:
+{{ inbound_http_listener_template.add_http_listener(allow_http_inbound_access) }}
+{{ outbound_http_listener_template.add_http_listener(allow_http_outbound_access) }}
+{% if allow_tcp_outbound_access -%}
+{{ outbound_tcp_listener_template.add_tcp_listener() }}
+{%- endif %}
+
+
+
+

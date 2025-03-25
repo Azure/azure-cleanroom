@@ -96,7 +96,7 @@ public class RoleTests : TestBase
         await this.SetRuntimeOption(RuntimeOption.AutoApproveDeploymentSpec, ActionName.Enable);
         await this.SetRuntimeOption(RuntimeOption.AutoApproveCleanRoomPolicy, ActionName.Enable);
 
-        // Update member1 to become a contract_operator.
+        // Update member1 to become a contractOperator.
         await this.SetRole(Members.Member1, RoleName.ContractOperator, "true");
 
         // Now a clean room policy proposal from member0 should remain open while from member1
@@ -134,7 +134,7 @@ public class RoleTests : TestBase
                 $"proposals/{proposalId}"))!;
         Assert.AreEqual("Accepted", proposalResponse["proposalState"]!.ToString());
 
-        // Update member1 to no longer be a cgs_operator.
+        // Update member1 to no longer be a cgsOperator.
         await this.SetRole(Members.Member1, RoleName.ContractOperator, "false");
 
         // Now a proposal from member1 should remain open as role was disabled.
@@ -152,7 +152,7 @@ public class RoleTests : TestBase
                 $"proposals/{proposalId}"))!;
         Assert.AreEqual("Open", proposalResponse["proposalState"]!.ToString());
 
-        // Update member1 to again become be a cgs_operator.
+        // Update member1 to again become be a cgsOperator.
         await this.SetRole(Members.Member1, RoleName.ContractOperator, "true");
 
         // Disabling the auto-approve options.
@@ -173,6 +173,9 @@ public class RoleTests : TestBase
             (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
                 $"proposals/{proposalId}"))!;
         Assert.AreEqual("Open", proposalResponse["proposalState"]!.ToString());
+
+        // Cleanup role assignment.
+        await this.SetRole(Members.Member1, RoleName.ContractOperator, "false");
     }
 
     [TestMethod]
@@ -186,7 +189,7 @@ public class RoleTests : TestBase
         await this.SetRuntimeOption(RuntimeOption.AutoApproveConstitution, ActionName.Enable);
         await this.SetRuntimeOption(RuntimeOption.AutoApproveJsApp, ActionName.Enable);
 
-        // Update member2 to become a cgs_operator.
+        // Update member2 to become a cgsOperator.
         await this.SetRole(Members.Member2, RoleName.CgsOperator, "true");
 
         // Now a JS app proposal from member0 should remain open while from member2
@@ -216,7 +219,7 @@ public class RoleTests : TestBase
                 $"proposals/{proposalId}"))!;
         Assert.AreEqual("Accepted", proposalResponse["proposalState"]!.ToString());
 
-        // Update member2 to no longer be a cgs_operator.
+        // Update member2 to no longer be a cgsOperator.
         await this.SetRole(Members.Member2, RoleName.CgsOperator, "false");
 
         // Now a proposal from member2 should remain open as role was disabled.
@@ -233,7 +236,7 @@ public class RoleTests : TestBase
                 $"proposals/{proposalId}"))!;
         Assert.AreEqual("Open", proposalResponse["proposalState"]!.ToString());
 
-        // Update member2 to again become be a cgs_operator.
+        // Update member2 to again become be a cgsOperator.
         await this.SetRole(Members.Member2, RoleName.CgsOperator, "true");
 
         // Disabling the auto-approve options.
@@ -253,6 +256,97 @@ public class RoleTests : TestBase
             (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
                 $"proposals/{proposalId}"))!;
         Assert.AreEqual("Open", proposalResponse["proposalState"]!.ToString());
+
+        // Cleanup role assignment.
+        await this.SetRole(Members.Member2, RoleName.CgsOperator, "false");
+    }
+
+    [TestMethod]
+    [DataRow(RoleName.CgsOperator)]
+    [DataRow(RoleName.ContractOperator)]
+    public async Task CheckNonVotingOperations(string roleName)
+    {
+        // Set member2 to cgsOperator.
+        await this.SetRole(Members.Member2, roleName, "true");
+
+        string contractId = Guid.NewGuid().ToString().Substring(0, 8);
+        string proposalId = await this.ProposeContract(contractId);
+
+        // Vote as member0 and member1.
+        await this.MemberAcceptProposal(this.CgsClients[Members.Member0], proposalId);
+        await this.MemberAcceptProposal(this.CgsClients[Members.Member1], proposalId);
+
+        // The proposal should be Accepted.
+        var proposalResponse =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
+                $"proposals/{proposalId}"))!;
+        Assert.AreEqual("Accepted", proposalResponse["proposalState"]!.ToString());
+
+        // Only member0 and member1 should be counted in the final votes.
+        var info = await this.CgsClients[Members.Member0].GetFromJsonAsync<JsonObject>("/show");
+        string member0Id = info!["memberId"]!.ToString();
+
+        info = await this.CgsClients[Members.Member1].GetFromJsonAsync<JsonObject>("/show");
+        string member1Id = info!["memberId"]!.ToString();
+
+        info = await this.CgsClients[Members.Member2].GetFromJsonAsync<JsonObject>("/show");
+        string member2Id = info!["memberId"]!.ToString();
+
+        Assert.AreEqual("true", proposalResponse["finalVotes"]![member0Id]!.ToString());
+        Assert.AreEqual("true", proposalResponse["finalVotes"]![member1Id]!.ToString());
+        Assert.IsNull(proposalResponse["finalVotes"]![member2Id]);
+
+        // Remove role assignment.
+        await this.SetRole(Members.Member2, roleName, "false");
+
+        // Create a new contract.
+        contractId = Guid.NewGuid().ToString().Substring(0, 8);
+        proposalId = await this.ProposeContract(contractId);
+
+        // Vote as member0 and member1.
+        await this.MemberAcceptProposal(this.CgsClients[Members.Member0], proposalId);
+        await this.MemberAcceptProposal(this.CgsClients[Members.Member1], proposalId);
+
+        // The proposal should remain Open.
+        proposalResponse =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
+                $"proposals/{proposalId}"))!;
+        Assert.AreEqual("Open", proposalResponse["proposalState"]!.ToString());
+
+        await this.MemberAcceptProposal(this.CgsClients[Members.Member2], proposalId);
+
+        // The proposal should be Accepted.
+        proposalResponse =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
+                $"proposals/{proposalId}"))!;
+        Assert.AreEqual("Accepted", proposalResponse["proposalState"]!.ToString());
+
+        // All 3 members should be counted in the final votes.
+        Assert.AreEqual("true", proposalResponse["finalVotes"]![member0Id]!.ToString());
+        Assert.AreEqual("true", proposalResponse["finalVotes"]![member1Id]!.ToString());
+        Assert.AreEqual("true", proposalResponse["finalVotes"]![member2Id]!.ToString());
+    }
+
+    protected override async Task AllMembersAcceptProposal(string proposalId)
+    {
+        // Get the members needed to vote upfront so that any member state changes while
+        // voting do not impact the voting process.
+        var membersNeededToVote = await this.GetMembersNeededToVote();
+        foreach (var member in membersNeededToVote)
+        {
+            await this.MemberAcceptProposal(this.CgsClients[member], proposalId);
+        }
+    }
+
+    protected override async Task AllMembersAcceptContract(string contractId, string proposalId)
+    {
+        // Get the members needed to vote upfront so that any member state changes while
+        // voting do not impact the voting process.
+        var membersNeededToVote = await this.GetMembersNeededToVote();
+        foreach (var member in membersNeededToVote)
+        {
+            await this.MemberAcceptContract(this.CgsClients[member], contractId, proposalId);
+        }
     }
 
     private async Task SetRole(int asMember, string roleName, string value)
@@ -275,7 +369,7 @@ public class RoleTests : TestBase
                                 ["member_id"] = memberId,
                                 ["member_data"] = new JsonObject
                                 {
-                                    ["cgs_roles"] = new JsonObject
+                                    ["cgsRoles"] = new JsonObject
                                     {
                                         [roleName] = value
                                     }
@@ -300,7 +394,53 @@ public class RoleTests : TestBase
             info = await this.CgsClients[asMember].GetFromJsonAsync<JsonObject>("/show");
             Assert.AreEqual(
                 value,
-                info!["memberData"]!["cgs_roles"]![roleName]!.ToString());
+                info!["memberData"]!["cgsRoles"]![roleName]!.ToString());
+        }
+    }
+
+    private async Task<List<int>> GetMembersNeededToVote()
+    {
+        List<int> membersNeededToVote = [];
+        for (int i = 0; i < this.CgsClients.Count; i++)
+        {
+            var info = await this.CgsClients[i].GetFromJsonAsync<JsonObject>("/show");
+            Assert.IsNotNull(info);
+
+            if (!IsRole(info, RoleName.ContractOperator) &&
+                !IsRole(info, RoleName.CgsOperator))
+            {
+                membersNeededToVote.Add(i);
+            }
+        }
+
+        return membersNeededToVote;
+
+        static bool IsRole(JsonObject memberInfo, string roleName)
+        {
+            var roles = memberInfo!["memberData"]!["cgsRoles"];
+
+            // No cgs roles set.
+            if (roles == null)
+            {
+                return false;
+            }
+
+            if (roles[roleName] != null)
+            {
+                string roleValue = roles[roleName]!.ToString();
+                if (roleValue == "true")
+                {
+                    return true;
+                }
+                else if (roleValue == "false")
+                {
+                    return false;
+                }
+
+                throw new Exception($"Unexpected value for role '{roleName}': '{roleValue}'.");
+            }
+
+            return false;
         }
     }
 
@@ -428,7 +568,7 @@ public class RoleTests : TestBase
 
     public static class RoleName
     {
-        public const string CgsOperator = "cgs_operator";
-        public const string ContractOperator = "contract_operator";
+        public const string CgsOperator = "cgsOperator";
+        public const string ContractOperator = "contractOperator";
     }
 }

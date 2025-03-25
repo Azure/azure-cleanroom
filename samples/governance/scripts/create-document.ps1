@@ -33,5 +33,4 @@ function Create-Document {
 
     $document = $document | ConvertTo-Json
     curl -sS -D - -X PUT localhost:$port/documents/$id -k -H "Content-Type: application/json" -d $document
-    CheckLastExitCode
 }

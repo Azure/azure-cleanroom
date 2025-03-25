@@ -1,0 +1,6 @@
+pydantic==2.8.2
+cryptography==44.0.1
+pycryptodome==3.19.1
+oras==0.1.29
+rich==13.8.0
+build==1.2.2.post1

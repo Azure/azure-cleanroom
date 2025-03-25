@@ -13,7 +13,7 @@
     "volumeMounts": [
       {
         "name": "telemetrymounts",
-        "mountPath": "/mnt/telemetry"
+        "mountPath": "$telemetryMountPath"
       }
     ],
     "securityContext": {

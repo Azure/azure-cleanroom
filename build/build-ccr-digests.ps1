@@ -11,6 +11,9 @@ param(
 
     [switch]$skipRegoPolicy
 )
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
+
 . $PSScriptRoot/helpers.ps1
 
 if ($outDir -eq "") {
@@ -31,6 +34,14 @@ $ccrContainers = @(
     "skr"
 )
 
+$ccrArtefacts = @(
+    "ccr-governance-opa-policy"
+)
+
+#https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
+
 $digests = @()
 $containerPolicies = @()
 foreach ($container in $ccrContainers) {
@@ -49,7 +60,6 @@ foreach ($container in $ccrContainers) {
     else {
         $containerRegoPolicy = "{}"
     }
-
     $templateJson = Get-Content -Path "$PSScriptRoot/templates/$container.json" | ConvertFrom-Json
     $policyJson = Get-Content -Path "$PSScriptRoot/templates/$container-policy.json" | ConvertFrom-Json
     $containerPolicies += [ordered]@{
@@ -70,7 +80,6 @@ foreach ($containerPolicy in $containerPolicies) {
     if ($push) {
         Set-Location $outDir
         oras push "$repo/policies/$imageName-policy:$tag" ./$fileName
-        CheckLastExitCode
         $policyDocumentDigest = Get-Digest -repo "$repo/policies" -containerName $imageName-policy -tag $tag
         foreach ($digest in $digests) {
             if ($digest["image"] -eq $imageName) {
@@ -81,10 +90,17 @@ foreach ($containerPolicy in $containerPolicies) {
     }
 }
 
+foreach ($artefact in $ccrArtefacts) {
+    $digest = Get-Digest -repo $repo -containerName $artefact -tag $tag
+    $digests += [ordered]@{
+        image  = $artefact
+        digest = "$digest"
+    }
+}
+
 $digests | ConvertTo-Yaml | Out-File $outDir/sidecar-digests.yaml
 
 if ($push) {
     Set-Location $outDir
     oras push "$repo/sidecar-digests:$tag" ./sidecar-digests.yaml
-    CheckLastExitCode
 }

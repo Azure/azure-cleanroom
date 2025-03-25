@@ -17,6 +17,5 @@ function Get-CleanRoom-Policy {
     $port = GetPortOrDie($port)
 
     $response = Invoke-WebRequest -Method GET -Uri "http://localhost:$port/contracts/$contractId/cleanroompolicy" -Headers $headers
-    CheckLastExitCode
     return $response.Content
 }

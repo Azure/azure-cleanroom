@@ -8,6 +8,8 @@ param(
     [parameter(Mandatory = $false)]
     [switch]$push
 )
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
 
 . $PSScriptRoot/../helpers.ps1
 
@@ -21,8 +23,6 @@ else {
 $root = git rev-parse --show-toplevel
 docker image build -t $imageName `
     -f $PSScriptRoot/../docker/Dockerfile.client-proxy $root
-CheckLastExitCode
 if ($push) {
     docker push $imageName
-    CheckLastExitCode
 }

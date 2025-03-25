@@ -1,7 +1,5 @@
-# Use the official .NET Core SDK as the base image
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 
-# Set the working directory
 WORKDIR /app
 
 # copy csproj and restore as distinct layers
@@ -24,26 +22,40 @@ COPY stylecop.json /app
 COPY Menees.Analyzers.Settings.xml /app
 COPY .editorconfig /app
 
-# Publish the application
 RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/governance/sidecar/ccr-governance.csproj
-COPY src/governance/sidecar/bootstrap.sh /app/publish/bootstrap.sh
 
-# Use the official .NET Core runtime as the base image for the final stage
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS virtual
 
 # Note: install iproute2 for ss command.
 RUN apt-get update && apt-get install -y curl jq iproute2
 
-# Set the working directory
 WORKDIR /app
 
-# Copy the published output from the build stage to the runtime stage
 COPY --from=build /app/publish .
+COPY src/governance/sidecar/bootstrap-virtual.sh bootstrap-virtual.sh
+COPY samples/governance/insecure-virtual/ insecure-virtual/
+RUN chmod +x ./bootstrap-virtual.sh
+
+# Listen on 8300 within the container.
+ARG PORT=8300
+ENV ASPNETCORE_URLS=http://+:${PORT}
+ENV INSECURE_VIRTUAL_ENVIRONMENT=true
+
+ENTRYPOINT ["./bootstrap-virtual.sh"]
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS prod
+
+# Note: install iproute2 for ss command.
+RUN apt-get update && apt-get install -y curl jq iproute2
+
+WORKDIR /app
+
+COPY --from=build /app/publish .
+COPY src/governance/sidecar/bootstrap.sh bootstrap.sh
 RUN chmod +x ./bootstrap.sh
 
 # Listen on 8300 within the container.
 ARG PORT=8300
 ENV ASPNETCORE_URLS=http://+:${PORT}
 
-# Set the entry point for the container
 ENTRYPOINT ["./bootstrap.sh"]

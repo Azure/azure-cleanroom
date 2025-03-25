@@ -21,7 +21,7 @@ runs:
       id: get-digest
       run: |
         . build/helpers.ps1
-        $digest = Get-Digest -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom -containerName ${{ inputs.name }} -tag ${{ inputs.tag }}
+        $digest = Get-Digest -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom -containerName ${{ inputs.name }} -tag ${{ inputs.tag }}
         Write-Host "Digest: $digest"
         echo "digest=$digest" >> $env:GITHUB_OUTPUT
 
@@ -29,12 +29,12 @@ runs:
       if: ${{ inputs.environment == 'internal' }}
       uses: actions/attest-build-provenance@v1
       with:
-        subject-name: ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/${{ inputs.name }}
+        subject-name: ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom/${{ inputs.name }}
         subject-digest: ${{ steps.get-digest.outputs.digest }}
 
     - name: Generate artefact attestation (unlisted images)
       if: ${{ inputs.environment == 'unlisted' }}
       uses: actions/attest-build-provenance@v1
       with:
-        subject-name: mcr.microsoft.com/cleanroom/${{ inputs.name }}
+        subject-name: mcr.microsoft.com/azurecleanroom/${{ inputs.name }}
         subject-digest: ${{ steps.get-digest.outputs.digest }}

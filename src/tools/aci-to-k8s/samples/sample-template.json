@@ -33,7 +33,7 @@
                   "value": "eyJJZGVudGl0aWVzIjogeyJBcHBsaWNhdGlvbklkZW50aXRpZXMiOiBbeyJDbGllbnRJZCI6ICIxYmIxMGQwOS1iNmUxLTRhYWQtYTY2My0yODAyMjQzZDdiMzkiLCAiQ3JlZGVudGlhbCI6IHsiQ3JlZGVudGlhbFR5cGUiOiAiRmVkZXJhdGVkQ3JlZGVudGlhbCIsICJGZWRlcmF0aW9uQ29uZmlndXJhdGlvbiI6IHsiSWRUb2tlbkVuZHBvaW50IjogImh0dHA6Ly9sb2NhbGhvc3Q6ODMwMCIsICJTdWJqZWN0IjogImNvbGxhYjEiLCAiQXVkaWVuY2UiOiAiYXBpOi8vQXp1cmVBRFRva2VuRXhjaGFuZ2UifX19LCB7IkNsaWVudElkIjogIjQ4ZDhiZjgwLWM5OTEtNDE2OS04NWNkLWZmNTljYmUxMmFlYSIsICJDcmVkZW50aWFsIjogeyJDcmVkZW50aWFsVHlwZSI6ICJGZWRlcmF0ZWRDcmVkZW50aWFsIiwgIkZlZGVyYXRpb25Db25maWd1cmF0aW9uIjogeyJJZFRva2VuRW5kcG9pbnQiOiAiaHR0cDovL2xvY2FsaG9zdDo4MzAwIiwgIlN1YmplY3QiOiAiY29sbGFiMSIsICJBdWRpZW5jZSI6ICJhcGk6Ly9BenVyZUFEVG9rZW5FeGNoYW5nZSJ9fX1dfX0="
                 }
               ],
-              "image": "mcr.microsoft.com/cleanroom/identity@sha256:771d81de4bf2ff299094a4832bb10bae9e20fe4daf78beb4a7872ad075fc6866",
+              "image": "mcr.microsoft.com/azurecleanroom/identity@sha256:771d81de4bf2ff299094a4832bb10bae9e20fe4daf78beb4a7872ad075fc6866",
               "ports": [
                 {
                   "port": 8290
@@ -110,7 +110,7 @@
                   "value": "grpc"
                 }
               ],
-              "image": "mcr.microsoft.com/cleanroom/blobfuse-launcher@sha256:9f501bc4551cc4766e05eb7df1486a808615eb256ada001afab6251715cf5ea4",
+              "image": "mcr.microsoft.com/azurecleanroom/blobfuse-launcher@sha256:9f501bc4551cc4766e05eb7df1486a808615eb256ada001afab6251715cf5ea4",
               "ports": [
                 {
                   "port": 8292
@@ -197,7 +197,7 @@
                   "value": "grpc"
                 }
               ],
-              "image": "mcr.microsoft.com/cleanroom/blobfuse-launcher@sha256:9f501bc4551cc4766e05eb7df1486a808615eb256ada001afab6251715cf5ea4",
+              "image": "mcr.microsoft.com/azurecleanroom/blobfuse-launcher@sha256:9f501bc4551cc4766e05eb7df1486a808615eb256ada001afab6251715cf5ea4",
               "ports": [
                 {
                   "port": 8293
@@ -284,7 +284,7 @@
                   "value": "grpc"
                 }
               ],
-              "image": "mcr.microsoft.com/cleanroom/blobfuse-launcher@sha256:9f501bc4551cc4766e05eb7df1486a808615eb256ada001afab6251715cf5ea4",
+              "image": "mcr.microsoft.com/azurecleanroom/blobfuse-launcher@sha256:9f501bc4551cc4766e05eb7df1486a808615eb256ada001afab6251715cf5ea4",
               "ports": [
                 {
                   "port": 8294
@@ -331,7 +331,7 @@
                 "'echo $CODE | base64 -d > main.go; go run main.go'"
               ],
               "environmentVariables": [],
-              "image": "mcr.microsoft.com/cleanroom/code-launcher@sha256:1643014cdad3401e43ecac0eaa4aba1e26729556b0cc9e4914b21b589b14d7dd",
+              "image": "mcr.microsoft.com/azurecleanroom/code-launcher@sha256:1643014cdad3401e43ecac0eaa4aba1e26729556b0cc9e4914b21b589b14d7dd",
               "ports": [],
               "resources": {
                 "requests": {
@@ -359,7 +359,7 @@
             "properties": {
               "command": [],
               "environmentVariables": [],
-              "image": "mcr.microsoft.com/cleanroom/otel-collector@sha256:f5f56a188bb732678fec13d2ea497088824ae5f7984bcd734bf6422bbdc7f03b",
+              "image": "mcr.microsoft.com/azurecleanroom/otel-collector@sha256:f5f56a188bb732678fec13d2ea497088824ae5f7984bcd734bf6422bbdc7f03b",
               "ports": [
                 {
                   "port": 4317
@@ -402,7 +402,7 @@
                   "value": "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJ2akNDQVVTZ0F3SUJBZ0lSQUlmNXNBVlVjbG90MzRUREQ5eFdkaW93Q2dZSUtvWkl6ajBFQXdNd0ZqRVUKTUJJR0ExVUVBd3dMUTBOR0lGTmxjblpwWTJVd0hoY05NalF3TmpBeE1ESTBNRFUzV2hjTk1qUXdOekF4TURJMApNRFUyV2pBV01SUXdFZ1lEVlFRRERBdERRMFlnVTJWeWRtbGpaVEIyTUJBR0J5cUdTTTQ5QWdFR0JTdUJCQUFpCkEySUFCQlEvYkpkSGl0ZVFzNlFnTXpscjdRa3p3Nm5Ick5TejVjdzh0SHp3MG1GSDhIbG5rK1NqOXlzU3ZTcjAKYitmdHNNQ25jWHNUT0NOSStKUlluVTgyVG1FS1Y0VkNkVktSQ2ZqWjlma25WQ0tGQkRUWnFNQmhRanQxL2RHNgo1NEhnd0tOV01GUXdFZ1lEVlIwVEFRSC9CQWd3QmdFQi93SUJBREFkQmdOVkhRNEVGZ1FVR3NCdW1kZGdFWGROClFxK040SXZkcTdsbDVVUXdId1lEVlIwakJCZ3dGb0FVR3NCdW1kZGdFWGROUXErTjRJdmRxN2xsNVVRd0NnWUkKS29aSXpqMEVBd01EYUFBd1pRSXhBTHNZWFJWay9oRVFmb1RiZ21wWFNsSWY1cGhlT1FGNTFGUUdaSWJIZzdOcApWYVdQb05ibzdGVlVXN0Ezdm55UHFRSXdjd1BwS2FxWm4zdG0xZnJpejJJanUxM0I1ZmpJMWlsNUpJdEM0cVdLCkJwcEpteXY4cTFzRnpuSFNGZTRJcjBuLwotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
                 }
               ],
-              "image": "mcr.microsoft.com/cleanroom/ccr-governance@sha256:2ff17405eff78eba5250d492568029b880ae3f6317929257fbd6b9ac622410fb",
+              "image": "mcr.microsoft.com/azurecleanroom/ccr-governance@sha256:2ff17405eff78eba5250d492568029b880ae3f6317929257fbd6b9ac622410fb",
               "ports": [
                 {
                   "port": 8300
@@ -433,7 +433,7 @@
                 "-socket-address",
                 "/mnt/uds/sock"
               ],
-              "image": "mcr.microsoft.com/cleanroom/ccr-attestation@sha256:86ded47d0d7eca085617ee4549ab2c05df09b4a23c2e29cd5b6f1372bad6df3e",
+              "image": "mcr.microsoft.com/azurecleanroom/ccr-attestation@sha256:86ded47d0d7eca085617ee4549ab2c05df09b4a23c2e29cd5b6f1372bad6df3e",
               "resources": {
                 "requests": {
                   "cpu": 0.5,
@@ -502,7 +502,7 @@
                 "/bin/bash",
                 "setup-iptables.sh"
               ],
-              "image": "mcr.microsoft.com/cleanroom/ccr-init@sha256:8839a0c347dd4573c3de48a0a0ec018d54a9fe8c12da7eef729145abd4ba0c96",
+              "image": "mcr.microsoft.com/azurecleanroom/ccr-init@sha256:8839a0c347dd4573c3de48a0a0ec018d54a9fe8c12da7eef729145abd4ba0c96",
               "securityContext": {
                 "privileged": "true"
               }

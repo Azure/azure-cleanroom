@@ -40,12 +40,12 @@ runs:
       run: az acr login --name ${{ inputs.registry-name }}
 
     - shell: pwsh
-      run: Install-Module -Name powershell-yaml -Force
+      run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
 
     - shell: pwsh
       run: |
         ./build/build-ccf-recovery-service-security-policy.ps1 `
-          -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom `
+          -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom `
           -tag ${{ inputs.tag }} `
           -push
 

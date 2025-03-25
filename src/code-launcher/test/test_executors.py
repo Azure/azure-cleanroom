@@ -6,11 +6,13 @@ import unittest.mock as mock
 import os.path
 import argparse
 
-from src.cmd_executors.executors import (
+from ..cmd_executors.executors import (
     TempFileHandler,
     PrivateACRCmdExecutor,
     EncContainerCmdExecutor,
 )
+
+# TODO (HPrabh): Fix the tests.
 
 
 class TestCmdExecutors(unittest.TestCase):

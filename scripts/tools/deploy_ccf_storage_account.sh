@@ -19,7 +19,7 @@ deploy_ccf_storage_account() {
         STORAGE_DEPLOYMENT_OUTPUTS=$(az deployment group create \
             --name $STORAGE_DEPLOYMENT_NAME \
             --resource-group $RESOURCE_GROUP \
-            --template-file $(realpath $TOOLS_DIR/../../azure/ccfStorageAccount.bicep) \
+            --template-file $(realpath $TOOLS_DIR/azure/ccfStorageAccount.bicep) \
             --query "properties.outputs")
 
         export STORAGE_ACCOUNT_NAME=$(echo "$STORAGE_DEPLOYMENT_OUTPUTS" | jq -r '.storageAccountName.value')

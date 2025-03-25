@@ -3,10 +3,13 @@
 
 using System.Formats.Tar;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using Azure.Identity;
+using Azure.Security.KeyVault.Keys.Cryptography;
 using Microsoft.Extensions.Logging;
 
 namespace CcfProvider;
@@ -53,7 +56,7 @@ public static class Utils
 
     public static string GetUniqueString(string id, int length = 13)
     {
-        using (var hash = System.Security.Cryptography.SHA512.Create())
+        using (var hash = SHA512.Create())
         {
             var bytes = System.Text.Encoding.UTF8.GetBytes(id);
             var hashedInputBytes = hash.ComputeHash(bytes);
@@ -142,5 +145,25 @@ public static class Utils
     public static IProgress<string> ProgressReporter(this ILogger logger)
     {
         return new Progress<string>(m => logger.LogInformation(m));
+    }
+
+    public static List<string> NodeSanFormat(this string fqdn)
+    {
+        return new List<string> { $"dNSName:{fqdn}" };
+    }
+
+    public static RSA ToRSAKey(string encryptionPrivateKey)
+    {
+        var rsaEncKey = RSA.Create();
+        rsaEncKey.ImportFromPem(encryptionPrivateKey);
+        return rsaEncKey;
+    }
+
+    public static async Task<RSA> ToRSAKey(Uri encryptionKeyId)
+    {
+        var creds = new DefaultAzureCredential();
+        var cryptographyClient = new CryptographyClient(encryptionKeyId, creds);
+        var rsaEncKey = await cryptographyClient.CreateRSAAsync();
+        return rsaEncKey;
     }
 }

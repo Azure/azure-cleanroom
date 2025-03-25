@@ -40,11 +40,14 @@ if (!$nowait) {
         --query "ipAddress.ip" `
         --output tsv
     Write-Host "Clean Room IP address: $ccrIP"
-
+    if ($null -eq $ccrIP) {
+        throw "Clean Room IP address is not set."
+    }
+    
     # wait for pyspark endpoint to be up.
     $timeout = New-TimeSpan -Minutes 10
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    while ((curl -o "''" -w "'%{http_code}'" -s -k https://${ccrIP}:8310/app/run_query/12) -ne "'200'") {
+    while ((curl -o /dev/null -w "%{http_code}" -s -k https://${ccrIP}:8310/app/run_query/12) -ne "200") {
         Write-Host "Waiting for pyspark endpoint to be up at https://${ccrIP}:8310"
         Start-Sleep -Seconds 3
         if ($stopwatch.elapsed -gt $timeout) {

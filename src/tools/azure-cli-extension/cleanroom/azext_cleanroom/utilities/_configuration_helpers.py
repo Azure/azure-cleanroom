@@ -1,68 +1,61 @@
-from ..models.datastore import *
-from ..models.model import *
-from ..models.secretstore import *
 from typing import Any
 from ..utilities._azcli_helpers import logger
+import cleanroom_common.azure_cleanroom_core.utilities.configuration_helpers as config_helpers
+from azure.cli.core.util import CLIError
+from cleanroom_common.azure_cleanroom_core.models.model import CleanRoomSpecification
+from cleanroom_common.azure_cleanroom_core.models.datastore import (
+    DatastoreSpecification,
+)
+from cleanroom_common.azure_cleanroom_core.models.secretstore import (
+    SecretStoreSpecification,
+)
+
 
 # TODO (HPrabh): Model a Configuration class that wraps the below methods.
 
 
-def read_cleanroom_spec(config_file) -> CleanRoomSpecification:
-    spec = _read_configuration_file(config_file)
-    return CleanRoomSpecification(**spec)
-
-
-def read_datastore_config(config_file) -> DatastoreSpecification:
-    spec = _read_configuration_file(config_file)
-    return DatastoreSpecification(**spec)
-
-
-def read_secretstore_config(config_file) -> SecretStoreSpecification:
-    spec = _read_configuration_file(config_file)
-    return SecretStoreSpecification(**spec)
-
-
-def _read_configuration_file(config_file) -> dict[str, Any]:
-    from azure.cli.core.util import CLIError
-    import yaml
-
-    logger.info(f"Reading configuration file {config_file}")
+def read_cleanroom_spec_internal(config_file) -> CleanRoomSpecification:
     try:
-        with open(config_file, "r") as f:
-            return yaml.safe_load(f)
+        spec = config_helpers.read_cleanroom_spec(config_file, logger)
     except FileNotFoundError:
         raise CLIError(
             f"Cannot find file {config_file}. Check the --*-config parameter value."
         )
 
-
-def write_cleanroom_spec(config_file, config: CleanRoomSpecification):
-    _write_configuration_file(config_file, config)
+    return spec
 
 
-def write_datastore_config(config_file, datastore: DatastoreSpecification):
-    _write_configuration_file(config_file, datastore)
+def read_datastore_config_internal(config_file) -> DatastoreSpecification:
+    try:
+        spec = config_helpers.read_datastore_config(config_file, logger)
+    except FileNotFoundError:
+        raise CLIError(
+            f"Cannot find file {config_file}. Check the --*-config parameter value."
+        )
+
+    return spec
 
 
-def write_secretstore_config(config_file, secretstore: SecretStoreSpecification):
-    _write_configuration_file(config_file, secretstore)
+def read_secretstore_config_internal(config_file) -> SecretStoreSpecification:
+    try:
+        spec = config_helpers.read_secretstore_config(config_file, logger)
+    except FileNotFoundError:
+        raise CLIError(
+            f"Cannot find file {config_file}. Check the --*-config parameter value."
+        )
+
+    return spec
 
 
-def _write_configuration_file(config_file, config: BaseModel):
-    import yaml
-    from rich import print
-
-    print(f"Writing {config_file}")
-    print(config)
-    with open(config_file, "w") as f:
-        yaml.dump(config.model_dump(mode="json"), f)
+def write_cleanroom_spec_internal(config_file, config: CleanRoomSpecification):
+    config_helpers.write_cleanroom_spec(config_file, config, logger)
 
 
-def generate_backcompat_datastore_configuration(cleanroom_config):
-    import os
+def write_datastore_config_internal(config_file, datastore: DatastoreSpecification):
+    config_helpers.write_datastore_config(config_file, datastore, logger)
 
-    file_name, file_ext = os.path.splitext(cleanroom_config)
-    datastore_config_file = file_name + "_datastore_config" + file_ext
 
-    datastore_keys_dir = f"{file_name}_datastore.keys"
-    return datastore_config_file, datastore_keys_dir
+def write_secretstore_config_internal(
+    config_file, secretstore: SecretStoreSpecification
+):
+    config_helpers.write_secretstore_config(config_file, secretstore, logger)

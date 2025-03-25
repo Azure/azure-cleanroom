@@ -1,7 +1,7 @@
 name: governance-sample
 services:
   ccf:
-    image: ccf:$ccfImageTag
+    image: ccf/app/run-js/sandbox:$ccfImageTag
     container_name: ccf
     ports:
       - "9080:8080"
@@ -21,16 +21,13 @@ services:
     environment:
       - cgsclientEndpoint=http://cgs-client-member0:8080
   ccr-governance:
-    image: ccr-governance:latest
+    image: ccr-governance-virtual:latest
     container_name: ccr-governance
     ports:
       - "9990:8300"
     environment:
       - ccrgovEndpoint=https://ccf:8080
       - ccrgovApiPathPrefix=app/contracts/1234
-      - insecure_mountpoint=/app/insecure-virtual/
       - serviceCertPem=/app/sandbox_common/service_cert.pem
-      - INSECURE_VIRTUAL_ENVIRONMENT=true
     volumes:
-      - ./insecure-virtual:/app/insecure-virtual:ro
       - ./sandbox_common:/app/sandbox_common:ro

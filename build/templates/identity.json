@@ -20,6 +20,10 @@
       {
         "name": "OTEL_METRIC_EXPORT_INTERVAL",
         "value": "$OtelMetricExportInterval"
+      },
+      {
+        "name": "TELEMETRY_MOUNT_PATH",
+        "value": "$telemetryMountPath"
       }
     ],
     "securityContext": {

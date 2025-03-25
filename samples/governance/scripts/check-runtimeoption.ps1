@@ -16,6 +16,5 @@ function Check-RuntimeOption {
   $port = GetPortOrDie($port)
 
   $response = (curl -sS -X POST localhost:$port/runtimeoptions/checkstatus/$statusOf -d "")
-  CheckLastExitCode
   return $response
 }

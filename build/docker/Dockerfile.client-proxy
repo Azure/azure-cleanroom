@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/oss/envoyproxy/envoy:v1.30.4
+FROM mcr.microsoft.com/oss/envoyproxy/envoy:v1.33.0
 
 RUN apt-get update && apt-get install -y gettext nano
 

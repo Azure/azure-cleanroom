@@ -76,6 +76,14 @@
       {
         "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
         "value": "grpc"
+      },
+      {
+        "name": "TELEMETRY_MOUNT_PATH",
+        "value": "$telemetryMountPath"
+      },
+      {
+        "name": "VOLUMESTATUS_MOUNT_PATH",
+        "value": "$volumeStatusMountPath"
       }
     ],
     "volumeMounts": [
@@ -85,7 +93,11 @@
       },
       {
         "name": "telemetrymounts",
-        "mountPath": "/mnt/telemetry"
+        "mountPath": "$telemetryMountPath"
+      },
+      {
+        "name": "volumestatusmounts",
+        "mountPath": "$volumeStatusMountPath"
       }
     ],
     "securityContext": {

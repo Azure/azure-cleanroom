@@ -1,0 +1,23 @@
+charset-normalizer==3.3.2
+requests==2.32.0
+typing_extensions==4.12.2
+pydantic==2.8.2
+pydantic_settings==2.4.0
+uvicorn==0.30.6
+fastapi==0.114.1
+podman==5.2.0
+psutil==6.0.0
+
+# Opentelemetry related
+opentelemetry-api==1.29.0
+opentelemetry-sdk==1.29.0
+opentelemetry-instrumentation-fastapi==0.50b0
+opentelemetry-exporter-otlp-proto-common==1.29.0
+opentelemetry-exporter-otlp-proto-grpc==1.29.0
+opentelemetry-instrumentation==0.50b0
+opentelemetry-instrumentation-logging==0.50b0
+opentelemetry-instrumentation-requests==0.50b0
+opentelemetry-proto==1.29.0
+opentelemetry-sdk==1.29.0
+opentelemetry-semantic-conventions==0.50b0
+opentelemetry-util-http==0.50b0

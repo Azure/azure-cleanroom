@@ -14,10 +14,10 @@ function Deploy-Aci-Governance {
         [string]$ccfName,
 
         [Parameter(Mandatory)]
-        [string]$registryUrl,
+        [string]$repo,
 
         [Parameter(Mandatory)]
-        [string]$registryTag,
+        [string]$tag,
 
         [switch]$allowAll,
 
@@ -27,6 +27,9 @@ function Deploy-Aci-Governance {
         [Parameter(Mandatory)]
         [string]$initialMemberName,
 
+        [Parameter(Mandatory)]
+        [string]$outDir,
+    
         [ValidateSet('mcr', 'local', 'acr')]
         [string]$registry = "local"
     )
@@ -36,11 +39,7 @@ function Deploy-Aci-Governance {
     $PSNativeCommandUseErrorActionPreference = $true
 
     $root = git rev-parse --show-toplevel
-
-    Import-Module $root/samples/common/infra-scripts/azure-helpers.psm1 -Force -DisableNameChecking
-    Import-Module $root/samples/common/infra-scripts/cgs/cgs-helpers.psm1 -Force -DisableNameChecking
-
-    $outDir = "$root/test/onebox/multi-party-collab/generated/ccf"
+    $outDir = "$outDir/ccf"
     mkdir -p $outDir
 
     function Get-UniqueString ([string]$id, $length = 13) {
@@ -58,19 +57,22 @@ function Deploy-Aci-Governance {
 
     az container delete --name $CCF_NAME --resource-group $ISV_RESOURCE_GROUP -y
 
-    if (!$NoBuild) {
-        # Install az cli before deploying ccf so that we can invoke az cleanroom ccf.
-        pwsh $root/build/build-azcliext-cleanroom.ps1
+    if ($env:GITHUB_ACTIONS -ne "true") {
+        if (!$NoBuild) {
+            # Install az cli before deploying ccf so that we can invoke az cleanroom ccf.
+            # For Github Actions flow its built and installed as part of the workflow.
+            pwsh $root/build/build-azcliext-cleanroom.ps1
+        }
     }
 
-    Deploy-Ccf `
+    pwsh $PSScriptRoot/ccf-up.ps1 `
         -resourceGroup $ISV_RESOURCE_GROUP `
         -ccfName $CCF_NAME `
         -location $location `
         -initialMemberName $initialMemberName `
         -memberCertPath "$outDir/${initialMemberName}_cert.pem" `
-        -registryUrl $registryUrl `
-        -registryTag $registryTag `
+        -repo $repo `
+        -tag $tag `
         -allowAll:$allowAll `
         -outDir $outDir
 
@@ -86,7 +88,9 @@ function Deploy-Aci-Governance {
         -NoTest `
         -NoBuild:$NoBuild `
         -ccfEndpoint $ccfEndpoint `
-        -registry $registry
+        -registry $registry `
+        -repo $repo `
+        -tag $tag
     $result = @{
         ccfEndpoint = $ccfEndpoint
     }

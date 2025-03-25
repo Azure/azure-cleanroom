@@ -39,10 +39,16 @@ public class Routes
         return $"{prefix}/oauth/token";
     }
 
-    public string ReleaseSigningKey(WebContext webContext)
+    public string IsCAEnabled(WebContext webContext)
     {
         var prefix = this.GetPathPrefix(webContext.GovernanceApiPathPrefix);
-        return $"{prefix}/ca/releaseSigningKey";
+        return $"{prefix}/ca/isEnabled";
+    }
+
+    public string GenerateEndorsedCert(WebContext webContext)
+    {
+        var prefix = this.GetPathPrefix(webContext.GovernanceApiPathPrefix);
+        return $"{prefix}/ca/generateEndorsedCert";
     }
 
     public string ConsentCheckExecution(WebContext webContext)

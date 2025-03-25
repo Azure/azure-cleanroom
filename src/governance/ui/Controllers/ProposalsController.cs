@@ -45,12 +45,13 @@ public class ProposalsController : Controller
 
         var votesModel = new List<ProposalViewModel.VotesViewModel>();
         Dictionary<string, JsonNode?> currentMembers =
-            members.AsEnumerable().ToDictionary(m => m.Key, m => m.Value);
+            members["value"]!.AsArray()
+            .ToDictionary(m => m!["memberId"]!.ToString(), m => m);
         var votedMembers = votes.ToDictionary((v) => v!["memberId"]!.ToString());
         foreach (var member in currentMembers)
         {
-            if (member.Value?["member_data"]?["is_operator"]?.ToString() == "true" ||
-                member.Value?["member_data"]?["is_recovery_operator"]?.ToString() == "true")
+            if (member.Value?["memberData"]?["isOperator"]?.ToString() == "true" ||
+                member.Value?["memberData"]?["isRecoveryOperator"]?.ToString() == "true")
             {
                 continue;
             }
@@ -70,7 +71,7 @@ public class ProposalsController : Controller
             votesModel.Add(new()
             {
                 MemberId = member.Key,
-                MemberName = member.Value?["member_data"]?["identifier"]?.ToString() ?? "Not set",
+                MemberName = member.Value?["membeData"]?["identifier"]?.ToString() ?? "Not set",
                 Vote = voteValue
             });
         }

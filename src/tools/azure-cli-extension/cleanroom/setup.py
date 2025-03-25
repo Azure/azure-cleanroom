@@ -22,6 +22,10 @@ def read(rel_path: str) -> str:
 
 
 def get_version(rel_path: str) -> str:
+    if not os.path.isfile(rel_path):
+        logger.warn("Version file not found, using default version 1.0.0")
+        return "1.0.0"
+
     for line in read(rel_path).splitlines():
         if line.startswith("VERSION"):
             delim = '"' if '"' in line else "'"
@@ -49,11 +53,10 @@ CLASSIFIERS = [
 # Add any additional SDK dependencies here and to requirements.txt
 DEPENDENCIES = [
     "python-on-whales==0.71.0",
-    "oras==0.1.29",
+    "pycryptodome==3.19.1",
+    "cryptography==43.0.1",
     "docker>=6.1.0",
-    "pycryptodome==3.12.0",
-    "pydantic==2.8.2",
-    "rich==13.8.0",
+    "oras==0.1.29",
 ]
 
 with open("README.rst", "r", encoding="utf-8") as f:
@@ -71,7 +74,7 @@ setup(
     long_description=README + "\n\n" + HISTORY,
     license="MIT",
     classifiers=CLASSIFIERS,
-    packages=find_packages(),
+    packages=find_packages(exclude=["tests"]),
     install_requires=DEPENDENCIES,
     package_data={
         "azext_cleanroom": [
@@ -84,9 +87,11 @@ setup(
             "data/azstore.yaml",
             "data/application.yaml",
             "data/publisher-config.yaml",
-            "binaries/aes_encryptor.so",
+        ],
+        "cleanroom_common.azure_cleanroom_core": [
             "templates/*.json",
             "templates/*.rego",
-        ]
+            "binaries/aes_encryptor.so",
+        ],
     },
 )

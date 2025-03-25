@@ -4,13 +4,13 @@ set -o errexit
 # Script adapted from https://kind.sigs.k8s.io/docs/user/local-registry/
 
 # 1. Create registry container unless it already exists
-reg_name='kind-registry'
+reg_name='ccr-registry'
 cluster_name='cleanroom'
-reg_port='5001'
+reg_port='5000'
 BASEDIR=$(dirname "$0")
-reg_image='registry:2'
+reg_image='registry:2.7'
 if [[ "${GITHUB_ACTIONS}" = "true" ]]; then
-    reg_image='cleanroombuild.azurecr.io/registry:2'
+    reg_image='cleanroombuild.azurecr.io/registry:2.7'
 fi
 if [ "$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true)" != 'true' ]; then
   docker run \
@@ -18,8 +18,13 @@ if [ "$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true
     "${reg_image}"
 fi
 
+node_image='kindest/node:v1.32.2'
+if [[ "${GITHUB_ACTIONS}" = "true" ]]; then
+    node_image='cleanroombuild.azurecr.io/kindest/node:v1.32.2'
+fi
+
 # 2. Create kind cluster with containerd registry config dir enabled
-kind create cluster --config=$BASEDIR/kind-config.yaml --name $cluster_name
+kind create cluster --config=$BASEDIR/kind-config.yaml --name $cluster_name --image "${node_image}"
 
 # 3. Add the registry config to the nodes
 #
@@ -55,4 +60,21 @@ data:
   localRegistryHosting.v1: |
     host: "localhost:${reg_port}"
     help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
+EOF
+
+# 6. Create a config map for the local registry to indicate to the containers to access it with
+# "http" instead of "https".
+# This config map can be mounted to the containers at /etc/containers/registry.conf.d/.
+# https://github.com/containers/podman/blob/main/troubleshooting.md#4-http-server-gave-http-response-to-https-client
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ccr-registry-conf
+  namespace: default
+data:
+  ccr-registry.conf: |
+    [[registry]]
+    location = "${reg_name}:5000"
+    insecure = true
 EOF

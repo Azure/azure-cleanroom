@@ -82,6 +82,14 @@ public class DockerNginxLoadBalancerProvider : ICcfLoadBalancerProvider
         });
     }
 
+    public string GenerateLoadBalancerFqdn(
+        string lbName,
+        string networkName,
+        JsonObject? providerConfig)
+    {
+        return this.GetLbHostName();
+    }
+
     public async Task<LoadBalancerEndpoint> GetLoadBalancerEndpoint(
         string networkName,
         JsonObject? providerConfig)
@@ -281,13 +289,19 @@ public class DockerNginxLoadBalancerProvider : ICcfLoadBalancerProvider
     private LoadBalancerEndpoint ToLbEndpoint(ContainerListResponse container)
     {
         int publicPort = container.GetPublicPort(NginxPort);
-        var host = IsGitHubActionsEnv() ? "172.17.0.1" : "host.docker.internal";
+        var host = this.GetLbHostName();
 
         return new LoadBalancerEndpoint
         {
             Name = container.Labels[DockerConstants.CcfNetworkResourceNameTag],
             Endpoint = $"https://{host}:{publicPort}"
         };
+    }
+
+    private string GetLbHostName()
+    {
+        var host = IsGitHubActionsEnv() ? "172.17.0.1" : "host.docker.internal";
+        return host;
 
         static bool IsGitHubActionsEnv()
         {

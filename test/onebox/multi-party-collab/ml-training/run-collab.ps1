@@ -4,34 +4,49 @@ param
     [switch]
     $NoBuild,
 
-    [ValidateSet('mcr', 'local')]
+    [ValidateSet('mcr', 'local', 'acr')]
     [string]$registry = "local",
+
+    [string]$repo = "localhost:5000",
+
+    [string]$tag = "latest",
 
     [string]
     [ValidateSet('mhsm', 'akvpremium')]
     $kvType
 )
 
-rm -rf $PSScriptRoot/generated
+$outDir = "$PSScriptRoot/generated"
+rm -rf $outDir
 Write-Host "Using $registry registry for cleanroom container images."
 $root = git rev-parse --show-toplevel
 pwsh $root/test/onebox/multi-party-collab/deploy-virtual-cleanroom-governance.ps1 `
     -NoBuild:$NoBuild `
     -registry $registry `
+    -repo $repo `
+    -tag $tag `
+    -ccfProjectName "ob-ccf-ml-training" `
     -projectName "ob-isv-client" `
-    -initialMemberName "isv"
+    -initialMemberName "isv" `
+    -outDir $outDir
+$ccfEndpoint = $(Get-Content $outDir/ccf/ccf.json | ConvertFrom-Json).endpoint
 az cleanroom governance client remove --name "ob-tdp-client"
 az cleanroom governance client remove --name "ob-tdc-client"
 
-pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 -registry $registry -kvType $kvType
+pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 -registry $registry -repo $repo -tag $tag -ccfEndpoint $ccfEndpoint -kvType $kvType
 if ($LASTEXITCODE -gt 0) {
     Write-Host -ForegroundColor Red "run-scenario-generate-template-policy returned non-zero exit code $LASTEXITCODE"
     exit $LASTEXITCODE
 }
 
-pwsh $PSScriptRoot/convert-template.ps1
+$registry_local_endpoint = ""
+if ($registry -eq "local") {
+    $registry_local_endpoint = "ccr-registry:5000"
+}
 
-pwsh $PSScriptRoot/deploy-virtual-cleanroom.ps1
+pwsh $PSScriptRoot/../convert-template.ps1 -outDir $outDir -registry-local-endpoint $registry_local_endpoint -repo $repo -tag $tag
+
+pwsh $PSScriptRoot/deploy-virtual-cleanroom.ps1 -repo $repo -tag $tag
 
 # Check that expected output files got created.
 $expectedFiles = @(
@@ -40,7 +55,9 @@ $expectedFiles = @(
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/depa-training-code-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/depa-training*-code-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/depa-training*-code-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/depa-training*-code-launcher.metrics",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/output*-blobfuse.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/output*-blobfuse-launcher.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/output*-blobfuse-launcher.traces",

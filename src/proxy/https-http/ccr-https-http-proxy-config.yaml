@@ -49,7 +49,7 @@ static_resources:
                   prefix: "/"
                 route:
                   cluster: service1
-                  timeout: 100s # Default is 15s
+                  timeout: 360s # Default is 15s
           http_filters:
           - name: envoy.filters.http.router
             typed_config:

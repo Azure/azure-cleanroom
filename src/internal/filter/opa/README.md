@@ -77,8 +77,8 @@ For example, the input for `on_request_headers` looks like this:
                     "value": "019d1417-017a-4697-842b-308e00fea796"
                 },
                 {
-                    "key": "x-ccr-is-incoming",
-                    "value": "true"
+                    "key": "x-ccr-request-direction",
+                    "value": "inbound"
                 }
             ]
         },
@@ -163,10 +163,6 @@ When the sidecar receives a policy decision, it expects a JSON object with the f
 The sidecar saves any `context` from the output document and then passes it as-is as input into the next message. The context's lifetime is tied to the lifetime of the GRPC bidrectional stream for the HTTP message.
 * `immediate_response` (optional): If specified as `true` then attempts to create a locally generated response, send it downstream, and stop processing additional filters and ignore any additional messages received from the remote server for this request or response. See [immediate_response](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto#envoy-v3-api-msg-service-ext-proc-v3-processingresponse) for more details.
 
-## Examples
-
-See the OPA policy implemented for the Confidential flow-based lending in the AA ecosystem scenario [here](../../../samples/aa-flow-based-lending/policies).
-
 ## Building and publishing the policy bundle
 
-The Rego policy files need to be packaged as an OPA policy [bundle](https://www.openpolicyagent.org/docs/latest/management-bundles/) and published to an OCI registry (like ACR). See [Building and Publishing Policy Containers](https://www.openpolicyagent.org/docs/latest/management-bundles/#building-and-publishing-policy-containers) and the [sample publishing script](../../../build/publish-depa-policies-bundle.ps1) for more information.
+The Rego policy files need to be packaged as an OPA policy [bundle](https://www.openpolicyagent.org/docs/latest/management-bundles/) and published to an OCI registry (like ACR). See [Building and Publishing Policy Containers](https://www.openpolicyagent.org/docs/latest/management-bundles/#building-and-publishing-policy-containers) for more information.

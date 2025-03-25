@@ -25,6 +25,10 @@
     "editor.defaultFormatter": "ms-python.black-formatter",
     "editor.formatOnSave": true
   },
+  "[cpp]": {
+    "editor.defaultFormatter": "xaver.clang-format",
+    "editor.formatOnSave": true
+  },
   "eslint.workingDirectories": [
     { "mode": "auto" }
   ],
@@ -45,5 +49,6 @@
     "disable-linters": [
       "resource-limits"
     ]
-  }
+  },
+  "dotnet.defaultSolution": "disable"
 }

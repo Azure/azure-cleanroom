@@ -39,14 +39,6 @@ public class EventsController : ControllerBase
         var wsConfig = await this.ccfClientManager.GetWsConfig();
         var paddingMode = RSASignaturePaddingMode.Pss;
 
-        // TODO (gsinha): Remove support for CCF v4 once support for mCCF is removed.
-        var ccfVersion = await this.ccfClientManager.GetCcfVersion();
-        this.logger.LogInformation($"CCF version is: {ccfVersion}");
-        if (ccfVersion.StartsWith("ccf-4."))
-        {
-            paddingMode = RSASignaturePaddingMode.Pkcs1;
-        }
-
         var dataBytes = Encoding.UTF8.GetBytes(data.ToJsonString());
         var signature = Signing.SignData(dataBytes, wsConfig.Attestation.PrivateKey, paddingMode);
         var content = Attestation.PrepareSignedDataRequestContent(

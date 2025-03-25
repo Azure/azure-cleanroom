@@ -35,7 +35,6 @@ public class EventsController : ClientControllerBase
         {
             using HttpResponseMessage response =
                 await appClient.GetAsync($"app/contracts/{contractId}/events{query}");
-            response.LogRequest(this.Logger);
             if (response.StatusCode == System.Net.HttpStatusCode.Accepted)
             {
                 await Task.Delay(response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(1));

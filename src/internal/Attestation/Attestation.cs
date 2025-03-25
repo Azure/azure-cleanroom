@@ -130,6 +130,11 @@ public class Attestation
             }
         };
 
+        content["encrypt"] = new JsonObject
+        {
+            ["publicKey"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(publicKey))
+        };
+
         content["attestation"] = CcfAttestationReport.ConvertFrom(attestationReport).AsObject();
 
         return content;

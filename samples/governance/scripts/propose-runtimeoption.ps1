@@ -21,5 +21,4 @@ function Propose-RuntimeOption {
   $port = GetPortOrDie($port)
 
   curl -sS -X POST localhost:$port/runtimeoptions/$option/propose-$action -k -H "Content-Type: application/json"
-  CheckLastExitCode
 }

@@ -25,5 +25,4 @@ function Set-Contract-RuntimeOption {
   $port = GetPortOrDie($port)
 
   curl -sS -X POST localhost:$port/contracts/$contractId/${option}/${action} -k -H "Content-Type: application/json"
-  CheckLastExitCode
 }

@@ -22,7 +22,6 @@ function Create-Storage-Resources {
                 --allow-shared-key-access $allowSharedKeyAccess `
                 --kind $kind `
                 --enable-hierarchical-namespace $enableHns)
-        CheckLastExitCode
         $storageAccountResult = $result | ConvertFrom-Json
 
         Write-Host "Assigning 'Storage Blob Data Contributor' permissions to logged in user"
@@ -30,9 +29,30 @@ function Create-Storage-Resources {
         $storageAccountResult
 
         if ($env:GITHUB_ACTIONS -eq "true") {
-            $sleepTime = 90
-            Write-Host "Waiting for $sleepTime seconds for permissions to get applied"
-            Start-Sleep -Seconds $sleepTime
+            & {
+                # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
+                $PSNativeCommandUseErrorActionPreference = $false
+                $timeout = New-TimeSpan -Seconds 120
+                $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+                $hasAccess = $false
+                while (!$hasAccess) {
+                    # Do an exists check to determine whether the permissions have been applied or not.
+                    az storage container create --name ghaction-c --account-name $storageAccountName --auth-mode login
+                    az storage blob upload --data "teststring" --overwrite -c ghaction-c -n ghaction-b --account-name $storageAccountName --auth-mode login
+                    if ($LASTEXITCODE -gt 0) {
+                        if ($stopwatch.elapsed -gt $timeout) {
+                            throw "Hit timeout waiting for rbac permissions to be applied on the storage account."
+                        }
+                        $sleepTime = 10
+                        Write-Host "Waiting for $sleepTime seconds before checking if permissions got applied..."
+                        Start-Sleep -Seconds $sleepTime
+                    }
+                    else {
+                        Write-Host "Blob creation check returned $LASTEXITCODE. Assuming permissions got applied."
+                        $hasAccess = $true
+                    }
+                }
+            }
         }
     }
 }

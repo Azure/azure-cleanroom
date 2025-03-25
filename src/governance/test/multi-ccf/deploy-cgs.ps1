@@ -10,6 +10,8 @@ param
     [string]
     $initialMemberName = "member0"
 )
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
 
 $root = git rev-parse --show-toplevel
 $build = "$root/build"
@@ -32,15 +34,12 @@ Write-Output "Building governance ccf app"
 pwsh $build/build-governance-ccf-app.ps1 --output $sandbox_common/dist
 
 if (!$NoBuild) {
-    pwsh $build/build-ccf.ps1
-    CheckLastExitCode
+    pwsh $build/ccf/build-ccf-runjs-app-sandbox.ps1
     pwsh $build/cgs/build-cgs-client.ps1
-    CheckLastExitCode
     pwsh $build/cgs/build-cgs-ui.ps1
-    CheckLastExitCode
 }
 
-$env:ccfImageTag = "js-virtual"
+$env:ccfImageTag = "latest"
 $env:initialMemberName = $initialMemberName
 docker compose -f $PSScriptRoot/docker-compose.yml up -d --remove-orphans
 
@@ -54,9 +53,13 @@ else {
 }
 
 # The node is not up yet and the service certificate will not be created until it returns 200.
-while ((curl -k -s  -o '' -w "'%{http_code}'" $ccfEndpoint/node/network) -ne "'200'") {
-    Write-Host "Waiting for ccf endpoint to be up"
-    Start-Sleep -Seconds 3
+& {
+    # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
+    $PSNativeCommandUseErrorActionPreference = $false
+    while ((curl -k -s  -o /dev/null -w "%{http_code}" $ccfEndpoint/node/network) -ne "200") {
+        Write-Host "Waiting for ccf endpoint to be up"
+        Start-Sleep -Seconds 3
+    }
 }
 
 # Get the service cert so that this script can take governance actions.
@@ -68,9 +71,13 @@ $serviceCertStr | Out-File "$sandbox_common/service_cert.pem"
 $serviceCert = cat "$sandbox_common/service_cert.pem" | base64 -w 0
 
 # wait for cgs-client endpoint to be up
-while ((curl -s  -o '' -w "'%{http_code}'" http://localhost:$port_member0/swagger/index.html) -ne "'200'") {
-    Write-Host "Waiting for cgs-client endpoint to be up"
-    Start-Sleep -Seconds 5
+& {
+    # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
+    $PSNativeCommandUseErrorActionPreference = $false
+    while ((curl -s  -o /dev/null -w "%{http_code}" http://localhost:$port_member0/ready) -ne "200") {
+        Write-Host "Waiting for cgs-client endpoint to be up"
+        Start-Sleep -Seconds 5
+    }
 }
 
 # Setup cgs-client instance on port $port_member0 with member0 cert/key information so that we can invoke CCF
@@ -78,20 +85,17 @@ while ((curl -s  -o '' -w "'%{http_code}'" http://localhost:$port_member0/swagge
 curl -sS -X POST localhost:$port_member0/configure `
     -F SigningCertPemFile=@$sandbox_common/member0_cert.pem `
     -F SigningKeyPemFile=@$sandbox_common/member0_privk.pem
-CheckLastExitCode
 
 Write-Output "Member status is Accepted. Activating member0..."
 curl -sS -X POST localhost:$port_member0/members/statedigests/ack `
     --header "$($ccfEndpointHeaderKey): $ccfEndpoint" `
     --header "$($serviceCertHeaderKey): $serviceCert"
-CheckLastExitCode
 
 timeout 20 bash -c `
-    "until curl -sS -X GET localhost:$port_member0/members --header '$($ccfEndpointHeaderKey): $ccfEndpoint' --header '$($serviceCertHeaderKey): $serviceCert' | jq -r '.[].status' | grep Active > /dev/null; do echo Waiting for member to be in Active state...; sleep 5; done"
+    "until curl -sS -X GET localhost:$port_member0/members --header '$($ccfEndpointHeaderKey): $ccfEndpoint' --header '$($serviceCertHeaderKey): $serviceCert' | jq -r '.value[].status' | grep Active > /dev/null; do echo Waiting for member to be in Active state...; sleep 5; done"
 curl -sS -X GET localhost:$port_member0/members `
     --header "$($ccfEndpointHeaderKey): $ccfEndpoint" `
     --header "$($serviceCertHeaderKey): $serviceCert" | jq
-CheckLastExitCode
 Write-Output "Member status is now Active"
 
 $memberId = (curl -s localhost:$port_member0/show `
@@ -119,11 +123,10 @@ Write-Output "Accepting the set_member_data proposal"
 curl -sS -X POST localhost:$port_member0/proposals/$proposalId/ballots/vote_accept `
     --header "$($ccfEndpointHeaderKey): $ccfEndpoint" `
     --header "$($serviceCertHeaderKey): $serviceCert" | jq
-CheckLastExitCode
 
 Write-Output "Submitting set_constitution proposal"
 $ccfConstitutionDir = "$root/src/ccf/ccf-provider-common/constitution"
-$cgsConstitutionDir = "$root/src/governance/ccf-app/constitution"
+$cgsConstitutionDir = "$root/src/governance/ccf-app/js/constitution"
 $content = ""
 Get-ChildItem $ccfConstitutionDir -Filter *.js | Foreach-Object { $content += Get-Content $_.FullName -Raw }
 Get-ChildItem $cgsConstitutionDir -Filter *.js | Foreach-Object { $content += Get-Content $_.FullName -Raw }
@@ -169,7 +172,6 @@ Write-Output "Accepting the set_js_runtime_options proposal as member0"
 curl -sS -X POST localhost:$port_member0/proposals/$proposalId/ballots/vote_accept `
     --header "$($ccfEndpointHeaderKey): $ccfEndpoint" `
     --header "$($serviceCertHeaderKey): $serviceCert" | jq
-CheckLastExitCode
 
 Write-Output "Submitting set_js_app proposal"
 @"
@@ -192,7 +194,6 @@ Write-Output "Accepting the set_js_app proposal as member0"
 curl -sS -X POST localhost:$port_member0/proposals/$proposalId/ballots/vote_accept `
     --header "$($ccfEndpointHeaderKey): $ccfEndpoint" `
     --header "$($serviceCertHeaderKey): $serviceCert" | jq
-CheckLastExitCode
 
 Write-Output "Confirming that /jsapp/bundle endpoint value matches the proposed app bundle"
 $canonical_bundle = curl -sS -X GET localhost:$port_member0/jsapp/bundle `
@@ -226,7 +227,6 @@ Write-Output "Accepting the open network proposal as member0"
 curl -sS -X POST localhost:$port_member0/proposals/$proposalId/ballots/vote_accept `
     --header "$($ccfEndpointHeaderKey): $ccfEndpoint" `
     --header "$($serviceCertHeaderKey): $serviceCert" | jq
-CheckLastExitCode
 
 Write-Output "Waiting a bit to avoid FrontendNotOpen error"
 sleep 3

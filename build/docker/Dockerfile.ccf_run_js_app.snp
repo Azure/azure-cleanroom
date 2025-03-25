@@ -1,5 +1,26 @@
+# Build the clean room specific C++ module that gets loaded in CCF.
+FROM ghcr.io/microsoft/ccf/app/dev/snp:ccf-6.0.0-rc1 AS builder
+
+# Copy the source.
+COPY /src/governance/ccf-app/cpp src/cpp
+COPY .clang-format .clang-format
+COPY /scripts scripts
+
+# Check for formatting before compilation.
+RUN chmod +x /scripts/*.sh
+RUN /scripts/ci-checks.sh
+
+# Build the binary.
+RUN cd src/cpp
+RUN mkdir build && cd build
+WORKDIR /src/cpp/build
+RUN CC="clang-15" CXX="clang++-15" cmake -GNinja -DCOMPILE_TARGET=snp ..
+RUN ninja
+
 # Run
-FROM ghcr.io/microsoft/ccf/app/run-js/snp:ccf-6.0.0-dev2
+FROM ghcr.io/microsoft/ccf/app/run-js/snp:ccf-6.0.0-rc1
+
+COPY --from=builder /src/cpp/build/libjs_cleanroom.snp.so /usr/lib/ccf
 
 COPY --chmod=755 /src/ccf/ccf-provider-common/scripts/node/bootstrap.sh /app/
 

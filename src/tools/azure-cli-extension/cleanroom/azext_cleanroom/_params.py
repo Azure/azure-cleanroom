@@ -11,43 +11,53 @@ from azure.cli.core.commands.parameters import (
     name_type,
     get_enum_type,
 )
-from .models.datastore import DatastoreEntry
+from cleanroom_common.azure_cleanroom_core.models.datastore import DatastoreEntry
+from cleanroom_common.azure_cleanroom_core.models.network import TrafficDirection
 
 
-def validate_mount(string):
+def validate_key_value(string, separator="="):
     """Extracts a single tag in key[=value] format"""
     result = {}
     if string:
-        comps = string.split(",", 1)
+        comps = string.split(separator, 1)
         result = {comps[0]: comps[1]} if len(comps) > 1 else {string: ""}
     return result
 
 
-def validate_mounts(ns):
-    """Extracts multiple space-separated tags in key[=value] format"""
-    if isinstance(ns.mounts, list):
-        mounts_dict = {}
-        for item in ns.mounts:
-            mounts_dict.update(validate_mount(item))
-        ns.mounts = mounts_dict
-
-
-def validate_env(string):
-    """Extracts a single tag in key[=value] format"""
-    result = {}
-    if string:
-        comps = string.split("=", 1)
-        result = {comps[0]: comps[1]} if len(comps) > 1 else {string: ""}
-    return result
-
-
-def validate_envs(ns):
+def validate_env_vars(ns):
     """Extracts multiple space-separated tags in key[=value] format"""
     if isinstance(ns.env_vars, list):
-        mounts_dict = {}
+        env_vars_dict = {}
         for item in ns.env_vars:
-            mounts_dict.update(validate_env(item))
-        ns.env_vars = mounts_dict
+            env_vars_dict.update(validate_key_value(item))
+        ns.env_vars = env_vars_dict
+
+
+def validate_ips(ns):
+    """Extracts multiple space-separated tags in key[=value] format"""
+    if isinstance(ns.allowed_ips, list):
+        allowed_ips = {}
+        for item in ns.allowed_ips:
+            allowed_ips.update(validate_key_value(item, separator=":"))
+        ns.allowed_ips = allowed_ips
+
+
+def validate_datasources(ns):
+    """Extracts multiple space-separated tags in key[=value] format"""
+    if isinstance(ns.datasources, list):
+        datasources_dict = {}
+        for item in ns.datasources:
+            datasources_dict.update(validate_key_value(item))
+        ns.datasources = datasources_dict
+
+
+def validate_datasinks(ns):
+    """Extracts multiple space-separated tags in key[=value] format"""
+    if isinstance(ns.datasinks, list):
+        datasinks_dict = {}
+        for item in ns.datasinks:
+            datasinks_dict.update(validate_key_value(item))
+        ns.datasinks = datasinks_dict
 
 
 default_security_policy_creation_option = "cached"
@@ -85,14 +95,22 @@ def load_arguments(self, _):
             "ccf_endpoint", help="CCF endpoint", options_list=["--ccf-endpoint", "-e"]
         )
         c.argument(
+            "signing_cert_id",
+            help="URI for the signing certificate stored in Azure Key Vault or a path to a file containing the URI",
+            options_list=["--signing-cert-id"],
+            required=False,
+        )
+        c.argument(
             "signing_cert",
             help="Path to the PEM-encoded signing cert",
             options_list=["--signing-cert"],
+            required=False,
         )
         c.argument(
             "signing_key",
             help="Path to the PEM-encoded signing key",
             options_list=["--signing-key"],
+            required=False,
         )
         c.argument(
             "service_cert",
@@ -109,26 +127,10 @@ def load_arguments(self, _):
         )
 
     with self.argument_context("cleanroom governance service deploy") as c:
-        c.argument("ccf_endpoint", help="CCF endpoint", options_list=["--ccf-endpoint"])
-        c.argument(
-            "signing_cert",
-            help="Path to the PEM-encoded signing cert",
-            options_list=["--signing-cert"],
-        )
-        c.argument(
-            "signing_key",
-            help="Path to the PEM-encoded signing key",
-            options_list=["--signing-key"],
-        )
         c.argument(
             "gov_client_name",
-            help="Name of the governance client instance to use that will be deployed for this service",
+            help="Name of the governance client instance to use",
             options_list=["--governance-client"],
-        )
-        c.argument(
-            "service_cert",
-            help="Path to the PEM-encoded service cert",
-            options_list=["--service-cert"],
         )
 
     with self.argument_context(
@@ -464,11 +466,74 @@ def load_arguments(self, _):
             options_list=["--action"],
         )
 
+    with self.argument_context("cleanroom governance network") as c:
+        c.argument(
+            "gov_client_name",
+            help="Name of the governance client instance to use",
+            options_list=["--governance-client"],
+        )
+
+    with self.argument_context(
+        "cleanroom governance network set-recovery-threshold"
+    ) as c:
+        c.argument(
+            "recovery_threshold",
+            help="The desired value",
+            options_list=["--recovery-threshold"],
+        )
+
     with self.argument_context("cleanroom governance member") as c:
         c.argument(
             "gov_client_name",
             help="Name of the governance client instance to use",
             options_list=["--governance-client"],
+        )
+
+    with self.argument_context(
+        "cleanroom governance member get-default-certificate-policy"
+    ) as c:
+        c.argument(
+            "member_name",
+            help="A unique name to use for the member",
+            options_list=["--member-name"],
+        )
+
+    with self.argument_context(
+        "cleanroom governance member generate-identity-certificate"
+    ) as c:
+        c.argument(
+            "member_name",
+            help="A unique name to use for the member",
+            options_list=["--member-name"],
+        )
+        c.argument(
+            "vault_name",
+            help="The Azure Key Vault to create the certificate in",
+            options_list=["--vault-name"],
+        )
+        c.argument(
+            "output_dir",
+            help="The output directory where files will get created",
+            options_list=["--output-dir"],
+        )
+
+    with self.argument_context(
+        "cleanroom governance member generate-encryption-key"
+    ) as c:
+        c.argument(
+            "member_name",
+            help="A unique name to use for the member",
+            options_list=["--member-name"],
+        )
+        c.argument(
+            "vault_name",
+            help="The Azure Key Vault to create the certificate in",
+            options_list=["--vault-name"],
+        )
+        c.argument(
+            "output_dir",
+            help="The output directory where files will get created",
+            options_list=["--output-dir"],
         )
 
     with self.argument_context("cleanroom governance member add") as c:
@@ -497,8 +562,15 @@ def load_arguments(self, _):
         )
         c.argument(
             "encryption_public_key",
-            help="Encryption public key for the member",
+            help="Encryption public key for the member for recovery",
             options_list=["--encryption-public-key"],
+            required=False,
+        )
+        c.argument(
+            "recovery_role",
+            arg_type=get_enum_type(["participant", "owner"]),
+            help="Whether the member is a participant or owner in recovery. Defaults to participant.",
+            options_list=["--recovery-role"],
             required=False,
         )
 
@@ -543,22 +615,44 @@ def load_arguments(self, _):
             options_list=["--image"],
         )
         c.argument(
+            "auto_start",
+            help="Whether the application needs to be started automatically or not.",
+            action="store_true",
+            options_list=["--auto-start"],
+            required=False,
+        )
+        c.argument(
             "command_line",
             help="The command to run.",
             options_list=["--command-line"],
         )
         c.argument(
-            "mounts",
-            help="The mount points to expose.",
-            options_list=["--mounts"],
-            validator=validate_mounts,
+            "ports",
+            help="The ports to be exposed for incoming traffic to the application.",
+            options_list=["--ports"],
+            type=int,
+            nargs="*",
+            required=False,
+        )
+        c.argument(
+            "datasources",
+            help="The datasources to expose.",
+            options_list=["--datasources"],
+            validator=validate_datasources,
+            nargs="*",
+        )
+        c.argument(
+            "datasinks",
+            help="The datasinks to expose.",
+            options_list=["--datasinks"],
+            validator=validate_datasinks,
             nargs="*",
         )
         c.argument(
             "env_vars",
             help="The environment variables to expose.",
             options_list=["--env-vars"],
-            validator=validate_envs,
+            validator=validate_env_vars,
             nargs="*",
         )
         c.argument(
@@ -577,19 +671,41 @@ def load_arguments(self, _):
             options_list=["--acr-access-identity"],
         )
 
-    with self.argument_context("cleanroom config add-application-endpoint") as c:
+    with self.argument_context("cleanroom config network http enable") as c:
         c.argument(
-            "application_name",
-            help="Application Name",
-            options_list=["--application-name"],
+            "direction",
+            arg_type=get_enum_type(TrafficDirection),
         )
-        c.argument("port", help="The port", options_list=["--port"], type=int)
         c.argument(
             "policy_bundle_url",
             help="The policy bundle URL",
             options_list=["--policy-bundle-url", "--policy"],
             default="",
         )
+
+    with self.argument_context("cleanroom config network http disable") as c:
+        c.argument(
+            "direction",
+            arg_type=get_enum_type(TrafficDirection),
+        )
+
+    with self.argument_context("cleanroom config network tcp enable") as c:
+        c.argument(
+            "allowed_ips",
+            help="The network IPs to which egress is allowed from the clean room. Please specify in the format of 'IP_ADDRESS1:PORT1 IP_ADDRESS2:PORT2 ...'",
+            options_list=["--allowed-ips"],
+            validator=validate_ips,
+            nargs="*",
+        )
+
+    with self.argument_context("cleanroom config network dns enable") as c:
+        c.argument(
+            "port",
+            help="The port at which the DNS server is running. Default is 53",
+            options_list=["--port"],
+            type=int,
+        )
+
     with self.argument_context("cleanroom config create-kek") as c:
         c.argument(
             "contract_id",
@@ -841,14 +957,22 @@ def load_arguments(self, _):
 
     with self.argument_context("cleanroom ccf provider configure") as c:
         c.argument(
+            "signing_cert_id",
+            help="URI for the operator signing certificate stored in Azure Key Vault or a path to a file containing the URI",
+            options_list=["--signing-cert-id"],
+            required=False,
+        )
+        c.argument(
             "signing_cert",
             help="Path to the PEM-encoded operator signing cert",
             options_list=["--signing-cert"],
+            required=False,
         )
         c.argument(
             "signing_key",
             help="Path to the PEM-encoded operator signing key",
             options_list=["--signing-key"],
+            required=False,
         )
         c.argument(
             "provider_client_name",
@@ -1078,6 +1202,12 @@ def load_arguments(self, _):
             required=False,
         )
         c.argument(
+            "encryption_key_id",
+            help="URI for the encryption key stored in Azure Key Vault or a path to a file containing the URI",
+            options_list=["--operator-recovery-encryption-key-id"],
+            required=False,
+        )
+        c.argument(
             "recovery_service_name",
             help="The confidential recovery service to use.",
             options_list=["--confidential-recovery-service-name"],
@@ -1155,19 +1285,16 @@ def load_arguments(self, _):
             options_list=["--name"],
         )
         c.argument(
-            "signing_cert",
-            help="Path to the PEM-encoded signing cert",
-            options_list=["--signing-cert"],
-        )
-        c.argument(
-            "signing_key",
-            help="Path to the PEM-encoded signing key",
-            options_list=["--signing-key"],
-        )
-        c.argument(
             "encryption_private_key",
             help="Path to the PEM-encoded private key",
-            options_list=["--encryption-private-key", "-s"],
+            options_list=["--encryption-private-key"],
+            required=False,
+        )
+        c.argument(
+            "encryption_key_id",
+            help="URI for the encryption key stored in Azure Key Vault or a path to a file containing the URI",
+            options_list=["--encryption-key-id"],
+            required=False,
         )
         c.argument(
             "provider_config",
@@ -1378,7 +1505,6 @@ def load_arguments(self, _):
             "recovery_threshold",
             help="Desired value.",
             options_list=["--recovery-threshold"],
-            required=False,
         )
         c.argument(
             "provider_config",

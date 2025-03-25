@@ -87,8 +87,25 @@ def load_command_table(self, _):
         g.custom_command("vote", "governance_document_vote_cmd")
         g.custom_command("show", "governance_document_show_cmd")
 
+    with self.command_group("cleanroom governance network") as g:
+        g.custom_command("show", "governance_network_show_cmd")
+        g.custom_command(
+            "set-recovery-threshold", "governance_network_set_recovery_threshold_cmd"
+        )
+
     with self.command_group("cleanroom governance member") as g:
         g.custom_command("keygenerator-sh", "governance_member_keygeneratorsh_cmd")
+        g.custom_command(
+            "get-default-certificate-policy",
+            "governance_member_get_default_certificate_policy_cmd",
+        )
+        g.custom_command(
+            "generate-identity-certificate",
+            "governance_member_generate_identity_certificate_cmd",
+        )
+        g.custom_command(
+            "generate-encryption-key", "governance_member_generate_encryption_key_cmd"
+        )
         g.custom_command("add", "governance_member_add_cmd")
         g.custom_command("activate", "governance_member_activate_cmd")
         g.custom_command("show", "governance_member_show_cmd")
@@ -101,14 +118,23 @@ def load_command_table(self, _):
         g.custom_command("wrap-deks", "config_wrap_deks_cmd")
         g.custom_command("wrap-secret", "config_wrap_secret_cmd")
         g.custom_command("add-application", "config_add_application_cmd")
-        g.custom_command("add-application-endpoint", "config_add_endpoint_cmd")
-        g.custom_command("disable-sandbox", "config_disable_sandbox_cmd")
-        g.custom_command("enable-sandbox", "config_enable_sandbox_cmd")
         g.custom_command("validate", "config_validate_cmd")
         g.custom_command("add-datasource", "config_add_datasource_cmd")
         g.custom_command("add-datasink", "config_add_datasink_cmd")
         g.custom_command("set-telemetry", "config_set_telemetry_cmd")
         g.custom_command("set-logging", "config_set_logging_cmd")
+
+    with self.command_group("cleanroom config network http") as g:
+        g.custom_command("enable", "config_network_http_enable_cmd")
+        g.custom_command("disable", "config_network_http_disable_cmd")
+
+    with self.command_group("cleanroom config network tcp") as g:
+        g.custom_command("enable", "config_network_tcp_enable_cmd")
+        g.custom_command("disable", "config_network_tcp_disable_cmd")
+
+    with self.command_group("cleanroom config network dns") as g:
+        g.custom_command("enable", "config_network_dns_enable_cmd")
+        g.custom_command("disable", "config_network_dns_disable_cmd")
 
     with self.command_group("cleanroom telemetry") as g:
         g.custom_command("download", "telemetry_download_cmd")

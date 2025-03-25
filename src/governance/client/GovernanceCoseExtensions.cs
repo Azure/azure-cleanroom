@@ -8,16 +8,11 @@ namespace Controllers;
 internal static class GovernanceCose
 {
     public static Task<byte[]> CreateGovCoseSign1Message(
-        WorkspaceConfiguration wsConfig,
+        CoseSignKey signKey,
         GovMessageType messageType,
         string? payload,
         string? proposalId = null)
     {
-        return Cose.CreateGovCoseSign1Message(
-            wsConfig.SigningCert,
-            wsConfig.SigningKey,
-            messageType,
-            payload,
-            proposalId);
+        return Cose.CreateGovCoseSign1Message(signKey, messageType, payload, proposalId);
     }
 }

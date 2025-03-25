@@ -1,6 +1,6 @@
 {
   "enclave": {
-    "file": "/usr/lib/ccf/libjs_generic.snp.so",
+    "file": "/usr/lib/ccf/libjs_cleanroom.snp.so",
     "platform": "SNP",
     "type": "Release"
   },

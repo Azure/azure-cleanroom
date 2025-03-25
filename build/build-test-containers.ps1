@@ -8,6 +8,9 @@ param(
     [parameter(Mandatory = $false)]
     [switch]$push
 )
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
+
 . $PSScriptRoot/helpers.ps1
 
 $ccrContainers = @(
@@ -22,6 +25,5 @@ $buildRoot = "$root/build"
 foreach ($container in $ccrContainers) {
     Write-Host -ForegroundColor DarkGreen "Building $container container"
     pwsh $buildroot/test/build-$container.ps1 -tag $tag -repo $repo -push:$push
-    CheckLastExitCode
     Write-Host -ForegroundColor DarkGray "================================================================="
 }

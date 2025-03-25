@@ -21,7 +21,6 @@ function Get-Contract {
 
   if ($all) {
     $response = Invoke-WebRequest -Method GET -Uri "http://localhost:$port/contracts" -Headers $headers
-    CheckLastExitCode
     return $response.Content
   }
 
@@ -30,6 +29,5 @@ function Get-Contract {
   }
 
   $response = Invoke-WebRequest -Method GET -Uri "http://localhost:$port/contracts/$id" -Headers $headers
-  CheckLastExitCode
   return $response.Content
 }

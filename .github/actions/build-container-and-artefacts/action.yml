@@ -80,10 +80,11 @@ runs:
     - shell: pwsh
       if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
       run: |
-        docker rmi -f $(docker images -aq)
         rm -rf ${{ inputs.name }}-${{ inputs.tag }}.tar
         rm -rf ${{ inputs.name }}.json
         rm -rf ${{ inputs.name }}-sbom
+        docker system prune -a --volumes -f
+        df -h --total
 
     - shell: bash
       if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}

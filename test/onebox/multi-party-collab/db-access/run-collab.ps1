@@ -4,29 +4,92 @@ param
     [switch]
     $NoBuild,
 
-    [ValidateSet('mcr', 'local')]
-    [string]$registry = "local"
+    [ValidateSet('mcr', 'local', 'acr')]
+    [string]$registry = "local",
+
+    [string]$repo = "localhost:5000",
+
+    [string]$tag = "latest"
 )
 
-rm -rf $PSScriptRoot/generated
+# https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
+
+$outDir = "$PSScriptRoot/generated"
+$datastoreOutdir = "$outDir/datastores"
+rm -rf $outDir
 Write-Host "Using $registry registry for cleanroom container images."
 $root = git rev-parse --show-toplevel
 pwsh $root/test/onebox/multi-party-collab/deploy-virtual-cleanroom-governance.ps1 `
     -NoBuild:$NoBuild `
     -registry $registry `
+    -repo $repo `
+    -tag $tag `
+    -ccfProjectName "ob-ccf-db-access" `
     -projectName "ob-consumer-client" `
-    -initialMemberName "consumer"
+    -initialMemberName "consumer" `
+    -outDir $outDir
+$ccfEndpoint = $(Get-Content $outDir/ccf/ccf.json | ConvertFrom-Json).endpoint
+
 az cleanroom governance client remove --name "ob-publisher-client"
 
-pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 -registry $registry
+pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 -registry $registry -repo $repo -tag $tag -ccfEndpoint $ccfEndpoint
 if ($LASTEXITCODE -gt 0) {
     Write-Host -ForegroundColor Red "run-scenario-generate-template-policy returned non-zero exit code $LASTEXITCODE"
     exit $LASTEXITCODE
 }
 
-pwsh $PSScriptRoot/convert-template.ps1
+pwsh $root/test/onebox/multi-party-collab/convert-template.ps1 -outDir $outDir -repo $repo -tag $tag
 
-pwsh $PSScriptRoot/deploy-virtual-cleanroom.ps1
+pwsh $root/test/onebox/multi-party-collab/deploy-virtual-cleanroom.ps1 -outDir $outDir -repo $repo -tag $tag
+
+Get-Job -Command "*kubectl port-forward ccr-client-proxy*" | Stop-Job
+Get-Job -Command "*kubectl port-forward ccr-client-proxy*" | Remove-Job
+kubectl port-forward ccr-client-proxy 10081:10080 &
+
+# Need to wait a bit for the port-forward to start.
+bash $root/src/scripts/wait-for-it.sh --timeout=20 --strict 127.0.0.1:10081 -- echo "ccr-client-proxy is available"
+
+pwsh $PSScriptRoot/../wait-for-cleanroom.ps1 `
+    -appName demo-app `
+    -proxyUrl http://127.0.0.1:10081
+
+Start-Sleep -Seconds 5
+Write-Host "Exporting logs..."
+$response = curl -X POST -s http://ccr.cleanroom.local:8200/gov/exportLogs --proxy http://127.0.0.1:10081
+$expectedResponse = '{"message":"Application telemetry data exported successfully."}'
+if ($response -ne $expectedResponse) {
+    Write-Host -ForegroundColor Red "Did not get expected response. Received: $response."
+    exit 1
+}
+
+Write-Host "Exporting telemetry..."
+$response = curl -X POST -s http://ccr.cleanroom.local:8200/gov/exportTelemetry --proxy http://127.0.0.1:10081
+$expectedResponse = '{"message":"Infrastructure telemetry data exported successfully."}'
+if ($response -ne $expectedResponse) {
+    Write-Host -ForegroundColor Red "Did not get expected response. Received: $response."
+    exit 1
+}
+
+mkdir -p $outDir/results
+az cleanroom datastore download `
+    --config $datastoreOutdir/db-access-consumer-datastore-config `
+    --name consumer-db-output `
+    --dst $outDir/results
+
+az cleanroom telemetry download `
+    --cleanroom-config $outDir/configurations/publisher-config `
+    --datastore-config $datastoreOutdir/db-access-publisher-datastore-config `
+    --target-folder $outDir/results
+
+az cleanroom logs download `
+    --cleanroom-config $outDir/configurations/publisher-config `
+    --datastore-config $datastoreOutdir/db-access-publisher-datastore-config `
+    --target-folder $outDir/results
+
+Write-Host "Application logs:"
+cat $outDir/results/application-telemetry*/**/demo-app.log
 
 # Check that expected output files got created.
 $expectedFiles = @(
@@ -35,7 +98,9 @@ $expectedFiles = @(
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/demo-app-code-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/demo-app*-code-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/demo-app*-code-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/demo-app*-code-launcher.metrics",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/consumer-db-output*-blobfuse.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/consumer-db-output*-blobfuse-launcher.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/consumer-db-output*-blobfuse-launcher.traces",

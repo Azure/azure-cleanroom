@@ -1,10 +1,14 @@
 import argparse
 import base64
 import hashlib
+import json
 import logging
 import os
+import sys
 import uuid
 
+# OpenTelemetry related packages
+# Logging
 from opentelemetry import _logs
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk.resources import Resource
@@ -12,11 +16,20 @@ from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.exporter.otlp.proto.grpc._log_exporter import (
     OTLPLogExporter,
 )
+
+# Tracing
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+# Metrics
+from opentelemetry import metrics
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+
+# External instrumentors
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
 
@@ -25,6 +38,8 @@ import utilities
 
 container_name = os.environ.get("AZURE_STORAGE_ACCOUNT_CONTAINER")
 access_name = os.environ.get("ACCESS_NAME")
+volumestatus_path = os.environ.get("VOLUMESTATUS_MOUNT_PATH", "/mnt/volumestatus")
+telemetry_path = os.environ.get("TELEMETRY_MOUNT_PATH", "/mnt/telemetry")
 
 if container_name is None:
     raise ValueError("AZURE_STORAGE_ACCOUNT_CONTAINER environment variable is not set")
@@ -32,19 +47,17 @@ if container_name is None:
 logger_name = "-".join([access_name, container_name, str(uuid.uuid4())[:8]])
 
 # Initialize tracing.
-provider = TracerProvider(
+tracer_provider = TracerProvider(
     resource=Resource.create(
         {
             "service.name": f"{logger_name}-blobfuse-launcher",
         }
     ),
 )
-provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
 
 # Sets the global default tracer provider.
-trace.set_tracer_provider(provider)
-# You can optionally pass a custom TracerProvider to instrument().
-RequestsInstrumentor().instrument(tracer_provider=provider)
+trace.set_tracer_provider(tracer_provider)
 
 # Creates a tracer from the global tracer provider.
 tracer = trace.get_tracer("blobfuse-launcher")
@@ -61,13 +74,35 @@ logger_provider.add_log_record_processor(
     BatchLogRecordProcessor(OTLPLogExporter(insecure=True))
 )
 _logs.set_logger_provider(logger_provider)
-LoggingInstrumentor().instrument(set_logging_format=True)
 
 # Create a logger from the global logger provider.
 logging.basicConfig(level=logging.INFO)
 handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
 logger = logging.getLogger("blobfuse-launcher")
 logger.addHandler(handler)
+
+# Create a meter provider
+exporter = OTLPMetricExporter()
+reader = PeriodicExportingMetricReader(exporter, export_interval_millis=1000)
+meter_provider = MeterProvider(
+    metric_readers=[reader],
+    resource=Resource.create(
+        {
+            "service.name": f"{logger_name}-blobfuse-launcher",
+        }
+    ),
+)
+metrics.set_meter_provider(meter_provider)
+
+# Add all the external instrumentors that are required.
+RequestsInstrumentor().instrument(
+    tracer_provider=tracer_provider, meter_provider=meter_provider
+)
+LoggingInstrumentor().instrument(
+    set_logging_format=True,
+    tracer_provider=tracer_provider,
+    meter_provider=meter_provider,
+)
 
 
 def log_args(logger: logging.Logger, args: argparse.Namespace):
@@ -204,7 +239,6 @@ def main():
     # Create directories if they don't exist.
     os.makedirs(args.mount_path, exist_ok=True)
     os.makedirs("/tmp/blobfuse_tmp", exist_ok=True)
-    os.makedirs("/mnt/telemetry/infrastructure/logs", exist_ok=True)
 
     encryption_key_base64 = base64.standard_b64encode(encryption_key).decode()
     os.environ["AZURE_STORAGE_AUTH_TYPE"] = "msi"
@@ -224,7 +258,7 @@ def main():
         os.environ["AZURE_STORAGE_CPK_ENCRYPTION_KEY"] = encryption_key_base64
         os.environ["AZURE_STORAGE_CPK_ENCRYPTION_KEY_SHA256"] = encryption_key_sha256
 
-        utilities.launch_blobfuse(
+        returncode = utilities.launch_blobfuse(
             logger,
             tracer,
             args.mount_path,
@@ -232,9 +266,10 @@ def main():
             args.sub_directory,
             args.use_adls,
             True,
+            telemetry_path,
         )
     elif args.custom_encryption_mode == "None":
-        utilities.launch_blobfuse(
+        returncode = utilities.launch_blobfuse(
             logger,
             tracer,
             args.mount_path,
@@ -242,18 +277,39 @@ def main():
             args.sub_directory,
             args.use_adls,
             False,
+            telemetry_path,
         )
     else:
         os.environ["ENCRYPTION_KEY"] = encryption_key_base64
-        utilities.launch_blobfuse_encrypted(
-            logger,
-            tracer,
-            args.mount_path,
-            args.read_only,
+        returncode = utilities.launch_blobfuse_encrypted(
+            logger, tracer, args.mount_path, args.read_only, telemetry_path
         )
 
-    # TODO (HPrabh): Handle SIGTERM.
-    os.system("sleep infinity")
+    logger.info(f"Blobfuse process returncode: {returncode}")
+
+    # Create a marker file for other containers that are waiting for the mount point to be
+    # available.
+    if returncode == 0:
+        with open(
+            os.path.join(volumestatus_path, f"{access_name}.volume.ready"), "w"
+        ) as f:
+            f.write(json.dumps({"mount_path": args.mount_path}))
+            f.close()
+
+        # TODO (HPrabh): Handle SIGTERM.
+        os.system("sleep infinity")
+    else:
+        trace.get_current_span().set_status(
+            status=trace.StatusCode.ERROR,
+            description=f"Blobfuse process returncode: {returncode}",
+        )
+        # Non zero return code from blobfuse. Record error.
+        with open(
+            os.path.join(volumestatus_path, f"{access_name}.volume.error"), "w"
+        ) as f:
+            f.write(json.dumps({"error_code": returncode}))
+            f.close()
+    sys.exit(returncode)
 
 
 if __name__ == "__main__":

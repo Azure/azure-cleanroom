@@ -48,7 +48,7 @@ runs:
     - shell: pwsh
       run: |
         $constitution_digest = cat constitution.json | jq -S -j | sha256sum | cut -d ' ' -f 1
-        oras push ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/cgs-constitution:"${{ inputs.tag }},$constitution_digest,latest" ./constitution.json `
+        oras push ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom/cgs-constitution:"${{ inputs.tag }},$constitution_digest,latest" ./constitution.json `
           --annotation "cleanroom.version=${{ inputs.tag }}" `
           --annotation "constitution.js.digest=sha256:$constitution_digest"
 

@@ -141,6 +141,28 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
         return Task.FromResult(policy);
     }
 
+    public async Task<RecoveryServiceHealth> GetRecoveryServiceHealth(
+        string serviceName,
+        JsonObject? providerConfig)
+    {
+        var svcContainer = await this.TryGetRecoveryServiceContainer(serviceName, providerConfig);
+        if (svcContainer == null)
+        {
+            throw new Exception($"No recovery service endpoint found for {serviceName}.");
+        }
+
+        var ep = await this.TryGetRecoveryServiceEndpoint(serviceName, providerConfig);
+        if (ep == null)
+        {
+            throw new Exception($"No envoy endpoint found for {serviceName}.");
+        }
+
+        var health = this.ToRecoveryServiceHealth(svcContainer);
+        health.Name = ep.Name;
+        health.Endpoint = ep.Endpoint;
+        return health;
+    }
+
     private async Task<RecoveryServiceEndpoint> CreateRecoveryServiceContainer(
         string instanceName,
         string serviceName,
@@ -164,6 +186,19 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
             new Progress<JSONMessage>(m => this.logger.LogInformation(m.ToProgressMessage())));
 
         string hostServiceCertDir = DockerClientEx.GetHostServiceCertDirectory("rs", instanceName);
+
+        string hostInsecureVirtualDir =
+            DockerClientEx.GetHostInsecureVirtualDirectory("rs", instanceName);
+        string insecureVirtualDir =
+            DockerClientEx.GetInsecureVirtualDirectory("rs", instanceName);
+        Directory.CreateDirectory(insecureVirtualDir);
+
+        // Copy out the test keys/report into the host directory so that it can be mounted into
+        // the container.
+        WorkspaceDirectories.CopyDirectory(
+            Directory.GetCurrentDirectory() + "/insecure-virtual/recovery-service",
+            insecureVirtualDir,
+            recursive: true);
 
         string base64EncodedPolicy =
             Convert.ToBase64String(
@@ -209,7 +244,8 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
             {
                 Binds = new List<string>
                 {
-                    $"{hostServiceCertDir}:{DockerConstants.ServiceFolderMountPath}:ro"
+                    $"{hostServiceCertDir}:{DockerConstants.ServiceFolderMountPath}:ro",
+                    $"{hostInsecureVirtualDir}:/app/insecure-virtual:ro"
                 },
                 NetworkMode = serviceName,
 
@@ -252,6 +288,26 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
                 {
                     { $"{DockerConstants.CcfRecoveryServiceNameTag}={serviceName}", true },
                     { $"{DockerConstants.CcfRecoveryServiceTypeTag}=ccr-proxy", true }
+                }
+            }
+        });
+
+        return containers.FirstOrDefault();
+    }
+
+    private async Task<ContainerListResponse?> TryGetRecoveryServiceContainer(
+        string serviceName,
+        JsonObject? providerConfig)
+    {
+        var containers = await this.client.GetContainers(
+            this.logger,
+            filters: new Dictionary<string, IDictionary<string, bool>>
+        {
+            {
+                "label", new Dictionary<string, bool>
+                {
+                    { $"{DockerConstants.CcfRecoveryServiceNameTag}={serviceName}", true },
+                    { $"{DockerConstants.CcfRecoveryServiceTypeTag}=recovery-service", true }
                 }
             }
         });
@@ -344,6 +400,25 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
         {
             IdentityEndpoint = $"http://{containerName}:8080/token",
             ImdsEndpoint = "dummy_required_value"
+        };
+    }
+
+    private RecoveryServiceHealth ToRecoveryServiceHealth(ContainerListResponse container)
+    {
+        var status = CcfRecoveryProvider.ServiceStatus.Ok;
+        var reasons = new List<CcfRecoveryProvider.Reason>();
+        if (container.State == "exited")
+        {
+            status = CcfRecoveryProvider.ServiceStatus.Unhealthy;
+            var code = "ContainerExited";
+            var message = $"Container {container.ID} has exited: {container.Status}.";
+            reasons.Add(new() { Code = code, Message = message });
+        }
+
+        return new RecoveryServiceHealth
+        {
+            Status = status.ToString(),
+            Reasons = reasons
         };
     }
 

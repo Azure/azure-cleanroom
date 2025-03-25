@@ -20,6 +20,5 @@ function Check-Contract-RuntimeOption {
   $port = GetPortOrDie($port)
 
   $response = (curl -sS -X POST localhost:$port/contracts/$contractId/checkstatus/$statusOf -d "")
-  CheckLastExitCode
   return $response
 }

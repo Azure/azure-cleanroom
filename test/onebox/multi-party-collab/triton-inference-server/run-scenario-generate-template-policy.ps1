@@ -4,8 +4,9 @@ param
     [string]
     $outDir = "$PSScriptRoot/generated",
 
+    [Parameter(Mandatory)]
     [string]
-    $ccfEndpoint = "https://host.docker.internal:9081",
+    $ccfEndpoint,
 
     [string]
     $ccfOutDir = "",
@@ -19,12 +20,12 @@ param
     [switch]
     $y,
 
-    [ValidateSet('mcr', 'local')]
+    [ValidateSet('mcr', 'local', 'acr')]
     [string]$registry = "local",
 
-    [string]$registryUrl = "localhost:5001",
+    [string]$repo = "localhost:5000",
 
-    [string]$registryTag = "latest",
+    [string]$tag = "latest",
 
     [switch]
     $caci
@@ -42,21 +43,16 @@ $modelsPath = "$PSScriptRoot/models/model_repository"
 $collabSamplePath = "$root/samples/multi-party-collab"
 
 if ($ccfOutDir -eq "") {
-    $ccfOutDir = "$root/test/onebox/multi-party-collab/generated/ccf"
+    $ccfOutDir = "$outDir/ccf"
 }
 
 if ($datastoreOutdir -eq "") {
-    $datastoreOutdir = "$root/test/onebox/multi-party-collab/generated/datastores"
+    $datastoreOutdir = "$outDir/datastores"
 }
 
 $serviceCert = $ccfOutDir + "/service_cert.pem"
 if (-not (Test-Path -Path $serviceCert)) {
     throw "serviceCert at $serviceCert does not exist."
-}
-
-if ($env:GITHUB_ACTIONS -eq "true" -and $ccfEndpoint -eq "https://host.docker.internal:9081") {
-    # 172.17.0.1: https://stackoverflow.com/questions/48546124/what-is-the-linux-equivalent-of-host-docker-internal
-    $ccfEndpoint = "https://172.17.0.1:9081"
 }
 
 mkdir -p "$outDir/configurations"
@@ -84,7 +80,7 @@ else {
 
 # Publisher identity creation.
 if (-not (Test-Path -Path "$ccfOutDir/publisher_cert.pem")) {
-    az cleanroom governance member keygenerator-sh | bash -s -- --name "publisher" --out "$ccfOutDir"
+    az cleanroom governance member keygenerator-sh | bash -s -- --name "publisher" --gen-enc-key --out "$ccfOutDir"
 }
 
 # Invite publisher to the consortium.
@@ -93,6 +89,7 @@ $publisherTenantId = az account show --query "tenantId" --output tsv
 # "consumer" member makes a proposal for adding the new member "publisher".
 $proposalId = (az cleanroom governance member add `
         --certificate $ccfOutDir/publisher_cert.pem `
+        --encryption-public-key $ccfOutDir/publisher_enc_pubk.pem `
         --identifier "publisher" `
         --tenant-id $publisherTenantId `
         --query "proposalId" `
@@ -108,9 +105,13 @@ az cleanroom governance proposal vote `
 # "publisher" deploys client-side containers to interact with the governance service as the new member.
 # Set overrides if local registry is to be used for CGS images.
 if ($registry -eq "local") {
-    $tag = cat "$ccfOutDir/local-registry-tag.txt"
-    $env:AZCLI_CGS_CLIENT_IMAGE = "localhost:5000/cgs-client:$tag"
-    $env:AZCLI_CGS_UI_IMAGE = "localhost:5000/cgs-ui:$tag"
+    $localTag = cat "$ccfOutDir/local-registry-tag.txt"
+    $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$localTag"
+    $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$localTag"
+}
+elseif ($registry -eq "acr") {
+    $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$tag"
+    $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$tag"
 }
 
 az cleanroom governance client deploy `
@@ -122,6 +123,33 @@ az cleanroom governance client deploy `
 
 # "publisher" accepts the invitation and becomes an active member in the consortium.
 az cleanroom governance member activate --governance-client "ob-publisher-client"
+
+# Update the recovery threshold of the network to include all the active members.
+$newThreshold = 2
+$proposalId = (az cleanroom governance network set-recovery-threshold `
+        --recovery-threshold $newThreshold `
+        --query "proposalId" `
+        --output tsv `
+        --governance-client "ob-publisher-client")
+
+# Vote on the above proposal to accept the new threshold.
+az cleanroom governance proposal vote `
+    --proposal-id $proposalId `
+    --action accept `
+    --governance-client "ob-publisher-client"
+
+az cleanroom governance proposal vote `
+    --proposal-id $proposalId `
+    --action accept `
+    --governance-client "ob-consumer-client"
+
+$recoveryThreshold = (az cleanroom governance network show `
+        --query "configuration.recoveryThreshold" `
+        --output tsv `
+        --governance-client "ob-publisher-client")
+if ($recoveryThreshold -ne $newThreshold) {
+    throw "Expecting recovery threshold to be $newThreshold but value is $recoveryThreshold."
+}
 
 # Create storage account, KV and MI resources.
 pwsh $collabSamplePath/prepare-resources.ps1 `
@@ -268,12 +296,11 @@ az cleanroom governance contract vote `
 
 mkdir -p $outDir/deployments
 # Set overrides if local registry is to be used for clean room container images.
-if ($registry -eq "local") {
-    $env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL = $registryUrl
-    $env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = "${registryUrl}/sidecar-digests:$registryTag"
+if ($registry -ne "mcr") {
+    $env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL = $repo
+    $env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = "${repo}/sidecar-digests:$tag"
 }
 
-# TODO (gsinha): Remove all-all flag once flow is stable.
 if ($caci) {
     az cleanroom governance deployment generate `
         --contract-id $contractId `
@@ -403,11 +430,6 @@ az cleanroom governance ca show `
     --query "caCert" `
     --output tsv > $outDir/cleanroomca.crt
 
-$usePreprovisionedOIDC = $false
-if ($env:USE_PREPROVISIONED_OIDC -eq "true") {
-    $usePreprovisionedOIDC = $true
-}
-
 # Creates a KEK with SKR policy, wraps DEKs with the KEK and put in kv.
 az cleanroom config wrap-deks `
     --contract-id $contractId `
@@ -422,5 +444,4 @@ pwsh $collabSamplePath/setup-access.ps1 `
     -contractId $contractId  `
     -outDir $outDir `
     -kvType akvpremium `
-    -governanceClient "ob-publisher-client" `
-    -usePreprovisionedOIDC:$usePreprovisionedOIDC
+    -governanceClient "ob-publisher-client"

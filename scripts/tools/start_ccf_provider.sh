@@ -6,7 +6,7 @@ start_ccf_provider() {
     source $TOOLS_DIR/install_az_cli_extension.sh && install_az_cli_extension
 
     if ! docker ps \
-        --filter "ancestor=mcr.microsoft.com/cleanroom/ccf/ccf-provider-client:latest" \
+        --filter "ancestor=mcr.microsoft.com/azurecleanroom/ccf/ccf-provider-client:latest" \
         --filter "ancestor=cleanroombuild.azurecr.io/workleap/azure-cli-credentials-proxy:1.1.0" \
         --format '{{.Names}}' | grep -q .; then
         az cleanroom ccf provider deploy

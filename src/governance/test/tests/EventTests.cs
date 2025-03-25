@@ -127,7 +127,7 @@ public class EventTests : TestBase
             DateTimeOffset.FromUnixTimeMilliseconds(Convert.ToInt64(timestamp));
             var timestamp_iso = responseBody["value"]!.AsArray()[0]!["timestamp_iso"]!.ToString();
             var isoTs = DateTimeOffset.Parse(timestamp_iso);
-            Assert.AreEqual(DateTime.Now.Date, isoTs.Date);
+            Assert.AreEqual(DateTime.UtcNow.Date, isoTs.Date);
         }
 
         // Add all the remaining events.
@@ -347,7 +347,7 @@ public class EventTests : TestBase
             DateTimeOffset.FromUnixTimeMilliseconds(Convert.ToInt64(timestamp));
             var timestamp_iso = responseBody["value"]!.AsArray()[0]!["timestamp_iso"]!.ToString();
             var isoTs = DateTimeOffset.Parse(timestamp_iso);
-            Assert.AreEqual(DateTime.Now.Date, isoTs.Date);
+            Assert.AreEqual(DateTime.UtcNow.Date, isoTs.Date);
         }
 
         // Add all the remaining events.

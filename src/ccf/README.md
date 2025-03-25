@@ -94,7 +94,7 @@ if (!(Test-Path "$sandbox_common/${operatorName}_cert.pem")) {
     "certificate": "$sandbox_common/${operatorName}_cert.pem",
     "memberData": {
         "identifier": "$operatorName",
-        "is_operator": true
+        "isOperator": true
     }
 }]
 "@ >  $sandbox_common/members.json
@@ -112,7 +112,7 @@ if (!(Test-Path "$sandbox_common/${operatorName}_cert.pem")) {
 
 # Create the Azure resources like Key Vault, Managed Identity etc and then create the service.
 $root = git rev-parse --show-toplevel
-pwsh $root/samples/ccf/ccf-provider/azcli/recovery/prepare-resources.ps1 `
+pwsh $root/samples/ccf/azcli/recovery/prepare-resources.ps1 `
     -resourceGroup $resourceGroup `
     -outDir $sandbox_common
 $resources = $(Get-Content $sandbox_common/recoveryResources.json | ConvertFrom-Json)
@@ -226,7 +226,7 @@ if (!(Test-Path "$sandbox_common/${operatorName}_cert.pem")) {
     "encryptionPublicKey": "$sandbox_common/${operatorName}_enc_pubk.pem",
     "memberData": {
         "identifier": "$operatorName",
-        "is_operator": true
+        "isOperator": true
     }
 }]
 "@ >  $sandbox_common/members.json

@@ -28,6 +28,5 @@ function Propose-Contract {
 "@
 
   $response = Invoke-WebRequest -Method POST -Uri "http://localhost:$port/contracts/$id/propose" -Headers $headers -Body $data
-  CheckLastExitCode
   return $response.Content
 }

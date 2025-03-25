@@ -1,25 +1,13 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.Extensions.Logging;
 using Microsoft.Rest.TransientFaultHandling;
 
 namespace Controllers;
 
 public static class HttpResponseMessageExtensions
 {
-    public static void LogRequest(this HttpResponseMessage response, ILogger logger)
-    {
-        if (response is null)
-        {
-            return;
-        }
-
-        var request = response.RequestMessage;
-        logger.LogInformation($"{request?.Method} ");
-        logger.LogInformation($"{request?.RequestUri} ");
-        logger.LogInformation($"HTTP/{request?.Version}");
-    }
-
     public static async Task ValidateStatusCodeAsync(
         this HttpResponseMessage response,
         ILogger logger)

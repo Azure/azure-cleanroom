@@ -22,6 +22,7 @@
     - [Events management](#events-management)
     - [Document management](#document-management)
     - [Member addition](#member-addition)
+      - [Using member keys stored in Azure Key Vault](#using-member-keys-stored-in-azure-key-vault)
   - [CCF](#ccf)
     - [Provider management](#provider-management)
     - [Network management](#network-management)
@@ -100,23 +101,23 @@ az extension remove --name cleanroom
     ```
     This will generate two files: `member0_cert.pem` and `member0_privk.pem`.
 
-  - Create a CCF instance per https://learn.microsoft.com/en-us/azure/managed-ccf/quickstart-portal. Supply the contents of `member0_cert.pem` file as mentioned in the quickstart. It takes around 10 minutes for the mCCF provisioning to complete.
-Make note of the application endpoint for the mCCF instance that gets created. It will be of the form `https://<name>.confidential-ledger.azure.com`.
+  - Create a CCF instance per steps [here](../../../ccf/README.md#3-quickstart-ccf-network-creation).
 
 ### Client management
 All `governance` commands below need a client deployment. The `client deploy` command will launch the client-side containers on your local machine to interact with CCF instance. Specify a friendly name via `--name` to refer to this deployment instance.
 ```powershell
 # Deploy client-side containers to interact with the governance service.
 az cleanroom governance client deploy `
-  --ccf-endpoint "https://<name>.confidential-ledger.azure.com" `
+  --ccf-endpoint "https://<name>.<region>.azurecontainer.io" `
   --signing-cert ./member0_cert.pem `
   --signing-key ./member0_privk.pem `
+  --service-cert ./service_cert.pem `
   --name "cl-governance"
 
 # See information about the client configuration.
 az cleanroom governance client show --name "cl-governance"
 {
-  "ccfEndpoint": "https://<name>.confidential-ledger.azure.com",
+  "ccfEndpoint": "https://<name>.<region>.azurecontainer.io",
   "memberData": {
     "identifier": <...>
   },
@@ -254,7 +255,7 @@ az cleanroom governance oidc-issuer generate-signing-key
 az cleanroom governance oidc-issuer show
 ```
 
-See [how to setup a public, secured OIDC Issuer URL](../../../governance/ccf-app/README.md#setup-a-public-secured-oidc-issuer-url-using-azure-blob-storage) to generate the Issuer URL value to use below.
+See [how to setup a public, secured OIDC Issuer URL](../../../governance/ccf-app/js/README.md#setup-a-public-secured-oidc-issuer-url-using-azure-blob-storage) to generate the Issuer URL value to use below.
 ```powershell
 # Set tenantId-level Issuer URL that will be exposing the /.well-known/openid-configuration and JWKS documents.
 # The tenantId value is automatically picked from the member_data of the member that is invoking this cmdlet.
@@ -423,13 +424,64 @@ az cleanroom governance proposal vote --proposal-id $proposalId --action accept
 
 # "neo" deploys client-side containers to interact with the governance service as the new member.
 az cleanroom governance client deploy `
-  --ccf-endpoint "https://<name>.confidential-ledger.azure.com" `
+  --ccf-endpoint "https://<name>.<region>.azurecontainer.io" `
   --signing-cert ./neo_cert.pem `
   --signing-key ./neo_privk.pem `
+  --service-cert ./service_cert.pem `
   --name "neo-client"
 
 # "neo" accepts the invitation and becomes an active member in the consortium.
 az cleanroom governance member activate --name "neo-client"
+```
+#### Using member keys stored in Azure Key Vault
+Members’s identity certificates and encryption keys can also be created and stored in Azure Key Vault and used with CCF. See [here](https://microsoft.github.io/CCF/main/governance/hsm_keys.html#using-member-keys-stored-in-hsm) for more details.
+
+**Generating identity certificate**
+```powershell
+# A new member "morpheus" creates a key pair as its member identity and shares the public key
+# (morpheus_cert.pem) with one of the existing members of the consortium.
+$vaultName = "<vault-name>"
+az cleanroom governance member generate-identity-certificate `
+  --member-name "morpheus" `
+  --vault-name $vaultName
+  --output-dir .
+
+# Sample output
+Generating identity private key and certificate for participant 'morpheus' in Azure Key Vault...
+Identity certificate generated at: ./morpheus_cert.pem (to be registered in CCF)
+Identity certificate Azure Key Vault Id written out at: ./morpheus_cert.id
+
+# Azure Key Vault certificate ID
+cat ./morpheus_cert.id
+https://<vault-name>.vault.azure.net/certificates/morpheus-identity/04b7d45225754cfcaa5827f468b3f444
+```
+
+**Generating encryption key**
+```powershell
+$vaultName = "<vault-name>"
+az cleanroom governance member generate-encryption-key `
+  --member-name "morpheus" `
+  --vault-name $vaultName
+  --output-dir .
+
+# Sample output
+Generating RSA encryption key pair for participant 'morpheus' in Azure Key Vault...
+Encryption public key generated at: ./morpheus_enc_pubk.pem (to be registered in CCF)
+Encryption key Azure Key Vault Id written out at: ./morpheus_enc_key.id
+
+# Azure Key Vault encryption key ID
+cat ./morpheus_enc_key.id
+https://<vault-name>.vault.azure.net/keys/morpheus-encryption/b318faa84ccb4417a3a2c38b49e06ece
+```
+
+Governance client can then be deployed using the member signing cert id value.
+```powershell
+# "morpheus" deploys client-side containers to interact with the governance service as the new member.
+az cleanroom governance client deploy `
+  --ccf-endpoint "https://<name>.<region>.azurecontainer.io" `
+  --signing-cert-id ./morpheus_cert.id `
+  --service-cert ./service_cert.pem `
+  --name "morpehus-client"
 ```
 
 ## CCF
@@ -488,7 +540,7 @@ $storageAccountId = az storage account show `
     "encryptionPublicKey": "./operator_enc_pubk.pem",
     "memberData": {
         "identifier": "operator",
-        "is_operator": true
+        "isOperator": true
     }
 }]
 "@ > members.json

@@ -1,9 +1,9 @@
 name: governance-ccf
 services:
   ccf:
-    image: ccf:$ccfImageTag
+    image: ${ccfImage:-ccf/app/run-js/sandbox:latest}
     ports:
-      - "9081:8080"
+      - "0:8080"
     volumes:
       - ${cgs_sandbox_common}/${initialMemberName}_cert.pem:/app/member0_cert.pem
       - ${cgs_sandbox_common}/${initialMemberName}_enc_pubk.pem:/app/member0_enc_pubk.pem

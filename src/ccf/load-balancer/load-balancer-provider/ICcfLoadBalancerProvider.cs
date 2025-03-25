@@ -15,6 +15,11 @@ public interface ICcfLoadBalancerProvider
 
     Task DeleteLoadBalancer(string networkName, JsonObject? providerConfig);
 
+    string GenerateLoadBalancerFqdn(
+        string lbName,
+        string networkName,
+        JsonObject? providerConfig);
+
     Task<LoadBalancerEndpoint> GetLoadBalancerEndpoint(
         string networkName,
         JsonObject? providerConfig);

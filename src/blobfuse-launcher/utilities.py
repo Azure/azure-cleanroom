@@ -49,6 +49,10 @@ def unwrap_secret(
             logger.error(
                 f"Failed to unwrap secret {kid} via secrets sidecar. Error: {e}"
             )
+            span.set_status(
+                status=trace.StatusCode.ERROR,
+                description=f"Failed to unwrap secret {kid} via secrets sidecar.",
+            )
             span.record_exception(e)
             raise e
         else:
@@ -86,6 +90,10 @@ def wait_for_services_readiness(logger, tracer, service_ports):
                 ex = Exception(
                     f"Service on port {service_port} is not available even after waiting for the threshold. Exiting..."
                 )
+                span.set_status(
+                    status=trace.StatusCode.ERROR,
+                    description=f"Service on port {service_port} is not available even after waiting for the threshold.",
+                )
                 span.record_exception(ex)
                 raise ex
 
@@ -115,6 +123,10 @@ def subprocess_launch(
                 f"Failed to launch subprocess {operationName} with command {command}."
                 + f"Error: {e}"
             )
+            span.set_status(
+                status=trace.StatusCode.ERROR,
+                description=f"Failed to launch subprocess {operationName} with command {command}.",
+            )
             span.record_exception(e)
             raise e
 
@@ -127,10 +139,11 @@ def launch_blobfuse(
     subdirectory: str,
     useAdls: bool,
     cpkEnabled: bool,
-):
+    telemetryPath: str,
+) -> int:
     with tracer.start_as_current_span("launch_blobfuse") as span:
 
-        subprocess_launch(
+        proc = subprocess_launch(
             logger,
             tracer,
             "blobfuse-mount",
@@ -144,12 +157,13 @@ def launch_blobfuse(
                 "--tmp-path",
                 "/tmp/blobfuse_tmp",
                 "--log-file-path",
-                f"/mnt/telemetry/{os.path.basename(mountPath)}-blobfuse.log",
+                f"{telemetryPath}/infrastructure/{os.path.basename(mountPath)}-blobfuse.log",
                 "--subdirectory",
                 f"{subdirectory}",
                 "--use-adls=" + str(useAdls).lower(),
             ],
         )
+        return proc.returncode
 
 
 def launch_blobfuse_encrypted(
@@ -157,7 +171,8 @@ def launch_blobfuse_encrypted(
     tracer: trace.Tracer,
     mountPath: str,
     readOnly: bool,
-):
+    telemetryPath: str,
+) -> int:
     with tracer.start_as_current_span("launch_blobfuse") as span:
 
         # To allow encryptor component we need config file for blobfuse mount.
@@ -178,7 +193,7 @@ def launch_blobfuse_encrypted(
         with open("config.yaml", "w") as file:
             yaml.dump(config, file)
 
-        subprocess_launch(
+        proc = subprocess_launch(
             logger,
             tracer,
             "blobfuse-mount",
@@ -189,6 +204,8 @@ def launch_blobfuse_encrypted(
                 "--config-file=config.yaml",
                 "--read-only=" + str(readOnly).lower(),
                 "--log-file-path",
-                f"/mnt/telemetry/{os.path.basename(mountPath)}-blobfuse.log",
+                f"{telemetryPath}/infrastructure/{os.path.basename(mountPath)}-blobfuse.log",
             ],
         )
+
+        return proc.returncode

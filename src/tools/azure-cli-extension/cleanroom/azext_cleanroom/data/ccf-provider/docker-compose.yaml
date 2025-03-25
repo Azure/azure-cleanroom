@@ -1,6 +1,6 @@
 services:
   client:
-    image: ${AZCLI_CCF_PROVIDER_CLIENT_IMAGE:-mcr.microsoft.com/cleanroom/ccf/ccf-provider-client:2.0.0}
+    image: ${AZCLI_CCF_PROVIDER_CLIENT_IMAGE:-mcr.microsoft.com/azurecleanroom/ccf/ccf-provider-client:2.0.0}
     ports:
       - "0:8080"
     environment:

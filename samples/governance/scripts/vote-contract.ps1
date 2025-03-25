@@ -34,6 +34,5 @@ function Vote-Contract {
 
   $vote_method = $vote -eq "accept" ? "vote_accept" : "vote_reject"
   $response = Invoke-WebRequest -Method POST -Uri "http://localhost:$port/contracts/$id/$vote_method" -Headers $headers -Body $data
-  CheckLastExitCode
   return $response.Content
 }

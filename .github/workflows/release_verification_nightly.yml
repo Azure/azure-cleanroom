@@ -15,7 +15,7 @@ jobs:
     permissions:
       id-token: write
       contents: read  # This is required for actions/checkout
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: test
     env:
       TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
@@ -46,7 +46,9 @@ jobs:
           openssl version
 
       - name: Install az cleanroom CLI
-        run: az extension add --source https://cleanroomazcli.blob.core.windows.net/azcli/cleanroom-1.0.0-py2.py3-none-any.whl -y --allow-preview true
+        run: |
+          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:2.0.0
+          az extension add --source ./cleanroom-2.0.0-py2.py3-none-any.whl -y --allow-preview true
 
       - name: Enabling az cli telemetry collection
         run: az config set core.collect_telemetry=true
@@ -54,12 +56,12 @@ jobs:
       - name: Run ml-training test
         uses: ./.github/actions/test-multi-party-collab/test-ml-training-caci
         with:
-          registry-url: mcr.microsoft.com/cleanroom
+          repo: mcr.microsoft.com/azurecleanroom
           tag: 2.0.0
           kvType: ${{ matrix.key-store }}
 
   encrypted-storage-nightly:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: test
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -85,7 +87,9 @@ jobs:
           openssl version
 
       - name: Install az cleanroom CLI
-        run: az extension add --source https://cleanroomazcli.blob.core.windows.net/azcli/cleanroom-1.0.0-py2.py3-none-any.whl -y --allow-preview true
+        run: |
+          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:2.0.0
+          az extension add --source ./cleanroom-2.0.0-py2.py3-none-any.whl -y --allow-preview true
 
       - name: Enabling az cli telemetry collection
         run: az config set core.collect_telemetry=true
@@ -93,11 +97,11 @@ jobs:
       - name: Run encrypted-storage test
         uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-caci
         with:
-          registry-url: mcr.microsoft.com/cleanroom
+          repo: mcr.microsoft.com/azurecleanroom
           tag: 2.0.0
 
   nginx-hello-nightly:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: test
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -123,7 +127,9 @@ jobs:
           openssl version
 
       - name: Install az cleanroom CLI
-        run: az extension add --source https://cleanroomazcli.blob.core.windows.net/azcli/cleanroom-1.0.0-py2.py3-none-any.whl -y --allow-preview true
+        run: |
+          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:2.0.0
+          az extension add --source ./cleanroom-2.0.0-py2.py3-none-any.whl -y --allow-preview true
 
       - name: Enabling az cli telemetry collection
         run: az config set core.collect_telemetry=true
@@ -131,5 +137,5 @@ jobs:
       - name: Run nginx-hello test
         uses: ./.github/actions/test-multi-party-collab/test-nginx-hello-caci
         with:
-          registry-url: mcr.microsoft.com/cleanroom
+          repo: mcr.microsoft.com/azurecleanroom
           tag: 2.0.0

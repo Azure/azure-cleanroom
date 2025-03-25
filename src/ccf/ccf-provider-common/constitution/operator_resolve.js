@@ -8,12 +8,12 @@ function getMemberInfo(memberId) {
 // Defines which of the members are operators.
 function isOperator(memberId) {
   const info = getMemberInfo(memberId);
-  return info.member_data && info.member_data.is_operator;
+  return info.member_data && info.member_data.isOperator;
 }
 
 function isRecoveryOperator(memberId) {
   const info = getMemberInfo(memberId);
-  return info.member_data && info.member_data.is_recovery_operator;
+  return info.member_data && info.member_data.isRecoveryOperator;
 }
 
 function getActiveMemberCount() {
@@ -76,7 +76,7 @@ function canOperatorPass(action) {
   // Additionally, operators can add or retire other operators.
   if (action.name === "set_member") {
     const memberData = action.args["member_data"];
-    if (memberData && memberData.is_operator) {
+    if (memberData && memberData.isOperator) {
       return true;
     }
   } else if (action.name === "remove_member") {

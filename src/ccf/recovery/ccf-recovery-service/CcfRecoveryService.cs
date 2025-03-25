@@ -88,8 +88,7 @@ public class CcfRecoveryService
         }
 
         var message = await Cose.CreateGovCoseSign1Message(
-            signingKeyInfo.SigningCert,
-            signingKeyInfo.SigningKey,
+            new CoseSignKey(signingKeyInfo.SigningCert, signingKeyInfo.SigningKey),
             GovMessageType.StateDigest,
             payload: null);
         return message;
@@ -135,8 +134,7 @@ public class CcfRecoveryService
         }
 
         var message = await Cose.CreateGovCoseSign1Message(
-            signingKeyInfo.SigningCert,
-            signingKeyInfo.SigningKey,
+            new CoseSignKey(signingKeyInfo.SigningCert, signingKeyInfo.SigningKey),
             GovMessageType.Ack,
             payload: stateDigest.ToJsonString());
         return message;
@@ -179,8 +177,7 @@ public class CcfRecoveryService
         };
 
         var message = await Cose.CreateGovCoseSign1Message(
-            signingKeyInfo.SigningCert,
-            signingKeyInfo.SigningKey,
+            new CoseSignKey(signingKeyInfo.SigningCert, signingKeyInfo.SigningKey),
             GovMessageType.RecoveryShare,
             payload: content.ToJsonString());
         return message;

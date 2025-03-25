@@ -7,14 +7,14 @@ param
     [ValidateSet("acr", "mcr")]
     [string]$registry,
 
-    [string]$registryUrl = "",
+    [string]$repo = "",
 
     [string]$tag = "latest"
 )
 
 $registryArg
-if ($registryUrl -eq "" -and $registry -eq "acr") {
-    throw "-registryUrl must be specified for acr option."
+if ($repo -eq "" -and $registry -eq "acr") {
+    throw "-repo must be specified for acr option."
 }
 if ($registry -eq "mcr") {
     $usingRegistry = "mcr"
@@ -22,10 +22,10 @@ if ($registry -eq "mcr") {
 }
 else {
     $registryArg = "local"
-    if ($registryUrl -eq "") {
-        throw "-registryUrl must be specified for acr option."
+    if ($repo -eq "") {
+        throw "-repo must be specified for acr option."
     }
-    $usingRegistry = $registryUrl
+    $usingRegistry = $repo
 }
 
 rm -rf $PSScriptRoot/generated
@@ -37,7 +37,7 @@ Write-Host "Using $usingRegistry registry for cleanroom container images."
 
 $resourceGroupTags = ""
 if ($env:GITHUB_ACTIONS -eq "true") {
-    $ISV_RESOURCE_GROUP = "cl-ob-triton-isv-${env:JOB_ID}-${env:RUN_ID}"
+    $ISV_RESOURCE_GROUP = "cl-ob-triton-isv-${env:JOB_ID}-${env:RUN_ID}-${env:RUN_ATTEMPT}"
     $resourceGroupTags = "github_actions=multi-party-collab-${env:JOB_ID}-${env:RUN_ID}"
 }
 else {
@@ -56,22 +56,24 @@ $ISV_RESOURCE_GROUP_LOCATION = "westeurope"
 Write-Host "Creating resource group $ISV_RESOURCE_GROUP in $ISV_RESOURCE_GROUP_LOCATION"
 az group create --location $ISV_RESOURCE_GROUP_LOCATION --name $ISV_RESOURCE_GROUP --tags $resourceGroupTags
 
+$outDir = "$PSScriptRoot/generated"
 $result = Deploy-Aci-Governance `
     -resourceGroup $ISV_RESOURCE_GROUP `
     -ccfName $CCF_NAME `
     -location $ISV_RESOURCE_GROUP_LOCATION `
     -NoBuild:$NoBuild `
-    -registryUrl $registryUrl `
-    -registryTag $tag `
+    -repo $repo `
+    -tag $tag `
     -allowAll:$allowAll `
     -projectName "ob-consumer-client" `
-    -initialMemberName "consumer"
+    -initialMemberName "consumer" `
+    -outDir $outDir
 az cleanroom governance client remove --name "ob-publisher-client"
 
 pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 `
     -registry $registryArg `
-    -registryUrl $registryUrl `
-    -registryTag $tag `
+    -repo $repo `
+    -tag $tag `
     -ccfEndpoint $result.ccfEndpoint `
     -caci
 

@@ -1,4 +1,40 @@
-FROM ghcr.io/microsoft/ccf/app/run-js/virtual:ccf-6.0.0-dev2
+# Build the clean room specific C++ module that gets loaded in CCF.
+FROM ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-rc1 AS builder
+
+# Copy the source.
+COPY /src/governance/ccf-app/cpp src/cpp
+COPY .clang-format .clang-format
+COPY /scripts scripts
+
+# Check for formatting before compilation.
+RUN chmod +x /scripts/*.sh
+RUN /scripts/ci-checks.sh
+
+# Build the binary.
+RUN cd src/cpp
+RUN mkdir build && cd build
+WORKDIR /src/cpp/build
+RUN CC="clang-15" CXX="clang++-15" cmake -GNinja -DCOMPILE_TARGET=virtual ..
+RUN ninja
+
+# Sandbox
+FROM ghcr.io/microsoft/ccf/app/run-js/virtual:ccf-6.0.0-rc1 AS sandbox
+
+COPY --from=builder /src/cpp/build/libjs_cleanroom.virtual.so /usr/lib/ccf
+COPY --from=builder /opt/ccf_virtual/bin/*.js /app/
+COPY --from=builder /opt/ccf_virtual/bin/keygenerator.sh /app/ 
+COPY ./src/governance/ccf-app/js/config/cchost_config_virtual_js.json /app/
+
+WORKDIR /app/
+
+EXPOSE 8080/tcp
+
+CMD ["/usr/bin/cchost", "--config", "/app/cchost_config_virtual_js.json"]
+
+# Run
+FROM ghcr.io/microsoft/ccf/app/run-js/virtual:ccf-6.0.0-rc1
+
+COPY --from=builder /src/cpp/build/libjs_cleanroom.virtual.so /usr/lib/ccf
 
 COPY --chmod=755 /src/ccf/ccf-provider-common/scripts/node/bootstrap.sh /app/
 

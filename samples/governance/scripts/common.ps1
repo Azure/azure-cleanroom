@@ -9,7 +9,3 @@ function GetPortOrDie([string] $port) {
 
   return $env:CGSCLIENT_PORT
 }
-
-function CheckLastExitCode() {
-  if ($LASTEXITCODE -gt 0) { exit 1 }
-}

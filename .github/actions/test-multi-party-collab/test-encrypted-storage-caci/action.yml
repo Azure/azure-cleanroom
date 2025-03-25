@@ -1,7 +1,7 @@
 name: Test Encrypted Storage scenario CACI
 description: Test Encrypted Storage scenario CACI
 inputs:
-  registry-url:
+  repo:
     description: The registry URL
     required: true
   tag:
@@ -10,17 +10,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Delete huge unnecessary tools folder # https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
-      shell: bash
-      run: rm -rf /opt/hostedtoolcache
-
-    - name: Add docker user
-      shell: bash
-      run: sudo usermod -aG docker $USER
-
-    - shell: pwsh
-      run: Install-Module -Name powershell-yaml -Force
-
     - name: Login to Azure and refresh token
       uses: ./.github/actions/login-to-azure
       env:
@@ -28,20 +17,21 @@ runs:
         TENANT_ID: ${{ env.AZURE_TENANT_ID }}
         SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-    - name: Log in to Azure Container Registry
-      if: ${{ !contains(inputs.registry-url, 'mcr.microsoft.com/cleanroom') }}
-      shell: pwsh
-      run: az acr login -n ${{ inputs.registry-url}}
+    - name: Install az cleanroom extension
+      shell: bash
+      run: |
+        oras pull ${{ inputs.repo }}/cli/cleanroom-whl:${{ inputs.tag }}
+        az extension add --allow-preview true --source ./cleanroom-*-py2.py3-none-any.whl -y
 
     - name: Run collab scenario on caci
-      if: ${{ !contains(inputs.registry-url, 'mcr.microsoft.com/cleanroom') }}
+      if: ${{ !contains(inputs.repo, 'mcr.microsoft.com/azurecleanroom') }}
       shell: pwsh
-      run: pwsh ./test/onebox/multi-party-collab/encrypted-storage/run-collab-aci.ps1 -registry acr -registryUrl ${{ inputs.registry-url }} -tag ${{ inputs.tag }}
+      run: pwsh ./test/onebox/multi-party-collab/encrypted-storage/run-collab-aci.ps1 -registry acr -repo ${{ inputs.repo }} -tag ${{ inputs.tag }}
 
     - name: Run collab scenario on caci
-      if: ${{ contains(inputs.registry-url, 'mcr.microsoft.com/cleanroom') }}
+      if: ${{ contains(inputs.repo, 'mcr.microsoft.com/azurecleanroom') }}
       shell: pwsh
-      run: pwsh ./test/onebox/multi-party-collab/encrypted-storage/run-collab-aci.ps1 -registry mcr -registryUrl ${{ inputs.registry-url }} -tag ${{ inputs.tag }} -NoBuild
+      run: pwsh ./test/onebox/multi-party-collab/encrypted-storage/run-collab-aci.ps1 -registry mcr -repo ${{ inputs.repo }} -tag ${{ inputs.tag }} -NoBuild
 
     - name: Dump ccf-provider-client logs
       shell: pwsh
@@ -82,7 +72,7 @@ runs:
     - uses: actions/upload-artifact@v4
       with:
           name: ccf-encrypted-storage-caci
-          path: ./test/onebox/multi-party-collab/generated/ccf
+          path: ./test/onebox/multi-party-collab/encrypted-storage/generated/ccf
           overwrite: true
       if: ${{ !cancelled() }}
 

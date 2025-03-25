@@ -14,6 +14,5 @@ function Get-DeploymentSpec {
     $port = GetPortOrDie($port)
 
     $response = (curl -sS -X GET localhost:$port/contracts/$contractId/deploymentspec)
-    CheckLastExitCode
     return $response
 }

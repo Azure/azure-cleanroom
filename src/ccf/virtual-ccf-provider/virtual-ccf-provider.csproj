@@ -20,6 +20,24 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="insecure-virtual\recovery-agent\attestation\attestation-report.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="insecure-virtual\recovery-agent\certs\cert.pem">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="insecure-virtual\recovery-agent\keys\priv_key.pem">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="insecure-virtual\recovery-agent\keys\pub_key.pem">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="insecure-virtual\recovery-service\encryption_key_attestation.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="insecure-virtual\recovery-service\signing_key_attestation.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="templates\virtual\join-config.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

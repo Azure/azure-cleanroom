@@ -4,24 +4,37 @@ param
     [switch]
     $NoBuild,
 
-    [ValidateSet('mcr', 'local')]
+    [ValidateSet('mcr', 'local', 'acr')]
     [string]$registry = "local",
+
+    [string]$repo = "",
+
+    [string]$tag = "latest",
+
+    [Parameter(Mandatory)]
+    [string]$ccfProjectName,
 
     [Parameter(Mandatory)]
     [string]$projectName,
 
     [Parameter(Mandatory)]
-    [string]$initialMemberName
+    [string]$initialMemberName,
+
+    [Parameter(Mandatory)]
+    [string]$outDir
+
 )
 $root = git rev-parse --show-toplevel
 
-$outDir = "$root/test/onebox/multi-party-collab/generated/ccf"
+$outDir = "$outDir/ccf"
 mkdir -p $outDir
 pwsh $root/samples/governance/azcli/deploy-cgs.ps1 `
     -initialMemberName $initialMemberName `
     -projectName $projectName `
-    -ccfProjectName "ob-ccf" `
+    -ccfProjectName $ccfProjectName `
     -outDir $outDir `
     -NoTest `
     -NoBuild:$NoBuild `
-    -registry $registry
+    -registry $registry `
+    -repo $repo `
+    -tag $tag

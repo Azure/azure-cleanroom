@@ -4,11 +4,15 @@ param
     [string]
     $outDir = "$PSScriptRoot/generated",
 
+    [Parameter(Mandatory)]
     [string]
-    $ccfEndpoint = "https://host.docker.internal:9081",
+    $ccfEndpoint,
 
     [string]
     $ccfOutDir = "",
+
+    [string]
+    $datastoreOutdir = "",
 
     [string]
     $contractId = "collab1",
@@ -19,9 +23,9 @@ param
     [ValidateSet('mcr', 'local', 'acr')]
     [string]$registry = "local",
 
-    [string]$registryUrl = "localhost:5001",
+    [string]$repo = "localhost:5000",
 
-    [string]$registryTag = "latest",
+    [string]$tag = "latest",
 
     [switch]
     $withSecurityPolicy
@@ -33,7 +37,11 @@ $PSNativeCommandUseErrorActionPreference = $true
 
 $root = git rev-parse --show-toplevel
 if ($ccfOutDir -eq "") {
-    $ccfOutDir = "$root/test/onebox/multi-party-collab/generated/ccf"
+    $ccfOutDir = "$outDir/ccf"
+}
+
+if ($datastoreOutdir -eq "") {
+    $datastoreOutdir = "$outDir/datastores"
 }
 
 $serviceCert = $ccfOutDir + "/service_cert.pem"
@@ -41,28 +49,129 @@ if (-not (Test-Path -Path $serviceCert)) {
     throw "serviceCert at $serviceCert does not exist."
 }
 
-if ($env:GITHUB_ACTIONS -eq "true" -and $ccfEndpoint -eq "https://host.docker.internal:9081") {
-    # 172.17.0.1: https://stackoverflow.com/questions/48546124/what-is-the-linux-equivalent-of-host-docker-internal
-    $ccfEndpoint = "https://172.17.0.1:9081"
-}
-
 mkdir -p "$outDir/configurations"
 $nginxConfig = "$outDir/configurations/nginx-config"
 
+mkdir -p "$datastoreOutdir"
+$nginxDatastoreConfig = "$datastoreOutdir/nginx-hello-nginx-datastore-config"
+
+mkdir -p "$datastoreOutdir/secrets"
+$nginxSecretStoreConfig = "$datastoreOutdir/secrets/nginx-hello-nginx-secretstore-config"
+$nginxLocalSecretStore = "$datastoreOutdir/secrets/nginx-hello-nginx-secretstore-local"
+
+$resourceGroupTags = ""
+if ($env:GITHUB_ACTIONS -eq "true") {
+    $nginxResourceGroup = "cl-ob-nginx-${env:JOB_ID}-${env:RUN_ID}"
+    $resourceGroupTags = "github_actions=multi-party-collab-${env:JOB_ID}-${env:RUN_ID}"
+}
+else {
+    $nginxResourceGroup = "cl-ob-nginx-${env:USER}"
+}
+
+# Set tenant Id as a part of the nginx's member data.
+# This is required to enable OIDC provider in the later steps.
+$nginxTenantId = az account show --query "tenantId" --output tsv
+$proposalId = (az cleanroom governance member set-tenant-id `
+        --identifier nginx `
+        --tenant-id $nginxTenantId `
+        --query "proposalId" `
+        --output tsv `
+        --governance-client "ob-nginx-client")
+
+az cleanroom governance proposal vote `
+    --proposal-id $proposalId `
+    --action accept `
+    --governance-client "ob-nginx-client"
+
+az cleanroom secretstore add `
+    --name nginx-local-store `
+    --config $nginxSecretStoreConfig `
+    --backingstore-type Local_File `
+    --backingstore-path $nginxLocalSecretStore
+
+# Create storage account, KV and MI resources.
+pwsh $PSScriptRoot/../prepare-resources.ps1 `
+    -resourceGroup $nginxResourceGroup `
+    -resourceGroupTags $resourceGroupTags `
+    -kvType akvpremium `
+    -outDir $outDir
+
+$result = Get-Content "$outDir/$nginxResourceGroup/resources.generated.json" | ConvertFrom-Json
+
 az cleanroom config init --cleanroom-config $nginxConfig
+
+$identity = $(az resource show --ids $result.mi.id --query "properties") | ConvertFrom-Json
+
+# Create identity entry in the configuration.
+az cleanroom config add-identity az-federated `
+    --cleanroom-config $nginxConfig `
+    -n nginx-identity `
+    --client-id $identity.clientId `
+    --tenant-id $identity.tenantId `
+    --backing-identity cleanroom_cgs_oidc
+
+# Add DEK and KEK secret stores.
+az cleanroom secretstore add `
+    --name nginx-dek-store `
+    --config $nginxSecretStoreConfig `
+    --backingstore-type Azure_KeyVault `
+    --backingstore-id $result.dek.kv.id 
+
+az cleanroom secretstore add `
+    --name nginx-kek-store `
+    --config $nginxSecretStoreConfig `
+    --backingstore-type Azure_KeyVault_Managed_HSM `
+    --backingstore-id $result.kek.kv.id `
+    --attestation-endpoint $result.maa_endpoint
+
+$containerSuffix = $($($(New-Guid).Guid) -replace '-').ToLower()
+Write-Host "Using container suffix {$containerSuffix} for application-telemetry"
+
+# $result below refers to the output of the prepare-resources.ps1 that was run earlier.
+az cleanroom config set-logging `
+    --cleanroom-config $nginxConfig `
+    --storage-account $result.sa.id `
+    --identity nginx-identity `
+    --datastore-config $nginxDatastoreConfig `
+    --secretstore-config $nginxSecretStoreConfig `
+    --datastore-secret-store nginx-local-store `
+    --dek-secret-store nginx-dek-store `
+    --kek-secret-store nginx-kek-store `
+    --encryption-mode CPK `
+    --container-suffix $containerSuffix
+
+$containerSuffix = $($($(New-Guid).Guid) -replace '-').ToLower()
+Write-Host "Using container suffix {$containerSuffix} for infrastructure-telemetry"
+az cleanroom config set-telemetry `
+    --cleanroom-config $nginxConfig `
+    --storage-account $result.sa.id `
+    --identity nginx-identity `
+    --datastore-config $nginxDatastoreConfig `
+    --secretstore-config $nginxSecretStoreConfig `
+    --datastore-secret-store nginx-local-store `
+    --dek-secret-store nginx-dek-store `
+    --kek-secret-store nginx-kek-store `
+    --encryption-mode CPK `
+    --container-suffix $containerSuffix
 
 az cleanroom config add-application `
     --cleanroom-config $nginxConfig `
     --name nginx-hello `
-    --image "docker.io/nginxdemos/nginx-hello:plain-text@sha256:d976f016b32fc381dfb74119cc421d42787b5a63a6b661ab57891b7caa5ad12e" `
+    --image "docker.io/nginxdemos/nginx-hello@sha256:d976f016b32fc381dfb74119cc421d42787b5a63a6b661ab57891b7caa5ad12e" `
+    --ports 8080 `
     --cpu 0.5 `
     --memory 4
 
-az cleanroom config add-application-endpoint `
+# Use a pre-built policy bundle if the registry is 'mcr'.
+$policyBundleUrl = "cleanroomsamples.azurecr.io/nginx-hello/nginx-hello-policy@sha256:d7b91031287ca532acbc8fa9117f982f694d9412adfd186800edef2adfb2b0e3"
+if ($registry -ne "mcr") {
+    pwsh $PSScriptRoot/build-policy-bundle.ps1 -tag $tag -repo $repo
+    $policyBundleUrl = "${repo}/nginx-hello-policy:$tag"
+}
+az cleanroom config network http enable `
     --cleanroom-config $nginxConfig `
-    --application-name nginx-hello `
-    --port 8080 `
-    --policy cleanroomsamples.azurecr.io/nginx-hello/nginx-hello-policy@sha256:c71b70a70dfad8279d063ab68d80df6d8d407ba8359a68c6edb3e99a25c77575
+    --direction inbound `
+    --policy $policyBundleUrl
 
 az cleanroom config view `
     --cleanroom-config $nginxConfig `
@@ -103,8 +212,8 @@ az cleanroom governance contract vote `
 mkdir -p $outDir/deployments
 # Set overrides if a non-mcr registry is to be used for clean room container images.
 if ($registry -ne "mcr") {
-    $env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL = $registryUrl
-    $env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = "${registryUrl}/sidecar-digests:$registryTag"
+    $env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL = $repo
+    $env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = "${repo}/sidecar-digests:$tag"
 }
 
 if ($withSecurityPolicy) {
@@ -129,6 +238,19 @@ az cleanroom governance deployment template propose `
 
 az cleanroom governance deployment policy propose `
     --policy-file $outDir/deployments/cleanroom-governance-policy.json `
+    --contract-id $contractId `
+    --governance-client "ob-nginx-client"
+
+# Propose enabling log and telemetry collection during cleanroom execution.
+az cleanroom governance contract runtime-option propose `
+    --option logging `
+    --action enable `
+    --contract-id $contractId `
+    --governance-client "ob-nginx-client"
+
+az cleanroom governance contract runtime-option propose `
+    --option telemetry `
+    --action enable `
     --contract-id $contractId `
     --governance-client "ob-nginx-client"
 
@@ -165,6 +287,32 @@ az cleanroom governance proposal vote `
     --action accept `
     --governance-client $clientName
 
+# Vote on the enable logging proposal.
+$proposalId = az cleanroom governance contract runtime-option get `
+    --option logging `
+    --contract-id $contractId `
+    --governance-client $clientName `
+    --query "proposalIds[0]" `
+    --output tsv
+
+az cleanroom governance proposal vote `
+    --proposal-id $proposalId `
+    --action accept `
+    --governance-client $clientName
+
+# Vote on the enable telemetry proposal.
+$proposalId = az cleanroom governance contract runtime-option get `
+    --option telemetry `
+    --contract-id $contractId `
+    --governance-client $clientName `
+    --query "proposalIds[0]" `
+    --output tsv
+
+az cleanroom governance proposal vote `
+    --proposal-id $proposalId `
+    --action accept `
+    --governance-client $clientName
+
 # Vote on the proposed CA enable.
 $proposalId = az cleanroom governance ca show `
     --contract-id $contractId `
@@ -186,3 +334,19 @@ az cleanroom governance ca show `
     --governance-client "ob-nginx-client" `
     --query "caCert" `
     --output tsv > $outDir/cleanroomca.crt
+
+# Creates a KEK with SKR policy, wraps DEKs with the KEK and put in kv.
+az cleanroom config wrap-deks `
+    --contract-id $contractId `
+    --cleanroom-config $nginxConfig `
+    --datastore-config $nginxDatastoreConfig `
+    --secretstore-config $nginxSecretStoreConfig `
+    --governance-client "ob-nginx-client"
+
+# Setup OIDC issuer endpoint and managed identity access to storage/KV.
+pwsh $PSScriptRoot/../setup-access.ps1 `
+    -resourceGroup $nginxResourceGroup `
+    -contractId $contractId `
+    -outDir $outDir `
+    -kvType akvpremium `
+    -governanceClient "ob-nginx-client"

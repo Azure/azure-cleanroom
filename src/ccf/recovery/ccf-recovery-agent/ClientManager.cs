@@ -136,11 +136,11 @@ public class ClientManager
         };
 
         var privateKey =
-            await File.ReadAllTextAsync("insecure-virtual/keys/priv_key.pem");
+            await File.ReadAllTextAsync("/app/insecure-virtual/keys/priv_key.pem");
         var publicKey =
-            await File.ReadAllTextAsync("insecure-virtual/keys/pub_key.pem");
+            await File.ReadAllTextAsync("/app/insecure-virtual/keys/pub_key.pem");
         var content = await File.ReadAllTextAsync(
-            "insecure-virtual/attestation/attestation-report.json");
+            "/app/insecure-virtual/attestation/attestation-report.json");
         var attestationReport = JsonSerializer.Deserialize<AttestationReport>(content)!;
 
         wsConfig.Attestation = new AttestationReportKey(publicKey, privateKey, attestationReport);

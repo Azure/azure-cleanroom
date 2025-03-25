@@ -1,15 +1,15 @@
 # Image for building the sidecar executable.
-FROM mcr.microsoft.com/oss/go/microsoft/golang:1.19.2 AS build-image
+FROM mcr.microsoft.com/oss/go/microsoft/golang:1.23.1 AS build-image
 
 # Install prerequisities.
 RUN apt-get update -y && \
     DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install \
     software-properties-common build-essential
 
-RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.53.3
+RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.63.4
 
-RUN mkdir -p /root/ccr-proxy-ext-processor
-WORKDIR /root/ccr-proxy-ext-processor
+# Set the working directory
+WORKDIR /app
 
 # Download dependencies. If go.mod/sum files are unchanged then layer caching optimization kicks in.
 COPY go.mod .
@@ -19,23 +19,22 @@ RUN go mod download
 COPY .golangci.yml .
 
 # Copy the sidecar source.
-WORKDIR /root/ccr-proxy-ext-processor
-COPY src/internal internal
-COPY src/proxy-ext-processor ccr-proxy-ext-processor
+COPY src/internal src/internal
+COPY src/proxy-ext-processor src/proxy-ext-processor
 
 # Build the sidecar.
 RUN golangci-lint run -v -c .golangci.yml ./...
 RUN go vet ./...
-WORKDIR /root/ccr-proxy-ext-processor/ccr-proxy-ext-processor
-RUN go build -o ccr-proxy-ext-processor
-RUN chmod +x ccr-proxy-ext-processor
+WORKDIR /app/src/proxy-ext-processor
+RUN go build -o /app/ccr-proxy-ext-processor
+RUN chmod +x /app/ccr-proxy-ext-processor
 
 # Run unit tests.
-WORKDIR /root/ccr-proxy-ext-processor
+WORKDIR /app/src/
 RUN go test ./...
 
 # Optimize the final image size by creating an image with only the sidecar executable.
-FROM mcr.microsoft.com/mirror/docker/library/ubuntu:20.04
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:22.04
 
 # Install prerequisities.
 RUN apt-get -y update && \
@@ -45,9 +44,9 @@ RUN apt-get -y update && \
 # Upgrade packages.
 RUN apt upgrade -y
 
-COPY --from=build-image /root/ccr-proxy-ext-processor/ccr-proxy-ext-processor/ccr-proxy-ext-processor ./ccr-proxy-ext-processor
+COPY --from=build-image /app/ccr-proxy-ext-processor ./ccr-proxy-ext-processor
 RUN chmod +x ./ccr-proxy-ext-processor
-COPY --from=build-image /root/ccr-proxy-ext-processor/ccr-proxy-ext-processor/run.sh ./run.sh
+COPY --from=build-image /app/src/proxy-ext-processor/run.sh ./run.sh
 RUN chmod +x ./run.sh
 
 ARG PORT=8281

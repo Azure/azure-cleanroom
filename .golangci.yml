@@ -8,3 +8,14 @@ linters-settings:
     check-shadowing: true
 run:
   timeout: 5m
+
+issues:
+  # Don't turn off any checks by default. We can do this explicitly if needed.
+  exclude-use-default: false
+
+  exclude-rules:
+    # TODO (HPrabh): Fix the following issues separately.
+    - linters: 
+        - staticcheck
+      # Some packages [go.opentelemetry.io/otel/trace] are using deprecated APIs.
+      text: "SA1019:"

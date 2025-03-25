@@ -34,7 +34,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: test
     steps:
       - name: Setup .NET
@@ -44,7 +44,7 @@ jobs:
 
       - name: Install powershell-yaml
         shell: pwsh
-        run: Install-Module -Name powershell-yaml -Force
+        run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
 
       # Generate SBOM for the container using
       # https://github.com/microsoft/sbom-tool/blob/main/docs/setting-up-github-actions.md#adding-the-sbom-generation-task
@@ -157,5 +157,10 @@ jobs:
       - name: Build CCF recovery service containers
         if: ${{ contains(inputs.build-type, 'ccf-recovery-service-containers') }}
         uses: ./.github/actions/build-ccf-recovery-service-containers
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+
+      - name: Build AZ CLI
+        uses: ./.github/actions/build-azcli
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}

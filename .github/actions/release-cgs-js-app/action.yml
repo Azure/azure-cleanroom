@@ -47,7 +47,7 @@ runs:
     - shell: pwsh
       run: |
         $bundle_digest = cat bundle.json | jq -S -j | sha256sum | cut -d ' ' -f 1
-        oras push ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/cgs-js-app:"${{ inputs.tag }},$bundle_digest,latest" ./bundle.json `
+        oras push ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom/cgs-js-app:"${{ inputs.tag }},$bundle_digest,latest" ./bundle.json `
           --annotation "cleanroom.version=${{ inputs.tag }}" `
           --annotation "bundle.json.digest=sha256:$bundle_digest"
 

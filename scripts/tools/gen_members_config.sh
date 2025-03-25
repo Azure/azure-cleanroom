@@ -13,7 +13,7 @@ gen_members_config() {
     "encryptionPublicKey": "$CCF_WORKSPACE/operator_enc_pubk.pem",
     "memberData": {
       "identifier": "operator",
-      "is_operator": true
+      "isOperator": true
     }
   }
 ]

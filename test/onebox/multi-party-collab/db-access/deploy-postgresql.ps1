@@ -5,7 +5,6 @@ function Deploy-PostgreSQL {
         [string]$resourceGroup
     )
     $root = git rev-parse --show-toplevel
-    Import-Module $root/samples/common/infra-scripts/azure-helpers.psm1 -Force -DisableNameChecking
 
     function Get-UniqueString ([string]$id, $length = 13) {
         $hashArray = (new-object System.Security.Cryptography.SHA512Managed).ComputeHash($id.ToCharArray())
@@ -39,14 +38,16 @@ function Deploy-PostgreSQL {
 
     $result = @{
         endpoint = ""
+        ip       = ""
         name     = $name
         user     = $user
         password = $password
     }
-    $result.endpoint = az container show `
+    $ipAddress = az container show `
         --name $aciName `
         -g $resourceGroup `
-        --query "ipAddress.fqdn" `
-        --output tsv
+        --query "ipAddress" | ConvertFrom-Json
+    $result.endpoint = $ipAddress.fqdn
+    $result.ip = $ipAddress.ip
     return $result
 }

@@ -85,6 +85,13 @@ public class CCHostConfig
         }
     }
 
+    public void SetSubjectAltNames(List<string> san)
+    {
+        var sanArray = new JsonArray();
+        san.ForEach(s => sanArray.Add(s));
+        this.cchostConfig["node_certificate"]!["subject_alt_names"] = sanArray;
+    }
+
     public async Task SetStartConfiguration(
         List<InitialMember> initialMembers,
         string constitutionFilesDir)

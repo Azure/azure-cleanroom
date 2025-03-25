@@ -5,10 +5,16 @@ WORKDIR /root
 # Install prerequisities.
 RUN apk update && apk upgrade && apk add bash
 
+# Install python/pip
+ENV PYTHONUNBUFFERED=1
+RUN apk add --update --no-cache python3 && ln -sf python3 /usr/bin/python
+RUN python3 -m ensurepip
+RUN pip3 install --no-cache --upgrade pip
+
 # Copy scripts for setting up the CCR for sandboxing.
 COPY src/init/iptables-rules/setup-iptables-no-network.sh .
 RUN chmod +x setup-iptables-no-network.sh
-COPY src/init/iptables-rules/setup-iptables-proxy.sh .
-RUN chmod +x setup-iptables-proxy.sh
-COPY src/init/iptables-rules/setup-iptables.sh .
-RUN chmod +x setup-iptables.sh
+COPY src/init/iptables-rules/templates templates
+COPY src/init/iptables-rules/setup-iptables.py .
+COPY src/init/iptables-rules/requirements.txt .
+RUN pip3 install -r requirements.txt

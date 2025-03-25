@@ -12,7 +12,7 @@ runs:
     - uses: docker/build-push-action@v5
       with:
         file: ./build/docker/Dockerfile.governance.ccf-app
-        context: ${{ github.workspace }}/src/governance/ccf-app
+        context: ${{ github.workspace }}/src/governance/ccf-app/js
         target: dist
         outputs: type=local,dest=.
 

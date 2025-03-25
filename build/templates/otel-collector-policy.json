@@ -9,7 +9,7 @@
   "mounts": [
     {
       "name": "telemetrymounts",
-      "mountPath": "/mnt/telemetry",
+      "mountPath": "$telemetryMountPath",
       "mountType": "emptyDir",
       "readOnly": false
     }

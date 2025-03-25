@@ -11,5 +11,4 @@ Function Get-Member {
   $port = GetPortOrDie($port)
 
   curl -sS -X GET localhost:$port/members | jq
-  CheckLastExitCode
 }

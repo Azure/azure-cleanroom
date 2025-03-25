@@ -39,6 +39,7 @@ public class DockerNodeProvider : ICcfNodeProvider
         string? nodeLogLevel,
         SecurityPolicyConfiguration policyOption,
         NodeData nodeData,
+        List<string> san,
         JsonObject? providerConfig)
     {
         string containerName = "cchost-nw-" + nodeName;
@@ -59,6 +60,7 @@ public class DockerNodeProvider : ICcfNodeProvider
         cchostConfig.SetPublishedAddress(fqdn: containerName);
         cchostConfig.SetNodeLogLevel(nodeLogLevel);
         await cchostConfig.SetNodeData(nodeData);
+        cchostConfig.SetSubjectAltNames(san);
 
         await cchostConfig.SetStartConfiguration(initialMembers, "constitution");
 
@@ -209,6 +211,7 @@ public class DockerNodeProvider : ICcfNodeProvider
         string? nodeLogLevel,
         SecurityPolicyConfiguration policyOption,
         NodeData nodeData,
+        List<string> san,
         JsonObject? providerConfig)
     {
         var nodeStorageProvider = NodeStorageProviderFactory.Create(
@@ -241,6 +244,7 @@ public class DockerNodeProvider : ICcfNodeProvider
         cchostConfig.SetPublishedAddress(fqdn: containerName);
         cchostConfig.SetNodeLogLevel(nodeLogLevel);
         await cchostConfig.SetNodeData(nodeData);
+        cchostConfig.SetSubjectAltNames(san);
 
         await cchostConfig.SetJoinConfiguration(targetRpcAddress, serviceCertPem);
 
@@ -385,6 +389,7 @@ public class DockerNodeProvider : ICcfNodeProvider
         string? nodeLogLevel,
         SecurityPolicyConfiguration policyOption,
         NodeData nodeData,
+        List<string> san,
         JsonObject? providerConfig)
     {
         var nodeStorageProvider = NodeStorageProviderFactory.Create(
@@ -420,6 +425,7 @@ public class DockerNodeProvider : ICcfNodeProvider
         cchostConfig.SetPublishedAddress(fqdn: containerName);
         cchostConfig.SetNodeLogLevel(nodeLogLevel);
         await cchostConfig.SetNodeData(nodeData);
+        cchostConfig.SetSubjectAltNames(san);
 
         await cchostConfig.SetRecoverConfiguration(previousServiceCertPem);
 
@@ -896,6 +902,19 @@ public class DockerNodeProvider : ICcfNodeProvider
         string hostServiceCertDir =
             DockerClientEx.GetHostServiceCertDirectory("ra", nodeEndpoint.NodeName);
 
+        string hostInsecureVirtualDir =
+            DockerClientEx.GetHostInsecureVirtualDirectory("ra", nodeEndpoint.NodeName);
+        string insecureVirtualDir =
+            DockerClientEx.GetInsecureVirtualDirectory("ra", nodeEndpoint.NodeName);
+        Directory.CreateDirectory(insecureVirtualDir);
+
+        // Copy out the test keys/report into the host directory so that it can be mounted into
+        // the container.
+        WorkspaceDirectories.CopyDirectory(
+            Directory.GetCurrentDirectory() + "/insecure-virtual/recovery-agent",
+            insecureVirtualDir,
+            recursive: true);
+
         var createContainerParams = new CreateContainerParameters
         {
             Labels = new Dictionary<string, string>
@@ -936,7 +955,8 @@ public class DockerNodeProvider : ICcfNodeProvider
                 CapAdd = new List<string>(),
                 Binds = new List<string>
                 {
-                    $"{hostServiceCertDir}:{DockerConstants.ServiceFolderMountPath}:ro"
+                    $"{hostServiceCertDir}:{DockerConstants.ServiceFolderMountPath}:ro",
+                    $"{hostInsecureVirtualDir}:/app/insecure-virtual:ro"
                 },
 
                 // Although traffic will be routed via envoy exposing the HTTP port for easier

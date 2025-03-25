@@ -30,9 +30,18 @@ else {
 # See https://docs.docker.com/build/guide/export/ for --output usage reference.
 docker image build `
     --output=$sandbox_common --target=dist `
-    -f $buildRoot/docker/Dockerfile.governance.ccf-app "$root/src/governance/ccf-app"
+    -f $buildRoot/docker/Dockerfile.governance.ccf-app "$root/src/governance/ccf-app/js"
 
 if ($push) {
+    if ($env:GITHUB_ACTIONS -eq "true") {
+        # If running in github actions then add a unique string into the js app bundle so that even
+        # if there is no code change we get a unique bundle digest so that each github action run
+        # generates a unique hash value.
+        Write-Host "Inserting unique string value '$tag' in the jsapp bundle."
+        $bundle_content = jq --arg tag1 "const github_actions_jsapp_tag = ""$tag"";`n" '.modules |= [{"name": "__github_actions_jsapp_tag.js__", "module": $tag1}] + .' "$sandbox_common/bundle.json"
+        $bundle_content | Out-File "$sandbox_common/bundle.json"
+    }
+
     $bundleDigest = cat "$sandbox_common/bundle.json" | jq -S -j | sha256sum | cut -d ' ' -f 1
 
     Push-Location $sandbox_common
@@ -54,10 +63,19 @@ cgs-js-app:
     Pop-Location
 
     $ccfConstitutionDir = "$root/src/ccf/ccf-provider-common/constitution"
-    $cgsConstitutionDir = "$root/src/governance/ccf-app/constitution"
+    $cgsConstitutionDir = "$root/src/governance/ccf-app/js/constitution"
     $content = ""
     Get-ChildItem $ccfConstitutionDir -Filter *.js | Foreach-Object { $content += Get-Content $_.FullName -Raw }
     Get-ChildItem $cgsConstitutionDir -Filter *.js | Foreach-Object { $content += Get-Content $_.FullName -Raw }
+
+    # If running in github actions then add a unique string into the constitution so that even
+    # if there is no code change we get a unique constitution digest so that each github action run
+    # generates a unique hash value.
+    if ($env:GITHUB_ACTIONS -eq "true") {
+        Write-Host "Inserting unique string value '$tag' in the constitution."
+        $content += "const github_actions_tag = ""$tag"";"
+    }
+
     $content | Out-File "$sandbox_common/constitution.js"
     $content | ConvertTo-Json | Out-File "$sandbox_common/constitution.json"
     $constitutionDigest = cat "$sandbox_common/constitution.json" | jq -S -j | sha256sum | cut -d ' ' -f 1

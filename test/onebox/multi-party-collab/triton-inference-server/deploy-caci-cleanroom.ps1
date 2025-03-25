@@ -40,7 +40,10 @@ if (!$nowait) {
         --query "ipAddress.ip" `
         --output tsv
     Write-Host "Clean Room IP address: $ccrIP"
-
+    if ($null -eq $ccrIP) {
+        throw "Clean Room IP address is not set."
+    }
+    
     $caCert = "$outDir/cleanroomca.crt"
     $base64CaCert = $(cat $caCert | base64 -w 0)
 
@@ -65,7 +68,7 @@ if (!$nowait) {
 
     $timeout = New-TimeSpan -Minutes 20
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    while ((curl -o '' -w "'%{http_code}'" -s --proxy http://127.0.0.1:10080 http://ccr.cleanroom.local:8000/v2/health/ready) -ne "'200'") {
+    while ((curl -o /dev/null -w "%{http_code}" -s --proxy http://127.0.0.1:10080 http://ccr.cleanroom.local:8000/v2/health/ready) -ne "200") {
         Write-Host "Waiting for tritonserver endpoint to be up at http://ccr.cleanroom.local:8000/v2/health/ready ($($stopwatch.elapsed.ToString()))"
         Start-Sleep -Seconds 20
         if ($stopwatch.elapsed -gt $timeout) {

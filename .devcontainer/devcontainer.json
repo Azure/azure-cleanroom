@@ -5,7 +5,7 @@
       "modules": "powershell-yaml"
     },
     "ghcr.io/devcontainers/features/azure-cli:1": {
-      "extensions": "confcom,managedccfs"
+      "extensions": "confcom"
     },
     "ghcr.io/dhoeric/features/oras:1": {}
   },

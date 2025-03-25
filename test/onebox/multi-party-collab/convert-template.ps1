@@ -2,15 +2,22 @@
 param
 (
     [string]
-    $outDir = "$PSScriptRoot/generated"
+    $outDir = "$PSScriptRoot/generated",
+
+    [string]
+    $repo = "localhost:5000",
+
+    [string]
+    $tag = "latest",
+
+    [string]
+    $registry_local_endpoint = "ccr-registry:5000"
 )
 
+
 $root = git rev-parse --show-toplevel
-docker image ls aci-to-k8s | grep aci-to-k8s 1>$null
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "aci-to-k8s image not found. Building image."
-    pwsh $root/build/onebox/build-aci-to-k8s.ps1
-}
+Write-Host "Building aci-to-k8s image."
+pwsh $root/build/onebox/build-aci-to-k8s.ps1
 
 Write-Host "Converting template"
 docker run --rm `
@@ -19,4 +26,7 @@ docker run --rm `
     -u $(id -u $env:USER) `
     aci-to-k8s `
     --template-file ./cleanroom-arm-template.json `
+    --registry-local-endpoint $registry_local_endpoint `
+    --repo $repo `
+    --tag $tag `
     --out-dir .

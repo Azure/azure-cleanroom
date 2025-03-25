@@ -45,6 +45,5 @@ function Propose-CleanRoom-Policy {
   }
 
   $response = Invoke-WebRequest -Method POST -Uri "http://localhost:$port/contracts/$contractId/cleanroompolicy/propose" -Headers $headers -Body $policy
-  CheckLastExitCode
   return $response.Content
 }

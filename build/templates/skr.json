@@ -20,6 +20,10 @@
       {
         "name": "LogLevel",
         "value": "Info"
+      },
+      {
+        "name": "TELEMETRY_MOUNT_PATH",
+        "value": "$telemetryMountPath"
       }
     ],
     "image": "$containerRegistryUrl/skr@$digest",

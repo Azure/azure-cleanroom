@@ -50,6 +50,9 @@ public class SecretsController : ControllerBase
                 message: "SKR_PORT environment variable not set."));
         }
 
+        this.logger.LogInformation($"Unwrapping secret for request "
+            + $"{JsonSerializer.Serialize(unwrapRequest)}.");
+
         // Get the Kek.
         string scope = unwrapRequest.Kek.AkvEndpoint.ToLower().Contains("vault.azure.net") ?
             "https://vault.azure.net/.default" : "https://managedhsm.azure.net/.default";
@@ -99,6 +102,7 @@ public class SecretsController : ControllerBase
         string uri = $"http://localhost:{this.config[SettingName.IdentityPort]}" +
             $"/metadata/identity/oauth2/token" +
             queryParams;
+        this.logger.LogInformation($"Fetching access token from {uri}.");
         HttpResponseMessage response = await httpClient.GetAsync(uri);
         await response.ValidateStatusCodeAsync(this.logger);
         var identityToken = await response.Content.ReadFromJsonAsync<JsonObject>();
@@ -120,6 +124,7 @@ public class SecretsController : ControllerBase
             ["access_token"] = accessToken
         };
 
+        this.logger.LogInformation($"Releasing key from {uri}.");
         HttpResponseMessage response = await httpClient.PostAsJsonAsync(uri, skrRequest);
         await response.ValidateStatusCodeAsync(this.logger);
         var skrResponse = await response.Content.ReadFromJsonAsync<JsonObject>();

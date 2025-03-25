@@ -30,14 +30,14 @@ jobs:
 
   # Add release specific tests here
   release-tests:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     needs: ["build-test-msint"]
     steps:
       - name: Run release test
         run: echo 'No release tests configured!'
 
   release-to-prod:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: production
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
@@ -70,6 +70,17 @@ jobs:
       - name: Release cleanroom containers to prod
         if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
         uses: ./.github/actions/release-cleanroom-containers
+        with:
+          tag: ${{ inputs.tag }}
+          environment: unlisted
+          registry-name: ${{ secrets.RELEASE_ACR_NAME }}
+          client-id: ${{ secrets.RELEASE_CLIENT_ID }}
+          tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
+          subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+
+      - name: Release cleanroom artefacts to prod
+        if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
+        uses: ./.github/actions/release-cleanroom-artefacts
         with:
           tag: ${{ inputs.tag }}
           environment: unlisted
@@ -221,6 +232,16 @@ jobs:
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
 
+      - name: Release cleanroom az cli extension
+        uses: ./.github/actions/release-azcliext-cleanroom
+        with:
+          tag: ${{ inputs.tag }}
+          environment: unlisted
+          registry-name: ${{ secrets.RELEASE_ACR_NAME }}
+          client-id: ${{ secrets.RELEASE_CLIENT_ID }}
+          tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
+          subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+
       - name: Verify attestation
         uses: ./.github/actions/verify-attestation
         with:
@@ -247,7 +268,7 @@ jobs:
     uses: ./.github/workflows/release_verification_nightly.yml
 
   create-github-release:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     needs: ["release-to-prod", "post-release-validation"]
     # Permission and environment variables below are needed to create a GitHub release
     permissions:
@@ -387,6 +408,13 @@ jobs:
         with:
           name: sidecar-digests-unlisted.yaml
 
+      - name: Download ccr-artefacts
+        if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
+        id: download-ccr-artefacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ccr-artefacts-unlisted
+
       - name: Download CCF provider client artefacts
         if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-provider-client') }}
         id: download-ccf-provider-client-artefact
@@ -494,6 +522,12 @@ jobs:
           ${{ steps.download-ccr-secrets-artefact.outputs.download-path }}/ccr-secrets-${{ inputs.tag }}.tar \
           ${{ steps.download-ccr-secrets-artefact.outputs.download-path }}/ccr-secrets.json \
           ccr-secrets-sbom.spdx.json
+
+      - name: Upload ccr-artefacts
+        if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
+        run: |
+          gh release upload ${{ inputs.tag }} \
+          ${{ steps.download-ccr-artefacts.outputs.download-path }}/ccr-artefacts/ccr-governance-opa-policy.tar.gz 
 
       # TODO (anrdesai): Re-add cleanroom-client.tar attachment to the release once we figure out a way to make it smaller than 2GB.
       - name: Upload cleanroom-client assets
@@ -628,3 +662,6 @@ jobs:
           ${{ steps.download-ccf-recovery-agent-artefact.outputs.download-path }}/ccf-recovery-agent-${{ inputs.tag }}.tar \
           ${{ steps.download-ccf-recovery-agent-artefact.outputs.download-path }}/ccf-recovery-agent.json \
           ccf-recovery-agent-sbom.spdx.json
+
+      - name: Upload AZ CLI extension
+        run: gh release upload ${{ inputs.tag }} cleanroom-*-py2.py3-none-any.whl

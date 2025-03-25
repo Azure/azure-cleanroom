@@ -1,4 +1,4 @@
-from .models.model import *
+from cleanroom_common.azure_cleanroom_core.models.model import *
 
 
 def config_add_identity_az_federated_cmd(
@@ -10,13 +10,13 @@ def config_add_identity_az_federated_cmd(
     backing_identity,
 ):
     from .utilities._configuration_helpers import (
-        read_cleanroom_spec,
-        write_cleanroom_spec,
+        read_cleanroom_spec_internal,
+        write_cleanroom_spec_internal,
     )
     from .utilities._azcli_helpers import logger
     from azure.cli.core.util import CLIError
 
-    spec = read_cleanroom_spec(cleanroom_config_file)
+    spec = read_cleanroom_spec_internal(cleanroom_config_file)
 
     identities = [x for x in spec.identities if x.name == backing_identity]
     if len(identities) == 0:
@@ -46,7 +46,7 @@ def config_add_identity_az_federated_cmd(
     else:
         logger.info(f"Patching identity {name} in configuration.")
         spec.identities[index] = federated_identity
-    write_cleanroom_spec(cleanroom_config_file, spec)
+    write_cleanroom_spec_internal(cleanroom_config_file, spec)
 
 
 def config_add_identity_az_secret_cmd(
@@ -60,13 +60,13 @@ def config_add_identity_az_secret_cmd(
     backing_identity,
 ):
     from .utilities._configuration_helpers import (
-        read_cleanroom_spec,
-        write_cleanroom_spec,
+        read_cleanroom_spec_internal,
+        write_cleanroom_spec_internal,
     )
     from .utilities._azcli_helpers import logger
     from azure.cli.core.util import CLIError
 
-    spec = read_cleanroom_spec(cleanroom_config_file)
+    spec = read_cleanroom_spec_internal(cleanroom_config_file)
 
     backing_identities = [x for x in spec.identities if x.name == backing_identity]
     if len(backing_identities) == 0:
@@ -111,20 +111,20 @@ def config_add_identity_az_secret_cmd(
     else:
         logger.info(f"Patching identity {name} in configuration.")
         spec.identities[index] = secret_identity
-    write_cleanroom_spec(cleanroom_config_file, spec)
+    write_cleanroom_spec_internal(cleanroom_config_file, spec)
 
 
 def config_add_identity_oidc_attested_cmd(
     cmd, cleanroom_config_file, name, client_id, tenant_id, issuer_url
 ):
     from .utilities._configuration_helpers import (
-        read_cleanroom_spec,
-        write_cleanroom_spec,
+        read_cleanroom_spec_internal,
+        write_cleanroom_spec_internal,
     )
     from .utilities._azcli_helpers import logger
     from azure.cli.core.util import CLIError
 
-    spec = read_cleanroom_spec(cleanroom_config_file)
+    spec = read_cleanroom_spec_internal(cleanroom_config_file)
 
     secret_identity = Identity(
         name=name,
@@ -143,7 +143,7 @@ def config_add_identity_oidc_attested_cmd(
     else:
         logger.info(f"Patching identity {name} in configuration.")
         spec.identities[index] = secret_identity
-    write_cleanroom_spec(cleanroom_config_file, spec)
+    write_cleanroom_spec_internal(cleanroom_config_file, spec)
 
 
 def config_add_datasource_cmd(
@@ -158,10 +158,11 @@ def config_add_datasource_cmd(
     kek_name="",
     access_name="",
 ):
-    from .models.datastore import DatastoreEntry
-    from .utilities._datastore_helpers import config_add_datastore
+    from cleanroom_common.azure_cleanroom_core.models.datastore import DatastoreEntry
+    from .utilities._datastore_helpers import config_add_datastore_internal
+    from .utilities._azcli_helpers import logger
 
-    config_add_datastore(
+    config_add_datastore_internal(
         cleanroom_config_file,
         datastore_name,
         datastore_config_file,
@@ -171,6 +172,7 @@ def config_add_datasource_cmd(
         kek_secret_store,
         kek_name,
         DatastoreEntry.AccessMode.Source,
+        logger,
         access_name,
     )
 
@@ -187,10 +189,11 @@ def config_add_datasink_cmd(
     kek_name="",
     access_name="",
 ):
-    from .models.datastore import DatastoreEntry
-    from .utilities._datastore_helpers import config_add_datastore
+    from cleanroom_common.azure_cleanroom_core.models.datastore import DatastoreEntry
+    from .utilities._datastore_helpers import config_add_datastore_internal
+    from .utilities._azcli_helpers import logger
 
-    config_add_datastore(
+    config_add_datastore_internal(
         cleanroom_config_file,
         datastore_name,
         datastore_config_file,
@@ -200,6 +203,7 @@ def config_add_datasink_cmd(
         kek_secret_store,
         kek_name,
         DatastoreEntry.AccessMode.Sink,
+        logger,
         access_name,
     )
 
@@ -219,16 +223,17 @@ def config_set_telemetry_cmd(
     container_suffix="",
 ):
     import os, re
-    from .models.datastore import DatastoreEntry
+    from cleanroom_common.azure_cleanroom_core.models.datastore import DatastoreEntry
     from .datastore_cmd import datastore_add_cmd
     from .utilities._configuration_helpers import (
-        read_cleanroom_spec,
-        write_cleanroom_spec,
+        read_cleanroom_spec_internal,
+        write_cleanroom_spec_internal,
     )
-    from .utilities._datastore_helpers import (
-        config_add_datastore,
+    from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
         generate_safe_datastore_name,
     )
+    from .utilities._datastore_helpers import config_add_datastore_internal
+    from .utilities._azcli_helpers import logger
 
     access_name = "infrastructure-telemetry"
 
@@ -253,7 +258,7 @@ def config_set_telemetry_cmd(
         container_name,
     )
 
-    config_add_datastore(
+    config_add_datastore_internal(
         cleanroom_config_file,
         datastore_name,
         datastore_config_file,
@@ -263,10 +268,11 @@ def config_set_telemetry_cmd(
         kek_secret_store,
         kek_name,
         DatastoreEntry.AccessMode.Sink,
+        logger,
         access_name,
     )
 
-    spec = read_cleanroom_spec(cleanroom_config_file)
+    spec = read_cleanroom_spec_internal(cleanroom_config_file)
     telemetryDataSink = [x for x in spec.datasinks if x.name == access_name][0]
     if spec.governance is None:
         spec.governance = GovernanceSettings()
@@ -278,7 +284,7 @@ def config_set_telemetry_cmd(
         logs=telemetryDataSink,
     )
 
-    write_cleanroom_spec(cleanroom_config_file, spec)
+    write_cleanroom_spec_internal(cleanroom_config_file, spec)
 
 
 def config_set_logging_cmd(
@@ -297,16 +303,17 @@ def config_set_logging_cmd(
 ):
     import os, re
     from .datastore_cmd import datastore_add_cmd
-    from .models.datastore import DatastoreEntry
+    from cleanroom_common.azure_cleanroom_core.models.datastore import DatastoreEntry
 
     from .utilities._configuration_helpers import (
-        read_cleanroom_spec,
-        write_cleanroom_spec,
+        read_cleanroom_spec_internal,
+        write_cleanroom_spec_internal,
     )
-    from .utilities._datastore_helpers import (
-        config_add_datastore,
+    from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
         generate_safe_datastore_name,
     )
+    from .utilities._datastore_helpers import config_add_datastore_internal
+    from .utilities._azcli_helpers import logger
 
     access_name = "application-telemetry"
     friendly_name = re.sub("[^A-Za-z0-9]+", "", os.path.basename(cleanroom_config_file))
@@ -330,7 +337,7 @@ def config_set_logging_cmd(
         container_name,
     )
 
-    config_add_datastore(
+    config_add_datastore_internal(
         cleanroom_config_file,
         datastore_name,
         datastore_config_file,
@@ -340,10 +347,11 @@ def config_set_logging_cmd(
         kek_secret_store_name,
         kek_name,
         DatastoreEntry.AccessMode.Sink,
+        logger,
         access_name,
     )
 
-    spec = read_cleanroom_spec(cleanroom_config_file)
+    spec = read_cleanroom_spec_internal(cleanroom_config_file)
     logsDataSink = [x for x in spec.datasinks if x.name == access_name][0]
     if spec.governance is None:
         spec.governance = GovernanceSettings()
@@ -351,17 +359,17 @@ def config_set_logging_cmd(
         spec.governance.telemetry = Telemetry()
     spec.governance.telemetry.application = ApplicationTelemetry(logs=logsDataSink)
 
-    write_cleanroom_spec(cleanroom_config_file, spec)
+    write_cleanroom_spec_internal(cleanroom_config_file, spec)
 
 
 def datasink_download_cmd(
     cmd, cleanroom_config_file, datasink_name, datastore_config, target_folder
 ):
     from .datastore_cmd import datastore_download_cmd
-    from .models.datastore import DatastoreEntry
-    from .utilities._datastore_helpers import config_get_datastore_name
+    from cleanroom_common.azure_cleanroom_core.models.datastore import DatastoreEntry
+    from .utilities._datastore_helpers import config_get_datastore_name_internal
 
-    datastore_name = config_get_datastore_name(
+    datastore_name = config_get_datastore_name_internal(
         cleanroom_config_file, datasink_name, DatastoreEntry.AccessMode.Sink
     )
 
@@ -372,10 +380,10 @@ def telemetry_decrypt_cmd(
     cmd, cleanroom_config_file, datastore_config_file, source_path, destination_path
 ):
     from .datastore_cmd import datastore_decrypt_cmd
-    from .models.datastore import DatastoreEntry
-    from .utilities._datastore_helpers import config_get_datastore_name
+    from cleanroom_common.azure_cleanroom_core.models.datastore import DatastoreEntry
+    from .utilities._datastore_helpers import config_get_datastore_name_internal
 
-    datastore_name = config_get_datastore_name(
+    datastore_name = config_get_datastore_name_internal(
         cleanroom_config_file,
         "infrastructure-telemetry",
         DatastoreEntry.AccessMode.Sink,
@@ -395,10 +403,10 @@ def logs_decrypt_cmd(
     cmd, cleanroom_config_file, datastore_config_file, source_path, destination_path
 ):
     from .datastore_cmd import datastore_decrypt_cmd
-    from .models.datastore import DatastoreEntry
-    from .utilities._datastore_helpers import config_get_datastore_name
+    from cleanroom_common.azure_cleanroom_core.models.datastore import DatastoreEntry
+    from .utilities._datastore_helpers import config_get_datastore_name_internal
 
-    datastore_name = config_get_datastore_name(
+    datastore_name = config_get_datastore_name_internal(
         cleanroom_config_file,
         "application-telemetry",
         DatastoreEntry.AccessMode.Sink,

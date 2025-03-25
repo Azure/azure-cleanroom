@@ -1,6 +1,13 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
 namespace Controllers;
 
 /// <summary>
@@ -57,8 +64,6 @@ public class ApiStartup
 
         app.UseSwagger();
         app.UseSwaggerUI();
-
-        app.UseRouting();
 
         app.UseAuthorization();
 

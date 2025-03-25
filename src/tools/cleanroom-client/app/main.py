@@ -1,13 +1,27 @@
+import hashlib
+import base64
+import uuid
+
+import yaml
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
+from fastapi import HTTPException
 
 from pydantic import BaseModel
 
-from azure.cli.core import get_default_cli
+from azure.cli.core import get_default_cli, CLIError
 
 import os
 import logging
 from enum import StrEnum
+
+from cleanroom_common.azure_cleanroom_core.models.model import (
+    CleanRoomSpecification,
+)
+from cleanroom_common.azure_cleanroom_core.utilities.helpers import (
+    get_deployment_template,
+    validate_config,
+)
 
 logger = logging.getLogger()
 
@@ -168,10 +182,12 @@ class ConfigAddApplicationRequest(BaseModel):
     name: str
     image: str
     command: str | None = None
-    mounts: list[str] | None = None
+    datasources: list[str] | None = None
+    datasinks: list[str] | None = None
     environmentVariables: list[str] | None = None
     cpu: str
     memory: str
+    autoStart: bool
     configName: str
 
 
@@ -239,6 +255,15 @@ class ConfigAddIdentityOIDCAttested(BaseModel):
     issuerUrl: str
 
 
+class DeploymentGenerateRequest(BaseModel):
+    spec: str
+    contract_id: str
+    ccf_endpoint: str
+    ssl_server_cert_base64: str
+    debug_mode: bool | None = False
+    operationId: str | None = None
+
+
 @app.get("/")
 def read_root():
     response = az_cli("version")
@@ -255,6 +280,15 @@ def login(request: LoginRequest):
         args.extend(request.loginArgs)
 
     return az_cli_ex(args)
+
+
+@app.get("/account/show")
+def account_show():
+    args = ["account", "show"]
+    try:
+        return az_cli_ex(args)
+    except CLIError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/add-secretstore")
@@ -601,14 +635,20 @@ def config_add_application(request: ConfigAddApplicationRequest):
         args.append("--command")
         args.append(request.command)
 
-    if request.mounts:
-        args.append("--mounts")
-        args.extend(request.mounts)
+    if request.datasources:
+        args.append("--datasources")
+        args.extend(request.datasources)
+
+    if request.datasinks:
+        args.append("--datasinks")
+        args.extend(request.datasinks)
 
     if request.environmentVariables:
         args.append("--env-vars")
         args.extend(request.environmentVariables)
 
+    if request.autoStart:
+        args.append("--auto-start")
     return az_cli_ex(args)
 
 
@@ -681,3 +721,53 @@ def config_enable_sandbox(request: ConfigEnableSandboxRequest):
     return az_cli(
         f"cleanroom config enable-sandbox --cleanroom-config {request.configName}"
     )
+
+
+@app.post("/deployment/generate")
+def deployment_generate(request: DeploymentGenerateRequest):
+
+    contract_yaml = yaml.safe_load(request.spec)
+    spec = CleanRoomSpecification(**contract_yaml)
+
+    # Currently ignore warnings.
+    issues, _ = validate_config(spec, logger)
+
+    errors = [{"code": x.code, "message": x.message} for x in issues]
+    if len(issues) > 0:
+        raise HTTPException(status_code=400, detail=errors)
+
+    debug_mode = request.debug_mode if request.debug_mode else False
+    operation_id = request.operationId if request.operationId else str(uuid.uuid4())
+
+    logger.info(
+        f"Generating deployment template for {request.contract_id}, operationId: {operation_id}"
+    )
+
+    arm_template, _, policy_rego = get_deployment_template(
+        spec,
+        request.contract_id,
+        request.ccf_endpoint,
+        request.ssl_server_cert_base64,
+        debug_mode,
+        logger,
+    )
+
+    cce_policy_base64 = base64.b64encode(bytes(policy_rego, "utf-8")).decode("utf-8")
+    cce_policy_hash = hashlib.sha256(bytes(policy_rego, "utf-8")).hexdigest()
+
+    arm_template["resources"][0]["properties"]["confidentialComputeProperties"][
+        "ccePolicy"
+    ] = cce_policy_base64
+
+    policy_json = {
+        "type": "add",
+        "claims": {
+            "x-ms-sevsnpvm-is-debuggable": False,
+            "x-ms-sevsnpvm-hostdata": cce_policy_hash,
+        },
+    }
+
+    return {
+        "arm_template": arm_template,
+        "policy_json": policy_json,
+    }

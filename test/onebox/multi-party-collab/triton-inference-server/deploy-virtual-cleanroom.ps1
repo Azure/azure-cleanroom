@@ -12,14 +12,6 @@ param
 )
 
 $root = git rev-parse --show-toplevel
-# Create or update configmap which gets projected into the ccr-governance container via a volume.
-kubectl create configmap insecure-virtual `
-    --from-file=ccr_gov_pub_key=$root/samples/governance/insecure-virtual/keys/ccr_gov_pub_key.pem `
-    --from-file=ccr_gov_priv_key=$root/samples/governance/insecure-virtual/keys/ccr_gov_priv_key.pem `
-    --from-file=attestation_report=$root/samples/governance/insecure-virtual/attestation/attestation-report.json `
-    -o yaml `
-    --dry-run=client | `
-    kubectl apply -f -
 
 kubectl delete pod virtual-cleanroom --force
 kubectl apply -f $outDir/deployments/virtual-cleanroom-pod.yaml
@@ -33,7 +25,7 @@ if (!$nowait) {
     # wait for tritonserver endpoint to be up. The image is big so it takes time for podman to pull it within the container.
     $timeout = New-TimeSpan -Minutes 20
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    while ((docker exec cleanroom-control-plane curl -o "''" -w "'%{http_code}'" -s -k https://${podIP}:8000/v2/health/ready) -ne "'200'") {
+    while ((docker exec cleanroom-control-plane curl -o /dev/null -w "%{http_code}" -s -k https://${podIP}:8000/v2/health/ready) -ne "200") {
         Write-Host "Waiting for tritonserver endpoint to be up at https://${podIP}:8000/v2/health/ready ($($stopwatch.elapsed.ToString()))"
         Start-Sleep -Seconds 20
         if ($stopwatch.elapsed -gt $timeout) {

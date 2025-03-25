@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using CcfCommon;
 using Controllers;
@@ -45,7 +46,10 @@ public class CcfRecoveryServiceProvider
 
         this.logger.LogInformation($"Recovery service endpoint is up at: {svcEndpoint.Endpoint}.");
 
-        var serviceCert = await this.GetSelfSignedCert(serviceName, svcEndpoint.Endpoint);
+        var serviceCert = await this.GetSelfSignedCert(
+            serviceName,
+            svcEndpoint.Endpoint,
+            onRetry: () => this.CheckServiceHealthy(serviceName, providerConfig));
 
         return new CcfRecoveryService
         {
@@ -92,7 +96,25 @@ public class CcfRecoveryServiceProvider
         return await this.svcInstanceProvider.GenerateSecurityPolicy(joinPolicy, policyOption);
     }
 
-    private async Task<string> GetSelfSignedCert(string serviceName, string endpoint)
+    private async Task CheckServiceHealthy(
+        string serviceName,
+        JsonObject? providerConfig)
+    {
+        var serviceHealth = await this.svcInstanceProvider.GetRecoveryServiceHealth(
+            serviceName,
+            providerConfig);
+        if (serviceHealth.Status == nameof(ServiceStatus.Unhealthy))
+        {
+            throw new Exception(
+                $"Service instance {serviceName} is reporting unhealthy: " +
+                $"{JsonSerializer.Serialize(serviceHealth, CcfUtils.Options)}");
+        }
+    }
+
+    private async Task<string> GetSelfSignedCert(
+        string serviceName,
+        string endpoint,
+        Func<Task>? onRetry = null)
     {
         using var client = HttpClientManager.NewInsecureClient(endpoint, this.logger);
 
@@ -136,6 +158,11 @@ public class CcfRecoveryServiceProvider
             {
                 throw new TimeoutException(
                     $"{serviceName}: Hit timeout waiting for {endpoint}/report");
+            }
+
+            if (onRetry != null)
+            {
+                await onRetry.Invoke();
             }
 
             await Task.Delay(TimeSpan.FromSeconds(1));

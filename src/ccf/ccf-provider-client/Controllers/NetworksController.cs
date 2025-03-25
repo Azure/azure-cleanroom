@@ -256,49 +256,64 @@ public class NetworksController : CCfClientController
             return error;
         }
 
+        var signingConfig = await this.ccfClientManager.GetSigningConfig();
         CcfNetworkProvider ccfNetworkProvider = this.GetNetworkProvider(content.InfraType);
+        using RSA rsaEncKey = !string.IsNullOrEmpty(content.EncryptionPrivateKey) ?
+            Utils.ToRSAKey(content.EncryptionPrivateKey) :
+            await Utils.ToRSAKey(new Uri(content.EncryptionKeyId!));
+
         JsonObject result = await ccfNetworkProvider.SubmitRecoveryShare(
             networkName,
-            content.SigningCert,
-            content.SigningKey,
-            content.EncryptionPrivateKey,
+            signingConfig.CoseSignKey,
+            rsaEncKey,
             content.ProviderConfig);
+
         return this.Ok(result);
 
         IActionResult? ValidateSubmitRecoveryShareInput()
         {
-            try
-            {
-                using var c = X509Certificate2.CreateFromPem(content.SigningCert);
-            }
-            catch (Exception e)
+            if (string.IsNullOrEmpty(content.EncryptionPrivateKey) &&
+                string.IsNullOrEmpty(content.EncryptionKeyId))
             {
                 return this.BadRequest(new ODataError(
-                    code: "InvalidSigningCert",
-                    message: e.Message));
+                    code: "InvalidEncryptionKey",
+                    message: "Either encryptionPrivateKey or encryptionKeyId must be specified."));
             }
 
-            try
-            {
-                var cert = X509Certificate2.CreateFromPem(content.SigningCert, content.SigningKey);
-            }
-            catch (Exception e)
+            if (!string.IsNullOrEmpty(content.EncryptionPrivateKey) &&
+                !string.IsNullOrEmpty(content.EncryptionKeyId))
             {
                 return this.BadRequest(new ODataError(
-                    code: "InvalidSigningKey",
-                    message: e.Message));
+                    code: "InvalidEncryptionKey",
+                    message: "Only one of encryptionPrivateKey or encryptionKeyId must be specified."));
             }
 
-            try
+            if (!string.IsNullOrEmpty(content.EncryptionPrivateKey))
             {
-                using var rsa = RSA.Create();
-                rsa.ImportFromPem(content.EncryptionPrivateKey);
+                try
+                {
+                    using var rsa = RSA.Create();
+                    rsa.ImportFromPem(content.EncryptionPrivateKey);
+                }
+                catch (Exception e)
+                {
+                    return this.BadRequest(new ODataError(
+                        code: "InvalidEncryptionPrivateKey",
+                        message: e.Message));
+                }
             }
-            catch (Exception e)
+            else
             {
-                return this.BadRequest(new ODataError(
-                    code: "InvalidEncryptionPrivateKey",
-                    message: e.Message));
+                try
+                {
+                    new Uri(content.EncryptionKeyId!);
+                }
+                catch (Exception e)
+                {
+                    return this.BadRequest(new ODataError(
+                        code: "InvalidEncryptionKeyId",
+                        message: e.Message));
+                }
             }
 
             return null;
@@ -320,13 +335,17 @@ public class NetworksController : CCfClientController
         CcfNetwork network;
         if (content.OperatorRecovery != null)
         {
+            using RSA rsaEncKey =
+                !string.IsNullOrEmpty(content.OperatorRecovery.EncryptionPrivateKey) ?
+                Utils.ToRSAKey(content.OperatorRecovery.EncryptionPrivateKey) :
+                await Utils.ToRSAKey(new Uri(content.OperatorRecovery.EncryptionKeyId!));
             network = await ccfNetworkProvider.RecoverNetwork(
                 networkName,
                 content.NodeCount ?? 1,
                 content.NodeLogLevel,
                 SecurityPolicyConfigInput.Convert(content.SecurityPolicy),
                 content.PreviousServiceCertificate,
-                content.OperatorRecovery.EncryptionPrivateKey,
+                rsaEncKey,
                 content.ProviderConfig);
         }
         else
@@ -400,19 +419,52 @@ public class NetworksController : CCfClientController
                     message: e.Message));
             }
 
-            try
+            if (content.OperatorRecovery != null)
             {
-                if (content.OperatorRecovery != null)
+                var opRec = content.OperatorRecovery;
+                if (string.IsNullOrEmpty(opRec.EncryptionPrivateKey) &&
+                    string.IsNullOrEmpty(opRec.EncryptionKeyId))
                 {
-                    using var rsa = RSA.Create();
-                    rsa.ImportFromPem(content.OperatorRecovery.EncryptionPrivateKey);
+                    return this.BadRequest(new ODataError(
+                        code: "InvalidEncryptionKey",
+                        message: "Either encryptionPrivateKey or encryptionKeyId must be specified."));
                 }
-            }
-            catch (Exception e)
-            {
-                return this.BadRequest(new ODataError(
-                    code: "InvalidEncryptionPrivateKey",
-                    message: e.Message));
+
+                if (!string.IsNullOrEmpty(opRec.EncryptionPrivateKey) &&
+                    !string.IsNullOrEmpty(opRec.EncryptionKeyId))
+                {
+                    return this.BadRequest(new ODataError(
+                        code: "InvalidEncryptionKey",
+                        message: "Only one of encryptionPrivateKey or encryptionKeyId must be specified."));
+                }
+
+                if (!string.IsNullOrEmpty(opRec.EncryptionPrivateKey))
+                {
+                    try
+                    {
+                        using var rsa = RSA.Create();
+                        rsa.ImportFromPem(opRec.EncryptionPrivateKey);
+                    }
+                    catch (Exception e)
+                    {
+                        return this.BadRequest(new ODataError(
+                            code: "InvalidEncryptionPrivateKey",
+                            message: e.Message));
+                    }
+                }
+                else
+                {
+                    try
+                    {
+                        new Uri(opRec.EncryptionKeyId!);
+                    }
+                    catch (Exception e)
+                    {
+                        return this.BadRequest(new ODataError(
+                            code: "InvalidEncryptionKeyId",
+                            message: e.Message));
+                    }
+                }
             }
 
             if (content.ConfidentialRecovery != null)

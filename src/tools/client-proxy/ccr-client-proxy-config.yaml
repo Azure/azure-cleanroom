@@ -23,6 +23,7 @@ static_resources:
       - name: envoy.filters.network.http_connection_manager
         typed_config: 
           '@type': "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+          request_timeout: 300s
           stat_prefix: outbound_proxy
           forward_client_cert_details: ALWAYS_FORWARD_ONLY
           route_config: 
@@ -34,7 +35,10 @@ static_resources:
                 routes:
                   - match: { prefix: "/"}
                     route:
-                      cluster: outbound-pass-through 
+                      timeout: "0s"
+                      cluster: outbound-pass-through
+                      retry_policy:
+                        num_retries: 3
           http_filters:
           - name: envoy.filters.http.dynamic_forward_proxy
             typed_config:

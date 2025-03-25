@@ -22,13 +22,4 @@
     <ProjectReference Include="..\..\ccf-common\ccf-common.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Update="insecure-virtual\encryption_key_attestation.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Update="insecure-virtual\signing_key_attestation.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
 </Project>

@@ -1,0 +1,519 @@
+openapi: '3.0.3'
+info:
+  title: Clean room specification
+  description: Clean room specification
+  version: '1.0'
+
+paths: {}
+
+components:
+  schemas:
+    CleanRoomSpecification:
+      type: object
+      properties:
+        sandbox:
+          $ref: "#/components/schemas/SandboxSettings"
+        identities:
+          type: array
+          items:
+            $ref: "#/components/schemas/Identity"
+        datasources:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccessPoint"
+        datasinks:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccessPoint"
+        applications:
+          type: array
+          items:
+            $ref: "#/components/schemas/Application"
+        applicationEndpoints:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApplicationEndpoint"
+        governance:
+          $ref: "#/components/schemas/GovernanceSettings"
+      required:
+      - identities
+      - datasources
+      - datasinks
+      - applications
+
+    SandBoxType:
+      type: string
+      enum:
+      - Type_0
+      - None
+
+    SandboxSettings:
+      type: object
+      properties:
+        sandboxType:
+          $ref: "#/components/schemas/SandBoxType"
+        privacyPolicy:
+          $ref: "#/components/schemas/Policy"
+        configuration:
+          type: string
+          default: ''
+      required:
+      - sandboxType
+
+    Policy:
+      type: object
+      properties:
+        policy:
+          oneOf:
+          - $ref: "#/components/schemas/InlinePolicy"
+          - $ref: "#/components/schemas/ExternalPolicy"
+
+    InlinePolicy:
+      type: object
+      properties:
+        policyDocument:
+          type: string
+
+    ExternalPolicy:
+      allOf:
+        - $ref: "#/components/schemas/Document"
+
+    Document:
+      type: object
+      properties:
+        documentType:
+          type: string
+        authenticityReceipt:
+          type: string
+        identity:
+          $ref: "#/components/schemas/Identity"
+          default: null
+        backingResource:
+          $ref: "#/components/schemas/Resource"
+      required:
+      - documentType
+      - authenticityReceipt
+      - backingResource
+
+    SecretProtocolType:
+      type: string
+      enum:
+      - AzureKeyVault_Secret
+      - AzureKeyVault_SecureKey
+      - AzureKeyVault_Key
+      - AzureKeyVault_Certificate
+
+    StoreProtocolType:
+      type: string
+      enum:
+      - Azure_BlobStorage
+      - Azure_OneLake
+    
+    ApplicationStoreProtocolType:
+      type: string
+      enum:
+      - AzureContainerRegistry
+
+    ProtocolType:
+      type: string
+      allOf:
+        - $ref: "#/components/schemas/IdentityProtocolType"
+        - $ref: "#/components/schemas/SecretProtocolType"
+        - $ref: "#/components/schemas/StoreProtocolType"
+        - $ref: "#/components/schemas/ApplicationStoreProtocolType"
+
+    ServiceEndpoint:
+      type: object
+      properties:
+        protocol:
+          $ref: "#/components/schemas/ProtocolType"
+        url:
+          type: string
+        configuration:
+          type: string
+          default: ''
+      required:
+      - protocol
+      - url
+
+    StoreType:
+      type: string
+      enum:
+        - Azure_BlobStorage
+        - Azure_OneLake
+    
+    SecretStoreType:
+      type: string
+      enum:
+        - AzureKeyVault
+
+    ApplicationStoreType:
+      type: string
+      enum:
+        - AzureContainerRegistry
+
+    ResourceType:
+      type: string
+      allOf:
+        - $ref: "#/components/schemas/StoreType"
+        - $ref: "#/components/schemas/SecretStoreType"
+        - $ref: "#/components/schemas/ApplicationStoreType"
+
+    Resource:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          $ref: "#/components/schemas/ResourceType"
+        id:
+          type: string
+        provider:
+          $ref: "#/components/schemas/ServiceEndpoint"
+      required:
+      - name
+      - type
+      - id
+      - provider
+
+    AccessPointType:
+      type: string
+      enum:
+        - Volume_ReadWrite
+        - Volume_ReadOnly
+
+    AccessPoint:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          $ref: "#/components/schemas/AccessPointType"
+        path:
+          type: string
+        store:
+          $ref: "#/components/schemas/Resource"
+        identity:
+          $ref: "#/components/schemas/Identity"
+        protection:
+          $ref: "#/components/schemas/PrivacyProxySettings"
+      required:
+      - name
+      - type
+      - path
+      - store
+      - identity
+      - protection
+
+    ProxyType:
+      type: string
+      enum:
+      - SecureVolume__ReadOnly__Azure__OneLake
+      - SecureVolume__ReadOnly__Azure__BlobStorage
+      - SecureVolume__ReadWrite__Azure__OneLake
+      - SecureVolume__ReadWrite__Azure__BlobStorage
+      - API
+      - SecureAPI
+    
+    ProxyMode:
+      type: string
+      enum:
+      - Secure
+      - Open
+
+    PrivacyProxySettings:
+      type: object
+      properties:
+        proxyType:
+          $ref: "#/components/schemas/ProxyType"
+        proxyMode:
+          $ref: "#/components/schemas/ProxyMode"
+        privacyPolicy:
+          $ref: "#/components/schemas/Policy"
+        configuration:
+          type: string
+          default: ''
+        encryptionSecrets:
+          type: object
+          properties:
+            dek:
+              $ref: "#/components/schemas/EncryptionSecret"
+            kek:
+              $ref: "#/components/schemas/EncryptionSecret"
+          required:
+          - dek
+          - kek
+        encryptionSecretAccessIdentity:
+          $ref: "#/components/schemas/Identity"
+      required:
+      - proxyType
+      - proxyMode
+
+    EncryptionSecret:
+      type: object
+      properties:
+        name:
+          type: string
+        secret:
+          $ref: "#/components/schemas/CleanroomSecret"
+      required:
+      - name
+      - secret
+
+    ApplicationResource:
+      type: object
+      properties:
+        requests:
+          type: object
+          properties:
+            cpu:
+              type: number
+            memoryInGB:
+              type: integer
+          required:
+          - cpu
+          - memoryInGB
+      required:
+      - requests
+
+    Application:
+      type: object
+      properties:
+        name:
+          type: string
+        image:
+          $ref: "#/components/schemas/Image"
+        command:
+          type: array
+          items:
+            type: string
+        environmentVariables:
+          type: object
+          additionalProperties:
+            type: string
+        # TODO (HPrabh): Move the mounts and ports away from runtimeSettings.
+        # TODO (HPrabh): Add references to datasources and datasinks instead of mounts.
+        runtimeSettings:
+          type: object
+          properties:
+            mounts:
+              type: object
+              additionalProperties:
+                type: string
+            ports:
+              type: array
+              items:
+                type: integer
+            resource:
+              $ref: "#/components/schemas/ApplicationResource"
+          required:
+          - mounts
+          - ports
+          - resource
+      required:
+      - name
+      - image
+      - command
+      - environmentVariables
+      - runtimeSettings
+
+    ApplicationEndpoint:
+      type: object
+      properties:
+        type:
+          type: string
+        port:
+          type: integer
+        protection:
+          $ref: "#/components/schemas/PrivacyProxySettings"
+      required:
+      - type
+      - port
+      - protection
+
+    ContractValidationEndpoint:
+      type: object
+      properties:
+        consentProvider:
+          $ref: "#/components/schemas/ConsentProvider"
+        identity:
+          $ref: "#/components/schemas/Identity"
+      required:
+      - consentProvider
+      - identity
+
+    ConsentProvider:
+      type: object
+      properties:
+        url:
+          type: string
+        method:
+          type: string
+        validResponses:
+          type: array
+          items:
+            type: integer
+      required:
+      - url
+      - method
+      - validResponses
+
+    Image:
+      type: object
+      properties:
+        executable:
+          $ref: "#/components/schemas/Document"
+        protection:
+          $ref: "#/components/schemas/PrivacyProxySettings"
+        enforcementPolicy:
+          $ref: "#/components/schemas/Policy"
+      required:
+      - executable
+      - enforcementPolicy
+
+    IdentityProtocolType:
+      type: string
+      enum:
+        - AzureAD_Federated
+        - AzureAD_ManagedIdentity
+        - AzureAD_Secret
+        - Attested_OIDC
+
+    Identity:
+      type: object
+      properties:
+        name:
+          type: string
+        clientId:
+          type: string
+        tenantId:
+          type: string
+        tokenIssuer:
+          oneOf:
+            - $ref: "#/components/schemas/AttestationBasedTokenIssuer"
+            - $ref: "#/components/schemas/SecretBasedTokenIssuer"
+            - $ref: "#/components/schemas/FederatedIdentityBasedTokenIssuer"
+          discriminator:
+            propertyName: issuerType
+      required:
+      - name
+      - clientId
+      - tenantId
+      - tokenIssuer
+
+    AttestationBasedTokenIssuer:
+      type: object
+      properties:
+        issuer:
+          $ref: "#/components/schemas/ServiceEndpoint"
+      required:
+      - issuer
+
+    SecretBasedTokenIssuer:
+      type: object
+      properties:
+        issuer:
+          $ref: "#/components/schemas/ServiceEndpoint"
+        secret:
+          $ref: "#/components/schemas/CleanroomSecret"
+        secretAccessIdentity:
+          $ref: "#/components/schemas/Identity"
+      required:
+      - issuer
+      - secret
+      - secretAccessIdentity
+
+    FederatedIdentityBasedTokenIssuer:
+      type: object
+      properties:
+        issuer:
+          $ref: "#/components/schemas/ServiceEndpoint"
+        federatedIdentity:
+          $ref: "#/components/schemas/Identity"
+      required:
+      - issuer
+      - federatedIdentity
+
+    SecretType:
+      type: string
+      enum:
+      - Secret
+      - Certificate
+      - Key
+
+    CleanroomSecret:
+      type: object
+      properties:
+        secretType:
+          $ref: "#/components/schemas/SecretType"
+        backingResource:
+          $ref: "#/components/schemas/Resource"
+      required:
+      - secretType
+      - backingResource
+
+    ApplicationTelemetry:
+      type: object
+      properties:
+        consent:
+          $ref: "#/components/schemas/GovernanceService"
+        logs:
+          $ref: "#/components/schemas/AccessPoint"
+      required:
+      - logs
+
+    InfrastructureTelemetry:
+      type: object
+      properties:
+        consent:
+          $ref: "#/components/schemas/GovernanceService"
+        metrics:
+          $ref: "#/components/schemas/AccessPoint"
+        traces:
+          $ref: "#/components/schemas/AccessPoint"
+        logs:
+          $ref: "#/components/schemas/AccessPoint"
+      required:
+      - metrics
+      - traces
+      - logs
+
+    GovernanceSettings:
+      type: object
+      properties:
+        consent:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceService"
+        audit:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceService"
+        telemetry:
+          type: object
+          properties:
+            infrastructure:
+              $ref: "#/components/schemas/InfrastructureTelemetry"
+            application:
+              $ref: "#/components/schemas/ApplicationTelemetry"
+
+    GovernanceService:
+      type: object
+      properties:
+        url:
+          type: string
+        method:
+          type: string 
+        validResponses:
+          type: array
+          items:
+            type: integer
+        identity:
+          $ref: "#/components/schemas/Identity"
+      required:
+      - url
+      - method
+      - validResponses
+      - identity
+
+

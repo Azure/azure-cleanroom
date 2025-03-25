@@ -82,7 +82,7 @@ def ccf_recovery_service_create(
     }
 
     logger.warning(
-        f"Run `docker logs {provider_client_name}-client-1 -f` to monitor recovery service creation progress."
+        f"Run `docker compose -p {provider_client_name} logs -f` to monitor recovery service creation progress."
     )
     r = requests.post(
         f"{provider_endpoint}/recoveryservices/{service_name}/create", json=content

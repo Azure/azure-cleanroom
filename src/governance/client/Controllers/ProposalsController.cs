@@ -24,7 +24,6 @@ public class ProposalsController : ClientControllerBase
         using HttpResponseMessage response = await ccfClient.GetAsync(
             $"gov/members/proposals?api-version={this.CcfClientManager.GetGovApiVersion()}");
         await response.ValidateStatusCodeAsync(this.Logger);
-        response.LogRequest(this.Logger);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
         return jsonResponse!;
     }
@@ -37,7 +36,6 @@ public class ProposalsController : ClientControllerBase
             await ccfClient.GetAsync($"gov/members/proposals/{proposalId}" +
             $"?api-version={this.CcfClientManager.GetGovApiVersion()}");
         await response.ValidateStatusCodeAsync(this.Logger);
-        response.LogRequest(this.Logger);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
         return jsonResponse!;
     }
@@ -52,7 +50,6 @@ public class ProposalsController : ClientControllerBase
         using HttpResponseMessage response =
             await ccfClient.GetAsync($"gov/proposals/{proposalId}");
         await response.ValidateStatusCodeAsync(this.Logger);
-        response.LogRequest(this.Logger);
         var jsonResponse = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
         var ballots = jsonResponse["ballots"]?.AsObject();
         var votes = new JsonArray();
@@ -82,7 +79,6 @@ public class ProposalsController : ClientControllerBase
         {
             using HttpResponseMessage response =
                 await appClient.GetAsync($"app/proposals/{proposalId}/historical{query}");
-            response.LogRequest(this.Logger);
             if (response.StatusCode == System.Net.HttpStatusCode.Accepted)
             {
                 // Intervals: 1s, 5s, 10s, 15s,....
@@ -126,7 +122,6 @@ public class ProposalsController : ClientControllerBase
             await ccfClient.GetAsync($"gov/members/proposals/{proposalId}/actions" +
             $"?api-version={this.CcfClientManager.GetGovApiVersion()}");
         await response.ValidateStatusCodeAsync(this.Logger);
-        response.LogRequest(this.Logger);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
         return jsonResponse!;
     }
@@ -135,10 +130,10 @@ public class ProposalsController : ClientControllerBase
     public async Task<JsonObject> WithdrawProposal([FromRoute] string proposalId)
     {
         var ccfClient = await this.CcfClientManager.GetGovClient();
-        var wsConfig = this.CcfClientManager.GetWsConfig();
+        var coseSignKey = this.CcfClientManager.GetCoseSignKey();
         var payload =
             await GovernanceCose.CreateGovCoseSign1Message(
-                wsConfig,
+                coseSignKey,
                 GovMessageType.Withdrawal,
                 null,
                 proposalId);
@@ -149,7 +144,6 @@ public class ProposalsController : ClientControllerBase
         using HttpResponseMessage response = await ccfClient.SendAsync(request);
         this.Response.CopyHeaders(response.Headers);
         await response.ValidateStatusCodeAsync(this.Logger);
-        response.LogRequest(this.Logger);
         await response.WaitGovTransactionCommittedAsync(this.Logger, this.CcfClientManager);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
         return jsonResponse!;
@@ -159,9 +153,9 @@ public class ProposalsController : ClientControllerBase
     public async Task<JsonObject> CreateProposal([FromBody] JsonObject content)
     {
         var ccfClient = await this.CcfClientManager.GetGovClient();
-        var wsConfig = this.CcfClientManager.GetWsConfig();
+        var coseSignKey = this.CcfClientManager.GetCoseSignKey();
         var payload = await GovernanceCose.CreateGovCoseSign1Message(
-            wsConfig,
+            coseSignKey,
             GovMessageType.Proposal,
             content.ToJsonString());
         using HttpRequestMessage request = Cose.CreateHttpRequestMessage(
@@ -171,7 +165,6 @@ public class ProposalsController : ClientControllerBase
         using HttpResponseMessage response = await ccfClient.SendAsync(request);
         this.Response.CopyHeaders(response.Headers);
         await response.ValidateStatusCodeAsync(this.Logger);
-        response.LogRequest(this.Logger);
         await response.WaitGovTransactionCommittedAsync(this.Logger, this.CcfClientManager);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
         return jsonResponse!;
@@ -221,21 +214,20 @@ public class ProposalsController : ClientControllerBase
         JsonObject ballot)
     {
         var ccfClient = await this.CcfClientManager.GetGovClient();
-        var wsConfig = this.CcfClientManager.GetWsConfig();
+        var coseSignKey = this.CcfClientManager.GetCoseSignKey();
         var payload = await GovernanceCose.CreateGovCoseSign1Message(
-            wsConfig,
+            coseSignKey,
             GovMessageType.Ballot,
             ballot.ToJsonString(),
             proposalId.ToString());
         using HttpRequestMessage request = Cose.CreateHttpRequestMessage(
             $"gov/members/proposals/{proposalId}/ballots/" +
-            $"{wsConfig.MemberId}:submit" +
+            $"{this.CcfClientManager.GetMemberId()}:submit" +
             $"?api-version={this.CcfClientManager.GetGovApiVersion()}",
             payload);
         using HttpResponseMessage response = await ccfClient.SendAsync(request);
         this.Response.CopyHeaders(response.Headers);
         await response.ValidateStatusCodeAsync(this.Logger);
-        response.LogRequest(this.Logger);
         await response.WaitGovTransactionCommittedAsync(this.Logger, this.CcfClientManager);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
         return this.Ok(jsonResponse!);

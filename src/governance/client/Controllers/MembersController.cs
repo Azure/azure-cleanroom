@@ -21,9 +21,9 @@ public class MembersController : ClientControllerBase
     public async Task<JsonObject> Get()
     {
         var ccfClient = await this.CcfClientManager.GetGovClient();
-        using HttpResponseMessage response = await ccfClient.GetAsync("gov/members");
+        using HttpResponseMessage response = await ccfClient.GetAsync(
+            $"gov/service/members?api-version={this.CcfClientManager.GetGovApiVersion()}");
         await response.ValidateStatusCodeAsync(this.Logger);
-        response.LogRequest(this.Logger);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
         return jsonResponse!;
     }
@@ -32,18 +32,17 @@ public class MembersController : ClientControllerBase
     public async Task<JsonObject> GetStateDigestUpdate()
     {
         var ccfClient = await this.CcfClientManager.GetGovClient();
-        var wsConfig = this.CcfClientManager.GetWsConfig();
+        var coseSignKey = this.CcfClientManager.GetCoseSignKey();
         var payload = await GovernanceCose.CreateGovCoseSign1Message(
-            wsConfig,
+            coseSignKey,
             GovMessageType.StateDigest,
             null);
         using HttpRequestMessage request = Cose.CreateHttpRequestMessage(
-            $"gov/members/state-digests/{wsConfig.MemberId}:update" +
+            $"gov/members/state-digests/{this.CcfClientManager.GetMemberId()}:update" +
             $"?api-version={this.CcfClientManager.GetGovApiVersion()}",
             payload);
         using HttpResponseMessage response = await ccfClient.SendAsync(request);
         await response.ValidateStatusCodeAsync(this.Logger);
-        response.LogRequest(this.Logger);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
         return jsonResponse!;
     }
@@ -52,19 +51,18 @@ public class MembersController : ClientControllerBase
     public async Task<string> AckStateDigest()
     {
         var ccfClient = await this.CcfClientManager.GetGovClient();
-        var wsConfig = this.CcfClientManager.GetWsConfig();
+        var coseSignKey = this.CcfClientManager.GetCoseSignKey();
         var stateDigest = await this.GetStateDigestUpdate();
         var payload = await GovernanceCose.CreateGovCoseSign1Message(
-            wsConfig,
+            coseSignKey,
             GovMessageType.Ack,
             stateDigest.ToJsonString());
         using HttpRequestMessage request = Cose.CreateHttpRequestMessage(
-            $"gov/members/state-digests/{wsConfig.MemberId}:ack" +
+            $"gov/members/state-digests/{this.CcfClientManager.GetMemberId()}:ack" +
             $"?api-version={this.CcfClientManager.GetGovApiVersion()}",
             payload);
         using HttpResponseMessage response = await ccfClient.SendAsync(request);
         await response.ValidateStatusCodeAsync(this.Logger);
-        response.LogRequest(this.Logger);
         var jsonResponse = await response.Content.ReadAsStringAsync();
         return jsonResponse!;
     }

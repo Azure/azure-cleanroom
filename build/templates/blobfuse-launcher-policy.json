@@ -82,6 +82,16 @@
       "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
       "value": ".*",
       "strategy": "re2"
+    },
+    {
+      "name": "TELEMETRY_MOUNT_PATH",
+      "value": "$telemetryMountPath",
+      "strategy": "string"
+    },
+    {
+      "name": "VOLUMESTATUS_MOUNT_PATH",
+      "value": "$volumeStatusMountPath",
+      "strategy": "string"
     }
   ],
   "mounts": [
@@ -93,7 +103,13 @@
     },
     {
       "name": "telemetrymounts",
-      "mountPath": "/mnt/telemetry",
+      "mountPath": "$telemetryMountPath",
+      "mountType": "emptyDir",
+      "readOnly": false
+    },
+    {
+      "name": "volumestatusmounts",
+      "mountPath": "$volumeStatusMountPath",
       "mountType": "emptyDir",
       "readOnly": false
     }

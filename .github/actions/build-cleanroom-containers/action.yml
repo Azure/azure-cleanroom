@@ -9,7 +9,6 @@ inputs:
 runs:
   using: composite
   steps:
-
     - uses: ./.github/actions/build-container-and-artefacts
       with:
         name: ccr-init

@@ -1,31 +1,28 @@
 param(
-  [parameter(Mandatory=$false)]
+  [parameter(Mandatory = $false)]
   [string]$tag = "latest",
 
-  [parameter(Mandatory=$false)]
+  [parameter(Mandatory = $false)]
   [string]$repo = "docker.io",
 
-  [parameter(Mandatory=$false)]
+  [parameter(Mandatory = $false)]
   [switch]$push
 )
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
 
 . $PSScriptRoot/../helpers.ps1
 
-if ($repo)
-{
+if ($repo) {
   $imageName = "$repo/ccr-proxy:$tag"
 }
-else
-{
+else {
   $imageName = "ccr-proxy:$tag"
 }
 
 $root = git rev-parse --show-toplevel
 docker image build -t $imageName `
   -f $PSScriptRoot/../docker/Dockerfile.proxy $root
-CheckLastExitCode
-if ($push)
-{
-    docker push $imageName
-    CheckLastExitCode
+if ($push) {
+  docker push $imageName
 }

@@ -43,7 +43,7 @@ jobs:
       build-type: ${{ inputs.release-type }}
 
   release-to-test:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: test
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
@@ -88,6 +88,18 @@ jobs:
       - name: Release cleanroom containers to test
         if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
         uses: ./.github/actions/release-cleanroom-containers
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+          environment: internal
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          needs-attestation: ${{ inputs.needs-attestation }}
+
+      - name: Release cleanroom artefacts
+        if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
+        uses: ./.github/actions/release-cleanroom-artefacts
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
@@ -253,6 +265,18 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           needs-attestation: ${{ inputs.needs-attestation }}
 
+      - name: Release cleanroom az cli extension
+        if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
+        uses: ./.github/actions/release-azcliext-cleanroom
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+          environment: internal
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          needs-attestation: ${{ inputs.needs-attestation }}
+
       - name: Verify attestation
         if: ${{ inputs.needs-attestation }}
         uses: ./.github/actions/verify-attestation
@@ -266,7 +290,7 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
   bvt-ml-training:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     needs: [build, release-to-test]
     environment: test
     env:
@@ -276,10 +300,10 @@ jobs:
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
-      TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
-      TDP_MHSM_NAME: 'azcleanroombvthsm2'
-      TDC_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
-      TDC_MHSM_NAME: 'azcleanroombvthsm2'
+      TDP_HSM_RESOURCE_GROUP: 'azcleanroom-emu-bvt-rg'
+      TDP_MHSM_NAME: 'azcleanroomemubvthsm'
+      TDC_HSM_RESOURCE_GROUP: 'azcleanroom-emu-bvt-rg'
+      TDC_MHSM_NAME: 'azcleanroomemubvthsm'
       USE_PREPROVISIONED_OIDC: "true"
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
@@ -306,12 +330,12 @@ jobs:
       - name: Run ml-training test
         uses: ./.github/actions/test-multi-party-collab/test-ml-training-caci
         with:
-          registry-url: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/cleanroom
+          repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           kvType: ${{ matrix.key-store }}
 
   bvt-encrypted-storage:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     needs: [build, release-to-test]
     environment: test
     env:
@@ -342,11 +366,11 @@ jobs:
       - name: Run encrypted-storage test
         uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-caci
         with:
-          registry-url: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/cleanroom
+          repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
 
   bvt-nginx-hello:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     needs: [build, release-to-test]
     environment: test
     env:
@@ -377,11 +401,11 @@ jobs:
       - name: Run nginx-hello test
         uses: ./.github/actions/test-multi-party-collab/test-nginx-hello-caci
         with:
-          registry-url: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/cleanroom
+          repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
 
   # bvt-triton-inference:
-  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
   #   needs: [build, release-to-test]
   #   environment: test
   #   env:
@@ -412,5 +436,5 @@ jobs:
   #     - name: Run triton-inference test
   #       uses: ./.github/actions/test-multi-party-collab/test-triton-inference-caci
   #       with:
-  #         registry-url: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/cleanroom
+  #         repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
   #         tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}

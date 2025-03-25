@@ -1,7 +1,3 @@
-function CheckLastExitCode() {
-    if ($LASTEXITCODE -gt 0) { exit 1 }
-}
-
 function Get-Digest {
     [CmdletBinding()]
     param (
@@ -16,7 +12,6 @@ function Get-Digest {
     )
 
     $manifest = oras manifest fetch $repo/"$containerName":$tag
-    CheckLastExitCode
 
     $manifestRaw = ""
     foreach ($line in $manifest) {

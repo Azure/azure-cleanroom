@@ -1,7 +1,7 @@
 name: governance-test
 services:
   ccf:
-    image: ccf:$ccfImageTag
+    image: ccf/app/run-js/sandbox:$ccfImageTag
     container_name: test-ccf
     ports:
       - "8080:8080"
@@ -50,16 +50,13 @@ services:
     ports:
       - "8299:8080"
   ccr-governance:
-    image: ccr-governance:latest
+    image: ccr-governance-virtual:latest
     container_name: test-ccr-governance
     ports:
       - "8990:8300"
     environment:
       - ccrgovEndpoint=https://test-ccf:8080
       - ccrgovApiPathPrefix=app/contracts/placeholder
-      - insecure_mountpoint=/app/insecure-virtual/
       - serviceCertPath=/app/sandbox_common/service_cert.pem
-      - INSECURE_VIRTUAL_ENVIRONMENT=true
     volumes:
-      - ../../../samples/governance/insecure-virtual:/app/insecure-virtual:ro
       - ./sandbox_common:/app/sandbox_common:ro

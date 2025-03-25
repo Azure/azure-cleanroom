@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using Azure.Identity;
 using CcfProvider;
+using CoseUtils;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Controllers;
@@ -24,41 +27,76 @@ public class WorkspacesController : ControllerBase
         this.logger = logger;
     }
 
+    [HttpGet("/ready")]
+    public IActionResult Ready()
+    {
+        return this.Ok(new JsonObject
+        {
+            ["status"] = "up"
+        });
+    }
+
     [HttpPost("/configure")]
     public async Task<IActionResult> SetWorkspaceConfig(
         [FromForm] WorkspaceConfigurationModel model)
     {
-        if (model?.SigningCertPemFile == null || model.SigningCertPemFile.Length <= 0)
+        if (model.SigningCertPemFile == null && string.IsNullOrEmpty(model.SigningCertId))
         {
-            return this.BadRequest("No file was uploaded.");
+            return this.BadRequest("Either SigningCertPemFile or SigningCertId must be specified");
         }
 
-        if (model?.SigningKeyPemFile == null || model.SigningKeyPemFile.Length <= 0)
+        if (model.SigningCertPemFile != null && !string.IsNullOrEmpty(model.SigningCertId))
         {
-            return this.BadRequest("No file was uploaded.");
+            return this.BadRequest(
+                "Only one of SigningCertPemFile or SigningCertId must be specified");
         }
 
-        string signingCert;
-        string signingKey;
-        using (var reader = new StreamReader(model.SigningCertPemFile.OpenReadStream()))
+        CoseSignKey coseSignKey;
+        if (model.SigningCertPemFile != null)
         {
+            if (model.SigningCertPemFile.Length <= 0)
+            {
+                return this.BadRequest("No signing cert file was uploaded.");
+            }
+
+            if (model.SigningKeyPemFile == null || model.SigningKeyPemFile.Length <= 0)
+            {
+                return this.BadRequest("No signing key file was uploaded.");
+            }
+
+            string signingCert;
+            using var reader = new StreamReader(model.SigningCertPemFile.OpenReadStream());
             signingCert = await reader.ReadToEndAsync();
+
+            string signingKey;
+            using var reader2 = new StreamReader(model.SigningKeyPemFile.OpenReadStream());
+            signingKey = await reader2.ReadToEndAsync();
+
+            coseSignKey = new CoseSignKey(signingCert, signingKey);
+        }
+        else
+        {
+            Uri signingCertId;
+            try
+            {
+                signingCertId = new Uri(model.SigningCertId!);
+            }
+            catch (Exception e)
+            {
+                return this.BadRequest($"Invalid signingKid value: {e.Message}.");
+            }
+
+            var creds = new DefaultAzureCredential();
+            coseSignKey = await CoseSignKey.FromKeyVault(signingCertId, creds);
         }
 
-        using (var reader = new StreamReader(model.SigningKeyPemFile.OpenReadStream()))
+        this.ccfClientManager.SetSigningConfig(new SigningConfiguration
         {
-            signingKey = await reader.ReadToEndAsync();
-        }
-
-        this.ccfClientManager.SetWsConfig(new CcfProvider.WorkspaceConfiguration
-        {
-            SigningCert = signingCert,
-            SigningKey = signingKey
+            CoseSignKey = coseSignKey
         });
-        this.agentClientManager.SetWsConfig(new CcfProvider.WorkspaceConfiguration
+        this.agentClientManager.SetSigningConfig(new SigningConfiguration
         {
-            SigningCert = signingCert,
-            SigningKey = signingKey
+            CoseSignKey = coseSignKey
         });
         return this.Ok("Workspace details configured successfully.");
     }
@@ -67,7 +105,7 @@ public class WorkspacesController : ControllerBase
     public IActionResult Show([FromQuery] bool? signingKey = false)
     {
         WorkspaceConfiguration copy;
-        var wsConfig = this.ccfClientManager.TryGetWsConfig();
+        var wsConfig = this.ccfClientManager.TryGetSigningConfig();
         if (wsConfig != null)
         {
             copy = JsonSerializer.Deserialize<WorkspaceConfiguration>(

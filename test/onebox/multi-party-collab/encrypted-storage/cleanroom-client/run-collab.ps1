@@ -4,17 +4,27 @@ param
     [switch]
     $NoBuild,
 
-    [ValidateSet('mcr', 'local')]
-    [string]$registry = "local"
+    [ValidateSet('mcr', 'local', 'acr')]
+    [string]$registry = "local",
+
+    [string]$repo = "localhost:5000",
+
+    [string]$tag = "latest"
 )
 
 $outDir = "$PSScriptRoot/generated"
 rm -rf $outDir
 Write-Host "Using $registry registry for cleanroom container images."
 $root = git rev-parse --show-toplevel
-$datastoreOutdir = "$PSScriptRoot/../../generated/datastores"
+$ccfOutDir = "$outDir/ccf"
+$datastoreOutdir = "$outDir/datastores"
 mkdir -p "$datastoreOutdir"
 $samplePath = "$root/test/onebox/multi-party-collab"
+
+if ($registry -ne "mcr") {
+    $env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL = "$repo"
+    $env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = "$repo/sidecar-digests:$tag"
+}
 
 pwsh $root/src/tools/cleanroom-client/deploy-cleanroom-client.ps1 `
     -outDir $outDir `
@@ -29,14 +39,23 @@ if ($LASTEXITCODE -gt 0) {
 pwsh $root/test/onebox/multi-party-collab/deploy-virtual-cleanroom-governance.ps1 `
     -NoBuild:$NoBuild `
     -registry $registry `
+    -repo $repo `
+    -tag $tag `
+    -ccfProjectName "ob-ccf-encrypted-storage-cl-client" `
     -projectName "ob-consumer-client" `
-    -initialMemberName "consumer"
+    -initialMemberName "consumer" `
+    -outDir $outDir
+$ccfEndpoint = $(Get-Content $outDir/ccf/ccf.json | ConvertFrom-Json).endpoint
 az cleanroom governance client remove --name "ob-publisher-client"
 
 $cleanroomClientEndpoint = "localhost:8321"
 pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 `
     -registry $registry  `
+    -repo $repo `
+    -tag $tag `
+    -ccfEndpoint $ccfEndpoint `
     -cleanroomClientEndpoint $cleanroomClientEndpoint `
+    -ccfOutDir $ccfOutDir `
     -datastoreOutDir $datastoreOutdir
 
 if ($LASTEXITCODE -gt 0) {
@@ -44,9 +63,49 @@ if ($LASTEXITCODE -gt 0) {
     exit $LASTEXITCODE
 }
 
-pwsh $PSScriptRoot/../convert-template.ps1 -outDir $outDir
+$registry_local_endpoint = ""
+if ($registry -eq "local") {
+    $registry_local_endpoint = "ccr-registry:5000"
+}
 
-pwsh $PSScriptRoot/../deploy-virtual-cleanroom.ps1 -outDir $outDir -skipLogs
+pwsh $root/test/onebox/multi-party-collab/convert-template.ps1 -outDir $outDir -registry_local_endpoint $registry_local_endpoint -repo $repo -tag $tag
+
+pwsh $root/test/onebox/multi-party-collab/deploy-virtual-cleanroom.ps1 -outDir $outDir -repo $repo -tag $tag
+
+
+Get-Job -Command "*kubectl port-forward ccr-client-proxy*" | Stop-Job
+Get-Job -Command "*kubectl port-forward ccr-client-proxy*" | Remove-Job
+kubectl port-forward ccr-client-proxy 10081:10080 &
+
+# Need to wait a bit for the port-forward to start.
+bash $root/src/scripts/wait-for-it.sh --timeout=20 --strict 127.0.0.1:10081 -- echo "ccr-client-proxy is available"
+if ($LASTEXITCODE -gt 0) {
+    Write-Host -ForegroundColor Red "Hit timeout waiting for ccr-client-proxy to be available. wait-for-it.sh returned returned non-zero exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+
+# Run the application.
+# curl -X POST -s http://ccr.cleanroom.local:8200/gov/demo-app/start --proxy http://127.0.0.1:10081
+
+pwsh $root/test/onebox/multi-party-collab/wait-for-cleanroom.ps1 `
+    -appName demo-app `
+    -proxyUrl http://127.0.0.1:10081
+
+Write-Host "Exporting logs..."
+$response = curl -X POST -s http://ccr.cleanroom.local:8200/gov/exportLogs --proxy http://127.0.0.1:10081
+$expectedResponse = '{"message":"Application telemetry data exported successfully."}'
+if ($response -ne $expectedResponse) {
+    Write-Host -ForegroundColor Red "Did not get expected response. Received: $response."
+    exit 1
+}
+
+Write-Host "Exporting telemetry..."
+$response = curl -X POST -s http://ccr.cleanroom.local:8200/gov/exportTelemetry --proxy http://127.0.0.1:10081
+$expectedResponse = '{"message":"Infrastructure telemetry data exported successfully."}'
+if ($response -ne $expectedResponse) {
+    Write-Host -ForegroundColor Red "Did not get expected response. Received: $response."
+    exit 1
+}
 
 curl --fail-with-body `
     -w "\n%{method} %{url} completed with %{response_code}\n" `
@@ -86,7 +145,8 @@ $expectedFiles = @(
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/demo-app-code-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/demo-app*-code-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/demo-app*-code-launcher.traces",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/consumer-output*-blobfuse.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/consumer-output*-blobfuse-launcher.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/consumer-output*-blobfuse-launcher.traces",

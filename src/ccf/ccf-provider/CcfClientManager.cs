@@ -9,7 +9,7 @@ namespace CcfProvider;
 public class CcfClientManager
 {
     private readonly ILogger logger;
-    private WorkspaceConfiguration wsConfig = default!;
+    private SigningConfiguration signingConfig = default!;
     private HttpClientManager httpClientManager;
 
     public CcfClientManager(ILogger logger)
@@ -18,25 +18,25 @@ public class CcfClientManager
         this.httpClientManager = new(logger);
     }
 
-    public void SetWsConfig(WorkspaceConfiguration wsConfig)
+    public void SetSigningConfig(SigningConfiguration wsConfig)
     {
-        this.wsConfig = wsConfig;
+        this.signingConfig = wsConfig;
     }
 
-    public async Task<WorkspaceConfiguration> GetWsConfig()
+    public async Task<SigningConfiguration> GetSigningConfig()
     {
-        await this.InitializeWsConfig();
-        return this.wsConfig;
+        await this.InitializeSigningConfig();
+        return this.signingConfig;
     }
 
-    public WorkspaceConfiguration TryGetWsConfig()
+    public SigningConfiguration TryGetSigningConfig()
     {
-        return this.wsConfig;
+        return this.signingConfig;
     }
 
-    public async Task CheckWsConfig()
+    public async Task CheckSigningConfig()
     {
-        await this.InitializeWsConfig();
+        await this.InitializeSigningConfig();
     }
 
     public Task<HttpClient> GetGovClient(string ccfEndpoint, string serviceCert)
@@ -54,9 +54,9 @@ public class CcfClientManager
         return "2024-07-01";
     }
 
-    private async Task InitializeWsConfig()
+    private async Task InitializeSigningConfig()
     {
-        if (this.wsConfig == null)
+        if (this.signingConfig == null)
         {
             throw new Exception("Invoke /configure first to setup signing cert and key details");
         }

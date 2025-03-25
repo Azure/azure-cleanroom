@@ -1,12 +1,15 @@
 name: Test Encrypted Storage scenario with Cleanroom Client
 description: Test Encrypted Storage scenario with Cleanroom Client
+inputs:
+  repo:
+    description: The registry URL
+    required: true
+  tag:
+    description: The tag for the built image
+    required: true
 runs:
   using: composite
   steps:
-    - name: Delete huge unnecessary tools folder # https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
-      shell: bash
-      run: rm -rf /opt/hostedtoolcache
-
     - name: Login to Azure and refresh token
       uses: ./.github/actions/login-to-azure
       env:
@@ -14,24 +17,19 @@ runs:
         TENANT_ID: ${{ env.AZURE_TENANT_ID }}
         SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-    - name: Add docker user
-      shell: bash
-      run: sudo usermod -aG docker $USER
-
-    - shell: pwsh
-      run: Install-Module -Name powershell-yaml -Force
-
     - name: Deploy Kind cluster
       shell: bash
       run: bash ./test/onebox/kind-up.sh
 
-    - name: Build clean room containers
-      shell: pwsh
-      run: ./build/onebox/build-local-cleanroom-containers.ps1
+    - name: Install az cleanroom extension
+      shell: bash
+      run: |
+        oras pull ${{ inputs.repo }}/cli/cleanroom-whl:${{ inputs.tag }}
+        az extension add --allow-preview true --source ./cleanroom-*-py2.py3-none-any.whl -y
 
     - name: Run collab scenario on Kind
       shell: pwsh
-      run: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/run-collab.ps1
+      run: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/run-collab.ps1 -registry acr -repo ${{ inputs.repo }} -tag ${{ inputs.tag }}
 
     - name: Dump credentials-proxy logs
       shell: pwsh
@@ -56,12 +54,17 @@ runs:
     - name: Dump ccf logs
       shell: pwsh
       if: ${{ !cancelled() }}
-      run: docker logs ob-ccf-ccf-1
+      run: docker logs ob-ccf-encrypted-storage-cl-client-ccf-1
 
     - name: Dump virtual-cleanroom logs
       shell: pwsh
       if: ${{ !cancelled() }}
       run: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
+
+    - name: Dump ccr-client-proxy logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: kubectl logs -l app=ccr-client-proxy --tail=-1 --all-containers --ignore-errors --prefix
 
     - uses: actions/upload-artifact@v4
       with:
@@ -87,7 +90,7 @@ runs:
     - uses: actions/upload-artifact@v4
       with:
           name: ccf-encrypted-storage-cleanroom-client
-          path: ./test/onebox/multi-party-collab/generated/ccf
+          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated/ccf
           overwrite: true
       if: ${{ !cancelled() }}
 

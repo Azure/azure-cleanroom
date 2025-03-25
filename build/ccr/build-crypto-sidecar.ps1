@@ -1,24 +1,24 @@
 param(
   [int]$port = 8283,
 
-  [parameter(Mandatory=$false)]
+  [parameter(Mandatory = $false)]
   [string]$tag = "latest",
 
-  [parameter(Mandatory=$false)]
+  [parameter(Mandatory = $false)]
   [string]$repo = "docker.io",
 
-  [parameter(Mandatory=$false)]
+  [parameter(Mandatory = $false)]
   [switch]$push
 )
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
 
 . $PSScriptRoot/../helpers.ps1
 
-if ($repo)
-{
+if ($repo) {
   $imageName = "$repo/crypto-sidecar:$tag"
 }
-else
-{
+else {
   $imageName = "crypto-sidecar:$tag"
 }
 
@@ -30,9 +30,6 @@ $buildRoot = "$root/build"
 docker image build -t $imageName `
   -f $buildRoot/docker/samples/aa-flow-based-lending/Dockerfile.crypto "$buildRoot/../external/rahasya" `
   --build-arg PORT=$port
-CheckLastExitCode
-if ($push)
-{
-    docker push $imageName
-    CheckLastExitCode
+if ($push) {
+  docker push $imageName
 }

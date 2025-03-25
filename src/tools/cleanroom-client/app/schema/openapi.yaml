@@ -36,6 +36,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /account/show:
+    get:
+      summary: Account Show
+      operationId: account_show_account_show_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
   /add-secretstore:
     post:
       summary: Add Secretstore
@@ -543,6 +553,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /deployment/generate:
+    post:
+      summary: Deployment Generate
+      operationId: deployment_generate_deployment_generate_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentGenerateRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
     AddDatastoreRequest:
@@ -653,13 +685,20 @@ components:
           - type: string
           - type: 'null'
           title: Command
-        mounts:
+        datasources:
           anyOf:
           - items:
               type: string
             type: array
           - type: 'null'
-          title: Mounts
+          title: Datasources
+        datasinks:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Datasinks
         environmentVariables:
           anyOf:
           - items:
@@ -673,6 +712,9 @@ components:
         memory:
           type: string
           title: Memory
+        autoStart:
+          type: boolean
+          title: Autostart
         configName:
           type: string
           title: Configname
@@ -682,6 +724,7 @@ components:
       - image
       - cpu
       - memory
+      - autoStart
       - configName
       title: ConfigAddApplicationRequest
     ConfigAddDatasinkRequest:
@@ -1069,6 +1112,38 @@ components:
       - targetFolder
       - configName
       title: DataStoreDownloadRequest
+    DeploymentGenerateRequest:
+      properties:
+        spec:
+          type: string
+          title: Spec
+        contract_id:
+          type: string
+          title: Contract Id
+        ccf_endpoint:
+          type: string
+          title: Ccf Endpoint
+        ssl_server_cert_base64:
+          type: string
+          title: Ssl Server Cert Base64
+        debug_mode:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Debug Mode
+          default: false
+        operationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Operationid
+      type: object
+      required:
+      - spec
+      - contract_id
+      - ccf_endpoint
+      - ssl_server_cert_base64
+      title: DeploymentGenerateRequest
     EncryptionMode:
       type: string
       enum:

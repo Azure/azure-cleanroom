@@ -22,8 +22,13 @@
     },
     {
       "name": "LogLevel",
-      "value": ".*",
-      "strategy": "re2"
+      "value": "Info",
+      "strategy": "string"
+    },
+    {
+      "name": "TELEMETRY_MOUNT_PATH",
+      "value": "$telemetryMountPath",
+      "strategy": "string"
     }
   ],
   "securityContext": {

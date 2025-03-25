@@ -3,7 +3,8 @@ param
 (
     [string] $contractId = "4321",
 
-    [string] $issuerUrl = "https://localhost:9081/app/oidc",
+    [Parameter(Mandatory)]
+    [string] $issuerUrl,
 
     [string] $projectName = "governance-sample-azcli"
 )

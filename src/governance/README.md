@@ -3,7 +3,7 @@
 - [High level layout](#high-level-layout)
 - [Local Development](#local-development)
 - [Components layout](#components-layout)
-  - [ccf-app](#ccf-app)
+  - [ccf-app/js](#ccf-appjs)
   - [client](#client)
   - [sidecar](#sidecar)
   - [ui](#ui)
@@ -45,8 +45,8 @@ You can also open `governance.sln` in Visual Studio and run the same tests execu
 If trying out any code changes then re-run the `deploy-cgs` command to deploy the change.
 
 ## Components layout
-### ccf-app
-This folder contains the clean room governance service (CGS) implemented as a CCF JS application. See [ccf-app readme](./ccf-app/README.md) for more details.
+### ccf-app/js
+This folder contains the clean room governance service (CGS) implemented as a CCF JS application. See [ccf-app readme](./ccf-app/js/README.md) for more details.
 
 ### client
 This folder contains the `cgs-client` container code. This container eases interaction with the CGS instance by doing the heavy lifting of interacting with CGS presenting member certificates and COSE signing governance requests using the member certificates. See [client readme](./client/README.md) for more details.

@@ -1,0 +1,20 @@
+name: Build cleanroom az cli
+description: Build cleanroom az cli
+
+inputs:
+  tag:
+    required: true
+    description: The tag
+
+runs:
+  using: composite
+  steps:
+    - name: Build cleanroom az cli extension
+      shell: pwsh
+      run: ./build/build-azcliext-cleanroom.ps1 -tag ${{ inputs.tag }} -skipInstall
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: cleanroom-cli.whl
+        path: ./build/bin/azext_cleanroom/dist
+        overwrite: true

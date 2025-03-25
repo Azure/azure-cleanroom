@@ -6,7 +6,13 @@
     "-socket-address",
     "/mnt/uds/sock"
   ],
-  "environmentVariables": [],
+  "environmentVariables": [
+    {
+      "name": "TELEMETRY_MOUNT_PATH",
+      "value": "$telemetryMountPath",
+      "strategy": "string"
+    }
+  ],
   "mounts": [
     {
       "name": "uds",

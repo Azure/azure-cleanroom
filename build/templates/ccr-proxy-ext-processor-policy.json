@@ -1,5 +1,5 @@
 {
-  "name": "ccr-proxy-ext-processor",
+  "name": "ccr-proxy-ext-processor-$name",
   "containerImage": "$containerRegistryUrl/ccr-proxy-ext-processor@$digest",
   "command": [
     "/bin/sh",
@@ -8,9 +8,9 @@
   ],
   "environmentVariables": [
     {
-        "name": "PORT",
-        "value": "8281",
-        "strategy": "string"
+      "name": "PORT",
+      "value": "$port",
+      "strategy": "string"
     },
     {
       "name": "BUNDLE_RESOURCE_PATH",
@@ -20,6 +20,11 @@
     {
       "name": "CCR_POLICY_ALLOW_ALL",
       "value": "$allowAll",
+      "strategy": "string"
+    },
+    {
+      "name": "TELEMETRY_MOUNT_PATH",
+      "value": "$telemetryMountPath",
       "strategy": "string"
     }
   ],

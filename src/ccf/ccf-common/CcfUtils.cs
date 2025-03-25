@@ -1,12 +1,24 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using AttestationClient;
 
 namespace CcfCommon;
 
 public static class CcfUtils
 {
+    public static readonly JsonSerializerOptions Options = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters =
+        {
+            new JsonStringEnumConverter()
+        }
+    };
+
     public static bool IsSevSnp()
     {
         return !IsVirtualEnvironment();

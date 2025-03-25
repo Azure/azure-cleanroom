@@ -12,10 +12,9 @@ import (
 type Header string
 
 const (
-	Method        Header = ":method"
-	Path          Header = ":path"
-	Authority     Header = ":authority"
-	CcrIsIncoming Header = "x-ccr-is-incoming"
+	Method    Header = ":method"
+	Path      Header = ":path"
+	Authority Header = ":authority"
 )
 
 // Creates a request headers proxy response containing the specified mutated headers as payload.
@@ -96,7 +95,7 @@ func CreateImmediateProxyResponse(
 			Status: &typev3.HttpStatus{
 				Code: status,
 			},
-			Body:    body,
+			Body:    []byte(body),
 			Details: details,
 		},
 	}
@@ -132,7 +131,7 @@ func createMutationResponse(
 func ExtractHeader(key Header, headers *pb.ProcessingRequest_RequestHeaders) string {
 	for _, n := range headers.RequestHeaders.Headers.Headers {
 		if n.Key == string(key) {
-			return n.Value
+			return string(n.RawValue)
 		}
 	}
 

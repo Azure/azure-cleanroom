@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	configuration "github.com/azure/azure-cleanroom/internal/configuration"
+	configuration "github.com/azure/azure-cleanroom/src/internal/configuration"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"

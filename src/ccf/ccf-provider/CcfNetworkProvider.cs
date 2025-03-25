@@ -62,6 +62,8 @@ public class CcfNetworkProvider
             Id = ToId(startNodeName)
         };
 
+        string lbName = "lb-nw-" + networkName;
+        var lbFqdn = this.lbProvider.GenerateLoadBalancerFqdn(lbName, networkName, providerConfig);
         var startNodeEndpoint = await this.nodeProvider.CreateStartNode(
             startNodeName,
             networkName,
@@ -69,6 +71,7 @@ public class CcfNetworkProvider
             nodeLogLevel,
             policyOption,
             nodeData,
+            lbFqdn.NodeSanFormat(),
             providerConfig);
 
         var serviceCertPem = await this.GetServiceCert(
@@ -93,11 +96,11 @@ public class CcfNetworkProvider
             policyOption,
             providerConfig,
             startNodeEndpoint,
+            lbFqdn.NodeSanFormat(),
             serviceCertPem,
             DesiredJoinNodeState.PartOfNetwork,
             ordinal);
 
-        string lbName = "lb-nw-" + networkName;
         List<string> servers =
             [startNodeEndpoint.ClientRpcAddress, .. joinNodes.Select(n => n.ClientRpcAddress)];
         var lbEndpoint =
@@ -180,10 +183,14 @@ public class CcfNetworkProvider
 
         // Before proceeding further check that signing cert/key that would be required to submit
         // any proposal are configured.
-        await this.ccfClientManager.CheckWsConfig();
+        await this.ccfClientManager.CheckSigningConfig();
 
         var lbEndpoint =
             await this.lbProvider.GetLoadBalancerEndpoint(networkName, providerConfig);
+        var lbFqdn = this.lbProvider.GenerateLoadBalancerFqdn(
+            lbEndpoint.Name,
+            networkName,
+            providerConfig);
 
         // Pick primary per CCF network as the target node to use for joining/removing nodes from
         // the network.
@@ -228,6 +235,7 @@ public class CcfNetworkProvider
                 providerConfig,
                 numNodesToCreate,
                 primaryNodeEndpoint,
+                lbFqdn.NodeSanFormat(),
                 serviceCertPem,
                 nodeLogLevel,
                 policyOption,
@@ -321,6 +329,7 @@ public class CcfNetworkProvider
                         providerConfig,
                         numNodesToCreate,
                         primaryNodeEndpoint,
+                        lbFqdn.NodeSanFormat(),
                         serviceCertPem,
                         nodeLogLevel,
                         policyOption,
@@ -386,6 +395,11 @@ public class CcfNetworkProvider
         ConcurrentBag<
             (NetworkNode node, long lastSignedSeqNo, NodeEndpoint ep, string serviceCertPem)>
             recoverNodeEndpoints = new();
+        string lbName = "lb-nw-" + targetNetworkName;
+        var lbFqdn = this.lbProvider.GenerateLoadBalancerFqdn(
+            lbName,
+            targetNetworkName,
+            providerConfig);
         foreach (var recoveryNode in recoveryNodeNames)
         {
             recoverTasks.Add(Task.Run(async () =>
@@ -405,6 +419,7 @@ public class CcfNetworkProvider
                     nodeLogLevel,
                     policyOption,
                     nodeData,
+                    lbFqdn.NodeSanFormat(),
                     providerConfig);
 
                 var serviceCertPem = await this.GetServiceCert(
@@ -468,11 +483,11 @@ public class CcfNetworkProvider
             policyOption,
             providerConfig,
             nodeToUse.ep,
+            lbFqdn.NodeSanFormat(),
             nodeToUse.serviceCertPem,
             DesiredJoinNodeState.PartOfPublicNetwork,
             ordinal);
 
-        string lbName = "lb-nw-" + targetNetworkName;
         List<string> servers =
             [nodeToUse.ep.ClientRpcAddress, .. joinNodes.Select(n => n.ClientRpcAddress)];
         var lbEndpoint = await this.lbProvider.CreateLoadBalancer(
@@ -557,24 +572,36 @@ public class CcfNetworkProvider
         var reportsArray = new JsonArray();
         foreach (var quote in response.Quotes)
         {
-            if (string.IsNullOrEmpty(quote.Raw))
+            if (quote.Format == "Insecure_Virtual")
             {
-                continue;
+                var hostData = JsonSerializer.Deserialize<JsonObject>(
+                    Convert.FromBase64String(quote.Raw))!["host_data"];
+                reportsArray.Add(new JsonObject
+                {
+                    ["hostData"] = hostData?.ToString(),
+                    ["raw"] = quote.Raw,
+                    ["endorsements"] = quote.Endorsements,
+                    ["nodeId"] = quote.NodeId,
+                    ["format"] = quote.Format,
+                    ["verified"] = true
+                });
             }
-
-            var report = SnpReport.VerifySnpAttestation(
-                quote.Raw,
-                quote.Endorsements,
-                uvmEndorsements: null);
-            reportsArray.Add(new JsonObject
+            else
             {
-                ["hostData"] = report.HostData.ToLower(),
-                ["raw"] = quote.Raw,
-                ["endorsements"] = quote.Endorsements,
-                ["nodeId"] = quote.NodeId,
-                ["format"] = quote.Format,
-                ["verified"] = true
-            });
+                var report = SnpReport.VerifySnpAttestation(
+                    quote.Raw,
+                    quote.Endorsements,
+                    uvmEndorsements: null);
+                reportsArray.Add(new JsonObject
+                {
+                    ["hostData"] = report.HostData.ToLower(),
+                    ["raw"] = quote.Raw,
+                    ["endorsements"] = quote.Endorsements,
+                    ["nodeId"] = quote.NodeId,
+                    ["format"] = quote.Format,
+                    ["verified"] = true
+                });
+            }
         }
 
         return new JsonObject
@@ -730,9 +757,8 @@ public class CcfNetworkProvider
 
     public async Task<JsonObject> SubmitRecoveryShare(
         string networkName,
-        string signingCert,
-        string signingKey,
-        string encryptionPrivateKey,
+        CoseSignKey coseSignKey,
+        RSA rsaEncKey,
         JsonObject? providerConfig)
     {
         var lbEndpoint =
@@ -740,7 +766,7 @@ public class CcfNetworkProvider
         var serviceCert = await this.GetServiceCert(lbEndpoint.Name, lbEndpoint.Endpoint);
         var ccfClient = await this.ccfClientManager.GetGovClient(lbEndpoint.Endpoint, serviceCert);
 
-        using var cert = X509Certificate2.CreateFromPem(signingCert);
+        using var cert = X509Certificate2.CreateFromPem(coseSignKey.Certificate);
         var memberId = cert.GetCertHashString(HashAlgorithmName.SHA256).ToLower();
         var response = await ccfClient.GetFromJsonAsync<JsonObject>(
             $"/gov/recovery/encrypted-shares/{memberId}" +
@@ -748,9 +774,7 @@ public class CcfNetworkProvider
         var encryptedShare = response!["encryptedShare"]!.ToString();
 
         byte[] wrappedValue = Convert.FromBase64String(encryptedShare);
-        using var privateKey = RSA.Create();
-        privateKey.ImportFromPem(encryptionPrivateKey);
-        var decryptedShare = privateKey.Decrypt(wrappedValue, RSAEncryptionPadding.OaepSHA256);
+        var decryptedShare = rsaEncKey.Decrypt(wrappedValue, RSAEncryptionPadding.OaepSHA256);
 
         var wrappedDecryptedShare = Convert.ToBase64String(decryptedShare);
         JsonObject content = new()
@@ -761,8 +785,7 @@ public class CcfNetworkProvider
         return await this.SubmitRecoveryShare(
             ccfClient,
             memberId,
-            signingCert,
-            signingKey,
+            coseSignKey,
             content);
     }
 
@@ -772,12 +795,12 @@ public class CcfNetworkProvider
         string? nodeLogLevel,
         SecurityPolicyConfiguration policyOption,
         string previousServiceCertificate,
-        string encryptionPrivateKey,
+        RSA rsaEncKey,
         JsonObject? providerConfig)
     {
         // Before proceeding further check that signing cert/key that would be required to submit
         // any proposal are configured.
-        await this.ccfClientManager.CheckWsConfig();
+        await this.ccfClientManager.CheckSigningConfig();
 
         // This is an opinionated recovery flow using the supplied encryption key
         // that orchestrates the below sequence:
@@ -802,13 +825,12 @@ public class CcfNetworkProvider
 
         await this.TransitionToOpen(networkName, previousServiceCertificate, providerConfig);
 
-        var wsConfig = await this.ccfClientManager.GetWsConfig();
+        var signingConfig = await this.ccfClientManager.GetSigningConfig();
 
         JsonObject response = await this.SubmitRecoveryShare(
             networkName,
-            wsConfig.SigningCert,
-            wsConfig.SigningKey,
-            encryptionPrivateKey,
+            signingConfig.CoseSignKey,
+            rsaEncKey,
             providerConfig);
 
         if (!response["message"]!.ToString().Contains("End of recovery procedure initiated"))
@@ -860,7 +882,7 @@ public class CcfNetworkProvider
     {
         // Before proceeding further check that signing cert/key that would be required to submit
         // any proposal are configured.
-        await this.ccfClientManager.CheckWsConfig();
+        await this.ccfClientManager.CheckSigningConfig();
 
         var agentConfig = new AgentConfig
         {
@@ -878,7 +900,7 @@ public class CcfNetworkProvider
         // - Recover the public network
         // - Transition service to open
         // - Request the confidential recovery service to submit the recovery share assuming the
-        //   confidential recoverer member is the only 1 recovery member required
+        //   confidential recoverer member is the only recovery member required
         //   for recovery.
         // - Wait for recovery node to become PartOfNetwork.
         // - Remove any retired (pre-DR) nodes.
@@ -895,20 +917,19 @@ public class CcfNetworkProvider
 
         await this.TransitionToOpen(networkName, previousServiceCertificate, providerConfig);
 
-        var wsConfig = await this.ccfClientManager.GetWsConfig();
-
         JsonObject response = await recoveryAgentProvider.SubmitRecoveryShare(
             networkName,
             confidentialRecoveryMemberName,
             agentConfig,
             providerConfig);
 
-        if (!response["message"]!.ToString().Contains("End of recovery procedure initiated"))
+        var message = response["message"]!.ToString();
+        if (!message.Contains("Full recovery key successfully submitted") ||
+            !message.Contains("End of recovery procedure initiated"))
         {
             throw new Exception(
-                $"Assuming only 1 member required for recovery hence expecting end of recovery " +
-                $"procedure but got: " +
-                $"{JsonSerializer.Serialize(response, Utils.Options)}");
+                $"Assuming only full recovery key required for recovery hence expecting end of " +
+                $"recovery procedure but got: {JsonSerializer.Serialize(response, Utils.Options)}");
         }
 
         var recoverNodeEndpoint = new NodeEndpoint
@@ -947,7 +968,7 @@ public class CcfNetworkProvider
     {
         // Before proceeding further check that signing cert/key that would be required to submit
         // any proposal are configured.
-        await this.ccfClientManager.CheckWsConfig();
+        await this.ccfClientManager.CheckSigningConfig();
 
         var agentConfig = new AgentConfig
         {
@@ -987,22 +1008,6 @@ public class CcfNetworkProvider
         using var cert = X509Certificate2.CreateFromPem(signingCert);
         var memberId = cert.GetCertHashString(HashAlgorithmName.SHA256).ToLower();
 
-        var members = await this.GetMembers(ccfClient);
-        var conflictingMembers = members.Where(m =>
-            !string.IsNullOrEmpty(m.Value.PublicEncryptionKey) &&
-            m.Key != memberId &&
-            !IsRecoveryOperator(m.Value));
-        if (conflictingMembers.Any())
-        {
-            throw new ApiException(
-                HttpStatusCode.Conflict,
-                "RecoveryMembersAlreadyExist",
-                "Following recovery member(s) already exist for the network. Adding a " +
-                "confidential recovery member with other non-confidenitial recovery member(s) " +
-                "is not  supported. Conflicting members: " +
-                "{JsonSerializer.Serialize(conflictingMembers)}");
-        }
-
         await this.AddAndAcceptRecoveryOperator(
             ccfClient,
             networkName,
@@ -1017,20 +1022,6 @@ public class CcfNetworkProvider
             confidentialRecoveryMemberName,
             agentConfig,
             providerConfig);
-
-        await this.SetAndAcceptRecoveryThreshold(ccfClient, networkName, 1, providerConfig);
-
-        static bool IsRecoveryOperator(Ccf.MemberInfo memberInfo)
-        {
-            if (memberInfo.MemberData != null)
-            {
-                string? value = memberInfo.MemberData["is_recovery_operator"]?.ToString();
-                bool.TryParse(value, out var isRecoveryOperator);
-                return isRecoveryOperator;
-            }
-
-            return false;
-        }
     }
 
     private static string ToId(string nodeName)
@@ -1077,6 +1068,7 @@ public class CcfNetworkProvider
         SecurityPolicyConfiguration policyOption,
         JsonObject? providerConfig,
         NodeEndpoint targetNodeEndpoint,
+        List<string> san,
         string serviceCertPem,
         DesiredJoinNodeState desiredJoinNodeState,
         int startOrdinal)
@@ -1104,21 +1096,11 @@ public class CcfNetworkProvider
                     nodeLogLevel,
                     policyOption,
                     nodeData,
+                    san,
                     providerConfig);
 
                 // Check before waiting for the node to become ready.
-                // TODO (gsinha): Also see how best to do this during WaitForJoinNodeReady in case
-                // the wait is going to timeout due to node restart/crash.
-                var nodeHealth = await this.nodeProvider.GetNodeHealth(
-                    networkName,
-                    joinNodeName,
-                    providerConfig);
-                if (nodeHealth.Status == nameof(NodeStatus.NeedsReplacement))
-                {
-                    throw new Exception(
-                        $"Node instance {joinNodeName} is reporting unhealthy: " +
-                        $"{JsonSerializer.Serialize(nodeHealth, Utils.Options)}");
-                }
+                await this.CheckNodeHealthy(networkName, joinNodeName, providerConfig);
 
                 joinNodes.Add(joinNodeEndpoint);
                 await this.WaitForJoinNodeReady(
@@ -1203,7 +1185,14 @@ public class CcfNetworkProvider
             }
         }
 
-        var selfSignedCertPem = await this.GetNodeSelfSignedCert(joinNodeEndpoint);
+        // Do a health check as part of retries as in case the join node fails to start then the
+        // https endpoint won't respond and there would be no point retrying.
+        var selfSignedCertPem = await this.GetNodeSelfSignedCert(
+            joinNodeEndpoint,
+            onRetry: () => this.CheckNodeHealthy(
+                networkName,
+                joinNodeEndpoint.NodeName,
+                providerConfig));
         var client = this.GetOrAddNodeClient(
             joinNodeEndpoint,
             serviceCertPem,
@@ -1640,7 +1629,9 @@ public class CcfNetworkProvider
         }
     }
 
-    private async Task<string> GetNodeSelfSignedCert(NodeEndpoint nodeEndpoint)
+    private async Task<string> GetNodeSelfSignedCert(
+        NodeEndpoint nodeEndpoint,
+        Func<Task>? onRetry = null)
     {
         var endpoint = nodeEndpoint.ClientRpcAddress;
         var nodeName = nodeEndpoint.NodeName;
@@ -1690,6 +1681,11 @@ public class CcfNetworkProvider
             {
                 throw new TimeoutException(
                     $"{nodeName}: Hit timeout waiting for {endpoint}/node/self_signed_certificate");
+            }
+
+            if (onRetry != null)
+            {
+                await onRetry.Invoke();
             }
 
             await Task.Delay(TimeSpan.FromSeconds(1));
@@ -1786,10 +1782,9 @@ public class CcfNetworkProvider
         JsonObject content,
         TimeSpan? timeout = null)
     {
-        var wsConfig = await this.ccfClientManager.GetWsConfig();
+        var signingConfig = await this.ccfClientManager.GetSigningConfig();
         var payload = await Cose.CreateGovCoseSign1Message(
-            wsConfig.SigningCert,
-            wsConfig.SigningKey,
+            signingConfig.CoseSignKey,
             GovMessageType.Proposal,
             content.ToJsonString());
         using HttpRequestMessage request = Cose.CreateHttpRequestMessage(
@@ -1810,15 +1805,14 @@ public class CcfNetworkProvider
             ["ballot"] = "export function vote (proposal, proposerId) { return true }"
         };
 
-        var wsConfig = await this.ccfClientManager.GetWsConfig();
+        var signingConfig = await this.ccfClientManager.GetSigningConfig();
         var payload = await Cose.CreateGovCoseSign1Message(
-            wsConfig.SigningCert,
-            wsConfig.SigningKey,
+            signingConfig.CoseSignKey,
             GovMessageType.Ballot,
             ballot.ToJsonString(),
             proposalId.ToString());
 
-        using var cert = X509Certificate2.CreateFromPem(wsConfig.SigningCert);
+        using var cert = X509Certificate2.CreateFromPem(signingConfig.CoseSignKey.Certificate);
         var memberId = cert.GetCertHashString(HashAlgorithmName.SHA256).ToLower();
         using HttpRequestMessage request = Cose.CreateHttpRequestMessage(
             $"gov/members/proposals/{proposalId}/ballots/" +
@@ -1835,13 +1829,11 @@ public class CcfNetworkProvider
     private async Task<JsonObject> SubmitRecoveryShare(
         HttpClient ccfClient,
         string memberId,
-        string signingCert,
-        string signingKey,
+        CoseSignKey coseSignKey,
         JsonObject content)
     {
         var payload = await Cose.CreateGovCoseSign1Message(
-            signingCert,
-            signingKey,
+            coseSignKey,
             GovMessageType.RecoveryShare,
             content.ToJsonString());
         using HttpRequestMessage request = Cose.CreateHttpRequestMessage(
@@ -2113,6 +2105,7 @@ public class CcfNetworkProvider
         JsonObject? providerConfig,
         int numNodesToCreate,
         NodeEndpoint primaryNodeEndpoint,
+        List<string> san,
         string serviceCertPem,
         string? nodeLogLevel,
         SecurityPolicyConfiguration policyOption,
@@ -2139,21 +2132,11 @@ public class CcfNetworkProvider
                     nodeLogLevel,
                     policyOption,
                     nodeData,
+                    san,
                     providerConfig);
 
                 // Check before waiting for the node to become ready.
-                // TODO (gsinha): Also see how best to do this during WaitForJoinNodeReady in case
-                // the wait is going to timeout due to node restart/crash.
-                var nodeHealth = await this.nodeProvider.GetNodeHealth(
-                    networkName,
-                    joinNodeName,
-                    providerConfig);
-                if (nodeHealth.Status == nameof(NodeStatus.NeedsReplacement))
-                {
-                    throw new Exception(
-                        $"Node instance {joinNodeName} is reporting unhealthy: " +
-                        $"{JsonSerializer.Serialize(nodeHealth, Utils.Options)}");
-                }
+                await this.CheckNodeHealthy(networkName, joinNodeName, providerConfig);
 
                 await this.WaitForJoinNodeReady(
                     networkName,
@@ -2180,7 +2163,6 @@ public class CcfNetworkProvider
         string nodeName,
         JsonObject? providerConfig)
     {
-        // Check that node is healthy or else we won't get the cert.
         var nodeHealth = await this.nodeProvider.GetNodeHealth(
             networkName,
             nodeName,
@@ -2222,11 +2204,12 @@ public class CcfNetworkProvider
                     {
                         ["cert"] = signingCert,
                         ["encryption_pub_key"] = encryptionPublicKey,
+                        ["recovery_role"] = "Owner",
                         ["member_data"] = new JsonObject
                         {
                             ["identifier"] = memberName,
-                            ["is_recovery_operator"] = true,
-                            ["recovery_service"] = recoveryServiceData
+                            ["isRecoveryOperator"] = true,
+                            ["recoveryService"] = recoveryServiceData
                         }
                     }
                 }
@@ -2241,49 +2224,6 @@ public class CcfNetworkProvider
         if (proposal["proposalState"]!.ToString() == "Open")
         {
             this.logger.LogInformation($"Accepting set_member proposal {proposalId}.");
-            proposal = await this.VoteAccept(ccfClient, proposalId);
-        }
-
-        if (proposal["proposalState"]!.ToString() != "Accepted")
-        {
-            throw new ApiException(
-                HttpStatusCode.MethodNotAllowed,
-                "ProposalNotAccepted",
-                $"Proposal to add recovery operator member " +
-                $"'{proposalId}' is not in an accepted state. " +
-                $"Proposal state: {JsonSerializer.Serialize(proposal)}");
-        }
-    }
-
-    private async Task SetAndAcceptRecoveryThreshold(
-        HttpClient ccfClient,
-        string networkName,
-        int recoveryThreshold,
-        JsonObject? providerConfig)
-    {
-        this.logger.LogInformation($"Setting recovery threshold to {recoveryThreshold}.");
-        var args = new JsonObject
-        {
-            ["recovery_threshold"] = recoveryThreshold
-        };
-
-        var proposalContent = new JsonObject
-        {
-            ["actions"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["name"] = "set_recovery_threshold",
-                    ["args"] = args
-                }
-            }
-        };
-
-        var proposal = await this.CreateProposal(ccfClient, proposalContent);
-        string proposalId = proposal["proposalId"]!.ToString();
-        if (proposal["proposalState"]!.ToString() == "Open")
-        {
-            this.logger.LogInformation($"Accepting set_recovery_threshold proposal {proposalId}.");
             proposal = await this.VoteAccept(ccfClient, proposalId);
         }
 

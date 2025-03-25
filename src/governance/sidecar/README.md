@@ -120,9 +120,9 @@ Upon error, these endpoints return a payload of the following format:
 The following environment variables control the configuration of this sidecar:
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `ccrgovEndpoint` | `string` | Yes | The endpoint address of the CGS service instance. Eg: https://contoso.confidential-ledger.azure.com |
-| `ccrgovApiPathPrefix` | `string` | Yes | The path prefix to use along with the endpoint address to form the complete base path of `<ccrgovEndpoint>/<ccrgovApiPathPrefix>` for invoking the CGS APIs. Eg: value of `app/contracts/dea12ad2` will result in the base path of `https://contoso.confidential-ledger.azure.com/app/contracts/dea12ad2`.|
-| `serviceCertPath` | `string` | Yes | The path to the file containing the PEM-encoded certificate to use for SSL connection verification when connecting to the `ccrgovEndpoint`. Can be skipped if connecting to a `*.confidential-ledger.azure.com` endpoint as the container will automatically download the certificate for it if this parameter was not specified.|
-| `serviceCert` | `string` | Yes | The base64 representation of the PEM-encoded certificate to use for SSL connection verification when connecting to the `ccrgovEndpoint`. Can be skipped if connecting to a `*.confidential-ledger.azure.com` endpoint as the container will automatically download the certificate for it if this parameter was not specified.|
+| `ccrgovEndpoint` | `string` | Yes | The endpoint address of the CGS service instance. Eg: https://contoso.westus.azurecontainer.io |
+| `ccrgovApiPathPrefix` | `string` | Yes | The path prefix to use along with the endpoint address to form the complete base path of `<ccrgovEndpoint>/<ccrgovApiPathPrefix>` for invoking the CGS APIs. Eg: value of `app/contracts/dea12ad2` will result in the base path of `https://contoso.westus.azurecontainer.io/app/contracts/dea12ad2`.|
+| `serviceCertPath` | `string` | Yes | The path to the file containing the PEM-encoded certificate to use for SSL connection verification when connecting to the `ccrgovEndpoint`.|
+| `serviceCert` | `string` | Yes | The base64 representation of the PEM-encoded certificate to use for SSL connection verification when connecting to the `ccrgovEndpoint`.|
 
 Only one of `serviceCert` or `serviceCertPath` need to be specified, not both.

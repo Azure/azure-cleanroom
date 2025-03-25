@@ -1,7 +1,7 @@
 name: Test triton inference CACI
 description: Test triton inference CACI
 inputs:
-  registry-url:
+  repo:
     description: The registry URL
     required: true
   tag:
@@ -10,20 +10,9 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Delete huge unnecessary tools folder # https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
-      shell: bash
-      run: rm -rf /opt/hostedtoolcache
-
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-
-    - name: Add docker user
-      shell: bash
-      run: sudo usermod -aG docker $USER
-
-    - shell: pwsh
-      run: Install-Module -Name powershell-yaml -Force
 
     - name: Login to Azure and refresh token
       uses: ./.github/actions/login-to-azure
@@ -32,13 +21,15 @@ runs:
         TENANT_ID: ${{ env.AZURE_TENANT_ID }}
         SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-    - name: Log in to Azure Container Registry
-      shell: pwsh
-      run: az acr login -n ${{ inputs.registry-url}}
+    - name: Install az cleanroom extension
+      shell: bash
+      run: |
+        oras pull ${{ inputs.repo }}/cli/cleanroom-whl:${{ inputs.tag }}
+        az extension add --allow-preview true --source ./cleanroom-*-py2.py3-none-any.whl -y
 
     - name: Run collab scenario on caci
       shell: pwsh
-      run: ./test/onebox/multi-party-collab/triton-inference-server/run-collab-aci.ps1 -registry acr -registryUrl ${{ inputs.registry-url}} -tag ${{ inputs.tag }}
+      run: ./test/onebox/multi-party-collab/triton-inference-server/run-collab-aci.ps1 -registry acr -repo ${{ inputs.repo}} -tag ${{ inputs.tag }}
 
     - name: Upload results
       uses: actions/upload-artifact@v4
@@ -68,7 +59,7 @@ runs:
       uses: actions/upload-artifact@v4
       with:
           name: ccf-triton-inference-caci
-          path: ./test/onebox/multi-party-collab/generated/ccf
+          path: ./test/onebox/multi-party-collab/triton-inference-server/generated/ccf
           overwrite: true
       if: ${{ !cancelled() }}
 

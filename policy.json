@@ -1,7 +1,0 @@
-{
-  "type": "add",
-  "claims": {
-    "x-ms-sevsnpvm-is-debuggable": false,
-    "x-ms-sevsnpvm-hostdata": "<insert ccepolicy hash value here Eg 73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20>"
-  }
-}

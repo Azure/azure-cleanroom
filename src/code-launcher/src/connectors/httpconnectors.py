@@ -1,12 +1,9 @@
-from tarfile import data_filter
+import os
 import requests
-import socket
-import time
+import logging
 
-from src.exceptions.custom_exceptions import ServiceNotAvailableFailure
-from src.logger.base_logger import logging
-
-logger = logging.getLogger()
+from opentelemetry import trace
+from src.utilities import utilities
 
 
 class HttpConnector:
@@ -42,84 +39,129 @@ class HttpConnector:
         resp.raise_for_status()
         return resp
 
-    @staticmethod
-    def wait_for_it(host, port, timeout=60, interval=5):
-        endtime_ = time.time() + timeout
-        socket_ = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        retrycount = 1
-        while True:
-            try:
-                socket_.connect((host, int(port)))
-                socket_.close()
-                break
-            except Exception as e:
-                if time.time() >= endtime_:
-                    socket_.close()
-                    raise ServiceNotAvailableFailure(
-                        f"{host} is not listening on port {port}"
-                    ) from e
-                else:
-                    logger.error(
-                        f"connecting to {host} on port {port} failed times={retrycount}, exception={e.args}"
-                    )
-                    retrycount = retrycount + 1
-                    time.sleep(interval)
-                    continue
-
 
 class IdentityHttpConnector:
+    port: int = 8290
+
     @staticmethod
-    def fetch_aad_token(tenant_id, client_id, identity_port, scope):
-        HttpConnector.wait_for_it("localhost", identity_port)
-        url = f"http://localhost:{identity_port}/metadata/identity/oauth2/token"
-        query_params = {
-            "scope": scope,
-            "tenantId": tenant_id,
-            "clientId": client_id,
-            "apiVersion": "2018-02-01",
-        }
-        headers = {"Content-Type": "application/json"}
-        resp = HttpConnector.httpget(url, query_params, headers)
-        if resp.get("token") is None:
-            raise RuntimeError("arc refresh_token not found in response")
-        return resp.get("token")
+    def set_port(port):
+        IdentityHttpConnector.port = port
+
+    @staticmethod
+    def fetch_aad_token(tenant_id, client_id, scope):
+        logger = logging.getLogger("httpconnectors")
+        tracer = trace.get_tracer("httpconnectors")
+        with tracer.start_as_current_span(f"fetch_aad_token") as span:
+            try:
+                url = f"http://localhost:{IdentityHttpConnector.port}/metadata/identity/oauth2/token"
+                span.set_attribute("url", url)
+                query_params = {
+                    "scope": scope,
+                    "tenantId": tenant_id,
+                    "clientId": client_id,
+                    "apiVersion": "2018-02-01",
+                }
+                headers = {"Content-Type": "application/json"}
+                resp = HttpConnector.httpget(url, query_params, headers)
+                token = resp.get("token")
+                if token is None:
+                    raise RuntimeError("identity token not found in response")
+                return token
+            except requests.HTTPError as e:
+                logger.exception(
+                    "Fetching Identity token failed with exception", exc_info=True
+                )
+                span.set_status(
+                    status=trace.StatusCode.ERROR,
+                    description=f"Fetching Identity token failed",
+                )
+                span.record_exception(e)
 
 
 class ACROAuthHttpConnector:
     @staticmethod
     def fetch_acr_refresh_token(private_acr_fqdn, tenant_id, aad_token):
-        url = f"https://{private_acr_fqdn}/oauth2/exchange"
-        post_params = f"grant_type=access_token&service={private_acr_fqdn}&tenant={tenant_id}&access_token={aad_token}"
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        resp = HttpConnector.httppost(url=url, post_params=post_params, headers=headers)
-        if resp.get("refresh_token") is None:
-            raise RuntimeError("arc refresh_token not found in response")
-        return resp.get("refresh_token")
-
-
-class SkrHttpConnector:
-    @staticmethod
-    def get_released_jwt_key(akv_endpoint, maa_endpoint, kid, skr_port, access_token):
-        HttpConnector.wait_for_it("localhost", skr_port)
-        url = f"http://localhost:{skr_port}/key/release"
-        post_params = {
-            "maa_endpoint": maa_endpoint,
-            "akv_endpoint": akv_endpoint,
-            "kid": kid,
-            "access_token": access_token,
-        }
-        headers = {"Content-Type": "application/json"}
-        resp = HttpConnector.httppost(url=url, json_data=post_params, headers=headers)
-        if resp.get("key") is None:
-            raise RuntimeError(f"key absent in the acr response")
-        return resp.get("key")
+        logger = logging.getLogger("httpconnectors")
+        tracer = trace.get_tracer("httpconnectors")
+        with tracer.start_as_current_span(f"fetch_acr_refresh_token") as span:
+            try:
+                url = f"https://{private_acr_fqdn}/oauth2/exchange"
+                span.set_attribute("url", url)
+                post_params = f"grant_type=access_token&service={private_acr_fqdn}&tenant={tenant_id}&access_token={aad_token}"
+                headers = {"Content-Type": "application/x-www-form-urlencoded"}
+                resp = HttpConnector.httppost(
+                    url=url, post_params=post_params, headers=headers
+                )
+                if resp.get("refresh_token") is None:
+                    raise RuntimeError("ACR refresh_token not found in response")
+                return resp.get("refresh_token")
+            except requests.HTTPError as e:
+                logger.exception(
+                    "Fetching ACR token failed with exception", exc_info=True
+                )
+                span.set_status(
+                    status=trace.StatusCode.ERROR,
+                    description=f"Fetching ACR token failed",
+                )
+                span.record_exception(e)
 
 
 class GovernanceHttpConnector:
+    port: int = 8300
+
     @staticmethod
-    def put_event(message, governance_port):
-        HttpConnector.wait_for_it("localhost", governance_port)
-        url = f"http://localhost:{governance_port}/events"
-        data = {"source": "code-launcher", "message": message}
-        headers = {"Content-Type": "application/json"}
-        HttpConnector.httpput(url, json_data=data, headers=headers)
+    def set_port(port):
+        GovernanceHttpConnector.port = port
+
+    @staticmethod
+    async def put_event(message):
+        logger = logging.getLogger("httpconnectors")
+        tracer = trace.get_tracer("httpconnectors")
+        if not utilities.events_enabled():
+            return
+        with tracer.start_as_current_span(f"governance_put_event") as span:
+            try:
+                url = f"http://localhost:{GovernanceHttpConnector.port}/events"
+                span.set_attribute("url", url)
+                data = {"source": "code-launcher", "message": message}
+                headers = {"Content-Type": "application/json"}
+                HttpConnector.httpput(url, json_data=data, headers=headers)
+            except requests.HTTPError as e:
+                logger.exception(
+                    "Governance put event failed with exception", exc_info=True
+                )
+                span.set_status(
+                    status=trace.StatusCode.ERROR,
+                    description=f"Governance put event failed",
+                )
+                span.record_exception(e)
+
+    @staticmethod
+    async def check_consent(scope: str):
+        scope = scope.lower()
+        logger = logging.getLogger("httpconnectors")
+        tracer = trace.get_tracer("httpconnectors")
+        with tracer.start_as_current_span(f"governance_check_{scope}_consent") as span:
+            try:
+                url = f"http://localhost:{GovernanceHttpConnector.port}/consentcheck/{scope}"
+                span.set_attribute("url", url)
+                headers = {"Content-Type": "application/json"}
+                resp = HttpConnector.httppost(url, headers=headers)
+                status = resp["status"]
+                if status != "enabled":
+                    from ..exceptions.custom_exceptions import ConsentCheckFailure
+
+                    raise ConsentCheckFailure(
+                        f"Consent status for {scope} is not enabled. Status is: '{status}'."
+                    )
+            except Exception as e:
+                logger.exception(
+                    f"Governance check for {scope} consent failed with exception",
+                    exc_info=True,
+                )
+                span.set_status(
+                    status=trace.StatusCode.ERROR,
+                    description=f"Governance check for {scope} consent failed",
+                )
+                span.record_exception(e)
+                raise

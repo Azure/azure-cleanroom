@@ -1,34 +1,18 @@
-FROM quay.io/podman/stable:v5.2.3 as test
-
-RUN dnf install -y python3-pip
-WORKDIR /root
-
-RUN mkdir -p /root/code_launcher/*
-COPY src/code-launcher/src/requirements.txt /root/code-launcher/src/requirements.txt
-RUN pip install -r /root/code-launcher/src/requirements.txt
-
-COPY src/code-launcher/ /root/code-launcher/
-WORKDIR /root/code-launcher
-RUN python3 -m unittest discover test/
-
-FROM quay.io/podman/stable:v5.2.3 as build
+FROM quay.io/podman/stable:v5.4.0 AS build
 
 # Install prerequisities.
 RUN dnf install -y python3-pip
-WORKDIR /root 
 
 # Enable this so that container can get launched in ACI. Without this podman run fails with:
 # "Error: OCI runtime error: crun: pivot_root: Invalid argument"
 RUN echo "no_pivot_root = true" >> /etc/containers/containers.conf
 
-RUN mkdir -p /root/code-launcher/src
-COPY src/code-launcher/src/requirements.txt /root/code-launcher/src/requirements.txt
-RUN pip install --no-cache-dir --upgrade -r /root/code-launcher/src/requirements.txt
+WORKDIR /app
+COPY src/code-launcher/requirements.txt .
+RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
-COPY src/code-launcher/ /root/code-launcher/
-ENV PYTHONPATH "${PYTHONPATH}:/root/code-launcher"
+COPY src/code-launcher/ ./code-launcher
+COPY src/cleanroomspec/ ./cleanroomspec
+COPY src/code-launcher/__init__.py .
 
-WORKDIR /root/code-launcher/src/
-RUN chmod +x code_launcher.py
-
-ENTRYPOINT [ "./code_launcher.py"]
+ENV PYTHONPATH="${PYTHONPATH}:/app"

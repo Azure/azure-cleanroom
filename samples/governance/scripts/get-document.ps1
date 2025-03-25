@@ -18,7 +18,6 @@ function Get-Document {
 
     if ($all) {
         $response = (curl -sS -X GET localhost:$port/documents)
-        CheckLastExitCode
         return $response
     }
 
@@ -27,6 +26,5 @@ function Get-Document {
     }
 
     $response = (curl -sS -X GET localhost:$port/documents/$id)
-    CheckLastExitCode
     return $response
 }

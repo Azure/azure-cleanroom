@@ -17,6 +17,7 @@ public interface ICcfNodeProvider
         string? nodeLogLevel,
         SecurityPolicyConfiguration policyOption,
         NodeData nodeData,
+        List<string> san,
         JsonObject? providerConfig);
 
     public Task<NodeEndpoint> CreateJoinNode(
@@ -28,6 +29,7 @@ public interface ICcfNodeProvider
         string? nodeLogLevel,
         SecurityPolicyConfiguration policyOption,
         NodeData nodeData,
+        List<string> san,
         JsonObject? providerConfig);
 
     public Task<NodeEndpoint> CreateRecoverNode(
@@ -38,6 +40,7 @@ public interface ICcfNodeProvider
         string? nodeLogLevel,
         SecurityPolicyConfiguration policyOption,
         NodeData nodeData,
+        List<string> san,
         JsonObject? providerConfig);
 
     Task<List<string>> GetCandidateRecoveryNodes(string networkName, JsonObject? providerConfig);

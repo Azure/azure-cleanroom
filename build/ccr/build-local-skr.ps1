@@ -8,6 +8,8 @@ param(
     [parameter(Mandatory = $false)]
     [switch]$push
 )
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
 
 $root = git rev-parse --show-toplevel
 $buildRoot = "$root/build"
@@ -21,8 +23,6 @@ else {
 }
 
 docker image build -t $imageName -f $buildRoot/docker/Dockerfile.local-skr "$buildRoot/.."
-CheckLastExitCode
 if ($push) {
     docker push $imageName
-    CheckLastExitCode
 }

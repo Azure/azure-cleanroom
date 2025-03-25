@@ -1,42 +1,73 @@
-from ..models.datastore import *
-from ..models.model import *
+from cleanroom_common.azure_cleanroom_core.exceptions.exception import *
+from ..utilities._azcli_helpers import logger
+from azure.cli.core.util import CLIError
+from cleanroom_common.azure_cleanroom_core.models.datastore import DatastoreEntry
+from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
+    Encryptor,
+)
 
 
-class Encryptor:
-    import os
+def get_datastore_internal(datastore_name, datastore_config_file) -> DatastoreEntry:
+    from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
+        get_datastore,
+    )
 
-    aes_encryptor_so = f"{os.path.dirname(__file__)}{os.path.sep}..{os.path.sep}binaries{os.path.sep}aes_encryptor.so"
-
-    from typing import Final
-
-    # encryptor tooling constants
-    NonceSize: Final[int] = 12
-    AuthTagSize: Final[int] = 16
-    PadLengthSize: Final[int] = 8
-    MetaSize: Final[int] = NonceSize + AuthTagSize
-
-    from enum import Enum
-
-    class Operation(Enum):
-        Encrypt = "Encrypt"
-        Decrypt = "Decrypt"
-
-
-def get_datastore(datastore_name, datastore_config_file) -> DatastoreEntry:
-    from azure.cli.core.util import CLIError
-    from ._configuration_helpers import read_datastore_config
-
-    datastore_config = read_datastore_config(datastore_config_file)
-    for index, x in enumerate(datastore_config.datastores):
-        if x.name == datastore_name:
-            datastore = datastore_config.datastores[index]
-            break
-    else:
-        raise CLIError(
-            f"Datastore {datastore_name} not found. Run az cleanroom datastore add first."
-        )
+    try:
+        datastore = get_datastore(datastore_name, datastore_config_file, logger)
+    except CleanroomSpecificationError as e:
+        if e.code == ErrorCode.DatastoreNotFound:
+            raise CLIError(
+                f"Datastore {datastore_name} not found. Run az cleanroom datastore add first."
+            )
 
     return datastore
+
+
+def config_add_datastore_internal(
+    cleanroom_config_file,
+    datastore_name,
+    datastore_config_file,
+    identity,
+    secretstore_config_file,
+    dek_secret_store,
+    kek_secret_store,
+    kek_name,
+    access_mode,
+    logger,
+    access_name="",
+):
+    from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
+        config_add_datastore,
+    )
+
+    try:
+        config_add_datastore(
+            cleanroom_config_file,
+            datastore_name,
+            datastore_config_file,
+            identity,
+            secretstore_config_file,
+            dek_secret_store,
+            kek_secret_store,
+            kek_name,
+            access_mode,
+            logger,
+            access_name,
+        )
+    except CleanroomSpecificationError as e:
+        match e.code:
+            case ErrorCode.IdentityConfigurationNotFound:
+                raise CLIError("Run az cleanroom config add-identity first.")
+            case ErrorCode.UnsupportedDekSecretStore:
+                raise CLIError(
+                    "Unsupported secret store for DEK. Please use Standard or Premium Key Vault"
+                )
+            case ErrorCode.UnsupportedKekSecretStore:
+                raise CLIError(
+                    "Unsupported secret store for KEK. Please use MHSM or Premium Key Vault"
+                )
+            case _:
+                raise CLIError(f"Error adding datastore: {e}")
 
 
 def azcopy(
@@ -115,188 +146,45 @@ def azcopy(
         raise CLIError("Failed to copy data. See error details above.")
 
 
-def config_add_datastore(
-    cleanroom_config_file,
-    datastore_name,
-    datastore_config_file,
-    identity,
-    secretstore_config_file,
-    dek_secret_store,
-    kek_secret_store,
-    kek_name,
-    access_mode,
-    access_name="",
-):
+def config_get_datastore_name_internal(cleanroom_config, access_name, access_mode):
+    from azure.cli.core.util import CLIError
+    from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
+        config_get_datastore_name,
+    )
+
+    try:
+        return config_get_datastore_name(
+            cleanroom_config, access_name, access_mode, logger
+        )
+    except CleanroomSpecificationError as e:
+        if e.code == ErrorCode.DatastoreNotFound:
+            raise CLIError(f"{access_name} not found in cleanroom configuration.")
+
+
+def encrypt_file_internal(plaintextPath, key, blockSize, ciphertextPath):
     from azure.cli.core.util import CLIError
     from ._azcli_helpers import logger
-    from ._configuration_helpers import (
-        read_cleanroom_spec,
-        write_cleanroom_spec,
-    )
-    from ._secretstore_helpers import get_secretstore_entry
-
-    access_name = access_name or datastore_name
-    cleanroom_spec = read_cleanroom_spec(cleanroom_config_file)
-
-    access_identity = [x for x in cleanroom_spec.identities if x.name == identity]
-    if len(access_identity) == 0:
-        raise CLIError("Run az cleanroom config add-identity first.")
-    import uuid
-
-    datastore_entry = get_datastore(datastore_name, datastore_config_file)
-
-    kek_name = kek_name or (
-        str(uuid.uuid3(uuid.NAMESPACE_X500, cleanroom_config_file))[:8] + "-kek"
-    )
-    wrapped_dek_name = f"wrapped-{datastore_name}-dek-{kek_name}"
-    if datastore_entry.storeType == DatastoreEntry.StoreType.Azure_BlobStorage:
-        proxy_type = (
-            ProxyType.SecureVolume__ReadOnly__Azure__BlobStorage
-            if access_mode == DatastoreEntry.AccessMode.Source
-            else ProxyType.SecureVolume__ReadWrite__Azure__BlobStorage
-        )
-        provider_protocol = ProtocolType.Azure_BlobStorage
-    elif datastore_entry.storeType == DatastoreEntry.StoreType.Azure_OneLake:
-        proxy_type = (
-            ProxyType.SecureVolume__ReadOnly__Azure__OneLake
-            if access_mode == DatastoreEntry.AccessMode.Source
-            else ProxyType.SecureVolume__ReadWrite__Azure__OneLake
-        )
-        provider_protocol = ProtocolType.Azure_OneLake
-
-    dek_secret_store_entry = get_secretstore_entry(
-        dek_secret_store, secretstore_config_file
-    )
-    kek_secret_store_entry = get_secretstore_entry(
-        kek_secret_store, secretstore_config_file
+    from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
+        encrypt_file,
     )
 
-    # TODO (HPrabh): Remove this check when key release is supported directly on the DEK.
-    if not dek_secret_store_entry.is_secret_supported():
-        raise CLIError(
-            "Unsupported secret store for DEK. Please use Standard or Premium Key Vault"
-        )
-
-    if not kek_secret_store_entry.is_key_release_supported():
-        raise CLIError(
-            "Unsupported secret store for KEK. Please use MHSM or Premium Key Vault"
-        )
-
-    encryption_mode = str(datastore_entry.encryptionMode)
-
-    store = Resource(
-        name=datastore_entry.storeName,
-        type=ResourceType(str(datastore_entry.storeType)),
-        id=datastore_name,
-        provider=ServiceEndpoint(
-            protocol=provider_protocol, url=datastore_entry.storeProviderUrl
-        ),
-    )
-
-    privacyProxySettings = PrivacyProxySettings(
-        proxyType=proxy_type,
-        proxyMode=ProxyMode.Secure,
-        configuration=str({"KeyType": "KEK", "EncryptionMode": encryption_mode}),
-        encryptionSecrets=EncryptionSecrets(
-            # TODO (HPrabh): Add support for DEK to be key released without having a wrapping KEK.
-            dek=EncryptionSecret(
-                name=wrapped_dek_name,
-                secret=CleanroomSecret(
-                    secretType=SecretType.Key,
-                    backingResource=Resource(
-                        id=dek_secret_store,
-                        name=wrapped_dek_name,
-                        type=ResourceType.AzureKeyVault,
-                        provider=ServiceEndpoint(
-                            protocol=ProtocolType.AzureKeyVault_Secret,
-                            url=dek_secret_store_entry.storeProviderUrl,
-                        ),
-                    ),
-                ),
-            ),
-            kek=EncryptionSecret(
-                name=kek_name,
-                secret=CleanroomSecret(
-                    secretType=SecretType.Key,
-                    backingResource=Resource(
-                        id=kek_secret_store,
-                        name=kek_name,
-                        type=ResourceType.AzureKeyVault,
-                        provider=ServiceEndpoint(
-                            protocol=ProtocolType.AzureKeyVault_SecureKey,
-                            url=kek_secret_store_entry.storeProviderUrl,
-                            configuration=kek_secret_store_entry.configuration,
-                        ),
-                    ),
-                ),
-            ),
-        ),
-        encryptionSecretAccessIdentity=access_identity[0],
-    )
-
-    if access_mode == DatastoreEntry.AccessMode.Source:
-        node = "datasources"
-        candidate_list = cleanroom_spec.datasources
-        access_point_type = AccessPointType.Volume_ReadOnly
-    else:
-        assert access_mode == DatastoreEntry.AccessMode.Sink
-        node = "datasinks"
-        candidate_list = cleanroom_spec.datasinks
-        access_point_type = AccessPointType.Volume_ReadWrite
-
-    access_point = AccessPoint(
-        name=access_name,
-        type=access_point_type,
-        path="",
-        store=store,
-        identity=access_identity[0],
-        protection=privacyProxySettings,
-    )
-
-    index = next(
-        (i for i, x in enumerate(candidate_list) if x.name == access_point.name),
-        None,
-    )
-    if index == None:
-        logger.info(f"Adding entry for {node} {access_point.name} in configuration.")
-        candidate_list.append(access_point)
-    else:
-        logger.info(f"Patching {node} {access_point.name} in configuration.")
-        candidate_list[index] = access_point
-
-    write_cleanroom_spec(cleanroom_config_file, cleanroom_spec)
-    logger.warning(f"'{datastore_name}' added to '{node}' in cleanroom configuration.")
+    try:
+        encrypt_file(plaintextPath, key, blockSize, ciphertextPath, logger)
+    except Exception as e:
+        raise CLIError(f"Error during encryption: {e}")
 
 
-def config_get_datastore_name(cleanroom_config, access_name, access_mode):
+def decrypt_file_internal(ciphertextPath, key, blockSize, plaintextPath):
     from azure.cli.core.util import CLIError
-    from ..datastore_cmd import DatastoreEntry
-    from ._configuration_helpers import read_cleanroom_spec
-
-    spec = read_cleanroom_spec(cleanroom_config)
-    eligible_candidates = (
-        spec.datasources
-        if access_mode == DatastoreEntry.AccessMode.Source
-        else spec.datasinks
+    from ._azcli_helpers import logger
+    from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
+        decrypt_file,
     )
-    candidates = [x for x in eligible_candidates if x.name == access_name]
-    if len(candidates) == 0:
-        raise CLIError(f"{access_name} not found in cleanroom configuration.")
 
-    datastore_name = candidates[0].store.id
-    return datastore_name
-
-
-def generate_safe_datastore_name(prefix, unique_name, friendly_name):
-    import uuid
-
-    safe_name = (
-        f"{prefix}-"
-        + str(uuid.uuid3(uuid.NAMESPACE_X500, unique_name))[:8]
-        + f"-{friendly_name}"
-    )[:63]
-
-    return safe_name
+    try:
+        decrypt_file(ciphertextPath, key, blockSize, plaintextPath, logger)
+    except Exception as e:
+        raise CLIError(f"Error during decryption: {e}")
 
 
 def cryptocopy(
@@ -306,13 +194,22 @@ def cryptocopy(
     source_path,
     destination_path,
     blockSize,
+    logger,
 ):
     import os, glob, base64
-    from ._azcli_helpers import logger
-    from ._datastore_helpers import get_datastore
-    from ._secretstore_helpers import get_secretstore, get_secretstore_entry
+    from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
+        get_datastore,
+    )
+    from ._secretstore_helpers import get_secretstore
+    from cleanroom_common.azure_cleanroom_core.utilities.secretstore_helpers import (
+        get_secretstore_entry,
+    )
+    from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
+        encrypt_file,
+        decrypt_file,
+    )
 
-    datastore = get_datastore(datastore_name, datastore_config_file)
+    datastore = get_datastore(datastore_name, datastore_config_file, logger)
     if operation == Encryptor.Operation.Decrypt:
         source_path = os.path.join(source_path, datastore.name, datastore.storeName)
         destination_path = os.path.join(
@@ -322,7 +219,9 @@ def cryptocopy(
     os.makedirs(destination_path, mode=0o755, exist_ok=True)
     # Get the key path.
     secret_store = get_secretstore(
-        get_secretstore_entry(datastore.secretstore_name, datastore.secretstore_config)
+        get_secretstore_entry(
+            datastore.secretstore_name, datastore.secretstore_config, logger
+        )
     )
     encryption_key = secret_store.get_secret(datastore_name)
     blockSize = int(blockSize)
@@ -338,120 +237,32 @@ def cryptocopy(
 
             logger.info(f"[{operation}] '{source_file}' -> '{destination_file}'")
             if operation == Encryptor.Operation.Encrypt:
-                encrypt_file(source_file, encryption_key, blockSize, destination_file)
+                encrypt_file(
+                    source_file, encryption_key, blockSize, destination_file, logger
+                )
             else:
-                decrypt_file(source_file, encryption_key, blockSize, destination_file)
-
-
-def encrypt_file(plaintextPath, key, blockSize, ciphertextPath):
-    import ctypes, base64, json
-    from azure.cli.core.util import CLIError
-    from ._azcli_helpers import logger
-
-    try:
-        with open(ciphertextPath, "wb") as ciphertextFile:
-            paddingLength = 0
-            with open(plaintextPath, "rb") as plaintextFile:
-                while True:
-                    buffer = plaintextFile.read(blockSize)
-                    dataLen = len(buffer)
-                    if not buffer:
-                        break
-
-                    # Padding zeros to make it multiple of blocksize.
-                    if dataLen < blockSize:
-                        paddingLength = blockSize - len(buffer)
-                        padding = bytes(paddingLength)
-                        buffer = buffer + padding
-
-                    # Invoking go encryption code.
-                    aes_encryption_lib = ctypes.CDLL(Encryptor.aes_encryptor_so)
-                    encrypt = aes_encryption_lib.GoEncryptChunk
-                    encrypt.argtypes = [ctypes.c_char_p]
-                    encrypt.restype = ctypes.c_void_p
-
-                    document = {
-                        "Data": base64.b64encode(buffer).decode(),
-                        "Key": base64.b64encode(key).decode(),
-                    }
-                    response = encrypt(json.dumps(document).encode("utf-8"))
-                    response_bytes = ctypes.string_at(response)
-                    response_string = response_bytes.decode("utf-8")
-                    jsonResponse = json.loads(response_string)
-                    encryptedChunk = base64.b64decode(jsonResponse.get("CipherText"))
-                    nonce = base64.b64decode(jsonResponse.get("Nonce"))
-
-                    encryptedChunk = nonce + encryptedChunk
-                    n = ciphertextFile.write(encryptedChunk)
-                    logger.info(
-                        f"Encrypted chunk written along with nonce and auth tag, total bytes: {n}"
-                    )
-                paddingLengthByte = paddingLength.to_bytes(8, byteorder="big")
-                n = ciphertextFile.write(paddingLengthByte)
-                logger.info(f"Padding length written, total bytes: {n}")
-    except Exception as e:
-        raise CLIError(f"Error during encryption: {e}")
-
-
-def decrypt_file(ciphertextPath, key, blockSize, plaintextPath):
-    import os, ctypes, base64, json
-    from azure.cli.core.util import CLIError
-    from ._azcli_helpers import logger
-
-    try:
-        with open(ciphertextPath, "rb") as ciphertextFile:
-            with open(plaintextPath, "wb") as plaintextFile:
-                ciphertextFileSize = os.path.getsize(ciphertextPath)
-                totalBlocks = (ciphertextFileSize - Encryptor.PadLengthSize) // (
-                    blockSize + Encryptor.MetaSize
+                decrypt_file(
+                    source_file, encryption_key, blockSize, destination_file, logger
                 )
 
-                for i in range(totalBlocks):
-                    buffer = ciphertextFile.read(blockSize + Encryptor.MetaSize)
-                    nonce = buffer[: Encryptor.NonceSize]
-                    buffer = buffer[Encryptor.NonceSize :]
-                    if not buffer:
-                        break
-                    # Invoking go decryption code.
-                    aes_encryption_lib = ctypes.CDLL(Encryptor.aes_encryptor_so)
-                    decrypt = aes_encryption_lib.GoDecryptChunk
-                    decrypt.argtypes = [ctypes.c_char_p]
-                    decrypt.restype = ctypes.c_void_p
 
-                    document = {
-                        "CipherText": base64.b64encode(buffer).decode(),
-                        "Nonce": base64.b64encode(nonce).decode(),
-                        "Key": base64.b64encode(key).decode(),
-                    }
-
-                    response = decrypt(json.dumps(document).encode("utf-8"))
-                    response_bytes = ctypes.string_at(response)
-                    response_string = response_bytes.decode("utf-8")
-                    jsonResponse = json.loads(response_string)
-                    decryptedChunk = base64.b64decode(jsonResponse.get("PlainText"))
-                    if i == totalBlocks - 1:
-                        paddingLength = ciphertextFile.read(Encryptor.PadLengthSize)
-                        paddingLength = int.from_bytes(paddingLength, byteorder="big")
-                        decryptedChunk = decryptedChunk[
-                            : len(decryptedChunk) - paddingLength
-                        ]
-
-                    n = plaintextFile.write(decryptedChunk)
-
-    except Exception as e:
-        raise CLIError(f"Error during decryption: {e}")
-
-
-def generate_wrapped_dek(datastore_name, datastore_config_file, public_key):
+def generate_wrapped_dek(datastore_name, datastore_config_file, public_key, logger):
     import base64
     from cryptography.hazmat.primitives.asymmetric import padding
     from cryptography.hazmat.primitives import hashes
-    from ._datastore_helpers import get_datastore
-    from ._secretstore_helpers import get_secretstore, get_secretstore_entry
+    from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
+        get_datastore,
+    )
+    from ._secretstore_helpers import get_secretstore
+    from cleanroom_common.azure_cleanroom_core.utilities.secretstore_helpers import (
+        get_secretstore_entry,
+    )
 
-    datastore = get_datastore(datastore_name, datastore_config_file)
+    datastore = get_datastore(datastore_name, datastore_config_file, logger)
     secret_store = get_secretstore(
-        get_secretstore_entry(datastore.secretstore_name, datastore.secretstore_config)
+        get_secretstore_entry(
+            datastore.secretstore_name, datastore.secretstore_config, logger
+        )
     )
     dek_bytes = secret_store.get_secret(datastore_name)
     return base64.b64encode(

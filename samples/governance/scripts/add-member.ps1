@@ -14,11 +14,11 @@ function Add-Member {
     $tenantId = "",
 
     [string[]]
-    [ValidateSet("cgs_operator", "contract_operator")]
+    [ValidateSet("cgsOperator", "contractOperator")]
     $addRole,
 
     [string[]]
-    [ValidateSet("cgs_operator", "contract_operator")]
+    [ValidateSet("cgsOperator", "contractOperator")]
     $removeRole,
 
     [string]
@@ -41,13 +41,13 @@ function Add-Member {
   $certContent = (Get-Content $memberCertPemFilePath -Raw).ReplaceLineEndings("\n")
   $memberdata = @{}
   if ($tenantId -ne "") {
-    $memberData.Add("tenant_id", $tenantId)
+    $memberData.Add("tenantId", $tenantId)
   }
   if ($identifier -ne "") {
     $memberData.Add("identifier", $identifier)
   }
   if ($cgsRoles.Count -gt 0) {
-    $memberData.Add("cgs_roles", $cgsRoles)
+    $memberData.Add("cgsRoles", $cgsRoles)
   }
 
   $memberData = $memberData | ConvertTo-Json -Compress
@@ -69,5 +69,4 @@ function Add-Member {
   Write-Output "Submitting set_member proposal"
   $proposalId = (curl -sS -X POST -H "content-type: application/json" localhost:$port/proposals/create -d $proposal | jq -r '.proposalId')
   curl -sS -X POST localhost:$port/proposals/$proposalId/ballots/vote_accept | jq
-  CheckLastExitCode
 }

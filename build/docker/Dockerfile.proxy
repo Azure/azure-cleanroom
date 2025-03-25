@@ -1,16 +1,15 @@
-# Note (gsinha): Using below image causes "segmentation fault" in the container when running in CACI as ubuntu 22.04 is not yet supported by CACI.
-# https://learn.microsoft.com/en-us/azure/container-instances/container-instances-troubleshooting#processcontainer-terminated-with-exit-code-139
-#FROM mcr.microsoft.com/oss/envoyproxy/envoy:v1.30.4
+FROM mcr.microsoft.com/oss/envoyproxy/envoy:v1.33.0
 
-FROM mcr.microsoft.com/oss/envoyproxy/envoy:v1.21.5
-
-RUN apt-get update && apt-get install -y gettext jq
+RUN apt-get update && apt-get install -y gettext jq python3 python3-distutils python3-pip
 
 WORKDIR "/home/envoy"
 
 COPY src/proxy/ccr-proxy-config.yaml ccr-proxy-config.yaml
 COPY src/proxy/cleanroom.cnf cleanroom.cnf
 COPY src/proxy/bootstrap.sh bootstrap.sh
+COPY src/proxy/templates templates
+COPY src/proxy/render-config render-config
+RUN pip install -r render-config/requirements.txt
 RUN chmod +x bootstrap.sh
 
 COPY src/proxy/https-http/ccr-https-http-proxy-config.yaml https-http/ccr-https-http-proxy-config.yaml

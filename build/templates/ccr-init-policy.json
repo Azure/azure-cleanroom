@@ -1,14 +1,37 @@
 {
   "name": "ccr-init",
   "containerImage": "$containerRegistryUrl/ccr-init@$digest",
-  "environmentVariables": [],
+  "environmentVariables": [
+    {
+      "name": "TELEMETRY_MOUNT_PATH",
+      "value": "$telemetryMountPath",
+      "strategy": "string"
+    }
+  ],
   "command": [
-      "/bin/bash",
-      "setup-iptables.sh",
-      "--mode",
-      "$mode"
+    "python",
+    "setup-iptables.py",
+    "--clear-mount-paths",
+    "$volumeStatusMountPath",
+    "--create-directories",
+    "$telemetryMountPath/infrastructure",
+    "$telemetryMountPath/application"
   ],
   "securityContext": {
-      "privileged": "true"
-  }
+    "privileged": "true"
+  },
+  "mounts": [
+    {
+      "name": "volumestatusmounts",
+      "mountPath": "$volumeStatusMountPath",
+      "mountType": "emptyDir",
+      "readOnly": false
+    },
+    {
+      "name": "telemetrymounts",
+      "mountPath": "$telemetryMountPath",
+      "mountType": "emptyDir",
+      "readOnly": false
+    }
+  ]
 }

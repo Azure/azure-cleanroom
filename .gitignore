@@ -410,6 +410,7 @@ dist
 .azcli-env
 src/tools/azure-cli-extension/cleanroom/cleanroom.egg-info
 src/tools/azure-cli-extension/cleanroom/build/
+src/tools/azure-cli-extension/cleanroom/azext_cleanroom/version.py
 src/tools/aes_encryptor/aes_encryptor.h
 src/tools/aes_encryptor/aes_encryptor.so
 

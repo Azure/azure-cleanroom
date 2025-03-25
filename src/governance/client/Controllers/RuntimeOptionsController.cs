@@ -42,7 +42,6 @@ public class RuntimeOptionsController : ClientControllerBase
             content: null);
         await response.ValidateStatusCodeAsync(this.Logger);
         this.Response.CopyHeaders(response.Headers);
-        response.LogRequest(this.Logger);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
         return jsonResponse!;
     }
@@ -69,10 +68,10 @@ public class RuntimeOptionsController : ClientControllerBase
         };
 
         var ccfClient = await this.CcfClientManager.GetGovClient();
-        var wsConfig = this.CcfClientManager.GetWsConfig();
+        var coseSignKey = this.CcfClientManager.GetCoseSignKey();
         var payload =
             await GovernanceCose.CreateGovCoseSign1Message(
-                wsConfig,
+                coseSignKey,
                 GovMessageType.Proposal,
                 proposalContent.ToJsonString());
         using HttpRequestMessage request = Cose.CreateHttpRequestMessage(
@@ -82,7 +81,6 @@ public class RuntimeOptionsController : ClientControllerBase
         using HttpResponseMessage response = await ccfClient.SendAsync(request);
         this.Response.CopyHeaders(response.Headers);
         await response.ValidateStatusCodeAsync(this.Logger);
-        response.LogRequest(this.Logger);
         await response.WaitGovTransactionCommittedAsync(this.Logger, this.CcfClientManager);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
         return this.Ok(jsonResponse!);

@@ -14,17 +14,17 @@ processors:
 
 exporters:
   file/traces:
-    path: /mnt/telemetry/*.traces
+    path: /mnt/telemetry/infrastructure/*.traces
     group_by:
       enabled: true
       resource_attribute: service.name
   file/metrics:
-    path: /mnt/telemetry/*.metrics
+    path: /mnt/telemetry/infrastructure/*.metrics
     group_by:
       enabled: true
       resource_attribute: service.name
   file/logs:
-    path: /mnt/telemetry/*.log
+    path: /mnt/telemetry/infrastructure/*.log
     group_by:
       enabled: true
       resource_attribute: service.name

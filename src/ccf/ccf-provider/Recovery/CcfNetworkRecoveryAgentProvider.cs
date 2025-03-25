@@ -46,13 +46,12 @@ public class CcfNetworkRecoveryAgentProvider
             AgentConfig = agentConfig
         };
 
-        var wsConfig = await this.agentClientManager.GetWsConfig();
-        using var cert = X509Certificate2.CreateFromPem(wsConfig.SigningCert);
+        var coseSignKey = this.agentClientManager.GetCoseSignKey();
+        using var cert = X509Certificate2.CreateFromPem(coseSignKey.Certificate);
         var memberId = cert.GetCertHashString(HashAlgorithmName.SHA256).ToLower();
 
         var payload = await Cose.CreateRecoveryCoseSign1Message(
-            wsConfig.SigningCert,
-            wsConfig.SigningKey,
+            coseSignKey,
             RecoveryMessageType.GenerateMember,
             JsonSerializer.Serialize(input));
         using HttpRequestMessage request = Cose.CreateHttpRequestMessage(
@@ -81,13 +80,12 @@ public class CcfNetworkRecoveryAgentProvider
             AgentConfig = agentConfig
         };
 
-        var wsConfig = await this.agentClientManager.GetWsConfig();
-        using var cert = X509Certificate2.CreateFromPem(wsConfig.SigningCert);
+        var coseSignKey = this.agentClientManager.GetCoseSignKey();
+        using var cert = X509Certificate2.CreateFromPem(coseSignKey.Certificate);
         var memberId = cert.GetCertHashString(HashAlgorithmName.SHA256).ToLower();
 
         var payload = await Cose.CreateRecoveryCoseSign1Message(
-            wsConfig.SigningCert,
-            wsConfig.SigningKey,
+            coseSignKey,
             RecoveryMessageType.ActivateMember,
             JsonSerializer.Serialize(input));
         using HttpRequestMessage request = Cose.CreateHttpRequestMessage(
@@ -116,13 +114,12 @@ public class CcfNetworkRecoveryAgentProvider
             AgentConfig = agentConfig
         };
 
-        var wsConfig = await this.agentClientManager.GetWsConfig();
-        using var cert = X509Certificate2.CreateFromPem(wsConfig.SigningCert);
+        var coseSignKey = this.agentClientManager.GetCoseSignKey();
+        using var cert = X509Certificate2.CreateFromPem(coseSignKey.Certificate);
         var memberId = cert.GetCertHashString(HashAlgorithmName.SHA256).ToLower();
 
         var payload = await Cose.CreateRecoveryCoseSign1Message(
-            wsConfig.SigningCert,
-            wsConfig.SigningKey,
+            coseSignKey,
             RecoveryMessageType.RecoveryShare,
             JsonSerializer.Serialize(input));
         using HttpRequestMessage request = Cose.CreateHttpRequestMessage(
@@ -149,13 +146,12 @@ public class CcfNetworkRecoveryAgentProvider
             AgentConfig = agentConfig
         };
 
-        var wsConfig = await this.agentClientManager.GetWsConfig();
-        using var cert = X509Certificate2.CreateFromPem(wsConfig.SigningCert);
+        var coseSignKey = this.agentClientManager.GetCoseSignKey();
+        using var cert = X509Certificate2.CreateFromPem(coseSignKey.Certificate);
         var memberId = cert.GetCertHashString(HashAlgorithmName.SHA256).ToLower();
 
         var payload = await Cose.CreateRecoveryCoseSign1Message(
-            wsConfig.SigningCert,
-            wsConfig.SigningKey,
+            coseSignKey,
             RecoveryMessageType.SetNetworkJoinPolicy,
             JsonSerializer.Serialize(input));
         using HttpRequestMessage request = Cose.CreateHttpRequestMessage(

@@ -1,6 +1,6 @@
 {
   "enclave": {
-    "file": "/usr/lib/ccf/libjs_generic.virtual.so",
+    "file": "/usr/lib/ccf/libjs_cleanroom.virtual.so",
     "type": "Virtual",
     "platform": "Virtual"
   },

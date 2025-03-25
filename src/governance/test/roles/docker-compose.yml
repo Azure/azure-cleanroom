@@ -1,7 +1,7 @@
 name: governance-test-roles
 services:
   ccf:
-    image: ccf:$ccfImageTag
+    image: ccf/app/run-js/sandbox:$ccfImageTag
     container_name: roletest-ccf
     ports:
       - "8480:8080"

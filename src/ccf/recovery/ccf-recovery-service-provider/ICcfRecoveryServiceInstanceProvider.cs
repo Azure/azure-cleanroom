@@ -30,6 +30,10 @@ public interface ICcfRecoveryServiceInstanceProvider
         string serviceName,
         JsonObject? providerConfig);
 
+    Task<RecoveryServiceHealth> GetRecoveryServiceHealth(
+        string serviceName,
+        JsonObject? providerConfig);
+
     Task<JsonObject> GenerateSecurityPolicy(
         NetworkJoinPolicy joinPolicy,
         SecurityPolicyCreationOption policyOption);

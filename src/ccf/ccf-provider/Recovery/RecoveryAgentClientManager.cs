@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Controllers;
+using CoseUtils;
 using Microsoft.Extensions.Logging;
 
 namespace CcfProvider;
@@ -9,7 +10,7 @@ namespace CcfProvider;
 public class RecoveryAgentClientManager
 {
     private readonly ILogger logger;
-    private WorkspaceConfiguration wsConfig = default!;
+    private SigningConfiguration signingConfig = default!;
     private HttpClientManager httpClientManager;
 
     public RecoveryAgentClientManager(ILogger logger)
@@ -18,25 +19,19 @@ public class RecoveryAgentClientManager
         this.httpClientManager = new(logger);
     }
 
-    public void SetWsConfig(WorkspaceConfiguration wsConfig)
+    public void SetSigningConfig(SigningConfiguration wsConfig)
     {
-        this.wsConfig = wsConfig;
+        this.signingConfig = wsConfig;
     }
 
-    public async Task<WorkspaceConfiguration> GetWsConfig()
+    public CoseSignKey GetCoseSignKey()
     {
-        await this.InitializeWsConfig();
-        return this.wsConfig;
-    }
+        if (this.signingConfig == null)
+        {
+            throw new Exception("Invoke /configure first to setup signing cert and key details");
+        }
 
-    public WorkspaceConfiguration TryGetWsConfig()
-    {
-        return this.wsConfig;
-    }
-
-    public async Task CheckWsConfig()
-    {
-        await this.InitializeWsConfig();
+        return this.signingConfig.CoseSignKey;
     }
 
     public Task<HttpClient> GetClient(string agentEndpoint, string serviceCert)
@@ -47,16 +42,6 @@ public class RecoveryAgentClientManager
             "recovery-agent",
             retryPolicy: HttpRetries.Policies.GetDefaultRetryPolicy(this.logger));
         return Task.FromResult(client);
-    }
-
-    private async Task InitializeWsConfig()
-    {
-        if (this.wsConfig == null)
-        {
-            throw new Exception("Invoke /configure first to setup signing cert and key details");
-        }
-
-        await Task.CompletedTask;
     }
 
     private class AgentClient

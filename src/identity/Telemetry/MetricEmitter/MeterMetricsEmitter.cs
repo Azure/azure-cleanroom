@@ -41,7 +41,6 @@ internal class MeterMetricsEmitter : IMetricsEmitter
             return;
         }
 
-        // TODO (gsinha): Add annotations too?
         if (dimensions != null)
         {
             var dims = new List<KeyValuePair<string, object?>>(dimensions.Count);

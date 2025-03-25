@@ -8,6 +8,9 @@ param(
     [parameter(Mandatory = $false)]
     [switch]$push
 )
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
+
 . $PSScriptRoot/../helpers.ps1
 
 if ($repo) {
@@ -19,12 +22,9 @@ else {
 
 $root = git rev-parse --show-toplevel
 $external = Join-Path $root -ChildPath "/external"
-# To avoid pulling the latest blobfuse commit commenting the below line.
-# git submodule update --init --recursive $external/azure-storage-fuse
+git submodule update --init --recursive $external/azure-storage-fuse
 
 docker image build -t $imageName -f $PSScriptRoot/../docker/Dockerfile.blobfuse-launcher $root
-CheckLastExitCode
 if ($push) {
     docker push $imageName
-    CheckLastExitCode
 }

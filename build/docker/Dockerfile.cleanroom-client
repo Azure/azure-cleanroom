@@ -1,10 +1,14 @@
 # The cbl-mariner image is stuck at python 3.9. Pulling the image from the  docker mirror till
 # mariner bumps up the python version.
 # FROM mcr.microsoft.com/cbl-mariner/base/python:3 as openapi-image
-FROM mcr.microsoft.com/mirror/docker/library/python:3.11 as openapi-image
+FROM mcr.microsoft.com/mirror/docker/library/python:3.11 AS openapi-image
 WORKDIR /code
 COPY ./requirements.txt /code/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+
+COPY ./dist /dist
+# Pip install the whl so that fastapi can build on the functionality provided within.
+RUN pip install /dist/cleanroom-*-py2.py3-none-any.whl
 
 COPY ./app /code/app
 RUN python3 /code/app/extract-openapi.py main:app
@@ -26,7 +30,10 @@ RUN chmod 755 /usr/bin/azcopy
 COPY ./dist /dist
 
 # Installing with --system flag so that container if running as non-root user is able to use the extension.
-RUN az extension add -y --source /dist/cleanroom-1.0.0-py2.py3-none-any.whl --allow-preview true --system
+RUN az extension add -y --source /dist/cleanroom-*-py2.py3-none-any.whl --allow-preview true --system
+
+# Pip install the whl so that fastapi can build on the functionality provided within.
+RUN pip install /dist/cleanroom-*-py2.py3-none-any.whl
 
 # So that az login is able to write here if container is running as non-root user.
 RUN mkdir /.azure
@@ -37,4 +44,4 @@ RUN mkdir /.azcopy
 RUN chmod 777 /.azcopy
 
 COPY ./app /code/app
-CMD ["fastapi", "run", "/code/app/main.py", "--port", "80"]
+CMD ["uvicorn", "main:app", "--app-dir", "/code/app", "--log-config", "/code/app/log_conf.yaml", "--port", "80", "--host", "0.0.0.0"]

@@ -7,7 +7,7 @@ param
     [ValidateSet("acr", "mcr")]
     [string]$registry,
 
-    [string]$registryUrl = "",
+    [string]$repo = "",
 
     [string]$tag = "latest",
 
@@ -20,15 +20,15 @@ param
 )
 
 $registryArg
-if ($registryUrl -eq "" -and $registry -eq "acr") {
-    throw "-registryUrl must be specified for acr option."
+if ($repo -eq "" -and $registry -eq "acr") {
+    throw "-repo must be specified for acr option."
 }
 if ($registry -eq "mcr") {
     $usingRegistry = "mcr"
     $registryArg = "mcr"
 }
 if ($registry -eq "acr") {
-    $usingRegistry = $registryUrl
+    $usingRegistry = $repo
     $registryArg = "acr"
 }
 
@@ -41,7 +41,7 @@ Write-Host "Using $usingRegistry registry for cleanroom container images."
 
 $resourceGroupTags = ""
 if ($env:GITHUB_ACTIONS -eq "true") {
-    $ISV_RESOURCE_GROUP = "cl-ob-isv-$kvType-${env:JOB_ID}-${env:RUN_ID}"
+    $ISV_RESOURCE_GROUP = "cl-ob-isv-$kvType-${env:JOB_ID}-${env:RUN_ID}-${env:RUN_ATTEMPT}"
     $resourceGroupTags = "github_actions=multi-party-collab-$kvType-${env:JOB_ID}-${env:RUN_ID}"
 }
 else {
@@ -60,25 +60,27 @@ $ISV_RESOURCE_GROUP_LOCATION = "westeurope"
 Write-Host "Creating resource group $ISV_RESOURCE_GROUP in $ISV_RESOURCE_GROUP_LOCATION"
 az group create --location $ISV_RESOURCE_GROUP_LOCATION --name $ISV_RESOURCE_GROUP --tags $resourceGroupTags
 
+$outDir = "$PSScriptRoot/generated"
 $result = Deploy-Aci-Governance `
     -resourceGroup $ISV_RESOURCE_GROUP `
     -location $ISV_RESOURCE_GROUP_LOCATION `
     -ccfName $CCF_NAME `
     -NoBuild:$NoBuild `
     -registry $registry `
-    -registryUrl $registryUrl `
-    -registryTag $tag `
+    -repo $repo `
+    -tag $tag `
     -allowAll:$allowAll `
     -projectName "ob-isv-client" `
-    -initialMemberName "isv"
+    -initialMemberName "isv" `
+    -outDir $outDir
 az cleanroom governance client remove --name "ob-tdp-client"
 az cleanroom governance client remove --name "ob-tdc-client"
 
 $withSecurityPolicy = !$allowAll
 pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 `
     -registry $registryArg `
-    -registryUrl $registryUrl `
-    -registryTag $tag `
+    -repo $repo `
+    -tag $tag `
     -ccfEndpoint $result.ccfEndpoint `
     -kvType $kvType `
     -withSecurityPolicy:$withSecurityPolicy
@@ -97,7 +99,9 @@ $expectedFiles = @(
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/depa-training-code-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/depa-training*-code-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/depa-training*-code-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/depa-training*-code-launcher.metrics",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/output*-blobfuse.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/output*-blobfuse-launcher.log",
     "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/output*-blobfuse-launcher.traces",

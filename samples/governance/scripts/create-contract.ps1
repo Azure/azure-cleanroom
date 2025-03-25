@@ -32,5 +32,4 @@ function Create-Contract {
   $contract = $contract | ConvertTo-Json
 
   Invoke-WebRequest -Method PUT -Uri "http://localhost:$port/contracts/$id" -Headers $headers -Body $contract
-  CheckLastExitCode
 }

@@ -14,9 +14,9 @@ import (
 
 	"google.golang.org/grpc"
 
-	configuration "github.com/azure/azure-cleanroom/internal/configuration"
-	"github.com/azure/azure-cleanroom/internal/filter"
-	"github.com/azure/azure-cleanroom/internal/filter/opa"
+	configuration "github.com/azure/azure-cleanroom/src/internal/configuration"
+	"github.com/azure/azure-cleanroom/src/internal/filter"
+	"github.com/azure/azure-cleanroom/src/internal/filter/opa"
 	pb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 )
@@ -32,15 +32,24 @@ func main() {
 	var err error
 	flag.Parse()
 	log.SetFormatter(&log.TextFormatter{
-		DisableQuote: true,
+		DisableQuote:  true,
+		FullTimestamp: true,
 	})
+	log.SetReportCaller(true)
+	log.SetLevel(log.InfoLevel)
 
 	jsonFile, err := os.Open(*configFile)
 	if err != nil {
 		log.Panicf("failed to open config file: %v", err)
 	}
 
-	defer jsonFile.Close()
+	defer func() {
+		err = jsonFile.Close()
+		if err != nil {
+			log.Errorf("failed to close config file: %v", err)
+		}
+	}()
+
 	byteValue, err := io.ReadAll(jsonFile)
 	if err != nil {
 		log.Panicf("failed to read config file: %v", err)

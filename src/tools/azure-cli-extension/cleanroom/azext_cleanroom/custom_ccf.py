@@ -55,6 +55,10 @@ def ccf_provider_deploy(cmd, provider_client_name):
     if not os.path.exists(ccf_provider_workspace_dir):
         os.makedirs(ccf_provider_workspace_dir)
 
+    if "AZCLI_CCF_PROVIDER_CLIENT_IMAGE" in os.environ:
+        image = os.environ["AZCLI_CCF_PROVIDER_CLIENT_IMAGE"]
+        logger.warning(f"Using ccf-provider-client image from override url: {image}")
+
     set_docker_compose_env_params()
     docker.compose.up(remove_orphans=True, detach=True)
     (_, port) = docker.compose.port(service="client", private_port=8080)
@@ -62,11 +66,13 @@ def ccf_provider_deploy(cmd, provider_client_name):
     ccf_provider_endpoint = f"http://localhost:{port}"
     while True:
         try:
-            r = requests.get(f"{ccf_provider_endpoint}/swagger/index.html")
+            r = requests.get(f"{ccf_provider_endpoint}/ready")
             if r.status_code == 200:
                 break
             else:
-                logger.warning("Waiting for ccf-provider-client endpoint to be up...")
+                logger.warning(
+                    f"Waiting for ccf-provider-client endpoint to be up... (status code: {r.status_code})"
+                )
                 sleep(5)
         except:
             logger.warning("Waiting for ccf-provider-client endpoint to be up...")
@@ -75,21 +81,46 @@ def ccf_provider_deploy(cmd, provider_client_name):
     logger.warning("ccf-provider-client container is listening on %s.", port)
 
 
-def ccf_provider_configure(cmd, signing_cert, signing_key, provider_client_name):
-    if not os.path.exists(signing_cert):
-        raise CLIError(f"File {signing_cert} does not exist.")
+def ccf_provider_configure(
+    cmd, signing_cert_id, signing_cert, signing_key, provider_client_name
+):
+    if not signing_cert and not signing_key and not signing_cert_id:
+        raise CLIError(
+            "Either (signing-cert,signing-key) or signing-cert-id must be specified."
+        )
+    if signing_cert_id:
+        if signing_cert or signing_key:
+            raise CLIError(
+                "signing-cert/signing-key cannot be specified along with signing-cert-id."
+            )
+        if os.path.exists(signing_cert_id):
+            with open(signing_cert_id, "r") as f:
+                signing_cert_id = f.read()
+    else:
+        if not signing_cert or not signing_key:
+            raise CLIError("Both signing-cert and signing-key must be specified.")
 
-    if not os.path.exists(signing_key):
-        raise CLIError(f"File {signing_key} does not exist.")
+        if not os.path.exists(signing_cert):
+            raise CLIError(f"File {signing_cert} does not exist.")
+
+        if not os.path.exists(signing_key):
+            raise CLIError(f"File {signing_key} does not exist.")
 
     provider_endpoint = get_provider_client_endpoint(cmd, provider_client_name)
 
-    files = [
-        ("SigningCertPemFile", ("SigningCertPemFile", open(signing_cert, "rb"))),
-        ("SigningKeyPemFile", ("SigningKeyPemFile", open(signing_key, "rb"))),
-    ]
+    data = {}
+    files = []
+    if signing_cert_id:
+        data["signingCertId"] = signing_cert_id
+    else:
+        files.append(
+            ("SigningCertPemFile", ("SigningCertPemFile", open(signing_cert, "rb")))
+        )
+        files.append(
+            ("SigningKeyPemFile", ("SigningKeyPemFile", open(signing_key, "rb")))
+        )
 
-    r = requests.post(f"{provider_endpoint}/configure", files=files)
+    r = requests.post(f"{provider_endpoint}/configure", data=data, files=files)
     if r.status_code != 200:
         raise CLIError(response_error_message(r))
 
@@ -126,6 +157,7 @@ def ccf_network_up(
     location,
     security_policy_creation_option,
     recovery_mode,
+    provider_client_name,
 ):
     if not location:
         location = az_cli(
@@ -209,7 +241,7 @@ def ccf_network_up(
 
     operator_member = {
         "certificate": operator_cert_pem_file,
-        "memberData": {"identifier": operator_name, "is_operator": True},
+        "memberData": {"identifier": operator_name, "isOperator": True},
     }
 
     if recovery_mode == "operator-recovery":
@@ -230,7 +262,6 @@ def ccf_network_up(
     with open(provider_config_file, "w") as f:
         f.write(json.dumps(provider_config, indent=2))
 
-    provider_client_name = "ccf-provider"
     az_cli(f"cleanroom ccf provider deploy --name {provider_client_name}")
 
     recovery_service_name = ""
@@ -324,6 +355,13 @@ def ccf_network_up(
             + f"--recovery-member-name {cm_name} "
             + f"--provider-config {provider_config_file} "
         )
+        az_cli(
+            f"cleanroom ccf network set-recovery-threshold "
+            + f"--name {network_name} "
+            + f"--recovery-threshold 1 "
+            + f"--provider-config {provider_config_file} "
+            + f"--provider-client {provider_client_name}"
+        )
 
     az_cli(
         f"cleanroom ccf network transition-to-open "
@@ -382,7 +420,7 @@ def ccf_network_create(
         "providerConfig": provider_config,
     }
     logger.warning(
-        f"Run `docker logs {provider_client_name}-client-1 -f` to monitor network creation progress."
+        f"Run `docker compose -p {provider_client_name} logs -f` to monitor network creation progress."
     )
     r = requests.post(
         f"{provider_endpoint}/networks/{network_name}/create", json=content
@@ -439,7 +477,7 @@ def ccf_network_update(
         "providerConfig": provider_config,
     }
     logger.warning(
-        f"Run `docker logs {provider_client_name}-client-1 -f` to monitor network update progress."
+        f"Run `docker compose -p {provider_client_name} logs -f` to monitor network update progress."
     )
     r = requests.post(
         f"{provider_endpoint}/networks/{network_name}/update", json=content
@@ -486,7 +524,7 @@ def ccf_network_recover_public_network(
         "providerConfig": provider_config,
     }
     logger.warning(
-        f"Run `docker logs {provider_client_name}-client-1 -f` to monitor network recovery progress."
+        f"Run `docker compose -p {provider_client_name} logs -f` to monitor network recovery progress."
     )
     r = requests.post(
         f"{provider_endpoint}/networks/{network_name}/recoverPublicNetwork",
@@ -501,41 +539,44 @@ def ccf_network_submit_recovery_share(
     cmd,
     network_name,
     infra_type,
-    signing_cert,
-    signing_key,
     encryption_private_key,
+    encryption_key_id,
     provider_config,
     provider_client_name,
 ):
-    if not os.path.exists(signing_cert):
-        raise CLIError(f"File {signing_cert} does not exist.")
+    if not encryption_private_key and not encryption_key_id:
+        raise CLIError(
+            "Either encryption-private-key or encryption-key-id must be specified."
+        )
 
-    if not os.path.exists(signing_key):
-        raise CLIError(f"File {signing_key} does not exist.")
+    if encryption_private_key and encryption_key_id:
+        raise CLIError(
+            "Both encryption-private-key and encryption-key-id cannot be specified."
+        )
 
-    if not os.path.exists(encryption_private_key):
-        raise CLIError(f"File {encryption_private_key} does not exist.")
+    if encryption_private_key:
+        if not os.path.exists(encryption_private_key):
+            raise CLIError(f"File {encryption_private_key} does not exist.")
+        with open(encryption_private_key, "r") as f:
+            encryption_private_key = f.read()
+
+    if encryption_key_id and os.path.exists(encryption_key_id):
+        with open(encryption_key_id, "r") as f:
+            encryption_key_id = f.read()
 
     provider_endpoint = get_provider_client_endpoint(cmd, provider_client_name)
 
     provider_config = parse_provider_config(provider_config, infra_type)
 
-    with open(signing_cert, "r") as f:
-        signing_cert = f.read()
-
-    with open(signing_key, "r") as f:
-        signing_key = f.read()
-
-    with open(encryption_private_key, "r") as f:
-        encryption_private_key = f.read()
-
     content = {
         "infraType": infra_type,
-        "signingCert": signing_cert,
-        "signingKey": signing_key,
-        "encryptionPrivateKey": encryption_private_key,
         "providerConfig": provider_config,
     }
+    if encryption_private_key:
+        content["encryptionPrivateKey"] = encryption_private_key
+    else:
+        content["encryptionKeyId"] = encryption_key_id
+
     r = requests.post(
         f"{provider_endpoint}/networks/{network_name}/submitRecoveryShare",
         json=content,
@@ -550,6 +591,7 @@ def ccf_network_recover(
     network_name,
     previous_service_cert,
     encryption_private_key,
+    encryption_key_id,
     recovery_service_name,
     member_name,
     infra_type,
@@ -562,21 +604,31 @@ def ccf_network_recover(
     if not os.path.exists(previous_service_cert):
         raise CLIError(f"File {previous_service_cert} does not exist.")
 
-    if encryption_private_key:
+    if encryption_private_key or encryption_key_id:
+        if encryption_private_key and encryption_key_id:
+            raise CLIError(
+                "Both operator-recovery-encryption-private-key and operator-recovery-encryption-key-id cannot be specified."
+            )
+
         if recovery_service_name or member_name:
             raise CLIError(
-                "Either --operator-recovery-encryption-private-key or "
+                "Either (--operator-recovery-encryption-private-key/operator-recovery-encryption-key-id) or "
                 + "(--confidential-recovery-member-name and --confidential-recovery-service-name) "
                 + "must be specified."
             )
-        if not os.path.exists(encryption_private_key):
+
+        if encryption_private_key and not os.path.exists(encryption_private_key):
             raise CLIError(f"File {encryption_private_key} does not exist.")
         with open(encryption_private_key, "r") as f:
             encryption_private_key = f.read()
+
+        if encryption_key_id and os.path.exists(encryption_key_id):
+            with open(encryption_key_id, "r") as f:
+                encryption_key_id = f.read()
     else:
         if not recovery_service_name or not member_name:
             raise CLIError(
-                "Either --operator-recovery-encryption-private-key or "
+                "Either (--operator-recovery-encryption-private-key/operator-recovery-encryption-key-id) or "
                 + "(--confidential-recovery-member-name and --confidential-recovery-service-name) "
                 + "must be specified."
             )
@@ -603,6 +655,10 @@ def ccf_network_recover(
         content["operatorRecovery"] = {
             "encryptionPrivateKey": encryption_private_key,
         }
+    elif encryption_key_id:
+        content["operatorRecovery"] = {
+            "encryptionKeyId": encryption_key_id,
+        }
     else:
         content["confidentialRecovery"] = {
             "memberName": member_name,
@@ -610,7 +666,7 @@ def ccf_network_recover(
         }
 
     logger.warning(
-        f"Run `docker logs {provider_client_name}-client-1 -f` to monitor network recovery progress."
+        f"Run `docker compose -p {provider_client_name} logs -f` to monitor network recovery progress."
     )
     r = requests.post(
         f"{provider_endpoint}/networks/{network_name}/recover",

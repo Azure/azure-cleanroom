@@ -39,13 +39,6 @@ public class CcfClientManager
         return this.wsConfig;
     }
 
-    public async Task<string> GetCcfVersion()
-    {
-        var client = await this.GetAppClient();
-        var version = (await client.GetFromJsonAsync<JsonObject>("/node/version"))!;
-        return version["ccf_version"]!.ToString();
-    }
-
     private async Task InitializeAppClient()
     {
         await this.InitializeWsConfig();
@@ -212,17 +205,6 @@ public class CcfClientManager
         if (!string.IsNullOrEmpty(this.config[SettingName.ServiceCertPath]))
         {
             return await File.ReadAllTextAsync(this.config[SettingName.ServiceCertPath]!);
-        }
-
-        var ep = new Uri(this.wsConfig.CcrgovEndpoint);
-        if (ep.Host.ToLower().EndsWith("confidential-ledger.azure.com"))
-        {
-            string ccfEndpointName = ep.Host.Split(".")[0];
-            using var client = new HttpClient();
-            var response = await client.GetFromJsonAsync<JsonObject>(
-                $"https://identity.confidential-ledger.core.azure.com/ledgerIdentity" +
-                $"/{ccfEndpointName}");
-            return response!["ledgerTlsCertificate"]!.ToString()!;
         }
 
         return null;

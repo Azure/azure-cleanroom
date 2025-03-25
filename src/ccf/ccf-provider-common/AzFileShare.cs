@@ -149,8 +149,6 @@ public static class AzFileShare
         JsonObject providerConfig,
         IProgress<string> progress)
     {
-        // TODO (gsinha): Figure out idempotency of file copy semantics. Can we resume tracking
-        // if copy is already in progress?
         var srcFileClient =
             await GetShareFileClient(sourceShareName, sourceFilePath, providerConfig);
         string dstFilePath = sourceFilePath;
@@ -387,7 +385,7 @@ public static class AzFileShare
 
         async Task DeleteFileWithRetries(ShareDirectoryClient dir, string fileName)
         {
-            TimeSpan retryTimeout = TimeSpan.FromSeconds(60);
+            TimeSpan retryTimeout = TimeSpan.FromSeconds(90);
             var stopwatch = Stopwatch.StartNew();
             int attempt = 1;
             while (true)

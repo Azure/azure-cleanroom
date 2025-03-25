@@ -18,7 +18,6 @@ function Get-Proposal {
 
   if ($all) {
     $response = (curl -sS -X GET localhost:$port/proposals)
-    CheckLastExitCode
     return $response
   }
 
@@ -27,14 +26,12 @@ function Get-Proposal {
   }
 
   $response = (curl -sS -X GET localhost:$port/proposals/$proposalId)
-  CheckLastExitCode
   $found = (($response | jq -r '.proposalId') -eq $proposalId)
   if (!$found) {
     return $response
   }
 
   $actions = (curl -sS -X GET localhost:$port/proposals/$proposalId/actions)
-  CheckLastExitCode
 
   # Merge proposal and actions into single json string.
   return $response.TrimEnd("}") + "," + $actions.TrimStart("{")

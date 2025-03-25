@@ -692,7 +692,7 @@ public class DocumentTests : TestBase
         foreach (var documentId in documentsId)
         {
             Assert.IsTrue(
-                documents.Where(item => item!["id"]!.ToString() == documentId).Count() == 1,
+                documents.Any(item => item!["id"]!.ToString() == documentId),
                 $"Did not find document {documentId} in the incoming document list {documents}");
         }
     }

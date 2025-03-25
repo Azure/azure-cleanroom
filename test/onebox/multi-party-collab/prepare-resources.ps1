@@ -23,7 +23,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-Import-Module $PSScriptRoot/common/infra-scripts/azure-helpers.psm1 -Force -DisableNameChecking
+$root = git rev-parse --show-toplevel
+Import-Module $root/samples/common/infra-scripts/azure-helpers.psm1 -Force -DisableNameChecking
 
 mkdir -p $outDir/$resourceGroup
 

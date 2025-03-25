@@ -51,6 +51,6 @@ ccf-recovery-agent:
 "@ | Out-File "$sandbox_common/version.yaml"
 
     Push-Location $sandbox_common
-    oras push "$repo/versionsccf/ccf-recovery-agent:$digestNoPrefix,latest" ./version.yaml
+    oras push "$repo/versions/ccf/ccf-recovery-agent:$digestNoPrefix,latest" ./version.yaml
     Pop-Location
 }

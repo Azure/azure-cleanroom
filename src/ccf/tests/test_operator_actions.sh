@@ -26,7 +26,7 @@ declare el=0
 function usage {
     echo ""
     echo "Run tests to validate if the operator actions are allowed in the custom constitution."
-    echo "An opeator member must exist in the CCF network. An operator member has the member data attribute 'is_operator' set to true."
+    echo "An opeator member must exist in the CCF network. An operator member has the member data attribute 'isOperator' set to true."
     echo ""
     echo "usage: ./test_operator_actions.sh --address <IPADDRESS:PORT> --signing-cert <CERT> --signing-key <KEY>"
     echo "Example: ./test_operator_actions.sh --address 127.0.0.1:8000 --signing-cert ./workspace/sandbox_common/member0_cert.pem --signing-key ./workspace/sandbox_common/member0_privk.pem"

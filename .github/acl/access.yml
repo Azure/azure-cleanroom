@@ -1,0 +1,18 @@
+# Documentation for ACL policy: https://aka.ms/gim/docs/policy/acl
+
+name: Access control list
+description: List of teams and their permission levels
+resource: repository
+where:
+configuration:
+  manageAccess:
+  - team: azcleanroomfte
+    role: Maintain
+  - team: azcleanroomdev
+    role: Maintain
+  - team: anantdir
+    role: Maintain
+  - team: CleanRoomPMteam
+    role: Maintain
+  - team: azure-core/azure-cleanroom
+    role: Maintain

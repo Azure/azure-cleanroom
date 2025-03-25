@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   pull_request:
     branches:
-      - main
+      - develop
       - release
 
 permissions:
@@ -20,31 +20,66 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-containers:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+  build-ccf-containers:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
+    strategy:
+      matrix:
+        container: [ccf-provider-client, ccf-recovery-agent, ccf-recovery-service, ccf-nginx, ccf-runjs-app-virtual, ccf-runjs-app-snp, ccf-runjs-app-sandbox, ccr-proxy, ccr-attestation, skr, cgs-client, cgs-ui, cgs-ccf-artefacts]
+      # Prevent Github from cancelling other jobs of the matrix if one of them fails.
+      fail-fast: false
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - name: Delete huge unnecessary tools folder # https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
-        run: rm -rf /opt/hostedtoolcache
-
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Add docker user
-        shell: bash
-        run: sudo usermod -aG docker $USER
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        shell: pwsh
+        run: az acr login -n ${{ vars.ACR_URL }}
+
+      - name: Build ${{ matrix.container }}
+        run: pwsh ./build/ccf/build-ccf-infra-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -containers ${{ matrix.container }}
+
+  build-ccf-container-policies:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    strategy:
+      matrix:
+        container: [ccf-network, ccf-recovery-service]
+      # Prevent Github from cancelling other jobs of the matrix if one of them fails.
+      fail-fast: false
+    needs: [build-ccf-containers]
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - shell: pwsh
-        run: Install-Module -Name powershell-yaml -Force
+        run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
 
-      # build-ccf-network-security-policy.ps1 uses confcom.
       - name: Install confcom extension
         shell: pwsh
         run: |
@@ -62,16 +97,54 @@ jobs:
         shell: pwsh
         run: az acr login -n ${{ vars.ACR_URL }}
 
-      - name: Build CCF containers
-        run: pwsh ./build/ccf/build-ccf-infra-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -pushPolicy
+      - name: Build ${{ matrix.container }} policy
+        run: pwsh ./build/ccf/build-ccf-infra-containers-policy.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -containers ${{ matrix.container }}
+
+  build-azcliext-cleanroom:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        shell: pwsh
+        run: az acr login -n ${{ vars.ACR_URL }}
+
+      - name: Build cleanroom az cli extension
+        run: pwsh ./build/build-azcliext-cleanroom.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push
 
   docker-operator-recovery:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
-    needs: [build-containers]
+    needs: [build-ccf-container-policies, build-azcliext-cleanroom]
+    strategy:
+      matrix:
+        key-store: [localfs, akv]
+      # Prevent Github from cancelling other jobs of the matrix if one of them fails.
+      fail-fast: false
     env:
         RUN_ID: ${{ github.run_id }}
         JOB_ID: ${{ github.job }}
+        AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+        AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -85,7 +158,14 @@ jobs:
           SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy local virtual CCF network via CCF provider
-        run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1 -infraType virtual -nodeCount 3 -registryUrl ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
+        run: >
+          pwsh ./samples/ccf/azcli/deploy-ccf.ps1
+          -infraType virtual
+          -nodeCount 3
+          -keyStoreType ${{ matrix.key-store }}
+          -registry acr
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
 
       - name: Dump cgs-client logs
         if: ${{ !cancelled() }}
@@ -98,7 +178,7 @@ jobs:
         run: docker logs ccf-provider-client-1
 
       - name: Test CGS sample on a local virtual CCF network deployed via CCF provider
-        run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-cgs.ps1
+        run: pwsh ./samples/ccf/azcli/deploy-cgs.ps1 -registry acr -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
       - name: Dump member0 cgs-client logs
         if: ${{ !cancelled() }}
@@ -106,80 +186,36 @@ jobs:
         run: docker logs member0-governance-cgs-client-1
 
       - name: Recover local virtual CCF network via operator recovery
-        run: pwsh ./samples/ccf/ccf-provider/azcli/recover-ccf.ps1 -nodeCount 3
+        run: pwsh ./samples/ccf/azcli/recover-ccf.ps1 -nodeCount 3 -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
       - name: Validate CGS state after recovery
-        run: pwsh ./samples/ccf/ccf-provider/azcli/validate-cgs-recovery.ps1
+        run: pwsh ./samples/ccf/azcli/validate-cgs-recovery.ps1
+
+      - name: Dump member0 cgs-client logs
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: docker logs member0-governance-cgs-client-1
 
       - name: Dump ccf-provider-client logs after recovery
         shell: pwsh
         if: ${{ !cancelled() }}
         run: docker logs ccf-provider-client-1
-
-#   docker-operator-recovery-new-name:
-#     runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
-#     environment: pr
-#     needs: [build-containers]
-#     env:
-#         RUN_ID: ${{ github.run_id }}
-#         JOB_ID: ${{ github.job }}
-#     steps:
-#       - uses: actions/checkout@v4
-#         with:
-#           submodules: recursive
-
-#       - name: Login to Azure and refresh token
-#         uses: ./.github/actions/login-to-azure
-#         env:
-#           CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-#           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-#           SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-#
-#       - name: Deploy local virtual CCF network via CCF provider
-#         run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1 -infraType virtual -nodeCount 3 -registryUrl ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
-
-#       - name: Dump cgs-client logs
-#         if: ${{ !cancelled() }}
-#         shell: pwsh
-#         run: docker logs ccf-provider-governance-cgs-client-1
-  
-#       - name: Dump ccf-provider-client logs
-#         shell: pwsh
-#         if: ${{ !cancelled() }}
-#         run: docker logs ccf-provider-client-1
-
-#       - name: Test CGS sample on a local virtual CCF network deployed via CCF provider
-#         # Trigger snapshot post completion as this recovery is only off a snapshot 
-#         # (and no committed ledger files or the latest RW ledger file) so that recovery has
-#         # the latest data available.
-#         run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-cgs.ps1 -triggerSnapshotOnCompletion
-
-#       - name: Dump member0 cgs-client logs
-#         if: ${{ !cancelled() }}
-#         shell: pwsh
-#         run: docker logs member0-governance-cgs-client-1
-
-#       - name: Recover local virtual CCF network via operator recovery
-#         run: pwsh ./samples/ccf/ccf-provider/azcli/recover-ccf.ps1 -nodeCount 3 -targetNetworkName testnet-virtual-r
-
-#       - name: Validate CGS state after recovery
-#         run: pwsh ./samples/ccf/ccf-provider/azcli/validate-cgs-recovery.ps1 -targetNetworkName testnet-virtual-r
-
-#       - name: Dump ccf-provider-client logs after recovery
-#         shell: pwsh
-#         if: ${{ !cancelled() }}
-#         run: docker logs ccf-provider-client-1
 
   docker-confidential-recovery:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
-    needs: [build-containers]
+    needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
         RUN_ID: ${{ github.run_id }}
         JOB_ID: ${{ github.job }}
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
         AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
         AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    strategy:
+      matrix:
+        key-store: [localfs, akv]
+      # Prevent Github from cancelling other jobs of the matrix if one of them fails.
+      fail-fast: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -193,7 +229,15 @@ jobs:
           SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy local virtual CCF network via CCF provider
-        run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1 -infraType virtual -nodeCount 3 -confidentialRecovery -registryUrl ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
+        run: >
+          pwsh ./samples/ccf/azcli/deploy-ccf.ps1
+          -infraType virtual
+          -nodeCount 3
+          -confidentialRecovery
+          -keyStoreType ${{ matrix.key-store }}
+          -registry acr
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
 
       - name: Dump cgs-client logs
         if: ${{ !cancelled() }}
@@ -208,15 +252,15 @@ jobs:
       - name: Dump ccf-recovery-agent logs
         shell: pwsh
         if: ${{ !cancelled() }}
-        run: pwsh ./samples/ccf/ccf-provider/azcli/show-docker-logs.ps1 -label "ccf-network/type=recovery-agent"
+        run: pwsh ./samples/ccf/azcli/show-docker-logs.ps1 -label "ccf-network/type=recovery-agent"
 
       - name: Dump ccf-recovery-service logs
         shell: pwsh
         if: ${{ !cancelled() }}
-        run: pwsh ./samples/ccf/ccf-provider/azcli/show-docker-logs.ps1 -label "ccf-recovery-service/type=recovery-service"
+        run: pwsh ./samples/ccf/azcli/show-docker-logs.ps1 -label "ccf-recovery-service/type=recovery-service"
 
       - name: Test CGS sample on a local virtual CCF network deployed via CCF provider
-        run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-cgs.ps1
+        run: pwsh ./samples/ccf/azcli/deploy-cgs.ps1 -registry acr -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
       - name: Dump member0 cgs-client logs
         if: ${{ !cancelled() }}
@@ -224,10 +268,15 @@ jobs:
         run: docker logs member0-governance-cgs-client-1
 
       - name: Recover local virtual CCF network via confidential recovery
-        run: pwsh ./samples/ccf/ccf-provider/azcli/recover-ccf.ps1 -nodeCount 3 -confidentialRecovery
+        run: pwsh ./samples/ccf/azcli/recover-ccf.ps1 -nodeCount 3 -confidentialRecovery -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
       - name: Validate CGS state after recovery
-        run: pwsh ./samples/ccf/ccf-provider/azcli/validate-cgs-recovery.ps1
+        run: pwsh ./samples/ccf/azcli/validate-cgs-recovery.ps1
+
+      - name: Dump member0 cgs-client logs
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: docker logs member0-governance-cgs-client-1
 
       - name: Dump ccf-provider-client logs after recovery
         shell: pwsh
@@ -237,23 +286,28 @@ jobs:
       - name: Dump ccf-recovery-agent logs after recovery
         shell: pwsh
         if: ${{ !cancelled() }}
-        run: pwsh ./samples/ccf/ccf-provider/azcli/show-docker-logs.ps1 -label "ccf-network/type=recovery-agent"
+        run: pwsh ./samples/ccf/azcli/show-docker-logs.ps1 -label "ccf-network/type=recovery-agent"
 
       - name: Dump ccf-recovery-service logs after recovery
         shell: pwsh
         if: ${{ !cancelled() }}
-        run: pwsh ./samples/ccf/ccf-provider/azcli/show-docker-logs.ps1 -label "ccf-recovery-service/type=recovery-service"
+        run: pwsh ./samples/ccf/azcli/show-docker-logs.ps1 -label "ccf-recovery-service/type=recovery-service"
 
   docker-confidential-recovery-onestep:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
-    needs: [build-containers]
+    needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
         RUN_ID: ${{ github.run_id }}
         JOB_ID: ${{ github.job }}
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
         AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
         AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    strategy:
+      matrix:
+        key-store: [localfs, akv]
+      # Prevent Github from cancelling other jobs of the matrix if one of them fails.
+      fail-fast: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -267,7 +321,16 @@ jobs:
           SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy local virtual CCF network via CCF provider
-        run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1 -infraType virtual -nodeCount 3 -confidentialRecovery -oneStepConfigureConfidentialRecovery -registryUrl ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
+        run: >
+          pwsh ./samples/ccf/azcli/deploy-ccf.ps1
+          -infraType virtual
+          -nodeCount 3
+          -confidentialRecovery
+          -oneStepConfigureConfidentialRecovery
+          -keyStoreType ${{ matrix.key-store }}
+          -registry acr
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
 
       - name: Dump cgs-client logs
         if: ${{ !cancelled() }}
@@ -282,15 +345,15 @@ jobs:
       - name: Dump ccf-recovery-agent logs
         shell: pwsh
         if: ${{ !cancelled() }}
-        run: pwsh ./samples/ccf/ccf-provider/azcli/show-docker-logs.ps1 -label "ccf-network/type=recovery-agent"
+        run: pwsh ./samples/ccf/azcli/show-docker-logs.ps1 -label "ccf-network/type=recovery-agent"
 
       - name: Dump ccf-recovery-service logs
         shell: pwsh
         if: ${{ !cancelled() }}
-        run: pwsh ./samples/ccf/ccf-provider/azcli/show-docker-logs.ps1 -label "ccf-recovery-service/type=recovery-service"
+        run: pwsh ./samples/ccf/azcli/show-docker-logs.ps1 -label "ccf-recovery-service/type=recovery-service"
 
       - name: Test CGS sample on a local virtual CCF network deployed via CCF provider
-        run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-cgs.ps1
+        run: pwsh ./samples/ccf/azcli/deploy-cgs.ps1 -registry acr -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
       - name: Dump member0 cgs-client logs
         if: ${{ !cancelled() }}
@@ -298,10 +361,15 @@ jobs:
         run: docker logs member0-governance-cgs-client-1
 
       - name: Recover local virtual CCF network via confidential recovery
-        run: pwsh ./samples/ccf/ccf-provider/azcli/recover-ccf.ps1 -nodeCount 3 -confidentialRecovery -oneStepRecovery
+        run: pwsh ./samples/ccf/azcli/recover-ccf.ps1 -nodeCount 3 -confidentialRecovery -oneStepRecovery -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
       - name: Validate CGS state after recovery
-        run: pwsh ./samples/ccf/ccf-provider/azcli/validate-cgs-recovery.ps1
+        run: pwsh ./samples/ccf/azcli/validate-cgs-recovery.ps1
+
+      - name: Dump member0 cgs-client logs
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: docker logs member0-governance-cgs-client-1
 
       - name: Dump ccf-provider-client logs after recovery
         shell: pwsh
@@ -311,17 +379,17 @@ jobs:
       - name: Dump ccf-recovery-agent logs after recovery
         shell: pwsh
         if: ${{ !cancelled() }}
-        run: pwsh ./samples/ccf/ccf-provider/azcli/show-docker-logs.ps1 -label "ccf-network/type=recovery-agent"
+        run: pwsh ./samples/ccf/azcli/show-docker-logs.ps1 -label "ccf-network/type=recovery-agent"
 
       - name: Dump ccf-recovery-service logs after recovery
         shell: pwsh
         if: ${{ !cancelled() }}
-        run: pwsh ./samples/ccf/ccf-provider/azcli/show-docker-logs.ps1 -label "ccf-recovery-service/type=recovery-service"
+        run: pwsh ./samples/ccf/azcli/show-docker-logs.ps1 -label "ccf-recovery-service/type=recovery-service"
 
   aci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
-    needs: [build-containers]
+    needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
         RUN_ID: ${{ github.run_id }}
         JOB_ID: ${{ github.job }}
@@ -339,7 +407,7 @@ jobs:
 
       - name: Deploy a virtual ACI CCF network via CCF provider
         # TODO (gsinha): Passing nodeCount as 1 and -NoTest (which does scale up) as an N node cluster is at times failing to join the start node with an SSL error.
-        run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1 -infraType virtualaci -nodeCount 1 -NoTest -registryUrl ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
+        run: pwsh ./samples/ccf/azcli/deploy-ccf.ps1 -infraType virtualaci -nodeCount 1 -NoTest -registry acr -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
       - name: Dump cgs-client logs
         if: ${{ !cancelled() }}
@@ -352,7 +420,7 @@ jobs:
         run: docker logs ccf-provider-client-1
 
       - name: Test CGS sample on a virtual ACI CCF network deployed via CCF provider
-        run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-cgs.ps1
+        run: pwsh ./samples/ccf/azcli/deploy-cgs.ps1 -registry acr -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
       - name: Dump member0 cgs-client logs
         if: ${{ !cancelled() }}
@@ -362,65 +430,12 @@ jobs:
       - name: Delete resource groups
         if: success()
         shell: pwsh
-        run: ./samples/ccf/ccf-provider/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
-
-  caci-local-storage:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
-    environment: pr
-    needs: [build-containers]
-    env:
-        RUN_ID: ${{ github.run_id }}
-        JOB_ID: ${{ github.job }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Login to Azure and refresh token
-        uses: ./.github/actions/login-to-azure
-        env:
-          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Deploy a CACI CCF network via CCF provider
-        # TODO (gsinha): Passing nodeCount as 1 and as an N node cluster is at times failing to join the start node with an SSL error.
-        run: >
-          pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1
-          -infraType caci
-          -nodeCount 1
-          -securityPolicyCreationOption cached-debug
-          -nodeStorageType localfs
-          -registryUrl ${{ vars.ACR_URL }}
-          -tag ${{ github.run_id }}
-
-      - name: Dump cgs-client logs
-        if: ${{ !cancelled() }}
-        shell: pwsh
-        run: docker logs ccf-provider-governance-cgs-client-1
-
-      - name: Dump ccf-provider-client logs
-        shell: pwsh
-        if: ${{ !cancelled() }}
-        run: docker logs ccf-provider-client-1
-
-      - name: Test CGS sample on a CACI CCF network deployed via CCF provider
-        run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-cgs.ps1
-
-      - name: Dump member0 cgs-client logs
-        if: ${{ !cancelled() }}
-        shell: pwsh
-        run: docker logs member0-governance-cgs-client-1
-
-      - name: Delete resource groups
-        if: success()
-        shell: pwsh
-        run: ./samples/ccf/ccf-provider/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
+        run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
 
   caci-operator-recovery:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
-    needs: [build-containers]
+    needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
         AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -443,11 +458,12 @@ jobs:
         # TODO (gsinha): Passing nodeCount as 1 as creating an N node cluster is at times failing to join the start node with an SSL error.
         # Scaling up to N nodes after creating a 1 node network does not hit the issue.
         run: >
-          pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1
+          pwsh ./samples/ccf/azcli/deploy-ccf.ps1
           -infraType caci 
           -nodeCount 1
           -securityPolicyCreationOption cached-debug
-          -registryUrl ${{ vars.ACR_URL }}
+          -registry acr
+          -repo ${{ vars.ACR_URL }}
           -tag ${{ github.run_id }}
 
       - name: Dump cgs-client logs
@@ -461,7 +477,7 @@ jobs:
         run: docker logs ccf-provider-client-1
 
       - name: Test CGS sample on a CACI CCF network deployed via CCF provider
-        run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-cgs.ps1
+        run: pwsh ./samples/ccf/azcli/deploy-cgs.ps1 -registry acr -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
       - name: Dump member0 cgs-client logs
         if: ${{ !cancelled() }}
@@ -470,20 +486,34 @@ jobs:
 
       - name: Recover single node CACI CCF network via operator recovery in one step
         run: >
-          pwsh ./samples/ccf/ccf-provider/azcli/recover-ccf.ps1
+          pwsh ./samples/ccf/azcli/recover-ccf.ps1
           -oneStepRecovery
           -nodeCount 1
           -securityPolicyCreationOption cached-debug
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
 
       - name: Validate CGS state after recovery
-        run: pwsh ./samples/ccf/ccf-provider/azcli/validate-cgs-recovery.ps1
+        run: pwsh ./samples/ccf/azcli/validate-cgs-recovery.ps1
+
+      - name: Dump member0 cgs-client logs
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: docker logs member0-governance-cgs-client-1
 
       - name: Upgrade single node CACI CCF network via scale up
         run: >
-          pwsh ./samples/ccf/ccf-provider/azcli/test-ccf-upgrade-via-scale-up.ps1
+          pwsh ./samples/ccf/azcli/test-ccf-upgrade-via-scale-up.ps1
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
 
       - name: Validate CGS state after upgrade (scale up)
-        run: pwsh ./samples/ccf/ccf-provider/azcli/validate-cgs-recovery.ps1
+        run: pwsh ./samples/ccf/azcli/validate-cgs-recovery.ps1
+
+      - name: Dump member0 cgs-client logs
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: docker logs member0-governance-cgs-client-1
 
       - name: Dump ccf-provider-client logs after recovery
         shell: pwsh
@@ -493,12 +523,12 @@ jobs:
       - name: Delete resource groups
         if: success()
         shell: pwsh
-        run: ./samples/ccf/ccf-provider/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
+        run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
 
   caci-confidential-recovery:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
-    needs: [build-containers]
+    needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
         AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -521,13 +551,14 @@ jobs:
         # TODO (gsinha): Passing nodeCount as 1 as creating an N node cluster is at times failing to join the start node with an SSL error.
         # Scaling up to N nodes after creating a 1 node network does not hit the issue.
         run: >
-          pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1
+          pwsh ./samples/ccf/azcli/deploy-ccf.ps1
           -infraType caci
           -nodeCount 1
           -securityPolicyCreationOption cached-debug
           -confidentialRecovery
           -oneStepConfigureConfidentialRecovery
-          -registryUrl ${{ vars.ACR_URL }}
+          -registry acr
+          -repo ${{ vars.ACR_URL }}
           -tag ${{ github.run_id }}
 
       - name: Dump cgs-client logs
@@ -541,7 +572,7 @@ jobs:
         run: docker logs ccf-provider-client-1
 
       - name: Test CGS sample on a CACI CCF network deployed via CCF provider
-        run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-cgs.ps1
+        run: pwsh ./samples/ccf/azcli/deploy-cgs.ps1 -registry acr -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
       - name: Dump member0 cgs-client logs
         if: ${{ !cancelled() }}
@@ -550,13 +581,20 @@ jobs:
 
       - name: Recover single node CACI CCF network via confidential recovery
         run: >
-          pwsh ./samples/ccf/ccf-provider/azcli/recover-ccf.ps1
+          pwsh ./samples/ccf/azcli/recover-ccf.ps1
           -nodeCount 1
           -confidentialRecovery
           -securityPolicyCreationOption cached-debug
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
 
       - name: Validate CGS state after recovery
-        run: pwsh ./samples/ccf/ccf-provider/azcli/validate-cgs-recovery.ps1
+        run: pwsh ./samples/ccf/azcli/validate-cgs-recovery.ps1
+
+      - name: Dump member0 cgs-client logs
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: docker logs member0-governance-cgs-client-1
 
       - name: Dump ccf-provider-client logs after recovery
         shell: pwsh
@@ -566,12 +604,12 @@ jobs:
       - name: Delete resource groups
         if: success()
         shell: pwsh
-        run: ./samples/ccf/ccf-provider/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
+        run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
 
   caci-confidential-recovery-ccf-upgrade:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
-    needs: [build-containers]
+    needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
         AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -595,14 +633,15 @@ jobs:
         # Scaling up to N nodes after creating a 1 node network does not hit the issue.
         # Passing -NoTest to avoid scale up testing to save time. Other tests cover it.
         run: >
-          pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1
+          pwsh ./samples/ccf/azcli/deploy-ccf.ps1
           -infraType caci
           -nodeCount 1
           -NoTest
           -securityPolicyCreationOption cached-debug
           -confidentialRecovery
           -oneStepConfigureConfidentialRecovery
-          -registryUrl ${{ vars.ACR_URL }}
+          -registry acr
+          -repo ${{ vars.ACR_URL }}
           -tag ${{ github.run_id }}
 
       - name: Dump cgs-client logs
@@ -616,7 +655,7 @@ jobs:
         run: docker logs ccf-provider-client-1
 
       - name: Test CGS sample on a CACI CCF network deployed via CCF provider
-        run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-cgs.ps1
+        run: pwsh ./samples/ccf/azcli/deploy-cgs.ps1 -registry acr -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
       - name: Dump member0 cgs-client logs
         if: ${{ !cancelled() }}
@@ -625,10 +664,17 @@ jobs:
 
       - name: Upgrade single node CACI CCF network via confidential recovery
         run: >
-          pwsh ./samples/ccf/ccf-provider/azcli/test-ccf-upgrade-via-confidential-recovery.ps1
+          pwsh ./samples/ccf/azcli/test-ccf-upgrade-via-confidential-recovery.ps1
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
 
       - name: Validate CGS state after upgrade (recovery)
-        run: pwsh ./samples/ccf/ccf-provider/azcli/validate-cgs-recovery.ps1
+        run: pwsh ./samples/ccf/azcli/validate-cgs-recovery.ps1
+
+      - name: Dump member0 cgs-client logs
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: docker logs member0-governance-cgs-client-1
 
       - name: Dump ccf-provider-client logs after recovery
         shell: pwsh
@@ -637,10 +683,17 @@ jobs:
 
       - name: Upgrade single node CACI CCF network via scale up
         run: >
-          pwsh ./samples/ccf/ccf-provider/azcli/test-ccf-upgrade-via-scale-up.ps1
+          pwsh ./samples/ccf/azcli/test-ccf-upgrade-via-scale-up.ps1
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
 
       - name: Validate CGS state after upgrade (scale up)
-        run: pwsh ./samples/ccf/ccf-provider/azcli/validate-cgs-recovery.ps1
+        run: pwsh ./samples/ccf/azcli/validate-cgs-recovery.ps1
+
+      - name: Dump member0 cgs-client logs
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: docker logs member0-governance-cgs-client-1
 
       - name: Dump ccf-provider-client logs after scale up
         shell: pwsh
@@ -650,12 +703,12 @@ jobs:
       - name: Delete resource groups
         if: success()
         shell: pwsh
-        run: ./samples/ccf/ccf-provider/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
+        run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
 
   caci-confidential-recovery-recsvc-upgrade:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
-    needs: [build-containers]
+    needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
         AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -679,14 +732,15 @@ jobs:
         # Scaling up to N nodes after creating a 1 node network does not hit the issue.
         # Passing -NoTest to avoid scale up testing to save time. Other tests cover it.
         run: >
-          pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1
+          pwsh ./samples/ccf/azcli/deploy-ccf.ps1
           -infraType caci
           -nodeCount 1
           -NoTest
           -securityPolicyCreationOption cached-debug
           -confidentialRecovery
           -oneStepConfigureConfidentialRecovery
-          -registryUrl ${{ vars.ACR_URL }}
+          -registry acr
+          -repo ${{ vars.ACR_URL }}
           -tag ${{ github.run_id }}
 
       - name: Dump cgs-client logs
@@ -700,7 +754,7 @@ jobs:
         run: docker logs ccf-provider-client-1
 
       - name: Test CGS sample on a CACI CCF network deployed via CCF provider
-        run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-cgs.ps1
+        run: pwsh ./samples/ccf/azcli/deploy-cgs.ps1 -registry acr -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
       - name: Dump member0 cgs-client logs
         if: ${{ !cancelled() }}
@@ -709,13 +763,20 @@ jobs:
 
       - name: Upgrade recovery service and recover single node CACI CCF network
         run: >
-          pwsh ./samples/ccf/ccf-provider/azcli/test-recovery-service-upgrade.ps1
+          pwsh ./samples/ccf/azcli/test-recovery-service-upgrade.ps1
           -nodeCount 1
           -OneStepRecovery
           -securityPolicyCreationOption cached-debug
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
 
       - name: Validate CGS state after upgrade (recovery)
-        run: pwsh ./samples/ccf/ccf-provider/azcli/validate-cgs-recovery.ps1
+        run: pwsh ./samples/ccf/azcli/validate-cgs-recovery.ps1
+
+      - name: Dump member0 cgs-client logs
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: docker logs member0-governance-cgs-client-1
 
       - name: Dump ccf-provider-client logs after recovery service upgrade
         shell: pwsh
@@ -725,12 +786,12 @@ jobs:
       - name: Delete resource groups
         if: success()
         shell: pwsh
-        run: ./samples/ccf/ccf-provider/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
+        run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
 
   caci-allow-all-confidential-recovery:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
-    needs: [build-containers]
+    needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
         AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -753,13 +814,14 @@ jobs:
         # TODO (gsinha): Passing nodeCount as 1 as creating an N node cluster is at times failing to join the start node with an SSL error.
         # Scaling up to N nodes after creating a 1 node network does not hit the issue.
         run: >
-          pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1
+          pwsh ./samples/ccf/azcli/deploy-ccf.ps1
           -infraType caci
           -nodeCount 1
           -securityPolicyCreationOption allow-all
           -confidentialRecovery
           -oneStepConfigureConfidentialRecovery
-          -registryUrl ${{ vars.ACR_URL }}
+          -registry acr
+          -repo ${{ vars.ACR_URL }}
           -tag ${{ github.run_id }}
 
       - name: Dump cgs-client logs
@@ -773,7 +835,7 @@ jobs:
         run: docker logs ccf-provider-client-1
 
       - name: Test CGS sample on a CACI CCF network deployed via CCF provider
-        run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-cgs.ps1
+        run: pwsh ./samples/ccf/azcli/deploy-cgs.ps1 -registry acr -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
       - name: Dump member0 cgs-client logs
         if: ${{ !cancelled() }}
@@ -782,13 +844,20 @@ jobs:
 
       - name: Recover single node CACI CCF network via confidential recovery
         run: >
-          pwsh ./samples/ccf/ccf-provider/azcli/recover-ccf.ps1
+          pwsh ./samples/ccf/azcli/recover-ccf.ps1
           -nodeCount 1
           -confidentialRecovery
           -securityPolicyCreationOption allow-all
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
 
       - name: Validate CGS state after recovery
-        run: pwsh ./samples/ccf/ccf-provider/azcli/validate-cgs-recovery.ps1
+        run: pwsh ./samples/ccf/azcli/validate-cgs-recovery.ps1
+
+      - name: Dump member0 cgs-client logs
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: docker logs member0-governance-cgs-client-1
 
       - name: Dump ccf-provider-client logs after recovery
         shell: pwsh
@@ -798,12 +867,12 @@ jobs:
       - name: Delete resource groups
         if: success()
         shell: pwsh
-        run: ./samples/ccf/ccf-provider/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
+        run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
 
   caci-confidential-recovery-onestep:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
     environment: pr
-    needs: [build-containers]
+    needs: [build-ccf-container-policies, build-azcliext-cleanroom]
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
         AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -826,13 +895,14 @@ jobs:
         # TODO (gsinha): Passing nodeCount as 1 as creating an N node cluster is at times failing to join the start node with an SSL error.
         # Scaling up to N nodes after creating a 1 node network does not hit the issue.
         run: >
-          pwsh ./samples/ccf/ccf-provider/azcli/deploy-ccf.ps1
+          pwsh ./samples/ccf/azcli/deploy-ccf.ps1
           -infraType caci
           -nodeCount 1
           -securityPolicyCreationOption cached-debug
           -confidentialRecovery
           -oneStepConfigureConfidentialRecovery
-          -registryUrl ${{ vars.ACR_URL }}
+          -registry acr
+          -repo ${{ vars.ACR_URL }}
           -tag ${{ github.run_id }}
           -location westus
 
@@ -847,7 +917,7 @@ jobs:
         run: docker logs ccf-provider-client-1
 
       - name: Test CGS sample on a CACI CCF network deployed via CCF provider
-        run: pwsh ./samples/ccf/ccf-provider/azcli/deploy-cgs.ps1
+        run: pwsh ./samples/ccf/azcli/deploy-cgs.ps1 -registry acr -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }}
 
       - name: Dump member0 cgs-client logs
         if: ${{ !cancelled() }}
@@ -856,14 +926,21 @@ jobs:
 
       - name: Recover single node CACI CCF network via confidential recovery in one step
         run: >
-          pwsh ./samples/ccf/ccf-provider/azcli/recover-ccf.ps1
+          pwsh ./samples/ccf/azcli/recover-ccf.ps1
           -nodeCount 1
           -oneStepRecovery
           -confidentialRecovery
           -securityPolicyCreationOption cached-debug
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
 
       - name: Validate CGS state after recovery
-        run: pwsh ./samples/ccf/ccf-provider/azcli/validate-cgs-recovery.ps1
+        run: pwsh ./samples/ccf/azcli/validate-cgs-recovery.ps1
+
+      - name: Dump member0 cgs-client logs
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: docker logs member0-governance-cgs-client-1
 
       - name: Dump ccf-provider-client logs after recovery
         shell: pwsh
@@ -873,4 +950,4 @@ jobs:
       - name: Delete resource groups
         if: success()
         shell: pwsh
-        run: ./samples/ccf/ccf-provider/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"
+        run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=ccf-network-${{ github.job }}-${{ github.run_id }}"

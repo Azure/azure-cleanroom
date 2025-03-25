@@ -15,7 +15,7 @@ COPY src/tools/azure-cli-extension azure-cli-extension
 
 WORKDIR /app/azure-cli-extension/cleanroom
 
-RUN python3 setup.py bdist_wheel
+RUN python3 -m build --wheel .
 
 FROM scratch AS dist
 COPY --from=build-image /app/azure-cli-extension/cleanroom/dist ./

@@ -13,7 +13,7 @@ runs:
       shell: pwsh
       run: |
         $ccfConstitutionDir="${{ github.workspace }}/src/ccf/ccf-provider-common/constitution"
-        $cgsConstitutionDir="${{ github.workspace }}/src/governance/ccf-app/constitution"
+        $cgsConstitutionDir="${{ github.workspace }}/src/governance/ccf-app/js/constitution"
         $content=""
         Get-ChildItem $ccfConstitutionDir -Filter *.js | Foreach-Object { $content += Get-Content $_.FullName -Raw }
         Get-ChildItem $cgsConstitutionDir -Filter *.js | Foreach-Object { $content += Get-Content $_.FullName -Raw }

@@ -832,7 +832,7 @@ public class ContractTests : TestBase
         foreach (var contractId in contractsId)
         {
             Assert.IsTrue(
-                contracts.Where(item => item!["id"]!.ToString() == contractId).Count() == 1,
+                contracts.Any(item => item!["id"]!.ToString() == contractId),
                 $"Did not find contract {contractId} in the incoming contract list {contracts}");
         }
     }

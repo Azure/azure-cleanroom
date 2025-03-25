@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.Cose;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using Azure.Security.KeyVault.Keys.Cryptography;
 
 namespace CoseUtils;
 
@@ -13,15 +14,12 @@ public static class Cose
 {
     public static byte[] Sign(CoseSignRequest request)
     {
-        var cert = X509Certificate2.CreateFromPem(request.Certificate, request.PrivateKey);
-        var privateKey = ECDsa.Create();
-        privateKey.ImportFromPem(request.PrivateKey);
-
         CoseHeaderMap protectedHeaders = request.ProtectedHeaders != null ?
             AddHeaders(request.ProtectedHeaders) : new();
         CoseHeaderMap unprotectedHeaders = request.UnprotectedHeaders != null ?
             AddHeaders(request.UnprotectedHeaders) : new();
 
+        var cert = X509Certificate2.CreateFromPem(request.SignKey.Certificate);
         try
         {
             var algorithm = (Algorithms)Enum.Parse(typeof(Algorithms), request.Algorithm);
@@ -32,14 +30,31 @@ public static class Cose
         {
             throw new Exception(
                 $"{request.Algorithm} is not supported, supported algorithms " +
-                $"are: ES256, ES384, ES512 and EdDSA.");
+                $"are: ES384.");
         }
 
-        var signer = new CoseSigner(
-            privateKey,
-            HashAlgorithmName.SHA384,
-            protectedHeaders,
-            unprotectedHeaders);
+        CoseSigner signer;
+        if (!string.IsNullOrEmpty(request.SignKey.PrivateKey))
+        {
+            var privateKey = ECDsa.Create();
+            privateKey.ImportFromPem(request.SignKey.PrivateKey);
+            signer = new CoseSigner(
+                privateKey,
+                HashAlgorithmName.SHA384,
+                protectedHeaders,
+                unprotectedHeaders);
+        }
+        else
+        {
+            var cryptographyClient = new CryptographyClient(
+                request.SignKey.KvCertificate!.KeyId,
+                request.SignKey.TokenCredential);
+            signer = new CoseSigner(
+                new ECDsaKeyVault(cert, cryptographyClient),
+                HashAlgorithmName.SHA384,
+                protectedHeaders,
+                unprotectedHeaders);
+        }
 
         var payload = request.Payload ?? string.Empty;
 
@@ -61,8 +76,7 @@ public static class Cose
     }
 
     public static Task<byte[]> CreateGovCoseSign1Message(
-        string certificate,
-        string privateKey,
+        CoseSignKey signKey,
         GovMessageType messageType,
         string? payload,
         string? proposalId = null)
@@ -79,21 +93,17 @@ public static class Cose
             protectedHeaders["ccf.gov.msg.proposal_id"] = proposalId;
         }
 
-        var result = Sign(new CoseSignRequest
-        {
-            Algorithm = "ES384",
-            Certificate = certificate,
-            PrivateKey = privateKey,
-            ProtectedHeaders = protectedHeaders,
-            Payload = payload
-        });
-
+        var signRequest = new CoseSignRequest(
+            signKey,
+            protectedHeaders,
+            unprotectedHeaders: null,
+            payload);
+        var result = Sign(signRequest);
         return Task.FromResult(result);
     }
 
     public static Task<byte[]> CreateRecoveryCoseSign1Message(
-        string certificate,
-        string privateKey,
+        CoseSignKey signKey,
         RecoveryMessageType messageType,
         string? payload)
     {
@@ -104,14 +114,12 @@ public static class Cose
             { "ccf.recovery.msg.created_at", createdAt }
         };
 
-        var result = Sign(new CoseSignRequest
-        {
-            Algorithm = "ES384",
-            Certificate = certificate,
-            PrivateKey = privateKey,
-            ProtectedHeaders = protectedHeaders,
-            Payload = payload
-        });
+        var signRequest = new CoseSignRequest(
+            signKey,
+            protectedHeaders,
+            unprotectedHeaders: null,
+            payload);
+        var result = Sign(signRequest);
 
         return Task.FromResult(result);
     }

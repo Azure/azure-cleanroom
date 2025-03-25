@@ -1,12 +1,24 @@
 name: governance-cli
 services:
   cgs-client:
-    image: ${AZCLI_CGS_CLIENT_IMAGE:-mcr.microsoft.com/cleanroom/cgs-client:2.0.0}
+    image: ${AZCLI_CGS_CLIENT_IMAGE:-mcr.microsoft.com/azurecleanroom/cgs-client:2.0.0}
     ports:
       - "0:8080"
+    environment:
+      - IDENTITY_ENDPOINT=http://cgs-credentials-proxy:8080/token
+      - IMDS_ENDPOINT="dummy_required_value"
   cgs-ui:
-    image: ${AZCLI_CGS_UI_IMAGE:-mcr.microsoft.com/cleanroom/cgs-ui:2.0.0}
+    image: ${AZCLI_CGS_UI_IMAGE:-mcr.microsoft.com/azurecleanroom/cgs-ui:2.0.0}
     ports:
       - "0:6300"
     environment:
       - cgsclientEndpoint=http://cgs-client:8080
+  cgs-credentials-proxy:
+    image: cleanroombuild.azurecr.io/workleap/azure-cli-credentials-proxy:1.1.0
+    ports:
+      - "0:8080"
+    volumes:
+      - ${HOME}/.azure:/app/.azure/
+    user: "${AZCLI_CCF_PROVIDER_UID}:${AZCLI_CCF_PROVIDER_GID}"
+    profiles:
+      - creds-proxy

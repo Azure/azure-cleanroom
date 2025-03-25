@@ -18,7 +18,6 @@ function Propose-DeploymentSpec {
 
     $port = GetPortOrDie($port)
     curl -sS -X POST localhost:$port/contracts/$contractId/deploymentspec/propose -k -H "Content-Type: application/json" -d $spec
-    CheckLastExitCode
 }
 
 function Propose-DeploymentSpec-From-File {
@@ -44,5 +43,4 @@ function Propose-DeploymentSpec-From-File {
 
     $port = GetPortOrDie($port)
     curl -sS -X POST localhost:$port/contracts/$contractId/deploymentspec/propose -k -H "Content-Type: application/json" -d "@$specFilePath"
-    CheckLastExitCode
 }

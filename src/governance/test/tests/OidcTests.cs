@@ -79,10 +79,7 @@ public class OidcTests : TestBase
             Assert.AreEqual(3, parts.Length);
 
             var header = JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[0]))!;
-            var ccfVersion = (await this.CcfClient.GetFromJsonAsync<JsonObject>("/node/version"))!;
-
-            var expectedAlgHeader =
-                ccfVersion["ccf_version"]!.ToString().StartsWith("ccf-4.") ? "RS256" : "PS256";
+            var expectedAlgHeader = "PS256";
             Assert.AreEqual(expectedAlgHeader, header["alg"]!.ToString());
             Assert.AreEqual("JWT", header["typ"]!.ToString());
             Assert.AreEqual(kid, header["kid"]!.ToString());

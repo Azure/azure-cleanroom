@@ -1,7 +1,7 @@
 name: governance-test-ccf-headers
 services:
   test-header-ccf-1:
-    image: ccf:$ccfImageTag
+    image: ccf/app/run-js/sandbox:$ccfImageTag
     ports:
       - "9001:8080"
     volumes:

@@ -119,7 +119,7 @@ public class TestBase
         await this.ProposeAndAcceptAllowAllCleanRoomPolicy(contractId);
     }
 
-    protected async Task ProposeAndAcceptContract(string contractId)
+    protected async Task<string> ProposeContract(string contractId)
     {
         string contractUrl = $"contracts/{contractId}";
         var contractContent = new JsonObject
@@ -160,7 +160,13 @@ public class TestBase
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
             var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
             proposalId = responseBody[ProposalIdKey]!.ToString();
+            return proposalId;
         }
+    }
+
+    protected async Task ProposeAndAcceptContract(string contractId)
+    {
+        string proposalId = await this.ProposeContract(contractId);
 
         // All members vote on the above proposal by accepting it.
         await this.AllMembersAcceptContract(contractId, proposalId);
@@ -288,7 +294,7 @@ public class TestBase
         }
     }
 
-    protected async Task AllMembersAcceptProposal(string proposalId)
+    protected virtual async Task AllMembersAcceptProposal(string proposalId)
     {
         foreach (var memberClient in this.CgsClients)
         {
@@ -306,7 +312,7 @@ public class TestBase
         }
     }
 
-    protected async Task AllMembersAcceptContract(string contractId, string proposalId)
+    protected virtual async Task AllMembersAcceptContract(string contractId, string proposalId)
     {
         foreach (var memberClient in this.CgsClients)
         {

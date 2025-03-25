@@ -13,11 +13,11 @@ function Propose-Set-MemberData {
     $memberIdentifier = "",
 
     [string[]]
-    [ValidateSet("cgs_operator", "contract_operator")]
+    [ValidateSet("cgsOperator", "contractOperator")]
     $addRole,
 
     [string[]]
-    [ValidateSet("cgs_operator", "contract_operator")]
+    [ValidateSet("cgsOperator", "contractOperator")]
     $removeRole,
 
     [switch]
@@ -42,16 +42,16 @@ function Propose-Set-MemberData {
 
   $memberdata = @{}
   if ($tenantId -ne "") {
-    $memberData.Add("tenant_id", $tenantId)
+    $memberData.Add("tenantId", $tenantId)
   }
   if ($memberIdentifier -ne "") {
     $memberData.Add("identifier", $memberIdentifier)
   }
   if ($cgsRoles.Count -gt 0) {
-    $memberData.Add("cgs_roles", $cgsRoles)
+    $memberData.Add("cgsRoles", $cgsRoles)
   }
 
-  $existingMemberData = (curl -sS "localhost:$port/members" | jq -r --arg memberId "$memberId" '.[$memberId].member_data')
+  $existingMemberData = (curl -sS "localhost:$port/members" | jq -r --arg memberId "$memberId" '.value[] | select(.memberId==$memberId).memberData')
   if ($existingMemberData -eq "null") {
     $existingMemberData = "{}"
   }

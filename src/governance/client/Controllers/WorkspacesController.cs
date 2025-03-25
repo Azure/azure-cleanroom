@@ -1,9 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
+using Azure.Identity;
+using Azure.Security.KeyVault.Certificates;
+using CoseUtils;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Controllers;
@@ -18,32 +21,95 @@ public class WorkspacesController : ClientControllerBase
     {
     }
 
+    [HttpGet("/ready")]
+    public IActionResult Ready()
+    {
+        return this.Ok(new JsonObject
+        {
+            ["status"] = "up"
+        });
+    }
+
     [HttpPost("/configure")]
     public async Task<IActionResult> SetWorkspaceConfig(
         [FromForm] WorkspaceConfigurationModel model)
     {
-        // Signing cert and signing key need to be mandatorily configured. CCF endpoint and
-        // service certificate are optional.
-        if (model?.SigningCertPemFile == null || model.SigningCertPemFile.Length <= 0)
+        if (model.SigningCertPemFile == null && string.IsNullOrEmpty(model.SigningCertId))
         {
-            return this.BadRequest("No file was uploaded.");
+            return this.BadRequest("Either SigningCertPemFile or SigningCertId must be specified");
         }
 
-        if (model?.SigningKeyPemFile == null || model.SigningKeyPemFile.Length <= 0)
+        if (model.SigningCertPemFile != null && !string.IsNullOrEmpty(model.SigningCertId))
         {
-            return this.BadRequest("No file was uploaded.");
+            return this.BadRequest(
+                "Only one of SigningCertPemFile or SigningCertId must be specified");
         }
 
-        using var reader = new StreamReader(model.SigningCertPemFile.OpenReadStream());
-        string signingCert = await reader.ReadToEndAsync();
+        CoseSignKey coseSignKey;
+        X509Certificate2 httpsClientCert;
+        if (model.SigningCertPemFile != null)
+        {
+            if (model.SigningCertPemFile.Length <= 0)
+            {
+                return this.BadRequest("No signing cert file was uploaded.");
+            }
 
-        using var reader2 = new StreamReader(model.SigningKeyPemFile.OpenReadStream());
-        string signingKey = await reader2.ReadToEndAsync();
+            if (model.SigningKeyPemFile == null || model.SigningKeyPemFile.Length <= 0)
+            {
+                return this.BadRequest("No signing key file was uploaded.");
+            }
+
+            string signingCert;
+            using var reader = new StreamReader(model.SigningCertPemFile.OpenReadStream());
+            signingCert = await reader.ReadToEndAsync();
+
+            string signingKey;
+            using var reader2 = new StreamReader(model.SigningKeyPemFile.OpenReadStream());
+            signingKey = await reader2.ReadToEndAsync();
+
+            coseSignKey = new CoseSignKey(signingCert, signingKey);
+            httpsClientCert = X509Certificate2.CreateFromPem(signingCert, signingKey);
+        }
+        else
+        {
+            Uri signingCertId;
+            try
+            {
+                signingCertId = new Uri(model.SigningCertId!);
+            }
+            catch (Exception e)
+            {
+                return this.BadRequest($"Invalid signingKid value: {e.Message}.");
+            }
+
+            var creds = new DefaultAzureCredential();
+            coseSignKey = await CoseSignKey.FromKeyVault(signingCertId, creds);
+
+            // Download the full cert along with private key for HTTPS client auth.
+            var akvEndpoint = "https://" + signingCertId.Host;
+            var certClient = new CertificateClient(new Uri(akvEndpoint), creds);
+
+            // certificates/{name} or certificates/{name}/{version}
+            var parts = signingCertId.AbsolutePath.Split(
+                "/",
+                StringSplitOptions.RemoveEmptyEntries);
+            string certName = parts[1];
+            string? version = parts.Length == 3 ? parts[2] : null;
+            httpsClientCert = await certClient.DownloadCertificateAsync(certName, version);
+        }
 
         string ccfEndpoint = string.Empty;
         if (!string.IsNullOrEmpty(model.CcfEndpoint))
         {
             ccfEndpoint = model.CcfEndpoint.Trim();
+            try
+            {
+                _ = new Uri(ccfEndpoint);
+            }
+            catch (Exception e)
+            {
+                return this.BadRequest($"Invalid ccfEndpoint value '{ccfEndpoint}': {e.Message}.");
+            }
         }
 
         string serviceCertPem = string.Empty;
@@ -54,21 +120,14 @@ public class WorkspacesController : ClientControllerBase
                 serviceCertPem = await reader3.ReadToEndAsync();
             }
         }
-        else if (!string.IsNullOrEmpty(ccfEndpoint))
-        {
-            var ep = new Uri(ccfEndpoint);
-            if (ep.Host.ToLower().EndsWith("confidential-ledger.azure.com"))
-            {
-                string ccfEndpointName = ep.Host.Split(".")[0];
-                using var client = new HttpClient();
-                var response = await client.GetFromJsonAsync<JsonObject>(
-                    $"https://identity.confidential-ledger.core.azure.com/ledgerIdentity" +
-                    $"/{ccfEndpointName}");
-                serviceCertPem = response!["ledgerTlsCertificate"]!.ToString()!;
-            }
-        }
 
-        CcfClientManager.SetSigningDefaults(signingCert, signingKey);
+        // Governance endpoint uses Cose signed messages for member auth.
+        CcfClientManager.SetGovAuthDefaults(coseSignKey);
+
+        // App authentication uses member_cert authentication policy which uses HTTPS client cert
+        // based authentication. So we need access to the member cert and private key for setting
+        // up HTTPS client cert auth.
+        CcfClientManager.SetAppAuthDefaults(httpsClientCert);
 
         // Set workspace configuration values only if the CCF endpoint is specified as part of the
         // configure call. This serves as a default value when running in single CCF client mode.
@@ -98,10 +157,14 @@ public class WorkspacesController : ClientControllerBase
             try
             {
                 var ccfClient = await this.CcfClientManager.GetGovClient();
-                using HttpResponseMessage response = await ccfClient.GetAsync("gov/members");
+                using HttpResponseMessage response = await ccfClient.GetAsync(
+                    $"gov/service/members?api-version={this.CcfClientManager.GetGovApiVersion()}");
                 await response.ValidateStatusCodeAsync(this.Logger);
                 var jsonResponse = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
-                copy.MemberData = jsonResponse[copy.MemberId]?["member_data"]?.AsObject();
+                copy.MemberData =
+                    jsonResponse["value"]!.AsArray()
+                    .FirstOrDefault(m => m!["memberId"]?.ToString() == copy.MemberId)?
+                    ["memberData"]!.AsObject();
             }
             catch (Exception e)
             {
@@ -226,14 +289,6 @@ public class WorkspacesController : ClientControllerBase
     {
         // There is not direct API to retrieve the original bundle that was submitted via set_jsapp.
         var ccfClient = await this.CcfClientManager.GetGovClient();
-        var version = this.CcfClientManager.GetGovApiVersion();
-        if (version == "2023-06-01-preview")
-        {
-            // For older CCF clusters get the bundle using the classic API as
-            // javascript-modules API came with 5.0 GA release.
-            return await this.GetJSAppBundleClassic();
-        }
-
         JsonObject modules, endpoints;
 
         using (HttpResponseMessage response = await ccfClient.GetAsync(
@@ -246,7 +301,7 @@ public class WorkspacesController : ClientControllerBase
 
         using (HttpResponseMessage response = await ccfClient.GetAsync(
             $"gov/service/javascript-app?" +
-            $"api-version={this.CcfClientManager.GetGovApiVersion()}"))
+            $"api-version={this.CcfClientManager.GetGovApiVersion()}&case=original"))
         {
             await response.ValidateStatusCodeAsync(this.Logger);
             endpoints = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
@@ -307,26 +362,20 @@ public class WorkspacesController : ClientControllerBase
                 var value = new JsonObject();
                 foreach (var item3 in verbSpec.Value!.AsObject().AsEnumerable())
                 {
-                    var key = ToSnakeCase(item3.Key);
-
-                    // open_api needs to openapi and not open_api to match bundle schema.
-                    if (key == "open_api")
-                    {
-                        key = "openapi";
-                    }
-
-                    value[key] = item3.Value?.DeepClone();
+                    value[item3.Key] = item3.Value?.DeepClone();
                 }
 
                 // Remove leading / ie "js_module": "/foo/bar" => "js_module": "foo/bar"
                 value["js_module"] = value["js_module"]!.ToString().TrimStart('/');
 
-                endpointsInProposalFormat[api]!.AsObject()[verb] = value;
-
-                static string ToSnakeCase(string input)
+                // The /javascript-app API is not returning mode value for PUT/POST. Need to fill it
+                // or else proposal submission fails.
+                if ((verb == "put" || verb == "post") && value["mode"] == null)
                 {
-                    return Regex.Replace(input, "([a-z])([A-Z])", "$1_$2").ToLower();
+                    value["mode"] = "readwrite";
                 }
+
+                endpointsInProposalFormat[api]!.AsObject()[verb] = value;
             }
         }
 
@@ -341,72 +390,6 @@ public class WorkspacesController : ClientControllerBase
             {
                 ["name"] = moduleNames[i].TrimStart('/'),
                 ["module"] = content
-            });
-        }
-
-        return this.Ok(new JsonObject
-        {
-            ["metadata"] = new JsonObject
-            {
-                ["endpoints"] = endpointsInProposalFormat
-            },
-            ["modules"] = modulesArray
-        });
-    }
-
-    private async Task<IActionResult> GetJSAppBundleClassic()
-    {
-        // There is not direct API to retrieve the original bundle that was submitted via set_jsapp.
-        var ccfClient = await this.CcfClientManager.GetGovClient();
-        JsonObject modules, endpoints;
-        using (HttpResponseMessage response = await ccfClient.GetAsync($"gov/kv/modules"))
-        {
-            await response.ValidateStatusCodeAsync(this.Logger);
-            modules = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
-        }
-
-        using (HttpResponseMessage response = await ccfClient.GetAsync($"gov/kv/endpoints"))
-        {
-            await response.ValidateStatusCodeAsync(this.Logger);
-            endpoints = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
-        }
-
-        var endpointsInProposalFormat = new JsonObject();
-        foreach (KeyValuePair<string, JsonNode?> item in endpoints!.AsEnumerable())
-        {
-            // Need to transform the endpoints output to the format that the proposal expects.
-            // "GET /contracts": { "js_module": "/foo/bar", ...} =>
-            // "/contracts": { "get": { "js_module": "foo/bar", ... }
-            string[] parts = item.Key.Split(" ");
-            string verb = parts[0]!.ToLower();
-            string api = parts[1]!;
-            if (endpointsInProposalFormat[api] == null)
-            {
-                endpointsInProposalFormat[api] = new JsonObject();
-            }
-
-            var value = item.Value!.DeepClone();
-
-            // Remove leading / ie "js_module": "/foo/bar" => "js_module": "foo/bar"
-            value["js_module"] = value["js_module"]!.ToString().TrimStart('/');
-
-            // The /endpoints API is not returning mode value for PUT/POST. Need to fill it
-            // or else proposal submission fails.
-            if ((verb == "put" || verb == "post") && value["mode"] == null)
-            {
-                value["mode"] = "readwrite";
-            }
-
-            endpointsInProposalFormat[api]!.AsObject()[verb] = value;
-        }
-
-        var modulesArray = new JsonArray();
-        foreach (KeyValuePair<string, JsonNode?> item in modules!.AsEnumerable())
-        {
-            modulesArray.Add(new JsonObject
-            {
-                ["name"] = item.Key.TrimStart('/'),
-                ["module"] = item.Value?.DeepClone()
             });
         }
 

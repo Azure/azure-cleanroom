@@ -1,16 +1,21 @@
-import base64
+import os
 import json
 import tempfile
 from typing import Callable
 from urllib.parse import urlparse
 from abc import ABC, ABCMeta, abstractmethod
 import uuid
-from ..models.secretstore import *
+from cleanroom_common.azure_cleanroom_core.models.secretstore import SecretStoreEntry
+
+from cleanroom_common.azure_cleanroom_core.exceptions.exception import (
+    CleanroomSpecificationError,
+    ErrorCode,
+)
 
 
 class ISecretStore(ABC):
     @abstractmethod
-    def get_or_add_secret(
+    def add_secret(
         self,
         secret_name: str,
         generate_secret: Callable,
@@ -27,7 +32,7 @@ class LocalSecretStore(ISecretStore):
     def __init__(self, entry: SecretStoreEntry):
         self._entry = entry
 
-    def get_or_add_secret(
+    def add_secret(
         self,
         secret_name: str,
         generate_secret: Callable,
@@ -38,13 +43,6 @@ class LocalSecretStore(ISecretStore):
         key_file_path = os.path.abspath(
             os.path.join(self._entry.storeProviderUrl, f"{secret_name}.bin")
         )
-
-        secret = self.get_secret(secret_name)
-        if secret is not None:
-            logger.warning(
-                f"Secret {secret_name} found in store {self._entry.storeProviderUrl}"
-            )
-            return secret
 
         logger.warning(
             f"Creating secret {secret_name} in store {self._entry.storeProviderUrl}"
@@ -70,7 +68,7 @@ class AzureSecureSecretStore(ISecretStore):
     def __init__(self, entry: SecretStoreEntry):
         self._entry = entry
 
-    def get_or_add_secret(
+    def add_secret(
         self,
         secret_name: str,
         generate_secret: Callable,
@@ -80,14 +78,9 @@ class AzureSecureSecretStore(ISecretStore):
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric import rsa
 
-        assert security_policy is not None
-
-        public_key = self.get_secret(secret_name)
-        if public_key is not None:
-            logger.warning(
-                f"Secret {secret_name} found in store {self._entry.storeProviderUrl}"
-            )
-            return public_key
+        assert (
+            security_policy is not None
+        ), "Security policy is required for secure store."
 
         logger.warning(
             f"Creating secret {secret_name} in store {self._entry.storeProviderUrl}"
@@ -99,7 +92,9 @@ class AzureSecureSecretStore(ISecretStore):
         try:
             private_key = generate_secret()
 
-            assert isinstance(private_key, rsa.RSAPrivateKey)
+            assert isinstance(
+                private_key, rsa.RSAPrivateKey
+            ), f"Invalid private key type {type(private_key)}"
             private_key_bytes = private_key.private_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.TraditionalOpenSSL,
@@ -197,17 +192,13 @@ class AzureSecretStore(ISecretStore):
     def __init__(self, entry: SecretStoreEntry):
         self._entry = entry
 
-    def get_or_add_secret(
+    def add_secret(
         self,
         secret_name: str,
         generate_secret: Callable,
         security_policy: str | None = None,
     ) -> bytes:
         from ._azcli_helpers import az_cli
-
-        secret = self.get_secret(secret_name)
-        if secret is not None:
-            return secret
 
         secret = generate_secret()
         vault_name = urlparse(self._entry.storeProviderUrl).hostname.split(".")[0]
@@ -248,20 +239,24 @@ class AzureSecretStore(ISecretStore):
             os.remove(secret_file_path)
 
 
-def get_secretstore_entry(
+def get_secretstore_entry_internal(
     secretstore_name, secretstore_config_file
 ) -> SecretStoreEntry:
     from azure.cli.core.util import CLIError
-    from ._configuration_helpers import read_secretstore_config
+    from cleanroom_common.azure_cleanroom_core.utilities.secretstore_helpers import (
+        get_secretstore_entry,
+    )
+    from ..utilities._azcli_helpers import logger
 
-    secretstore_config = read_secretstore_config(secretstore_config_file)
-    for index, x in enumerate(secretstore_config.secretstores):
-        if x.name == secretstore_name:
-            return secretstore_config.secretstores[index]
-    else:
-        raise CLIError(
-            f"Secret store {secretstore_name} not found. Run az cleanroom secret-store add first."
-        )
+    try:
+        return get_secretstore_entry(secretstore_name, secretstore_config_file, logger)
+    except CleanroomSpecificationError as e:
+        if e.code == ErrorCode.SecretStoreNotFound:
+
+            raise CLIError(
+                f"Secret store {secretstore_name} not found. Run az cleanroom secret-store add first."
+            )
+        raise CLIError(f"Get secret store failed: {e}")
 
 
 def get_secretstore(secretstore_entry: SecretStoreEntry) -> ISecretStore:

@@ -12,11 +12,13 @@
 # This is done to speed up command execution as having all the imports listed at top level is making
 # execution slow for every command even if the top level imported packaged will not be used by that
 # command.
+from enum import StrEnum
 import hashlib
 import json
 import os
 from time import sleep
 import base64
+from typing import Any
 from urllib.parse import urlparse
 import uuid
 import shlex
@@ -29,9 +31,11 @@ from .utilities._azcli_helpers import logger, az_cli
 from .datastore_cmd import *
 from .config_cmd import *
 from .secretstore_cmd import *
+from cleanroom_common.azure_cleanroom_core.models.network import *
 
-MCR_CLEANROOM_VERSIONS_REGISTRY = "mcr.microsoft.com/cleanroom"
-MCR_CGS_REGISTRY = "mcr.microsoft.com/cleanroom"
+
+MCR_CLEANROOM_VERSIONS_REGISTRY = "mcr.microsoft.com/azurecleanroom"
+MCR_CGS_REGISTRY = "mcr.microsoft.com/azurecleanroom"
 mcr_cgs_constitution_url = f"{MCR_CGS_REGISTRY}/cgs-constitution:2.0.0"
 mcr_cgs_jsapp_url = f"{MCR_CGS_REGISTRY}/cgs-js-app:2.0.0"
 
@@ -48,26 +52,62 @@ application_yml = (
 
 
 def governance_client_deploy_cmd(
-    cmd, ccf_endpoint: str, signing_cert, signing_key, gov_client_name, service_cert=""
+    cmd,
+    ccf_endpoint: str,
+    signing_cert_id,
+    signing_cert,
+    signing_key,
+    gov_client_name,
+    service_cert="",
 ):
-    if not os.path.exists(signing_cert):
-        raise CLIError(f"File {signing_cert} does not exist.")
+    if not signing_cert and not signing_key and not signing_cert_id:
+        raise CLIError(
+            "Either (signing-cert,signing-key) or signing-cert-id must be specified."
+        )
+    if signing_cert_id:
+        if signing_cert or signing_key:
+            raise CLIError(
+                "signing-cert/signing-key cannot be specified along with signing-cert-id."
+            )
+        if os.path.exists(signing_cert_id):
+            with open(signing_cert_id, "r") as f:
+                signing_cert_id = f.read()
+    else:
+        if not signing_cert or not signing_key:
+            raise CLIError("Both signing-cert and signing-key must be specified.")
 
-    if not os.path.exists(signing_key):
-        raise CLIError(f"File {signing_key} does not exist.")
+        if not os.path.exists(signing_cert):
+            raise CLIError(f"File {signing_cert} does not exist.")
 
-    if service_cert == "" and (
-        not ccf_endpoint.lower().endswith("confidential-ledger.azure.com")
-    ):
+        if not os.path.exists(signing_key):
+            raise CLIError(f"File {signing_key} does not exist.")
+
+    if not service_cert:
         raise CLIError(
             f"--service-cert argument must be specified for {ccf_endpoint} endpoint."
         )
 
     from python_on_whales import DockerClient
 
+    compose_profiles = []
+    if signing_cert_id:
+        compose_profiles = ["creds-proxy"]
+
     docker = DockerClient(
-        compose_files=[compose_file], compose_project_name=gov_client_name
+        compose_files=[compose_file],
+        compose_project_name=gov_client_name,
+        compose_profiles=compose_profiles,
     )
+
+    uid = os.getuid()
+    gid = os.getgid()
+    os.environ["AZCLI_CCF_PROVIDER_UID"] = str(uid)
+    os.environ["AZCLI_CCF_PROVIDER_GID"] = str(gid)
+
+    if "AZCLI_CGS_CLIENT_IMAGE" in os.environ:
+        image = os.environ["AZCLI_CGS_CLIENT_IMAGE"]
+        logger.warning(f"Using cgs-client image from override url: {image}")
+
     docker.compose.up(remove_orphans=True, detach=True)
 
     import time
@@ -80,12 +120,20 @@ def governance_client_deploy_cmd(
             (_, port) = docker.compose.port(service="cgs-client", private_port=8080)
             (_, uiport) = docker.compose.port(service="cgs-ui", private_port=6300)
             cgs_endpoint = f"http://localhost:{port}"
-            r = requests.get(f"{cgs_endpoint}/swagger/index.html")
+            r = requests.get(f"{cgs_endpoint}/ready")
             if r.status_code == 200:
                 started = True
                 break
+            elif r.status_code == 404:
+                logger.warning(
+                    f"Restarting cgs-client container as its reporting unexpected status code 404 for /ready endpoint..."
+                )
+                docker.compose.down()
+                docker.compose.up(remove_orphans=True, detach=True)
             else:
-                logger.warning("Waiting for cgs-client endpoint to be up...")
+                logger.warning(
+                    f"Waiting for cgs-client endpoint to be up... (status code: {r.status_code})"
+                )
                 sleep(5)
         except:
             logger.warning("Waiting for cgs-client endpoint to be up...")
@@ -97,10 +145,17 @@ def governance_client_deploy_cmd(
         )
 
     data = {"CcfEndpoint": ccf_endpoint}
-    files = [
-        ("SigningCertPemFile", ("SigningCertPemFile", open(signing_cert, "rb"))),
-        ("SigningKeyPemFile", ("SigningKeyPemFile", open(signing_key, "rb"))),
-    ]
+    files = []
+    if signing_cert_id:
+        data["signingCertId"] = signing_cert_id
+    else:
+        files.append(
+            ("SigningCertPemFile", ("SigningCertPemFile", open(signing_cert, "rb")))
+        )
+        files.append(
+            ("SigningKeyPemFile", ("SigningKeyPemFile", open(signing_key, "rb")))
+        )
+
     if service_cert != "":
         files.append(
             ("ServiceCertPemFile", ("ServiceCertPemFile", open(service_cert, "rb")))
@@ -160,7 +215,8 @@ def governance_client_get_upgrades_cmd(cmd, gov_client_name=""):
             f"Could not identify version for cgs-client container image: {digest}."
         )
 
-    latest_cgs_client_version = find_cgs_client_version_entry("latest")
+    latest_tag = os.environ.get("AZCLI_CGS_CLIENT_LATEST_TAG", "latest")
+    latest_cgs_client_version = find_cgs_client_version_entry(latest_tag)
     from packaging.version import Version
 
     upgrades = []
@@ -587,7 +643,7 @@ def governance_deployment_generate_cmd(
     if not os.path.exists(output_dir):
         raise CLIError(f"Output folder location {output_dir} does not exist.")
 
-    from .utilities._helpers import get_deployment_template
+    from .utilities._helpers import get_deployment_template_internal
 
     contract = governance_contract_show_cmd(cmd, gov_client_name, contract_id)
     contract_yaml = yaml.safe_load(contract["data"])
@@ -601,7 +657,7 @@ def governance_deployment_generate_cmd(
     if security_policy_creation_option == "cached-debug":
         debug_mode = True
 
-    arm_template, policy_json, policy_rego = get_deployment_template(
+    arm_template, policy_json, policy_rego = get_deployment_template_internal(
         cleanroomSpec,
         contract_id,
         ccf_details["ccfEndpoint"],
@@ -648,7 +704,7 @@ def governance_deployment_generate_cmd(
             assert (
                 security_policy_creation_option == "cached"
                 or security_policy_creation_option == "cached-debug"
-            )
+            ), f"Invalid security policy creation option passed: {security_policy_creation_option}"
             with open(output_dir + f"{os.path.sep}cleanroom-policy.rego", "w") as f:
                 f.write(policy_rego)
 
@@ -959,17 +1015,50 @@ def governance_document_vote_cmd(
     return r.json()
 
 
+def governance_network_set_recovery_threshold_cmd(
+    cmd, recovery_threshold, gov_client_name=""
+):
+    content = {
+        "actions": [
+            {
+                "name": "set_recovery_threshold",
+                "args": {"recovery_threshold": int(recovery_threshold)},
+            }
+        ]
+    }
+
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.post(f"{cgs_endpoint}/proposals/create", json=content)
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_network_show_cmd(cmd, gov_client_name=""):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.get(f"{cgs_endpoint}/network/show")
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
 def governance_member_add_cmd(
     cmd,
     identifier,
     certificate,
     encryption_public_key,
+    recovery_role,
     tenant_id,
     member_data,
     gov_client_name="",
 ):
     if not os.path.exists(certificate):
         raise CLIError(f"File {certificate} does not exist.")
+
+    if recovery_role and not encryption_public_key:
+        raise CLIError(
+            f"--recovery-role can only be specified along with --encryption-public-key."
+        )
 
     if member_data:
         if identifier:
@@ -989,7 +1078,7 @@ def governance_member_add_cmd(
             raise CLIError(f"--identifier must be specified.")
         member_data = {"identifier": identifier}
         if tenant_id != "":
-            member_data["tenant_id"] = tenant_id
+            member_data["tenantId"] = tenant_id
 
     encryption_public_key_pem = ""
     cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
@@ -1005,6 +1094,10 @@ def governance_member_add_cmd(
     }
     if encryption_public_key_pem:
         args["encryption_pub_key"] = encryption_public_key_pem
+        if recovery_role:
+            args["recovery_role"] = (
+                "Owner" if recovery_role == "owner" else "Participant"
+            )
 
     content = {
         "actions": [
@@ -1024,13 +1117,13 @@ def governance_member_add_cmd(
 
 def governance_member_set_tenant_id_cmd(cmd, identifier, tenant_id, gov_client_name=""):
     cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
-    member_data = {"identifier": identifier, "tenant_id": tenant_id}
+    member_data = {"identifier": identifier, "tenantId": tenant_id}
     members = governance_member_show_cmd(cmd, gov_client_name)
     member = [
         x
-        for x in members
-        if "identifier" in members[x]["member_data"]
-        and members[x]["member_data"]["identifier"] == identifier
+        for x in members["value"]
+        if "identifier" in x["memberData"]
+        and x["memberData"]["identifier"] == identifier
     ]
     if len(member) == 0:
         raise CLIError(f"Member with identifier {identifier} was not found.")
@@ -1040,7 +1133,7 @@ def governance_member_set_tenant_id_cmd(cmd, identifier, tenant_id, gov_client_n
             {
                 "name": "set_member_data",
                 "args": {
-                    "member_id": member[0],
+                    "member_id": member[0]["memberId"],
                     "member_data": member_data,
                 },
             }
@@ -1071,6 +1164,73 @@ def governance_member_show_cmd(cmd, gov_client_name=""):
 def governance_member_keygeneratorsh_cmd(cmd):
     with open(keygenerator_sh, encoding="utf-8") as f:
         print(f.read())
+
+
+def governance_member_get_default_certificate_policy_cmd(cmd, member_name):
+    policy = get_default_cert_policy(member_name)
+    print(policy)
+
+
+def governance_member_generate_identity_certificate_cmd(
+    cmd, member_name, vault_name, output_dir
+):
+    cert_policy = get_default_cert_policy(member_name)
+    cert_policy_file = output_dir + f"{os.path.sep}cert-policy.json"
+    with open(cert_policy_file, "w") as f:
+        f.write(cert_policy)
+    cert_name = f"{member_name}-identity"
+    logger.warning(
+        f"Generating identity private key and certificate for participant '{member_name}' in Azure Key Vault..."
+    )
+    az_cli(
+        f"keyvault certificate create --name {cert_name} --vault-name {vault_name} --policy @{cert_policy_file}"
+    )
+    cert_pem_file = output_dir + f"{os.path.sep}{member_name}_cert.pem"
+    if os.path.exists(cert_pem_file):
+        os.remove(cert_pem_file)
+    az_cli(
+        f"keyvault certificate download --name {cert_name} --vault-name {vault_name} --file {cert_pem_file} --encoding PEM"
+    )
+    cert_id = az_cli(
+        f"keyvault certificate show --name {cert_name} --vault-name {vault_name} --query id --output tsv"
+    )
+    cert_id_file = output_dir + f"{os.path.sep}{member_name}_cert.id"
+    with open(cert_id_file, "w") as f:
+        f.write(str(cert_id))
+    logger.warning(
+        f"Identity certificate generated at: {cert_pem_file} (to be registered in CCF)"
+    )
+    logger.warning(
+        f"Identity certificate Azure Key Vault Id written out at: {cert_id_file}"
+    )
+
+
+def governance_member_generate_encryption_key_cmd(
+    cmd, member_name, vault_name, output_dir
+):
+    key_name = f"{member_name}-encryption"
+    logger.warning(
+        f"Generating RSA encryption key pair for participant '{member_name}' in Azure Key Vault..."
+    )
+    az_cli(
+        f"keyvault key create --name {key_name} --vault-name {vault_name} --kty RSA --size 2048 --ops decrypt"
+    )
+    enc_pubk_pem_file = output_dir + f"{os.path.sep}{member_name}_enc_pubk.pem"
+    if os.path.exists(enc_pubk_pem_file):
+        os.remove(enc_pubk_pem_file)
+    az_cli(
+        f"keyvault key download --name {key_name} --vault-name {vault_name} --file {enc_pubk_pem_file}"
+    )
+    kid = az_cli(
+        f"keyvault key show --name {key_name} --vault-name {vault_name} --query key.kid --output tsv"
+    )
+    kid_file = output_dir + f"{os.path.sep}{member_name}_enc_key.id"
+    with open(kid_file, "w") as f:
+        f.write(str(kid))
+    logger.warning(
+        f"Encryption public key generated at: {enc_pubk_pem_file} (to be registered in CCF)"
+    )
+    logger.warning(f"Encryption key Azure Key Vault Id written out at: {kid_file}")
 
 
 def get_cgs_client_endpoint(cmd, gov_client_name: str):
@@ -1154,12 +1314,12 @@ def config_init_cmd(cmd, cleanroom_config_file):
     )
     spec.identities.append(attested_identity)
 
-    from .utilities._configuration_helpers import write_cleanroom_spec
+    from .utilities._configuration_helpers import write_cleanroom_spec_internal
 
-    write_cleanroom_spec(cleanroom_config_file, spec)
+    write_cleanroom_spec_internal(cleanroom_config_file, spec)
 
 
-def merge_specs(this: CleanRoomSpecification, that: CleanRoomSpecification):
+def merge_specs(this: Any, that: Any):
     for k in that.model_fields.keys():
         this_attr = getattr(this, k)
         that_attr = getattr(that, k)
@@ -1171,6 +1331,9 @@ def merge_specs(this: CleanRoomSpecification, that: CleanRoomSpecification):
             setattr(this, k, that_attr)
             continue
 
+        if this_attr == that_attr:
+            continue
+
         if isinstance(this_attr, list) and isinstance(that_attr, list):
             for i in that_attr:
                 if i not in this_attr:
@@ -1180,7 +1343,7 @@ def merge_specs(this: CleanRoomSpecification, that: CleanRoomSpecification):
                     assert index is not None
 
         else:
-            assert this_attr == that_attr
+            this_attr = merge_specs(this_attr, that_attr)
 
     return this
 
@@ -1188,17 +1351,19 @@ def merge_specs(this: CleanRoomSpecification, that: CleanRoomSpecification):
 def config_view_cmd(cmd, cleanroom_config_file, configs, output_file, no_print):
 
     from .utilities._configuration_helpers import (
-        read_cleanroom_spec,
-        write_cleanroom_spec,
+        read_cleanroom_spec_internal,
+        write_cleanroom_spec_internal,
     )
     from rich import print
 
-    cleanroom_spec = read_cleanroom_spec(cleanroom_config_file)
+    cleanroom_spec = read_cleanroom_spec_internal(cleanroom_config_file)
 
     for config in configs:
-        cleanroom_spec = merge_specs(cleanroom_spec, read_cleanroom_spec(config))
+        cleanroom_spec = merge_specs(
+            cleanroom_spec, read_cleanroom_spec_internal(config)
+        )
 
-    write_cleanroom_spec(output_file, cleanroom_spec)
+    write_cleanroom_spec_internal(output_file, cleanroom_spec)
     if not no_print:
         print(cleanroom_spec)
 
@@ -1289,9 +1454,12 @@ def config_wrap_secret_cmd(
             cl_policy["policy"]["x-ms-sevsnpvm-hostdata"][0],
         )
 
-    from .utilities._secretstore_helpers import get_secretstore, get_secretstore_entry
+    from .utilities._secretstore_helpers import (
+        get_secretstore,
+        get_secretstore_entry_internal,
+    )
 
-    kek_secret_store_entry = get_secretstore_entry(
+    kek_secret_store_entry = get_secretstore_entry_internal(
         kek_secretstore_name, secretstore_config_file
     )
     kek_secret_store = get_secretstore(kek_secret_store_entry)
@@ -1350,20 +1518,23 @@ def config_add_application_cmd(
     cmd,
     cleanroom_config_file,
     name,
+    auto_start,
     image,
     cpu,
     memory,
+    ports: List[int] = [],
     command_line=None,
-    mounts={},
+    datasources={},
+    datasinks={},
     env_vars={},
     acr_access_identity=None,
 ):
     from .utilities._configuration_helpers import (
-        read_cleanroom_spec,
-        write_cleanroom_spec,
+        read_cleanroom_spec_internal,
+        write_cleanroom_spec_internal,
     )
 
-    spec = read_cleanroom_spec(cleanroom_config_file)
+    spec = read_cleanroom_spec_internal(cleanroom_config_file)
 
     acr_identity = None
     if acr_access_identity is not None:
@@ -1372,10 +1543,15 @@ def config_add_application_cmd(
             raise CLIError("Run az cleanroom config add-identity first.")
         acr_identity = access_identity[0]
 
+    app_start_type = ApplicationStartType.Manual
+    if auto_start:
+        app_start_type = ApplicationStartType.Auto
     registry_url = image.split("/")[0]
     command = shlex.split(command_line) if command_line else []
+
     application = Application(
         name=name,
+        startType=app_start_type,
         image=Image(
             executable=Document(
                 documentType="OCI",
@@ -1397,9 +1573,10 @@ def config_add_application_cmd(
         ),
         command=command,
         environmentVariables=env_vars,
+        datasources=datasources,
+        datasinks=datasinks,
         runtimeSettings=RuntimeSettings(
-            mounts=mounts,
-            ports=[],
+            ports=ports,
             resource=ApplicationResource(requests=Requests(cpu=cpu, memoryInGB=memory)),
         ),
     )
@@ -1417,27 +1594,30 @@ def config_add_application_cmd(
         logger.info(f"Patching application {application.name} in configuration.")
         spec.applications[index] = application
 
-    write_cleanroom_spec(cleanroom_config_file, spec)
+    write_cleanroom_spec_internal(cleanroom_config_file, spec)
     logger.warning(f"Application {name} added to cleanroom configuration.")
 
 
-def config_add_endpoint_cmd(
-    cmd, cleanroom_config_file, application_name, port: int, policy_bundle_url=""
+def config_network_http_enable_cmd(
+    cmd,
+    cleanroom_config_file,
+    direction: TrafficDirection,
+    policy_bundle_url="",
 ):
     from azure.cli.core.util import CLIError
 
     from .utilities._configuration_helpers import (
-        read_cleanroom_spec,
-        write_cleanroom_spec,
+        read_cleanroom_spec_internal,
+        write_cleanroom_spec_internal,
     )
 
-    spec = read_cleanroom_spec(cleanroom_config_file)
-    index = next(
-        (i for i, x in enumerate(spec.applications) if x.name == application_name),
-        None,
-    )
-    if index == None:
-        raise CLIError(f"Run az cleanroom config add-application first")
+    spec = read_cleanroom_spec_internal(cleanroom_config_file)
+
+    if not spec.network:
+        spec.network = NetworkSettings()
+
+    if not spec.network.http:
+        spec.network.http = HttpSettings()
 
     privacy_policy = None
     if policy_bundle_url:
@@ -1457,62 +1637,139 @@ def config_add_endpoint_cmd(
             )
         )
 
-    # TODO (HPrabh): Associate the application endpoint with an application and vice versa.
-    application_endpoint = ApplicationEndpoint(
-        port=port,
-        type="Open",
-        protection=PrivacyProxySettings(
-            proxyType=ProxyType.API,
-            proxyMode=ProxyMode.Open,
-            privacyPolicy=privacy_policy,
-        ),
-    )
-
-    endpointIndex = next(
-        (i for i, x in enumerate(spec.applicationEndpoints) if x.port == port),
-        None,
-    )
-    if endpointIndex == None:
-        logger.info(
-            f"Adding entry for application endpoint at port {port} in configuration."
+    if direction == TrafficDirection.Inbound:
+        spec.network.http.inbound = Inbound(
+            enabled=True,
+            policy=PrivacyProxySettings(
+                proxyType=ProxyType.API,
+                proxyMode=ProxyMode.Open,
+                privacyPolicy=privacy_policy,
+            ),
         )
-        spec.applicationEndpoints.append(application_endpoint)
-    else:
-        logger.info(f"Patching application {port} in configuration.")
-        spec.applicationEndpoints[endpointIndex] = application_endpoint
+    elif direction == TrafficDirection.Outbound:
+        spec.network.http.outbound = Outbound(
+            enabled=True,
+            policy=PrivacyProxySettings(
+                proxyType=ProxyType.API,
+                proxyMode=ProxyMode.Open,
+                privacyPolicy=privacy_policy,
+            ),
+        )
 
-    spec.applications[index].runtimeSettings.ports.append(port)
-    write_cleanroom_spec(cleanroom_config_file, spec)
+    write_cleanroom_spec_internal(cleanroom_config_file, spec)
 
 
-def config_disable_sandbox_cmd(cmd, cleanroom_config_file):
+def config_network_http_disable_cmd(
+    cmd, cleanroom_config_file, direction: TrafficDirection
+):
+
     from .utilities._configuration_helpers import (
-        read_cleanroom_spec,
-        write_cleanroom_spec,
+        read_cleanroom_spec_internal,
+        write_cleanroom_spec_internal,
     )
 
-    spec = read_cleanroom_spec(cleanroom_config_file)
-    spec.sandbox = SandboxSettings(sandboxType=SandBoxType.None_)
-    write_cleanroom_spec(cleanroom_config_file, spec)
+    spec = read_cleanroom_spec_internal(cleanroom_config_file)
+
+    if not spec.network or not spec.network.http:
+        return
+
+    if direction == TrafficDirection.Inbound:
+        spec.network.http.inbound = None
+    elif direction == TrafficDirection.Outbound:
+        spec.network.http.outbound = None
+
+    write_cleanroom_spec_internal(cleanroom_config_file, spec)
 
 
-def config_enable_sandbox_cmd(cmd, cleanroom_config_file):
+def config_network_tcp_enable_cmd(
+    cmd,
+    cleanroom_config_file,
+    allowed_ips={},
+):
     from .utilities._configuration_helpers import (
-        read_cleanroom_spec,
-        write_cleanroom_spec,
+        read_cleanroom_spec_internal,
+        write_cleanroom_spec_internal,
+    )
+    import ipaddress
+
+    spec = read_cleanroom_spec_internal(cleanroom_config_file)
+
+    if not allowed_ips:
+        raise CLIError("No IP addresses provided for allow listing.")
+
+    if not spec.network:
+        spec.network = NetworkSettings()
+
+    if not spec.network.tcp:
+        spec.network.tcp = TcpSettings(outbound=Outbound1(enabled=True, allowedIPs=[]))
+
+    for address, port in allowed_ips.items():
+        try:
+            ipaddress.ip_address(address)
+        except ValueError:
+            raise CLIError(
+                f"Invalid IP address: {address}. Only IP address allow listing is supported currently."
+            )
+        spec.network.tcp.outbound.allowedIPs.append(
+            NetworkEndpoint(address=address, port=int(port))
+        )
+
+    write_cleanroom_spec_internal(cleanroom_config_file, spec)
+
+
+def config_network_tcp_disable_cmd(cmd, cleanroom_config_file):
+    from .utilities._configuration_helpers import (
+        read_cleanroom_spec_internal,
+        write_cleanroom_spec_internal,
     )
 
-    spec = read_cleanroom_spec(cleanroom_config_file)
-    spec.sandbox = SandboxSettings(sandboxType=SandBoxType.Type_0)
-    write_cleanroom_spec(cleanroom_config_file, spec)
+    spec = read_cleanroom_spec_internal(cleanroom_config_file)
+
+    if not spec.network or not spec.network.tcp:
+        return
+
+    spec.network.tcp.outbound = None
+    write_cleanroom_spec_internal(cleanroom_config_file, spec)
+
+
+def config_network_dns_enable_cmd(cmd, cleanroom_config_file, port: int):
+    from .utilities._configuration_helpers import (
+        read_cleanroom_spec_internal,
+        write_cleanroom_spec_internal,
+    )
+
+    spec = read_cleanroom_spec_internal(cleanroom_config_file)
+
+    if not spec.network:
+        spec.network = NetworkSettings()
+
+    spec.network.dns = DnsSettings(enabled=True, port=port)
+
+    write_cleanroom_spec_internal(cleanroom_config_file, spec)
+
+
+def config_network_dns_disable_cmd(cmd, cleanroom_config_file):
+    from .utilities._configuration_helpers import (
+        read_cleanroom_spec_internal,
+        write_cleanroom_spec_internal,
+    )
+
+    spec = read_cleanroom_spec_internal(cleanroom_config_file)
+
+    if not spec.network:
+        return
+
+    spec.network.dns = None
+
+    write_cleanroom_spec_internal(cleanroom_config_file, spec)
 
 
 def config_validate_cmd(cmd, cleanroom_config_file):
     from .utilities._configuration_helpers import (
-        read_cleanroom_spec,
+        read_cleanroom_spec_internal,
     )
 
-    spec = read_cleanroom_spec(cleanroom_config_file)
+    spec = read_cleanroom_spec_internal(cleanroom_config_file)
     _validate_config(spec)
 
 
@@ -1539,24 +1796,29 @@ def config_wrap_deks(
 ):
 
     from .utilities._configuration_helpers import (
-        read_cleanroom_spec,
+        read_cleanroom_spec_internal,
     )
 
-    config = read_cleanroom_spec(cleanroom_config_file)
+    config = read_cleanroom_spec_internal(cleanroom_config_file)
 
     from .utilities._datastore_helpers import generate_wrapped_dek
-    from .utilities._secretstore_helpers import get_secretstore, get_secretstore_entry
+    from .utilities._secretstore_helpers import (
+        get_secretstore,
+        get_secretstore_entry_internal,
+    )
 
     for ds_entry in config.datasources + config.datasinks:
         datastore_name = ds_entry.store.id
 
-        assert ds_entry.protection.encryptionSecrets
+        assert (
+            ds_entry.protection.encryptionSecrets
+        ), f"Encryption secrets not specified for datastore {datastore_name}"
 
         kek_name = ds_entry.protection.encryptionSecrets.kek.name
         kek_secret_store_name = (
             ds_entry.protection.encryptionSecrets.kek.secret.backingResource.id
         )
-        kek_secret_store_entry = get_secretstore_entry(
+        kek_secret_store_entry = get_secretstore_entry_internal(
             kek_secret_store_name, secretstore_config_file
         )
         kek_secret_store = get_secretstore(kek_secret_store_entry)
@@ -1569,7 +1831,7 @@ def config_wrap_deks(
         dek_secret_store_name = (
             ds_entry.protection.encryptionSecrets.dek.secret.backingResource.id
         )
-        dek_secret_store_entry = get_secretstore_entry(
+        dek_secret_store_entry = get_secretstore_entry_internal(
             dek_secret_store_name, secretstore_config_file
         )
         dek_secret_store = get_secretstore(dek_secret_store_entry)
@@ -1577,10 +1839,10 @@ def config_wrap_deks(
         logger.warning(
             f"Creating wrapped DEK secret '{wrapped_dek_name}' for '{datastore_name}' in key vault '{dek_secret_store_entry.storeProviderUrl}'."
         )
-        dek_secret_store.get_or_add_secret(
+        dek_secret_store.add_secret(
             wrapped_dek_name,
             lambda: generate_wrapped_dek(
-                datastore_name, datastore_config_file, public_key
+                datastore_name, datastore_config_file, public_key, logger
             ),
         )
 
@@ -1612,14 +1874,16 @@ def config_create_kek(
     key_release_policy,
 ):
     from .utilities._configuration_helpers import (
-        read_cleanroom_spec,
+        read_cleanroom_spec_internal,
     )
     from .utilities._azcli_helpers import logger
 
-    spec = read_cleanroom_spec(cleanroom_config_file)
+    spec = read_cleanroom_spec_internal(cleanroom_config_file)
     for ds_entry in spec.datasources + spec.datasinks:
         ds_name = ds_entry.name
-        assert ds_entry.protection.encryptionSecrets
+        assert (
+            ds_entry.protection.encryptionSecrets
+        ), f"Encryption secrets not specified for datastore {ds_name}"
 
         kek_name = ds_entry.protection.encryptionSecrets.kek.secret.backingResource.name
         kek_secret_store_name = (
@@ -1638,9 +1902,12 @@ def create_kek(
     key_release_policy,
 ):
     from .utilities._azcli_helpers import logger
-    from .utilities._secretstore_helpers import get_secretstore, get_secretstore_entry
+    from .utilities._secretstore_helpers import (
+        get_secretstore,
+        get_secretstore_entry_internal,
+    )
 
-    kek_secret_store_entry = get_secretstore_entry(
+    kek_secret_store_entry = get_secretstore_entry_internal(
         kek_secret_store_name, secretstore_config_file
     )
     kek_secret_store = get_secretstore(kek_secret_store_entry)
@@ -1650,7 +1917,7 @@ def create_kek(
 
         return rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
-    _ = kek_secret_store.get_or_add_secret(
+    _ = kek_secret_store.add_secret(
         kek_name,
         generate_secret=create_key,
         security_policy=key_release_policy,
@@ -1813,7 +2080,8 @@ def constitution_digest_to_version_info(digest):
 
     upgrade = None
     current_version = Version(cgs_constitution)
-    latest_cgs_constitution = find_constitution_version_entry("latest")
+    latest_tag = os.environ.get("AZCLI_CGS_SERVICE_LATEST_TAG", "latest")
+    latest_cgs_constitution = find_constitution_version_entry(latest_tag)
     if (
         latest_cgs_constitution != None
         and Version(latest_cgs_constitution) > current_version
@@ -1835,7 +2103,8 @@ def bundle_digest_to_version_info(canonical_digest):
 
     upgrade = None
     current_version = Version(cgs_jsapp)
-    latest_cgs_jsapp = find_jsapp_version_entry("latest")
+    latest_tag = os.environ.get("AZCLI_CGS_SERVICE_LATEST_TAG", "latest")
+    latest_cgs_jsapp = find_jsapp_version_entry(latest_tag)
     if latest_cgs_jsapp != None and Version(latest_cgs_jsapp) > current_version:
         upgrade = {"jsappVersion": latest_cgs_jsapp}
 
@@ -2004,41 +2273,19 @@ def try_get_cgs_client_version(tag: str):
 
 def _validate_config(spec: CleanRoomSpecification):
     from rich.console import Console
+    from cleanroom_common.azure_cleanroom_core.utilities.helpers import (
+        validate_config,
+    )
 
-    # TODO (HPrabh): Update the validate function to check the whole spec for anomalies.
     console = Console()
-    issues = []
-    warnings = []
-    seen = set()
-    dupes = []
-    if spec.applicationEndpoints:
-        for endpoint in spec.applicationEndpoints:
-            if not endpoint.protection.privacyPolicy:
-                warnings.append(
-                    {
-                        "code": "NetworkAllowAll",
-                        "message": f"Application(s) open port {endpoint.port} does not have a "
-                        + "configured network policy. All traffic will be allowed. ",
-                    }
-                )
-            if endpoint.port in seen:
-                dupes.append(endpoint.port)
-            else:
-                seen.add(endpoint.port)
-
-    if len(dupes) > 0:
-        issues.append(
-            {
-                "code": "DuplicatePort",
-                "message": f"Port {dupes} appear more than once in the application(s). "
-                + "A port value can be used only once.",
-            }
-        )
+    issues, warnings = validate_config(spec, logger)
 
     if len(warnings) > 0:
         console.print(f"Warnings in the specification: {warnings}", style="bold yellow")
+
     if len(issues) > 0:
-        raise CLIError(issues)
+        errors = [str(x) for x in issues]
+        raise CLIError(errors)
 
 
 def ccf_provider_deploy_cmd(cmd, provider_client_name):
@@ -2047,10 +2294,14 @@ def ccf_provider_deploy_cmd(cmd, provider_client_name):
     return ccf_provider_deploy(cmd, provider_client_name)
 
 
-def ccf_provider_configure_cmd(cmd, signing_cert, signing_key, provider_client_name):
+def ccf_provider_configure_cmd(
+    cmd, signing_cert_id, signing_cert, signing_key, provider_client_name
+):
     from .custom_ccf import ccf_provider_configure
 
-    return ccf_provider_configure(cmd, signing_cert, signing_key, provider_client_name)
+    return ccf_provider_configure(
+        cmd, signing_cert_id, signing_cert, signing_key, provider_client_name
+    )
 
 
 def ccf_provider_show_cmd(cmd, provider_client_name):
@@ -2074,6 +2325,7 @@ def ccf_network_up_cmd(
     location,
     security_policy_creation_option,
     recovery_mode,
+    provider_client_name,
 ):
     from .custom_ccf import ccf_network_up
 
@@ -2086,6 +2338,7 @@ def ccf_network_up_cmd(
         location,
         security_policy_creation_option,
         recovery_mode,
+        provider_client_name,
     )
 
 
@@ -2192,9 +2445,8 @@ def ccf_network_submit_recovery_share_cmd(
     cmd,
     network_name,
     infra_type,
-    signing_cert,
-    signing_key,
     encryption_private_key,
+    encryption_key_id,
     provider_config,
     provider_client_name,
 ):
@@ -2204,9 +2456,8 @@ def ccf_network_submit_recovery_share_cmd(
         cmd,
         network_name,
         infra_type,
-        signing_cert,
-        signing_key,
         encryption_private_key,
+        encryption_key_id,
         provider_config,
         provider_client_name,
     )
@@ -2217,6 +2468,7 @@ def ccf_network_recover_cmd(
     network_name,
     previous_service_cert,
     encryption_private_key,
+    encryption_key_id,
     recovery_service_name,
     member_name,
     infra_type,
@@ -2233,6 +2485,7 @@ def ccf_network_recover_cmd(
         network_name,
         previous_service_cert,
         encryption_private_key,
+        encryption_key_id,
         recovery_service_name,
         member_name,
         infra_type,
@@ -2678,3 +2931,23 @@ def ccf_recovery_service_api_show_report_cmd(cmd, service_config, provider_clien
     return ccf_recovery_service_api_show_report(
         cmd, service_config, provider_client_name
     )
+
+
+def get_default_cert_policy(member_name) -> str:
+    policy = {
+        "issuerParameters": {"name": "Self"},
+        "keyProperties": {
+            "curve": "P-384",
+            "exportable": True,
+            "keyType": "EC",
+            "reuseKey": True,
+        },
+        "secretProperties": {"contentType": "application/x-pkcs12"},
+        "x509CertificateProperties": {
+            "keyUsage": ["digitalSignature"],
+            "subject": f"CN={member_name}",
+            "validityInMonths": 12,
+        },
+    }
+
+    return json.dumps(policy, indent=2)

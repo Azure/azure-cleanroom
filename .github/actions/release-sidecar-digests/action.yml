@@ -39,11 +39,11 @@ runs:
       run: az acr login --name ${{ inputs.registry-name }}
 
     - shell: pwsh
-      run: Install-Module -Name powershell-yaml -Force
+      run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
 
     - shell: pwsh
       run: |
-        ./build/build-ccr-digests.ps1 -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom -tag ${{ inputs.tag }} -push
+        ./build/build-ccr-digests.ps1 -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom -tag ${{ inputs.tag }} -push
 
     - uses: actions/upload-artifact@v4
       with:

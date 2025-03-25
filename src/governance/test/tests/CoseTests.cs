@@ -8,6 +8,11 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.Cose;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using Azure;
+using Azure.Identity;
+using Azure.Security.KeyVault.Certificates;
 using CoseUtils;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -66,14 +71,11 @@ public class CoseTests
             { "ms.bar", "bar" }
         };
 
-        byte[] message = Cose.Sign(new CoseSignRequest
-        {
-            Algorithm = "ES384",
-            Certificate = signingCert,
-            PrivateKey = signingKey,
-            ProtectedHeaders = protectedHeaders,
-            Payload = "veryimportantdata"
-        });
+        byte[] message = Cose.Sign(new CoseSignRequest(
+            new CoseSignKey(signingCert, signingKey),
+            protectedHeaders,
+            unprotectedHeaders: null,
+            "veryimportantdata"));
 
         var sign1Message = CoseMessage.DecodeSign1(message);
         Assert.AreEqual(
@@ -105,14 +107,11 @@ public class CoseTests
             { "ms.bar", "bar" }
         };
 
-        var message = Cose.Sign(new CoseSignRequest
-        {
-            Algorithm = "ES384",
-            Certificate = signingCert,
-            PrivateKey = signingKey,
-            ProtectedHeaders = protectedHeaders,
-            Payload = "veryimportantdata"
-        });
+        var message = Cose.Sign(new CoseSignRequest(
+            new CoseSignKey(signingCert, signingKey),
+            protectedHeaders,
+            unprotectedHeaders: null,
+            "veryimportantdata"));
 
         var sign1Message = CoseMessage.DecodeSign1(message);
         Assert.AreEqual(
@@ -125,6 +124,73 @@ public class CoseTests
             "veryimportantdata",
             Encoding.UTF8.GetString(sign1Message.Content!.Value.Span));
         var result = Cose.Verify(sign1Message, signingCert);
+        Assert.IsTrue(result);
+    }
+
+    //[TestMethod]
+    public async Task GenerateKeyVaultCertAndSignVerify()
+    {
+        string akvEndpoint = "https://gsinhakv.vault.azure.net/";
+        var creds = new DefaultAzureCredential();
+        var certName = "mcert-cose-test";
+        var certClient = new CertificateClient(new Uri(akvEndpoint), creds);
+        KeyVaultCertificate certificate;
+
+        try
+        {
+            certificate = await certClient.GetCertificateAsync(certName);
+        }
+        catch (RequestFailedException rfe) when (rfe.ErrorCode == "CertificateNotFound")
+        {
+            // https://microsoft.github.io/CCF/main/governance/hsm_keys.html#certificate-and-key-generation
+            CertificateOperation createOperation = await certClient.StartCreateCertificateAsync(
+                certName,
+                new CertificatePolicy(issuerName: "Self", subject: "CN=Member")
+                {
+                    ContentType = CertificateContentType.Pkcs12,
+                    KeyType = CertificateKeyType.Ec,
+                    KeyCurveName = CertificateKeyCurveName.P384,
+                    Exportable = true,
+                    ReuseKey = true,
+                    KeyUsage = { CertificateKeyUsage.DigitalSignature },
+                    ValidityInMonths = 12,
+                    LifetimeActions =
+                    {
+                        new LifetimeAction(CertificatePolicyAction.AutoRenew)
+                        {
+                            DaysBeforeExpiry = 90,
+                        }
+                    },
+                });
+            certificate = await createOperation.WaitForCompletionAsync(
+            TimeSpan.FromSeconds(5),
+            CancellationToken.None);
+        }
+
+        Dictionary<string, string> protectedHeaders = new()
+        {
+            { "ms.foo", "foo" },
+            { "ms.bar", "bar" }
+        };
+
+        var coseSignKey = new CoseSignKey(certificate, creds);
+        var message = Cose.Sign(new CoseSignRequest(
+            coseSignKey,
+            protectedHeaders,
+            unprotectedHeaders: null,
+            "veryimportantdata"));
+
+        var sign1Message = CoseMessage.DecodeSign1(message);
+        Assert.AreEqual(
+            protectedHeaders["ms.foo"],
+            sign1Message.ProtectedHeaders[new CoseHeaderLabel("ms.foo")].GetValueAsString());
+        Assert.AreEqual(
+            protectedHeaders["ms.bar"],
+            sign1Message.ProtectedHeaders[new CoseHeaderLabel("ms.bar")].GetValueAsString());
+        Assert.AreEqual(
+            "veryimportantdata",
+            Encoding.UTF8.GetString(sign1Message.Content!.Value.Span));
+        var result = Cose.Verify(sign1Message, coseSignKey.Certificate);
         Assert.IsTrue(result);
     }
 

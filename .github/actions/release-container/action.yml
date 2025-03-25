@@ -72,12 +72,12 @@ runs:
       if: ${{ steps.check-released-containers.outputs.container_released != 'true' }}
       run: |
         docker load -i ${{ steps.download-artefact.outputs.download-path }}/${{ inputs.artefact-name }}-${{ inputs.tag }}.tar
-        docker tag ${{ inputs.artefact-name }}:${{ inputs.tag }} ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/${{ inputs.name }}:${{ inputs.tag }}
-        docker push ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/${{ inputs.name }}:${{ inputs.tag }}
-        oras attach --artifact-type application/spdx+json ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/${{ inputs.name }}:${{ inputs.tag }} ${{ steps.download-artefact.outputs.download-path }}/${{ inputs.artefact-name }}-sbom/_manifest/spdx_2.2/manifest.spdx.json --disable-path-validation
+        docker tag ${{ inputs.artefact-name }}:${{ inputs.tag }} ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom/${{ inputs.name }}:${{ inputs.tag }}
+        docker push ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom/${{ inputs.name }}:${{ inputs.tag }}
+        oras attach --artifact-type application/spdx+json ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom/${{ inputs.name }}:${{ inputs.tag }} ${{ steps.download-artefact.outputs.download-path }}/${{ inputs.artefact-name }}-sbom/_manifest/spdx_2.2/manifest.spdx.json --disable-path-validation
 
-        docker tag ${{ inputs.artefact-name }}:${{ inputs.tag }} ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/${{ inputs.name }}:latest
-        docker push ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/cleanroom/${{ inputs.name }}:latest
+        docker tag ${{ inputs.artefact-name }}:${{ inputs.tag }} ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom/${{ inputs.name }}:latest
+        docker push ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom/${{ inputs.name }}:latest
 
     - uses: ./.github/actions/attest-artefact
       if: ${{ inputs.needs-attestation == 'true' && steps.check-released-containers.outputs.container_released != 'true' }}

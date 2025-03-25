@@ -5,15 +5,25 @@ namespace CoseUtils;
 
 public class CoseSignRequest
 {
-    public string Algorithm { get; set; } = default!;
+    public CoseSignRequest(
+        CoseSignKey signKey,
+        Dictionary<string, string>? protectedHeaders,
+        Dictionary<string, string>? unprotectedHeaders,
+        string? payload)
+    {
+        this.SignKey = signKey;
+        this.ProtectedHeaders = protectedHeaders;
+        this.UnprotectedHeaders = unprotectedHeaders;
+        this.Payload = payload;
+    }
 
-    public string Certificate { get; set; } = default!;
+    public string Algorithm { get; } = "ES384";
 
-    public string PrivateKey { get; set; } = default!;
+    public CoseSignKey SignKey { get; } = default!;
 
-    public Dictionary<string, string>? ProtectedHeaders { get; set; }
+    public Dictionary<string, string>? ProtectedHeaders { get; }
 
-    public Dictionary<string, string>? UnprotectedHeaders { get; set; }
+    public Dictionary<string, string>? UnprotectedHeaders { get; }
 
-    public string? Payload { get; set; }
+    public string? Payload { get; }
 }

@@ -8,6 +8,8 @@ param(
     [parameter(Mandatory = $false)]
     [switch]$push
 )
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
 
 if ($repo) {
     $imageName = "$repo/cleanroom-client:$tag"
@@ -25,21 +27,17 @@ docker image build `
     --output="$root/src/tools/cleanroom-client/dist" `
     --target=dist `
     -f $buildRoot/docker/Dockerfile.azcliext.cleanroom "$buildRoot/.."
-CheckLastExitCode
 
 docker image build `
     -t $imageName `
     -f $buildRoot/docker/Dockerfile.cleanroom-client "$root/src/tools/cleanroom-client"
-CheckLastExitCode
 
 # Extract the open-api spec.
 docker image build `
     --output="$root/src/tools/cleanroom-client/app/schema" `
     --target=openapi-dist `
     -f $buildRoot/docker/Dockerfile.cleanroom-client "$root/src/tools/cleanroom-client"
-CheckLastExitCode
 
 if ($push) {
     docker push $imageName
-    CheckLastExitCode
 }

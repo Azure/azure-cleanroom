@@ -149,7 +149,7 @@ Generate-Oidc-Issuer-Signing-Key | jq
 Get-Oidc-Issuer-Info
 ```
 
-See [how to setup a public, secured OIDC Issuer URL](../governance/../../src/governance/ccf-app/README.md#setup-a-public-secured-oidc-issuer-url-using-azure-blob-storage) to generate the Issuer URL value to use below.
+See [how to setup a public, secured OIDC Issuer URL](../governance/../../src/governance/ccf-app/js/README.md#setup-a-public-secured-oidc-issuer-url-using-azure-blob-storage) to generate the Issuer URL value to use below.
 ```powershell
 # Set tenantId-level Issuer URL that will be exposing the /.well-known/openid-configuration and JWKS documents.
 # The tenantId value is automatically picked from the member_data of the member that is invoking this cmdlet.
@@ -269,16 +269,16 @@ In advanced scenarios the consortium might want to make one member's proposal fo
 
 | Role | Description |
 | --- | --- |
-| `cgs_operator` | Allows auto-approval for `set_constitution` and `set_js_app` proposals. |
-| `contract_operator` | Allows auto-approval for `set_deployment_spec` and `set_clean_room_policy` proposals. |
+| `cgsOperator` | Allows auto-approval for `set_constitution` and `set_js_app` proposals. |
+| `contractOperator` | Allows auto-approval for `set_deployment_spec` and `set_clean_room_policy` proposals. |
 
 If a member has such role(s) enabled on them then their proposals can get auto-approved and not require any voting. Auto approval of these actions has to be enabled explicitly via the following runtime options:
 | Runtime Option | Affected Role |
 | --- | --- |
-| `autoapprove-constitution-proposal` | `cgs_operator`|
-| `autoapprove-jsapp-proposal` | `cgs_operator`|
-| `autoapprove-deploymentspec-proposal` | `contract_operator`|
-| `autoapprove-cleanroompolicy-proposal` | `contract_operator`|
+| `autoapprove-constitution-proposal` | `cgsOperator`|
+| `autoapprove-jsapp-proposal` | `cgsOperator`|
+| `autoapprove-deploymentspec-proposal` | `contractOperator`|
+| `autoapprove-cleanroompolicy-proposal` | `contractOperator`|
 
 Below cmdlets showcase how to add/remove roles from a member and enable/disable the auto approval options.
 
@@ -286,15 +286,15 @@ Below cmdlets showcase how to add/remove roles from a member and enable/disable 
 # Propose the member to have CGS operator role but not contract operator.
 $memberId = Get-CgsClient-Config | jq -r '.memberId'
 $proposalId=(Propose-Set-MemberData -memberId $memberId `
-    -addRole cgs_operator `
-    -removeRole contract_operator `
+    -addRole cgsOperator `
+    -removeRole contractOperator `
     | jq -r '.proposalId') 
 
 # Vote on the proposal. If there are multiple members then each member needs to vote before the
 # proposal gets accepted.
 Vote-Proposal -proposalId $proposalId -vote accept | jq
 
-# Propose enabling auto-approval for JS App proposals. After this members with cgs_operator role
+# Propose enabling auto-approval for JS App proposals. After this members with cgsOperator role
 # enabled wil have their proposals get accepted automatically.
 $proposalId=(Propose-RuntimeOption -option autoapprove-jsapp-proposal -action enable | jq -r '.proposalId') 
 
@@ -303,7 +303,7 @@ $proposalId=(Propose-RuntimeOption -option autoapprove-jsapp-proposal -action en
 Vote-Proposal -proposalId $proposalId -vote accept | jq
 
 # Propose disabling auto-approval for clean room policy proposals. This affects members with
-# contract_operator role.
+# contractOperator role.
 $proposalId=(Propose-RuntimeOption -option autoapprove-cleanroompolicy-proposal -action disable | jq -r '.proposalId') 
 
 # Check the status of a runtime option.
@@ -315,11 +315,11 @@ Get-Member
   "3d2eabf321a304f5b76d494340cce3fdf18bdf09dcb6e6a84d4cde8e20e4bd6f": {
     "cert": "...",
     "member_data": {
-      "cgs_roles": {
-        "contract_operator": "true"
+      "cgsRoles": {
+        "contractOperator": "true"
       },
       "identifier": "member2",
-      "tenant_id": "72f988bf-86f1-41af-91ab-2d7cd011db47"
+      "tenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47"
     },
     "public_encryption_key": null,
     "status": "Active"
@@ -336,7 +336,7 @@ Get-Member
     "cert": "...",
     "member_data": {
       "identifier": "member1",
-      "tenant_id": "72f988bf-86f1-41af-91ab-2d7cd011db47"
+      "tenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47"
     },
     "public_encryption_key": null,
     "status": "Active"
@@ -372,16 +372,16 @@ In advanced scenarios the consortium might want to make one member's proposal fo
 
 | Role | Description |
 | --- | --- |
-| `cgs_operator` | Allows auto-approval for `set_constitution` and `set_js_app` proposals. |
-| `contract_operator` | Allows auto-approval for `set_deployment_spec` and `set_clean_room_policy` proposals. |
+| `cgsOperator` | Allows auto-approval for `set_constitution` and `set_js_app` proposals. |
+| `contractOperator` | Allows auto-approval for `set_deployment_spec` and `set_clean_room_policy` proposals. |
 
 If a member has such role(s) enabled on them then their proposals can get auto-approved and not require any voting. Auto approval of these actions has to be enabled explicitly via the following runtime options:
 | Runtime Option | Affected Role |
 | --- | --- |
-| `autoapprove-constitution-proposal` | `cgs_operator`|
-| `autoapprove-jsapp-proposal` | `cgs_operator`|
-| `autoapprove-deploymentspec-proposal` | `contract_operator`|
-| `autoapprove-cleanroompolicy-proposal` | `contract_operator`|
+| `autoapprove-constitution-proposal` | `cgsOperator`|
+| `autoapprove-jsapp-proposal` | `cgsOperator`|
+| `autoapprove-deploymentspec-proposal` | `contractOperator`|
+| `autoapprove-cleanroompolicy-proposal` | `contractOperator`|
 
 Below cmdlets showcase how to add/remove roles from a member and enable/disable the auto approval options.
 
@@ -389,15 +389,15 @@ Below cmdlets showcase how to add/remove roles from a member and enable/disable 
 # Propose the member to have CGS operator role but not contract operator.
 $memberId = Get-CgsClient-Config | jq -r '.memberId'
 $proposalId=(Propose-Set-MemberData -memberId $memberId `
-    -addRole cgs_operator `
-    -removeRole contract_operator `
+    -addRole cgsOperator `
+    -removeRole contractOperator `
     | jq -r '.proposalId') 
 
 # Vote on the proposal. If there are multiple members then each member needs to vote before the
 # proposal gets accepted.
 Vote-Proposal -proposalId $proposalId -vote accept | jq
 
-# Propose enabling auto-approval for JS App proposals. After this members with cgs_operator role
+# Propose enabling auto-approval for JS App proposals. After this members with cgsOperator role
 # enabled wil have their proposals get accepted automatically.
 $proposalId=(Propose-RuntimeOption -option autoapprove-jsapp-proposal -action enable | jq -r '.proposalId') 
 
@@ -406,7 +406,7 @@ $proposalId=(Propose-RuntimeOption -option autoapprove-jsapp-proposal -action en
 Vote-Proposal -proposalId $proposalId -vote accept | jq
 
 # Propose disabling auto-approval for clean room policy proposals. This affects members with
-# contract_operator role.
+# contractOperator role.
 $proposalId=(Propose-RuntimeOption -option autoapprove-cleanroompolicy-proposal -action disable | jq -r '.proposalId') 
 
 # Check the status of a runtime option.
@@ -418,11 +418,11 @@ Get-Member
   "3d2eabf321a304f5b76d494340cce3fdf18bdf09dcb6e6a84d4cde8e20e4bd6f": {
     "cert": "...",
     "member_data": {
-      "cgs_roles": {
-        "contract_operator": "true"
+      "cgsRoles": {
+        "contractOperator": "true"
       },
       "identifier": "member2",
-      "tenant_id": "72f988bf-86f1-41af-91ab-2d7cd011db47"
+      "tenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47"
     },
     "public_encryption_key": null,
     "status": "Active"
@@ -439,7 +439,7 @@ Get-Member
     "cert": "...",
     "member_data": {
       "identifier": "member1",
-      "tenant_id": "72f988bf-86f1-41af-91ab-2d7cd011db47"
+      "tenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47"
     },
     "public_encryption_key": null,
     "status": "Active"

@@ -8,7 +8,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/azure/azure-cleanroom/internal/filter"
+	"github.com/azure/azure-cleanroom/src/internal/filter"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	pb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	typev3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"

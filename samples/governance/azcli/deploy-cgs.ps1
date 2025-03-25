@@ -22,8 +22,15 @@ param
     [ValidateSet('mcr', 'local', 'acr')]
     [string]$registry = "local",
 
+    [string]$repo = "localhost:5000",
+
+    [string]$tag = "",
+
     [string]
-    $ccfEndpoint = ""
+    $ccfEndpoint = "",
+
+    [string]
+    $memberKeysAkvVaultName = ""
 )
 
 #https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
@@ -34,37 +41,6 @@ $root = git rev-parse --show-toplevel
 $build = "$root/build"
 
 . $root/build/helpers.ps1
-
-if ($registry -eq "local") {
-    if (!$NoBuild) {
-        pwsh $build/build-azcliext-cleanroom.ps1
-        CheckLastExitCode
-        pwsh $build/build-ccf.ps1
-        CheckLastExitCode
-        pwsh $build/cgs/build-cgs-client.ps1
-        CheckLastExitCode
-        pwsh $build/cgs/build-cgs-ui.ps1
-        CheckLastExitCode
-    }
-}
-else {
-    if (!$NoBuild) {
-        pwsh $build/build-ccf.ps1
-
-        # Install clean room extension that corresponds to the MCR images.
-        $version = (az extension show --name cleanroom --query "version" --output tsv 2>$null)
-        if ($version -ne "0.0.1") {
-            Write-Host "Installing az cleanroom cli"
-            az extension remove --name cleanroom 2>$null
-            az extension add `
-                --allow-preview true `
-                --source https://cleanroomazcli.blob.core.windows.net/azcli/cleanroom-1.0.0-py2.py3-none-any.whl -y
-        }
-        else {
-            Write-Host "az cleanroom cli version: $version already installed."
-        }
-    }
-}
 
 if ($ccfEndpoint -eq "") {
     pwsh $PSScriptRoot/remove-cgs.ps1 -ccfProjectName $ccfProjectName -projectName $projectName
@@ -78,54 +54,187 @@ else {
     $sandbox_common = $outDir
 }
 
-# Create registry container unless it already exists.
-$reg_name = "ccf-registry"
-$reg_port = "5000"
-$registryImage = "registry:2.7"
-if ($env:GITHUB_ACTIONS -eq "true") {
-    $registryImage = "cleanroombuild.azurecr.io/registry:2.7"
+$orasImage = "ghcr.io/oras-project/oras:v1.2.0"
+
+$env:ccfImage = ""
+if ($registry -eq "local") {
+    $env:ccfImage = "ccf/app/run-js/sandbox:latest"
+    if (!$NoBuild) {
+        pwsh $build/build-azcliext-cleanroom.ps1
+
+        if ($ccfEndpoint -eq "") {
+            pwsh $build/ccf/build-ccf-runjs-app-sandbox.ps1
+        }
+
+        pwsh $build/cgs/build-cgs-client.ps1
+        pwsh $build/cgs/build-cgs-ui.ps1
+    }
+}
+elseif ($registry -eq "acr") {
+    if ($ccfEndpoint -eq "") {
+        $env:ccfImage = "$repo/ccf/app/run-js/sandbox:$tag"
+    }
+
+    $whlPath = "$repo/cli/cleanroom-whl:$tag"
+    Write-Host "Downloading and installing az cleanroom cli from ${whlPath}"
+    if ($env:GITHUB_ACTIONS -eq "true") {
+        oras pull $whlPath --output $sandbox_common
+    }
+    else {
+        $orasImage = "ghcr.io/oras-project/oras:v1.2.0"
+        docker run --rm --network host -v ${sandbox_common}:/workspace -w /workspace `
+            $orasImage pull $whlPath
+    }
+
+    & {
+        # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
+        $PSNativeCommandUseErrorActionPreference = $false
+        az extension remove --name cleanroom 2>$null
+    }
+    az extension add `
+        --allow-preview true `
+        --source ${sandbox_common}/cleanroom-*-py2.py3-none-any.whl -y
+}
+else {
+    if (!$NoBuild) {
+        if ($ccfEndpoint -eq "") {
+            pwsh $build/ccf/build-ccf-runjs-app-sandbox.ps1
+        }
+
+        # Install clean room extension that corresponds to the MCR images.
+        $version = (az extension show --name cleanroom --query "version" --output tsv 2>$null)
+        if ($version -ne "0.0.1") {
+            oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:2.0.0
+
+            Write-Host "Installing az cleanroom cli"
+            az extension remove --name cleanroom 2>$null
+            az extension add `
+                --allow-preview true `
+                --source ./cleanroom-2.0.0-py2.py3-none-any.whl -y
+        }
+        else {
+            Write-Host "az cleanroom cli version: $version already installed."
+        }
+    }
 }
 
-& {
-    # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
-    $PSNativeCommandUseErrorActionPreference = $false
-    $registryState = docker inspect -f '{{.State.Running}}' "${reg_name}" 2>$null
-    if ($registryState -ne "true") {
-        docker run -d --restart=always -p "127.0.0.1:${reg_port}:5000" --name "${reg_name}" $registryImage
+# Create registry container unless it already exists.
+if ($registry -eq "local") {
+    $reg_name = "ccr-registry"
+    $reg_port = "5000"
+    $registryImage = "registry:2.7"
+    if ($env:GITHUB_ACTIONS -eq "true") {
+        $registryImage = "cleanroombuild.azurecr.io/registry:2.7"
+    }
+
+    & {
+        # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
+        $PSNativeCommandUseErrorActionPreference = $false
+        $registryState = docker inspect -f '{{.State.Running}}' "${reg_name}" 2>$null
+        if ($registryState -ne "true") {
+            docker run -d --restart=always -p "127.0.0.1:${reg_port}:5000" --network bridge --name "${reg_name}" $registryImage
+        }
     }
 }
 
 if ($ccfEndpoint -eq "") {
-    & {
-        # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
-        # Creating the initial member identity certificate to add into the consortium.
-        $PSNativeCommandUseErrorActionPreference = $false
-        az cleanroom governance member keygenerator-sh | `
-            bash -s -- --name $initialMemberName --gen-enc-key --out $sandbox_common
+    if ($memberKeysAkvVaultName -eq "") {
+        & {
+            # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
+            # Creating the initial member identity certificate to add into the consortium.
+            $PSNativeCommandUseErrorActionPreference = $false
+            az cleanroom governance member keygenerator-sh | `
+                bash -s -- --name $initialMemberName --gen-enc-key --out $sandbox_common
+        }
+    }
+    else {
+        # Generate member identity certificate/key.
+        Write-Output "Generating identity private key and certificate for participant '$initialMemberName' in key vault..."
+        $certName = "${initialMemberName}-identity"
+        $policy = az cleanroom governance member get-default-certificate-policy `
+            --member-name $initialMemberName
+        az keyvault certificate create `
+            --name $certName `
+            --vault-name $memberKeysAkvVaultName `
+            --policy "$policy"
+        $cert_pem_file = "$sandbox_common/${initialMemberName}_cert.pem"
+        if (Test-Path $cert_pem_file) {
+            # az keyvault certificate download does not overwrite hence remove any existing file first.
+            Remove-Item $cert_pem_file
+        }
+        az keyvault certificate download `
+            --file $cert_pem_file `
+            --name $certName `
+            --vault-name $memberKeysAkvVaultName `
+            --encoding PEM
+        Write-Output "Identity certificate generated at: $cert_pem_file (to be registered in CCF)"
+        $certId = az keyvault certificate show `
+            --name $certName `
+            --vault-name $memberKeysAkvVaultName `
+            --query id `
+            --output tsv
+        $certId | Out-File "$sandbox_common/${initialMemberName}_cert.id"
+
+        # Generate member encryption key.
+        Write-Output "Generating RSA encryption key pair for participant '$initialMemberName' in key vault..."
+        $encKeyName = "${initialMemberName}-encryption"
+        az keyvault key create `
+            --name $encKeyName `
+            --vault-name $memberKeysAkvVaultName `
+            --kty RSA `
+            --size 2048 `
+            --ops decrypt
+        $enc_pubk_pem_file = "$sandbox_common/${initialMemberName}_enc_pubk.pem"
+        if (Test-Path $enc_pubk_pem_file) {
+            # az keyvault key download does not overwrite hence remove any existing file first.
+            Remove-Item $enc_pubk_pem_file
+        }
+        az keyvault key download `
+            --file $enc_pubk_pem_file `
+            --name $encKeyName `
+            --vault-name $memberKeysAkvVaultName
+        Write-Output "Encryption public key generated at: $enc_pubk_pem_file (to be registered in CCF)"
     }
 
-    $env:ccfImageTag = "js-virtual"
     $env:initialMemberName = $initialMemberName
     $env:cgs_sandbox_common = $sandbox_common
     docker compose -f $PSScriptRoot/docker-compose.yml -p $ccfProjectName up -d --remove-orphans
-
+    $ccfPortMapping = docker compose -f $PSScriptRoot/docker-compose.yml -p $ccfProjectName port ccf 8080
+    if ($ccfPortMapping -eq "") {
+        throw "Could not determine port mapping for ccf."
+    }
+    # $ccfPortMapping format is 0.0.0.0:<port>
+    $ccfPort = $ccfPortMapping.split(":")[1]
     $ccfEndpoint = ""
     if ($env:GITHUB_ACTIONS -ne "true") {
-        $ccfEndpoint = "https://host.docker.internal:9081"
+        $ccfEndpoint = "https://host.docker.internal:$ccfPort"
     }
     else {
         # 172.17.0.1: https://stackoverflow.com/questions/48546124/what-is-the-linux-equivalent-of-host-docker-internal
-        $ccfEndpoint = "https://172.17.0.1:9081"
+        $ccfEndpoint = "https://172.17.0.1:$ccfPort"
     }
+
+    @"
+{
+  "endpoint": "$ccfEndpoint"
+}
+"@ | Out-File $sandbox_common/ccf.json
 }
 
 # The node is not up yet and the service certificate will not be created until it returns 200.
 & {
     # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
     $PSNativeCommandUseErrorActionPreference = $false
-    while ((curl -k -s  -o '' -w "'%{http_code}'" $ccfEndpoint/node/network) -ne "'200'") {
-        Write-Host "Waiting for ccf endpoint to be up"
+    $timeout = New-TimeSpan -Minutes 5
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $statusCode = (curl -k -s  -o /dev/null -w "%{http_code}" $ccfEndpoint/node/network)  
+    while ($statusCode -ne "200") {
+        Write-Host "Waiting for ccf endpoint to be up at $ccfEndpoint, status code: $statusCode"
         Start-Sleep -Seconds 3
+        if ($stopwatch.elapsed -gt $timeout) {
+            throw "Hit timeout waiting for ccf endpoint to be up."
+        }
+        $statusCode = (curl -k -s  -o /dev/null -w "%{http_code}" $ccfEndpoint/node/network)
     }
 }
 # Get the service cert so that this script can take governance actions.
@@ -140,7 +249,6 @@ if ($registry -eq "local") {
     $localTag = "100.$(Get-Date -UFormat %s)"
     $localTag | Out-File $sandbox_common/local-registry-tag.txt
     $server = "localhost:$reg_port"
-    $orasImage = "ghcr.io/oras-project/oras:v1.2.0"
 
     # Push the images.
     docker tag cgs-client:latest $server/cgs-client:$localTag
@@ -194,15 +302,51 @@ cgs-ui:
 
     $env:AZCLI_CLEANROOM_VERSIONS_REGISTRY = $server
 }
+elseif ($registry -eq "acr") {
+    $localTag = $tag
+    $server = $repo
+
+    docker pull $server/cgs-client:$localTag
+    $client_digest = docker inspect --format='{{index .RepoDigests 0}}' $server/cgs-client:$localTag
+    $client_digest = $client_digest.Substring($client_digest.Length - 71, 71)
+    $client_digest_no_prefix = $client_digest.Substring(7, $client_digest.Length - 7)
+
+    docker pull $server/cgs-ui:$localTag
+    $ui_digest = docker inspect --format='{{index .RepoDigests 0}}' $server/cgs-ui:$localTag
+    $ui_digest = $ui_digest.Substring($ui_digest.Length - 71, 71)
+    $ui_digest_no_prefix = $ui_digest.Substring(7, $ui_digest.Length - 7)
+
+    $env:AZCLI_CGS_CLIENT_IMAGE = "$server/cgs-client:$localTag"
+    $env:AZCLI_CGS_UI_IMAGE = "$server/cgs-ui:$localTag"
+
+    $constitution_image_digest = docker run --rm --network host `
+        $orasImage resolve $server/cgs-constitution:$localTag
+    $bundle_image_digest = docker run --rm --network host `
+        $orasImage resolve $server/cgs-js-app:$localTag
+
+    $env:AZCLI_CGS_CONSTITUTION_IMAGE = "$server/cgs-constitution@$constitution_image_digest"
+    $env:AZCLI_CGS_JSAPP_IMAGE = "$server/cgs-js-app@$bundle_image_digest"
+
+    $env:AZCLI_CLEANROOM_VERSIONS_REGISTRY = $server
+}
 
 # Setup cgs-client instance on port $port with member cert/key information so that we can invoke CCF
 # APIs via it.
-az cleanroom governance client deploy `
-    --ccf-endpoint $ccfEndpoint `
-    --signing-key $sandbox_common/${initialMemberName}_privk.pem `
-    --signing-cert $sandbox_common/${initialMemberName}_cert.pem `
-    --service-cert $sandbox_common/service_cert.pem `
-    --name $projectName
+if (Test-Path $sandbox_common/${initialMemberName}_cert.id) {
+    az cleanroom governance client deploy `
+        --ccf-endpoint $ccfEndpoint `
+        --signing-cert-id $sandbox_common/${initialMemberName}_cert.id `
+        --service-cert $sandbox_common/service_cert.pem `
+        --name $projectName
+}
+else {
+    az cleanroom governance client deploy `
+        --ccf-endpoint $ccfEndpoint `
+        --signing-key $sandbox_common/${initialMemberName}_privk.pem `
+        --signing-cert $sandbox_common/${initialMemberName}_cert.pem `
+        --service-cert $sandbox_common/service_cert.pem `
+        --name $projectName
+}
 
 $port = az cleanroom governance client show-deployment `
     --name $projectName `
@@ -213,7 +357,7 @@ $port = az cleanroom governance client show-deployment `
 & {
     # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
     $PSNativeCommandUseErrorActionPreference = $false
-    while ((curl -s  -o '' -w "'%{http_code}'" http://localhost:$port/swagger/index.html) -ne "'200'") {
+    while ((curl -s  -o /dev/null -w "%{http_code}" http://localhost:$port/ready) -ne "200") {
         Write-Host "Waiting for cgs-client endpoint to be up"
         Start-Sleep -Seconds 3
     }
@@ -221,12 +365,10 @@ $port = az cleanroom governance client show-deployment `
 
 Write-Output "Activating $initialMemberName..."
 az cleanroom governance member activate --governance-client $projectName
-CheckLastExitCode
 
 timeout 20 bash -c `
-    "until az cleanroom governance member show --governance-client $projectName | jq -r '.[].status' | grep Active > /dev/null; do echo Waiting for member to be in Active state...; sleep 5; done"
+    "until az cleanroom governance member show --governance-client $projectName | jq -r '.value[].status' | grep Active > /dev/null; do echo Waiting for member to be in Active state...; sleep 5; done"
 az cleanroom governance member show --governance-client $projectName | jq
-CheckLastExitCode
 Write-Output "Member status is now Active"
 
 Write-Output "Submitting open network proposal"
@@ -245,7 +387,6 @@ $proposalId = (curl -sS -X POST -H "content-type: application/json" localhost:$p
 
 Write-Output "Accepting the open network proposal as $initialMemberName"
 curl -sS -X POST localhost:$port/proposals/$proposalId/ballots/vote_accept | jq
-CheckLastExitCode
 
 Write-Output "Waiting a bit to avoid FrontendNotOpen error"
 sleep 3
@@ -271,11 +412,10 @@ $proposalId = (curl -sS -X POST -H "content-type: application/json" localhost:$p
 
 Write-Output "Accepting the set_member_data proposal"
 curl -sS -X POST localhost:$port/proposals/$proposalId/ballots/vote_accept | jq
-CheckLastExitCode
 
 if (!$NoTest) {
     pwsh $PSScriptRoot/initiate-set-contract-flow.ps1 -projectName $projectName -issuerUrl "$ccfEndpoint/app/oidc"
-    pwsh $PSScriptRoot/initiate-service-upgrade-flow.ps1 -projectName $projectName -version $localTag
+    pwsh $PSScriptRoot/initiate-service-upgrade-flow.ps1 -projectName $projectName -version $localTag -repo $repo
     pwsh $PSScriptRoot/initiate-client-upgrade-flow.ps1 -projectName $projectName -version $localTag
 }
 

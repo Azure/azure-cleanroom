@@ -63,13 +63,14 @@ public class ContractsController : Controller
                 var members = (await client.GetFromJsonAsync<JsonObject>(
                     $"{this.configuration.GetEndpoint()}/members"))!;
                 Dictionary<string, JsonNode?> currentMembers =
-                    members.AsEnumerable().ToDictionary(m => m.Key, m => m.Value);
+                    members["value"]!.AsArray()
+                    .ToDictionary(m => m!["memberId"]!.ToString(), m => m);
                 foreach (var vote in item.FinalVotes)
                 {
                     string name = "not a current member";
                     if (currentMembers.TryGetValue(vote.MemberId, out var value))
                     {
-                        name = value?["member_data"]?["identifier"]?.ToString() ?? "Not set";
+                        name = value?["memberData"]?["identifier"]?.ToString() ?? "Not set";
                     }
 
                     vote.MemberName = name;

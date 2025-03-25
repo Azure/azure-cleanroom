@@ -11,7 +11,7 @@ param
     $outDir = "$PSScriptRoot/generated",
 
     [string]
-    $datastoreOutdir = "$PSScriptRoot/../generated/datastores",
+    $datastoreOutdir = "$PSScriptRoot/generated/datastores",
 
     [switch]
     $nowait,
@@ -36,11 +36,43 @@ az deployment group create `
     --template-file "$outDir/deployments/cleanroom-arm-template.json" `
     --parameters location=$location
 
-if (!$nowait) {
-    pwsh $root/test/onebox/multi-party-collab/wait-for-cleanroom.ps1 `
-        -resourceGroup $resourceGroup `
-        -cleanRoomName $cleanRoomName
+do {
+    Write-Host "Sleeping for 15 seconds for IP address to be available."
+    Start-Sleep -Seconds 15
+    $ccrIP = az container show `
+        --name $cleanRoomName `
+        -g $resourceGroup `
+        --query "ipAddress.ip" `
+        --output tsv
+} while ($null -eq $ccrIP)
+
+Write-Host "Clean Room IP address: $ccrIP"
+if ($null -eq $ccrIP) {
+    throw "Clean Room IP address is not set."
 }
+
+# wait for code-launcher endpoint to be up.
+$timeout = New-TimeSpan -Minutes 30
+$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+while ((curl -o /dev/null -w "%{http_code}" -s -k https://${ccrIP}:8200/gov/doesnotexist/status) -ne "404") {
+    Write-Host "Waiting for code-launcher endpoint to be up at https://${ccrIP}:8200"
+    Start-Sleep -Seconds 3
+    if ($stopwatch.elapsed -gt $timeout) {
+        throw "Hit timeout waiting for code-launcher endpoint to be up."
+    }
+}
+
+# The application is configured for auto-start. Hence, no need to issue the start API.
+# curl -X POST -s -k https://${ccrIP}:8200/gov/depa-training/start
+
+if (!$nowait) {
+    pwsh $PSScriptRoot/wait-for-cleanroom.ps1 `
+        -appName depa-training `
+        -cleanroomIp $ccrIP
+}
+
+curl -v -X POST -s -k https://${ccrIP}:8200/gov/exportLogs
+curl -v -X POST -s -k https://${ccrIP}:8200/gov/exportTelemetry
 
 if (!$skiplogs) {
     mkdir -p $outDir/results

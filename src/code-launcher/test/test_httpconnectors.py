@@ -3,16 +3,17 @@
 import unittest
 import unittest.mock as mock
 
-from src.connectors.httpconnectors import (
+from ..connectors.httpconnectors import (
     GovernanceHttpConnector,
     HttpConnector,
     IdentityHttpConnector,
     SkrHttpConnector,
     ACROAuthHttpConnector,
 )
-from src.exceptions.custom_exceptions import ServiceNotAvailableFailure
+from ..exceptions.custom_exceptions import ServiceNotAvailableFailure
 
 
+# TODO (HPrabh): Are these tests required ?
 class TestHttpConnector(unittest.TestCase):
     def test_wait_for_it_success(self):
         HttpConnector.wait_for_it("microsoft.com", 443)

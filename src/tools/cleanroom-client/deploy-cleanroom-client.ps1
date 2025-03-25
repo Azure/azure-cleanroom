@@ -6,7 +6,7 @@ param(
     [string]$outDir = "$PSScriptRoot/generated",
 
     [string]
-    $datastoreOutdir = "$PSScriptRoot/../generated/datastores",
+    $datastoreOutdir = "$PSScriptRoot/generated/datastores",
 
     [parameter(Mandatory = $true)]
     [string]$dataDir,
@@ -20,7 +20,6 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 
 $root = git rev-parse --show-toplevel
-$collabSamplePath = "$root/samples/multi-party-collab"
 
 & {
     # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
@@ -77,6 +76,9 @@ docker run -d `
     -p ${port}:80 `
     --network credential-proxy-bridge `
     -e MSI_ENDPOINT="http://${credproxy_name}:8080/token" `
+    -e SCRATCH_DIR="${outDir}" `
+    -e AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL="$env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL" `
+    -e AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL="$env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL" `
     cleanroom-client
 
 # Login to Azure using managed identity via the credentials-proxy.

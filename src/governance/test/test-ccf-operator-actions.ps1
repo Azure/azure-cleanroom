@@ -7,6 +7,8 @@ param
     [switch]
     $WithWorkaround
 )
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
 
 $root = git rev-parse --show-toplevel
 $build = "$root/build"
@@ -38,7 +40,7 @@ $proposalId = (curl -sS -X POST -H "content-type: application/json" localhost:$p
      "args": {
        "cert": "$certContent",
        "member_data": {
-        "is_operator": true
+        "isOperator": true
        }
      }
    }]
@@ -47,15 +49,12 @@ $proposalId = (curl -sS -X POST -H "content-type: application/json" localhost:$p
 
 Write-Output "Accepting the set_member proposal as member0"
 curl -sS -X POST localhost:$port_member0/proposals/$proposalId/ballots/vote_accept | jq
-CheckLastExitCode
 
 Write-Output "Accepting the set_member proposal as member1"
 curl -sS -X POST localhost:$port_member1/proposals/$proposalId/ballots/vote_accept | jq
-CheckLastExitCode
 
 Write-Output "Accepting the set_member proposal as member2"
 curl -sS -X POST localhost:$port_member2/proposals/$proposalId/ballots/vote_accept | jq
-CheckLastExitCode
 
 # Setup cgs-client on port $port_ccfOpeator with ccf_operator cert/key information so that we can invoke CCF APIs via it.
 curl -sS -X POST localhost:$port_ccf_operator/configure `
@@ -66,7 +65,6 @@ curl -sS -X POST localhost:$port_ccf_operator/configure `
 
 Write-Output "ccf_operator status is Accepted. Activating ccf_operator..."
 curl -sS -X POST localhost:$port_ccf_operator/members/statedigests/ack
-CheckLastExitCode
 curl -sS -X GET localhost:$port_ccf_operator/members | jq
 
 $testcontainer = "test_ccf_operator_actions"

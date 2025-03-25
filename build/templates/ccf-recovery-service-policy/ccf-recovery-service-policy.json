@@ -120,8 +120,8 @@
       },
       {
         "name": "LogLevel",
-        "value": ".*",
-        "strategy": "re2"
+        "value": "Info",
+        "strategy": "string"
       }
     ]
   }

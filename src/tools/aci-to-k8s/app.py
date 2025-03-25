@@ -1,14 +1,22 @@
 import argparse
+import base64
 import json
 import os
+from urllib.parse import urlunparse, urlunsplit
 import yaml
 
 
-def get_containers_registry_url():
-    return os.environ.get(
-        "AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL",
-        "docker.io/gausinha",
-    )
+def replace_registry_url(url, registry_url):
+    # url parse does not work if scheme is not specified. Work around this limitation by
+    # adding a http to the url.
+    if not url.startswith("http"):
+        url = "http://" + url
+    url_parsed = urlparse(url)
+    # Replace the netloc with the registry override.
+    url_parsed = url_parsed._replace(netloc=registry_url)
+    url = urlunparse(url_parsed)
+    url = re.sub("https?://", "", url)
+    return url
 
 
 parser = argparse.ArgumentParser(
@@ -20,6 +28,28 @@ parser.add_argument(
     dest="template_file",
     required=True,
     help="The ARM template file to convert.",
+)
+parser.add_argument(
+    "--registry-local-endpoint",
+    type=str,
+    dest="registry_local_endpoint",
+    required=False,
+    default=None,
+    help="The local endpoint to use for the registry. This will be used by containers looking to access the registry from within the cleanroom.",
+)
+parser.add_argument(
+    "--repo",
+    type=str,
+    dest="repo",
+    required=True,
+    help="The registry endpoint to download the container images.",
+)
+parser.add_argument(
+    "--tag",
+    type=str,
+    dest="tag",
+    required=True,
+    help="The tag for downloading the container images.",
 )
 parser.add_argument(
     "--out-dir",
@@ -51,6 +81,8 @@ for container in parsed_json["resources"][0]["properties"]["initContainers"]:
     }
     if "command" in container["properties"]:
         pod_init_container["command"] = container["properties"]["command"]
+
+    privileged = False
     if "securityContext" in container["properties"]:
         if "privileged" in container["properties"]["securityContext"]:
             pod_init_container["securityContext"] = {
@@ -61,6 +93,28 @@ for container in parsed_json["resources"][0]["properties"]["initContainers"]:
                     else False
                 )
             }
+            privileged = pod_init_container["securityContext"]["privileged"]
+
+    if "environmentVariables" in container["properties"]:
+        pod_init_container["env"] = []
+        for item in container["properties"]["environmentVariables"]:
+            pod_init_container["env"].append(
+                {"name": item["name"], "value": item["value"]}
+            )
+
+    if "volumeMounts" in container["properties"]:
+        pod_init_container["volumeMounts"] = []
+        for item in container["properties"]["volumeMounts"]:
+            pod_init_container["volumeMounts"].append(
+                {
+                    "name": item["name"],
+                    "mountPath": item["mountPath"],
+                    "mountPropagation": (
+                        "Bidirectional" if privileged else "HostToContainer"
+                    ),
+                }
+            )
+
     pod_init_containers.append(pod_init_container)
 
 # Map containers.
@@ -116,41 +170,89 @@ if "volumes" in parsed_json["resources"][0]["properties"]:
 # Replace/update/remove few containers for local testing scenario.
 # Remove ccr-attestation as it is not required in local env.
 # Replace skr-sidecar with the local-skr container.
-# Add mount-point in ccr-governance sidecar to load attestation report/keys.
+# Replace ccr-governance sidecar with its virtual image that has the attestation report/keys baked in.
+# Remove CCR_FQDN env variable from ccr-proxy.
 pod_containers = [pc for pc in pod_containers if pc["name"] != "ccr-attestation"]
 pod_containers = [pc for pc in pod_containers if pc["name"] != "skr-sidecar"]
-registry_url = get_containers_registry_url()
 pod_containers.append(
     {
         "name": "local-skr-sidecar",
-        "image": f"{registry_url}/local-skr:latest",
+        "image": f"{args.repo}/local-skr:{args.tag}",
     }
 )
 for item in pod_containers:
     if item["name"] == "ccr-governance":
-        item["env"].append(
-            {"name": "insecure_mountpoint", "value": "/app/insecure-virtual/"}
-        )
-        item["env"].append({"name": "INSECURE_VIRTUAL_ENVIRONMENT", "value": "true"})
+        item["image"] = f"{args.repo}/ccr-governance-virtual:{args.tag}"
+    elif "ccr-proxy-ext-processor" in item["name"]:
+        from urllib.parse import urlparse, urlunparse
+        import re
+
+        bundleResourcePath = [
+            x for x in item["env"] if x["name"] == "BUNDLE_RESOURCE_PATH"
+        ][0]["value"]
+
+        if "localhost" in bundleResourcePath:
+            if args.registry_local_endpoint:
+                item["env"].append({"name": "USE_HTTP", "value": "true"})
+                bundleResourcePath = replace_registry_url(
+                    bundleResourcePath, args.registry_local_endpoint
+                )
+                [x for x in item["env"] if x["name"] == "BUNDLE_RESOURCE_PATH"][0][
+                    "value"
+                ] = bundleResourcePath
+    elif "code-launcher" in item["name"]:
+        from urllib.parse import urlparse, urlunparse
+        import re
+
+        application_details_index = [
+            i for i, e in enumerate(item["command"]) if e == "--application-base-64"
+        ][0]
+        application_details = base64.b64decode(
+            item["command"][application_details_index + 1]
+        ).decode("utf-8")
+        application = json.loads(application_details)
+        if (
+            "localhost"
+            in application["image"]["executable"]["backingResource"]["provider"]["url"]
+        ):
+            if args.registry_local_endpoint:
+                application["image"]["executable"]["backingResource"]["provider"][
+                    "url"
+                ] = args.registry_local_endpoint
+                application["image"]["executable"]["backingResource"]["id"] = (
+                    replace_registry_url(
+                        application["image"]["executable"]["backingResource"]["id"],
+                        args.registry_local_endpoint,
+                    )
+                )
+                item["command"][application_details_index + 1] = base64.b64encode(
+                    json.dumps(application).encode("utf-8")
+                ).decode("utf-8")
+
+        # Add the registry-conf volume mount to the code-launcher container.
+        # This will be backed by the config-map ccr-registry-conf created in kind cluster.
+        # This ensures that the code-launcher container accesses the local registry with "http"
+        # instead of "https".
         item["volumeMounts"].append(
-            {"name": "insecure-virtual", "mountPath": "/app/insecure-virtual"}
+            {
+                "name": "registry-conf",
+                "mountPath": "/etc/containers/registries.conf.d",
+            }
         )
-volumes.append(
-    {
-        "name": "insecure-virtual",
-        "configMap": {
-            "name": "insecure-virtual",
-            "items": [
-                {"key": "ccr_gov_pub_key", "path": "keys/ccr_gov_pub_key.pem"},
-                {"key": "ccr_gov_priv_key", "path": "keys/ccr_gov_priv_key.pem"},
-                {
-                    "key": "attestation_report",
-                    "path": "attestation/attestation-report.json",
+        volumes.append(
+            {
+                "name": "registry-conf",
+                "configMap": {
+                    "name": "ccr-registry-conf",
+                    "items": [
+                        {"key": "ccr-registry.conf", "path": "ccr-registry.conf"}
+                    ],
                 },
-            ],
-        },
-    }
-)
+            }
+        )
+    elif item["name"] == "ccr-proxy":
+        item["env"] = [e for e in item["env"] if e["name"] != "CCR_FQDN"]
+
 output = {
     "apiVersion": "v1",
     "kind": "Pod",

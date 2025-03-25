@@ -65,6 +65,7 @@ dotnet_diagnostic.IDE0270.severity = default
 dotnet_diagnostic.IDE0290.severity = default
 dotnet_diagnostic.IDE0300.severity = none
 dotnet_diagnostic.IDE0305.severity = default
+dotnet_diagnostic.IDE0306.severity = none
 # IDE0072: Add missing cases
 dotnet_diagnostic.IDE0072.severity = suggestion
 
@@ -167,6 +168,7 @@ dotnet_style_prefer_conditional_expression_over_assignment = true:silent
 dotnet_style_prefer_conditional_expression_over_return = true:silent
 dotnet_style_explicit_tuple_names = true:suggestion
 dotnet_style_prefer_inferred_tuple_names = true:suggestion
+dotnet_style_require_accessibility_modifiers = none
 
 # VSTHRD200: Use "Async" suffix for async methods
 dotnet_diagnostic.VSTHRD200.severity = none

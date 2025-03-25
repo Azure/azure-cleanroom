@@ -25,10 +25,10 @@ function Verify-Attestation {
         $environment
     )
 
-    $repo = "mcr.microsoft.com/cleanroom"
+    $repo = "mcr.microsoft.com/azurecleanroom"
     if ($environment -eq "internal") {
         az acr login -n cleanroomsidecars
-        $repo = "cleanroomsidecars.azurecr.io/internal/cleanroom"
+        $repo = "cleanroomsidecars.azurecr.io/internal/azurecleanroom"
     }
 
     $timeout = New-TimeSpan -Minutes 15
@@ -167,3 +167,5 @@ if ($releaseType.Contains(("ccf-recovery-service"))) {
 if ($releaseType.Contains(("ccf-recovery-agent"))) {
     Verify-Attestation -tag $tag -container $ccfRecoveryAgent -environment $environment
 }
+
+Verify-Attestation -tag $tag -container cli/cleanroom-whl -environment $environment

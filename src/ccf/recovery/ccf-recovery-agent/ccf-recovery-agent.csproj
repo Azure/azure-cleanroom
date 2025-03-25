@@ -20,19 +20,4 @@
     <ProjectReference Include="..\..\ccf-common\ccf-common.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Update="insecure-virtual\certs\cert.pem">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="insecure-virtual\keys\priv_key.pem">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="insecure-virtual\keys\pub_key.pem">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="insecure-virtual\attestation\attestation-report.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-
 </Project>

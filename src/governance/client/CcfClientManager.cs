@@ -1,10 +1,11 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Concurrent;
 using System.Net.Security;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text.Json.Nodes;
+using CoseUtils;
 using Microsoft.Extensions.Http;
 
 namespace Controllers;
@@ -13,6 +14,8 @@ public class CcfClientManager
 {
     private static CcfConfiguration ccfConfiguration = new();
     private static SigningConfiguration signingConfiguration = default!;
+    private static X509Certificate2 httpsClientCert = default!;
+    private static ConcurrentDictionary<string, string> secretIdToSecretMap = new();
     private readonly ILogger logger;
     private readonly string ccfEndpoint;
     private readonly string serviceCertPem;
@@ -28,15 +31,20 @@ public class CcfClientManager
         this.serviceCertPem = serviceCertPem ?? ccfConfiguration.ServiceCert;
     }
 
-    public static void SetSigningDefaults(string signingCertPem, string signingKeyPem)
+    public static void SetGovAuthDefaults(
+        CoseSignKey coseSignKey)
     {
-        using var cert = X509Certificate2.CreateFromPem(signingCertPem);
+        using var cert = X509Certificate2.CreateFromPem(coseSignKey.Certificate);
         signingConfiguration = new SigningConfiguration()
         {
-            SigningCert = signingCertPem,
-            SigningKey = signingKeyPem,
+            SignKey = coseSignKey,
             MemberId = cert.GetCertHashString(HashAlgorithmName.SHA256).ToLower()
         };
+    }
+
+    public static void SetAppAuthDefaults(X509Certificate2 httpsClientCert)
+    {
+        CcfClientManager.httpsClientCert = httpsClientCert;
     }
 
     public static void SetCcfDefaults(string ccfEndpoint, string serviceCertPem)
@@ -54,33 +62,34 @@ public class CcfClientManager
         {
             CcfEndpoint = this.ccfEndpoint,
             ServiceCert = this.serviceCertPem,
-            SigningCert = signingConfiguration.SigningCert,
-            SigningKey = signingConfiguration.SigningKey,
+            SigningCert = signingConfiguration.SignKey.Certificate,
+            SigningKey = signingConfiguration.SignKey.PrivateKey,
+            SigningCertId = signingConfiguration.SignKey.KvCertificate?.Id.ToString(),
             MemberId = signingConfiguration.MemberId,
         };
     }
 
-    public async Task<HttpClient> GetGovClient()
+    public string GetMemberId()
+    {
+        return signingConfiguration.MemberId;
+    }
+
+    public CoseSignKey GetCoseSignKey()
+    {
+        return signingConfiguration.SignKey;
+    }
+
+    public Task<HttpClient> GetGovClient()
     {
         var client = this.InitializeClient(configureClientCert: false);
-        var version = (await client.GetFromJsonAsync<JsonObject>("/node/version"))!;
-        var versionStr = version["ccf_version"]!.ToString();
-
-        if (versionStr.StartsWith("ccf-4.") || versionStr == "ccf-5.0.0-dev15")
-        {
-            this.version = "2023-06-01-preview";
-        }
-        else
-        {
-            this.version = "2024-07-01";
-        }
-
-        return client;
+        this.version = "2024-07-01";
+        return Task.FromResult(client);
     }
 
     public HttpClient GetAppClient()
     {
-        return this.InitializeClient(configureClientCert: true);
+        var client = this.InitializeClient(configureClientCert: true);
+        return client;
     }
 
     public string GetGovApiVersion()
@@ -166,22 +175,9 @@ public class CcfClientManager
             }
         };
 
-        var certificate = signingConfiguration.SigningCert;
-        var privateKey = signingConfiguration.SigningKey;
-        var cert = X509Certificate2.CreateFromPem(certificate, privateKey);
-
-        // https://github.com/dotnet/runtime/issues/45680#issuecomment-739912495
-        // Workaround for Windows: credentials are available in the security package.
-        // SslStream not working with ephemeral keys.
-        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
-            System.Runtime.InteropServices.OSPlatform.Windows))
-        {
-            cert = new X509Certificate2(cert.Export(X509ContentType.Pkcs12));
-        }
-
         if (configureClientCert)
         {
-            handler.ClientCertificates.Add(cert);
+            handler.ClientCertificates.Add(httpsClientCert);
         }
 
         var policyHandler = new PolicyHttpMessageHandler(

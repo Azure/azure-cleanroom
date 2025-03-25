@@ -336,6 +336,24 @@ internal static class DockerClientEx
         return hostWorkspaceDir + $"/{infraTypeFolderName}/service-cert-{type}-{instanceName}";
     }
 
+    public static string GetInsecureVirtualDirectory(string type, string instanceName)
+    {
+        var infraTypeFolderName = "virtual";
+        string wsDir =
+            Environment.GetEnvironmentVariable("WORKSPACE_DIR") ?? Directory.GetCurrentDirectory();
+        return wsDir + $"/{infraTypeFolderName}/insecure-virtual-{type}-{instanceName}";
+    }
+
+    public static string GetHostInsecureVirtualDirectory(string type, string instanceName)
+    {
+        var infraTypeFolderName = "virtual";
+        string hostWorkspaceDir =
+            Environment.GetEnvironmentVariable("HOST_WORKSPACE_DIR") ??
+            Environment.GetEnvironmentVariable("WORKSPACE_DIR") ??
+            Directory.GetCurrentDirectory();
+        return hostWorkspaceDir + $"/{infraTypeFolderName}/insecure-virtual-{type}-{instanceName}";
+    }
+
     public static string ToProgressMessage(this JSONMessage message)
     {
         var pm = message.Status;

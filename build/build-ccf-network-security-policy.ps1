@@ -9,6 +9,9 @@ param(
 
     [switch]$push
 )
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
+
 . $PSScriptRoot/helpers.ps1
 
 if ($outDir -eq "") {
@@ -78,6 +81,5 @@ if ($push) {
     Push-Location
     Set-Location $outDir
     oras push "$policiesRepo/ccf-network-security-policy:$tag,$regoPolicyDigest,$debugRegoPolicyDigest" ./$fileName
-    CheckLastExitCode
     Pop-Location
 }

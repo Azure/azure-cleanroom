@@ -3,12 +3,14 @@ package opa
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/azure/azure-cleanroom/internal/configuration"
-	"github.com/azure/azure-cleanroom/internal/filter"
+	"github.com/azure/azure-cleanroom/src/internal/configuration"
+	"github.com/azure/azure-cleanroom/src/internal/filter"
 	ext_proc "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	typev3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/stretchr/testify/require"
@@ -18,65 +20,21 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-const examplePathAllowedRequestHeader = `{
+const exampleRequestHeaders = `{
 	"requestHeaders": {
         "headers": {
             "headers": [
                 {
                     "key": ":path",
-                    "value": "/api/action1"
+                    "raw_value": "%s"
                 },
                 {
                     "key": ":method",
-                    "value": "GET"
+                    "raw_value": "%s"
                 },
                 {
-                    "key": "x-ccr-is-incoming",
-                    "value": "true"
-                }
-            ]
-        },
-        "endOfStream": true
-    }
-  }`
-
-const examplePathDisallowedRequestHeader = `{
-	"requestHeaders": {
-        "headers": {
-            "headers": [
-                {
-                    "key": ":path",
-                    "value": "/api/action2"
-                },
-                {
-                    "key": ":method",
-                    "value": "GET"
-                },
-                {
-                    "key": "x-ccr-is-incoming",
-                    "value": "true"
-                }
-            ]
-        },
-        "endOfStream": true
-    }
-  }`
-
-const exampleMethodDisallowedRequestHeader = `{
-	"requestHeaders": {
-        "headers": {
-            "headers": [
-                {
-                    "key": ":path",
-                    "value": "/api/action1"
-                },
-                {
-                    "key": ":method",
-                    "value": "POST"
-                },
-                {
-                    "key": "x-ccr-is-incoming",
-                    "value": "true"
+                    "key": "x-ccr-request-direction",
+                    "raw_value": "%s"
                 }
             ]
         },
@@ -111,7 +69,11 @@ func Test_RequestHeader_PathAllowed(t *testing.T) {
 	}
 
 	var req ext_proc.ProcessingRequest
-	if err := protojson.Unmarshal([]byte(examplePathAllowedRequestHeader), &req); err != nil {
+	requestHeaders := fmt.Sprintf(exampleRequestHeaders,
+		base64.StdEncoding.EncodeToString([]byte("/api/action1")),
+		base64.StdEncoding.EncodeToString([]byte("GET")),
+		base64.StdEncoding.EncodeToString([]byte("inbound")))
+	if err := protojson.Unmarshal([]byte(requestHeaders), &req); err != nil {
 		panic(err)
 	}
 
@@ -162,7 +124,87 @@ func Test_RequestHeader_PathDisallowed(t *testing.T) {
 	}
 
 	var req ext_proc.ProcessingRequest
-	if err := protojson.Unmarshal([]byte(examplePathDisallowedRequestHeader), &req); err != nil {
+	requestHeaders := fmt.Sprintf(exampleRequestHeaders,
+		base64.StdEncoding.EncodeToString([]byte("/api/action2")),
+		base64.StdEncoding.EncodeToString([]byte("GET")),
+		base64.StdEncoding.EncodeToString([]byte("inbound")))
+	if err := protojson.Unmarshal([]byte(requestHeaders), &req); err != nil {
+		panic(err)
+	}
+
+	ctx, span := tracer.Start(context.Background(), "testspan")
+	resp := f.OnRequestHeaders(ctx, &req)
+	var ok bool
+	ir, ok := resp.Response.(*ext_proc.ProcessingResponse_ImmediateResponse)
+	if !ok {
+		t.Fatalf("Expected response type to be %T but got: %v", ir, resp)
+	}
+
+	expectedCode := typev3.StatusCode_Forbidden
+	if ir.ImmediateResponse.Status.Code != expectedCode {
+		t.Fatalf("Expected status code %v but got %v", expectedCode, ir.ImmediateResponse.Status.Code)
+	}
+
+	// Validate expected span data.
+	span.End()
+	spanStubs := exp.GetSpans()
+	require.Len(t, spanStubs, 1)
+	spanStub := spanStubs[0]
+	var foundException bool
+	var foundExceptionType bool
+	var foundExceptionMessage bool
+	for _, event := range spanStub.Events {
+		if event.Name == "exception" {
+			foundException = true
+			for _, eventAttribute := range event.Attributes {
+				if eventAttribute.Key == "exception.type" &&
+					eventAttribute.Value.AsString() == "*errors.errorString" {
+					foundExceptionType = true
+				}
+
+				if eventAttribute.Key == "exception.message" &&
+					eventAttribute.Value.AsString() == "RequestNotAllowed" {
+					foundExceptionMessage = true
+				}
+
+				if foundExceptionType && foundExceptionMessage {
+					break
+				}
+			}
+
+			require.True(t,
+				foundExceptionType,
+				"did not find expected exception.type attribute: %v",
+				event.Attributes)
+			require.True(t,
+				foundExceptionMessage,
+				"did not find expected exception.message attribute: %v",
+				event.Attributes)
+			break
+		}
+	}
+
+	require.True(t, foundException, "did not find expected exception event: %v", spanStub.Events)
+}
+
+func Test_RequestHeader_HeaderDisallowed(t *testing.T) {
+	exp := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithSyncer(exp),
+	)
+	tracer := tp.Tracer("tracer")
+
+	f, err := testOpaFilter(tracer)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var req ext_proc.ProcessingRequest
+	requestHeaders := fmt.Sprintf(exampleRequestHeaders,
+		base64.StdEncoding.EncodeToString([]byte("/api/action1")),
+		base64.StdEncoding.EncodeToString([]byte("GET")),
+		base64.StdEncoding.EncodeToString([]byte("outbound")))
+	if err := protojson.Unmarshal([]byte(requestHeaders), &req); err != nil {
 		panic(err)
 	}
 
@@ -229,7 +271,11 @@ func Test_RequestHeader_MethodDisallowed(t *testing.T) {
 	}
 
 	var req ext_proc.ProcessingRequest
-	if err := protojson.Unmarshal([]byte(exampleMethodDisallowedRequestHeader), &req); err != nil {
+	requestHeaders := fmt.Sprintf(exampleRequestHeaders,
+		base64.StdEncoding.EncodeToString([]byte("/api/action1")),
+		base64.StdEncoding.EncodeToString([]byte("POST")),
+		base64.StdEncoding.EncodeToString([]byte("inbound")))
+	if err := protojson.Unmarshal([]byte(requestHeaders), &req); err != nil {
 		panic(err)
 	}
 
@@ -255,7 +301,11 @@ func Test_RequestBody_ResponseMutationSuccess(t *testing.T) {
 
 	// Send a RequestHeader message first as that is a pre-req for the RequestBody message.
 	var req ext_proc.ProcessingRequest
-	if err := protojson.Unmarshal([]byte(examplePathAllowedRequestHeader), &req); err != nil {
+	requestHeaders := fmt.Sprintf(exampleRequestHeaders,
+		base64.StdEncoding.EncodeToString([]byte("/api/action1")),
+		base64.StdEncoding.EncodeToString([]byte("GET")),
+		base64.StdEncoding.EncodeToString([]byte("inbound")))
+	if err := protojson.Unmarshal([]byte(requestHeaders), &req); err != nil {
 		panic(err)
 	}
 
@@ -324,7 +374,11 @@ func Test_ResponseBody_ResponseMutationSuccess(t *testing.T) {
 
 	// Send a RequestHeader message first as that is a pre-req for the ResponseBody message.
 	var req ext_proc.ProcessingRequest
-	if err := protojson.Unmarshal([]byte(examplePathAllowedRequestHeader), &req); err != nil {
+	requestHeaders := fmt.Sprintf(exampleRequestHeaders,
+		base64.StdEncoding.EncodeToString([]byte("/api/action1")),
+		base64.StdEncoding.EncodeToString([]byte("GET")),
+		base64.StdEncoding.EncodeToString([]byte("inbound")))
+	if err := protojson.Unmarshal([]byte(requestHeaders), &req); err != nil {
 		panic(err)
 	}
 
@@ -471,13 +525,14 @@ func testOpaFilter(tracer trace.Tracer) (filter.HttpFilter, error) {
 		}
 
 		on_request_headers := response {
+			is_inbound_request == true
 			some h1 in input.requestHeaders.headers.headers
 			h1.key == ":path"
-			h1.value == "/api/action1"
+			h1.rawValue == base64.encode("/api/action1")
 
 			some h2 in input.requestHeaders.headers.headers
 			h2.key == ":method"
-			h2.value == "GET"
+			h2.rawValue == base64.encode("GET")
 			response := {
 				"allowed": true,
 				"context": {
@@ -485,6 +540,12 @@ func testOpaFilter(tracer trace.Tracer) (filter.HttpFilter, error) {
 				}
 			}
 		}
+
+		is_inbound_request := true if {
+			some header in input.requestHeaders.headers.headers
+			header.key == "x-ccr-request-direction"
+			base64.decode(header.rawValue) == "inbound"
+		} else := false
 
 		default on_request_body = false
 
