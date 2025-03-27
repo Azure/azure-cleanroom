@@ -601,7 +601,7 @@ def get_deployment_template(
             "ccr-proxy-ext-processor",
             sidecar_replacement_vars["ccr-proxy-ext-processor"](
                 "gov",
-                f"{get_containers_registry_url()}/ccr-governance-opa-policy@{gov_opa_policy_digest}",
+                f"{get_containers_registry_url()}/policies/ccr-governance-opa-policy@{gov_opa_policy_digest}",
                 str(False).lower(),
                 8281,
                 TELEMETRY_MOUNT_PATH,

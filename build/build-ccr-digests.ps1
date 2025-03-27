@@ -35,7 +35,7 @@ $ccrContainers = @(
 )
 
 $ccrArtefacts = @(
-    "ccr-governance-opa-policy"
+    "policies/ccr-governance-opa-policy"
 )
 
 #https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
