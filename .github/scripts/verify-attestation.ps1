@@ -31,7 +31,7 @@ function Verify-Attestation {
         $repo = "cleanroomsidecars.azurecr.io/internal/azurecleanroom"
     }
 
-    $timeout = New-TimeSpan -Minutes 15
+    $timeout = New-TimeSpan -Minutes 1
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
     while ($stopwatch.Elapsed -lt $timeout) {
