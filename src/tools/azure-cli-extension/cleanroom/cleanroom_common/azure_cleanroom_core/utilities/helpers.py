@@ -594,14 +594,14 @@ def get_deployment_template(
     gov_opa_policy_digest = [
         x
         for x in get_sidecars_version(logger)
-        if x["image"] == "ccr-governance-opa-policy"
+        if x["image"] == "policies/ccr-governance-opa-policy"
     ][0]["digest"]
     sidecars.append(
         get_sidecar(
             "ccr-proxy-ext-processor",
             sidecar_replacement_vars["ccr-proxy-ext-processor"](
                 "gov",
-                f"{get_containers_registry_url()}/ccr-governance-opa-policy@{gov_opa_policy_digest}",
+                f"{get_containers_registry_url()}/policies/ccr-governance-opa-policy@{gov_opa_policy_digest}",
                 str(False).lower(),
                 8281,
                 TELEMETRY_MOUNT_PATH,

@@ -49,7 +49,7 @@ if ($push) {
     # then oras pull fails with "Error: failed to resolve path for writing: path traversal disallowed"
     Push-Location
     Set-Location $outputPath
-    oras push $repo/ccr-governance-opa-policy:$tag `
+    oras push $repo/policies/ccr-governance-opa-policy:$tag `
         --config $policyFilesPath/config.json:application/vnd.oci.image.config.v1+json `
         ./ccr-governance-opa-policy.tar.gz:application/vnd.oci.image.layer.v1.tar+gzip
     Pop-Location
