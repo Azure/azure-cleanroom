@@ -23,10 +23,6 @@ runs:
         oras pull ${{ inputs.repo }}/cli/cleanroom-whl:${{ inputs.tag }}
         az extension add --allow-preview true --source ./cleanroom-*-py2.py3-none-any.whl -y
 
-    - name: Log in to Azure Container Registry
-      shell: pwsh
-      run: az acr login -n ${{ inputs.repo }}
-
     - name: Run collab scenario on caci
       if: ${{ !contains(inputs.repo, 'mcr.microsoft.com/azurecleanroom') }}
       shell: pwsh
