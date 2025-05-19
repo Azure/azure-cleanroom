@@ -408,12 +408,13 @@ jobs:
         with:
           name: sidecar-digests-unlisted.yaml
 
-      - name: Download ccr-artefacts
-        if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
-        id: download-ccr-artefacts
-        uses: actions/download-artifact@v4
-        with:
-          name: ccr-artefacts-unlisted
+      # TODO (ashank) No such atefact exist. Check why is this listed here
+      #- name: Download ccr-artefacts
+      #  if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
+      #  id: download-ccr-artefacts
+      #  uses: actions/download-artifact@v4
+      #  with:
+      #    name: ccr-artefacts-unlisted
 
       - name: Download CCF provider client artefacts
         if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-provider-client') }}
@@ -523,11 +524,12 @@ jobs:
           ${{ steps.download-ccr-secrets-artefact.outputs.download-path }}/ccr-secrets.json \
           ccr-secrets-sbom.spdx.json
 
-      - name: Upload ccr-artefacts
-        if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
-        run: |
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccr-artefacts.outputs.download-path }}/ccr-artefacts/ccr-governance-opa-policy.tar.gz 
+      # TODO (ashank) Same as above
+      #- name: Upload ccr-artefacts
+      #  if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
+      #  run: |
+      #    gh release upload ${{ inputs.tag }} \
+      #    ${{ steps.download-ccr-artefacts.outputs.download-path }}/ccr-artefacts/ccr-governance-opa-policy.tar.gz
 
       # TODO (anrdesai): Re-add cleanroom-client.tar attachment to the release once we figure out a way to make it smaller than 2GB.
       - name: Upload cleanroom-client assets
