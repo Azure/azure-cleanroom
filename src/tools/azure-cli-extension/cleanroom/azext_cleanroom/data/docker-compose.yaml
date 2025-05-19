@@ -14,7 +14,7 @@ services:
     environment:
       - cgsclientEndpoint=http://cgs-client:8080
   cgs-credentials-proxy:
-    image: cleanroombuild.azurecr.io/workleap/azure-cli-credentials-proxy:1.1.0
+    image: cleanroombuild.azurecr.io/workleap/azure-cli-credentials-proxy:1.2.5
     ports:
       - "0:8080"
     volumes:

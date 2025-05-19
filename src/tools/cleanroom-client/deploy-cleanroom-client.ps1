@@ -40,9 +40,9 @@ if (!$NoBuild) {
 # https://github.com/gsoft-inc/azure-cli-credentials-proxy
 $credproxy_name = "credentials-proxy"
 $credproxy_port = "5050"
-$credential_proxy_image = "workleap/azure-cli-credentials-proxy:1.1.0"
+$credential_proxy_image = "workleap/azure-cli-credentials-proxy:1.2.5"
 if ($env:GITHUB_ACTIONS -eq "true") {
-    $credential_proxy_image = "cleanroombuild.azurecr.io/workleap/azure-cli-credentials-proxy:1.1.0"
+    $credential_proxy_image = "cleanroombuild.azurecr.io/workleap/azure-cli-credentials-proxy:1.2.5"
 }
 
 & {

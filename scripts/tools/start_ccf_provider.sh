@@ -7,7 +7,7 @@ start_ccf_provider() {
 
     if ! docker ps \
         --filter "ancestor=mcr.microsoft.com/azurecleanroom/ccf/ccf-provider-client:latest" \
-        --filter "ancestor=cleanroombuild.azurecr.io/workleap/azure-cli-credentials-proxy:1.1.0" \
+        --filter "ancestor=cleanroombuild.azurecr.io/workleap/azure-cli-credentials-proxy:1.2.5" \
         --format '{{.Names}}' | grep -q .; then
         az cleanroom ccf provider deploy
     else

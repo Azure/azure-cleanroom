@@ -188,7 +188,7 @@ public static class ImageUtils
 
     public static string CredentialsProxyTag()
     {
-        return "1.1.0";
+        return "1.2.5";
     }
 
     public static string LocalSkrImage()
