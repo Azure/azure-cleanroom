@@ -47,8 +47,8 @@ jobs:
 
       - name: Install az cleanroom CLI
         run: |
-          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:3.0.0
-          az extension add --source ./cleanroom-3.0.0-py2.py3-none-any.whl -y --allow-preview true
+          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:4.0.0
+          az extension add --source ./cleanroom-*-py2.py3-none-any.whl -y --allow-preview true
 
       - name: Enabling az cli telemetry collection
         run: az config set core.collect_telemetry=true
@@ -57,7 +57,7 @@ jobs:
         uses: ./.github/actions/test-multi-party-collab/test-ml-training-caci
         with:
           repo: mcr.microsoft.com/azurecleanroom
-          tag: 3.0.0
+          tag: 4.0.0
           kvType: ${{ matrix.key-store }}
 
   encrypted-storage-nightly:
@@ -88,8 +88,8 @@ jobs:
 
       - name: Install az cleanroom CLI
         run: |
-          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:3.0.0
-          az extension add --source ./cleanroom-3.0.0-py2.py3-none-any.whl -y --allow-preview true
+          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:4.0.0
+          az extension add --source ./cleanroom-*-py2.py3-none-any.whl -y --allow-preview true
 
       - name: Enabling az cli telemetry collection
         run: az config set core.collect_telemetry=true
@@ -98,7 +98,7 @@ jobs:
         uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-caci
         with:
           repo: mcr.microsoft.com/azurecleanroom
-          tag: 3.0.0
+          tag: 4.0.0
 
   nginx-hello-nightly:
     runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
@@ -128,8 +128,8 @@ jobs:
 
       - name: Install az cleanroom CLI
         run: |
-          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:3.0.0
-          az extension add --source ./cleanroom-3.0.0-py2.py3-none-any.whl -y --allow-preview true
+          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:4.0.0
+          az extension add --source ./cleanroom-*-py2.py3-none-any.whl -y --allow-preview true
 
       - name: Enabling az cli telemetry collection
         run: az config set core.collect_telemetry=true
@@ -138,4 +138,4 @@ jobs:
         uses: ./.github/actions/test-multi-party-collab/test-nginx-hello-caci
         with:
           repo: mcr.microsoft.com/azurecleanroom
-          tag: 3.0.0
+          tag: 4.0.0
