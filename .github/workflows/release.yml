@@ -666,4 +666,4 @@ jobs:
           ccf-recovery-agent-sbom.spdx.json
 
       - name: Upload AZ CLI extension
-        run: gh release upload ${{ inputs.tag }} cleanroom-*-py2.py3-none-any.whl
+        run: gh release upload ${{ inputs.tag }} cleanroom-cli.whl
