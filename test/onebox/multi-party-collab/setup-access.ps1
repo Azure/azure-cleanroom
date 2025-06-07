@@ -286,7 +286,8 @@ else {
       --identity-name $MANAGED_IDENTITY_NAME `
       --resource-group $resourceGroup `
       --issuer $issuerUrl `
-      --subject $contractId
+      --subject $contractId `
+      --audience api://AzureADTokenExchange
   }
   else {
     $parameters = @{
