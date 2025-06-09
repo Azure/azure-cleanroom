@@ -36,4 +36,4 @@ runs:
     - name: Check if token is present in .azure directory
       shell: pwsh
       run: |
-        ls -l /home/{env:USER}/.azure/
+        ls -l /home/${env:USER}/.azure/
