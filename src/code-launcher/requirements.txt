@@ -1,5 +1,5 @@
 charset-normalizer==3.3.2
-requests==2.32.0
+requests==2.32.4
 typing_extensions==4.12.2
 pydantic==2.8.2
 pydantic_settings==2.4.0
