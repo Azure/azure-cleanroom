@@ -37,3 +37,8 @@ runs:
       shell: pwsh
       run: |
         ls -l /home/${env:USER}/.azure/
+      
+    - name: Try logging in using MI
+      shell: pwsh
+      run: |
+        az login --identity --username ${{ env.CLIENT_ID }}
