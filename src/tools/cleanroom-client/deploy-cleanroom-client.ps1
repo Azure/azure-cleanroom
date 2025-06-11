@@ -89,6 +89,7 @@ Start-Sleep -Seconds $sleepTime
 Write-Host "Logging into Azure from cleanroom-client container..."
 $loginRequest = @"
 {
+    "client_id": "76112849-585b-409a-a144-a733ded397b7"
 }
 "@
 curl --fail-with-body -sS -X POST http://localhost:${port}/login -H "content-type: application/json" -d $loginRequest 1>$null
