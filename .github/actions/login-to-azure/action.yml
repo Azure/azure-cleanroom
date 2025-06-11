@@ -41,4 +41,4 @@ runs:
     - name: Try logging in using MI
       shell: pwsh
       run: |
-        az login --identity --username ${{ env.CLIENT_ID }}
+        az login --identity --client-id ${{ env.CLIENT_ID }}
