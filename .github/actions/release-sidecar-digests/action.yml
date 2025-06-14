@@ -41,6 +41,12 @@ runs:
     - shell: pwsh
       run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
 
+    - name: Install confcom extension
+      shell: pwsh
+      run: |
+        az extension add --name confcom --version 1.2.4 -y --allow-preview true
+        az version
+
     - shell: pwsh
       run: |
         ./build/build-ccr-digests.ps1 -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom -tag ${{ inputs.tag }} -push
