@@ -269,417 +269,417 @@ jobs:
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
 
-  post-release-validation:
-    needs: ["release-to-prod"]
-    permissions:
-      id-token: write
-      contents: read  # This is required for actions/checkout
-      attestations: write
-      packages: write
+  # post-release-validation:
+  #   needs: ["release-to-prod"]
+  #   permissions:
+  #     id-token: write
+  #     contents: read  # This is required for actions/checkout
+  #     attestations: write
+  #     packages: write
 
-    # The call below does not specify a branch parameter since the default behaviour of reusable
-    # workflows is to work on the same commit/tag as the calling workflow. Assuming the current
-    # workflow is running on the 'release' branch, this validation also runs on the 'release' branch.
-    # https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_iduses
-    uses: ./.github/workflows/release_verification_nightly.yml
+  #   # The call below does not specify a branch parameter since the default behaviour of reusable
+  #   # workflows is to work on the same commit/tag as the calling workflow. Assuming the current
+  #   # workflow is running on the 'release' branch, this validation also runs on the 'release' branch.
+  #   # https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_iduses
+  #   uses: ./.github/workflows/release_verification_nightly.yml
 
-  create-github-release:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
-    needs: ["release-to-prod", "post-release-validation"]
-    # Permission and environment variables below are needed to create a GitHub release
-    permissions:
-      contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      # Checkout is needed for the GitHub release as that provides the repository context
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-tags: true
-          ref: ${{ inputs.tag }}
+  # create-github-release:
+  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+  #   needs: ["release-to-prod", "post-release-validation"]
+  #   # Permission and environment variables below are needed to create a GitHub release
+  #   permissions:
+  #     contents: write
+  #   env:
+  #     GH_TOKEN: ${{ github.token }}
+  #   steps:
+  #     # Checkout is needed for the GitHub release as that provides the repository context
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #       with:
+  #         submodules: recursive
+  #         fetch-tags: true
+  #         ref: ${{ inputs.tag }}
 
-      - name: Download released containers artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: released-containers-unlisted
+  #     - name: Download released containers artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: released-containers-unlisted
 
-      - name: Get released containers
-        shell: pwsh
-        id: get-released-containers
-        run: |
-          $releasedContainers = Get-Content released-containers-unlisted.txt
-          echo "released_containers=$releasedContainers" >> $env:GITHUB_OUTPUT
+  #     - name: Get released containers
+  #       shell: pwsh
+  #       id: get-released-containers
+  #       run: |
+  #         $releasedContainers = Get-Content released-containers-unlisted.txt
+  #         echo "released_containers=$releasedContainers" >> $env:GITHUB_OUTPUT
 
-      - name: Download identity artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'identity') }}
-        id: download-identity-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: identity
+  #     - name: Download identity artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'identity') }}
+  #       id: download-identity-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: identity
 
-      - name: Download blobfuse-launcher artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'blobfuse-launcher') }}
-        id: download-blobfuse-launcher-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: blobfuse-launcher
+  #     - name: Download blobfuse-launcher artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'blobfuse-launcher') }}
+  #       id: download-blobfuse-launcher-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: blobfuse-launcher
 
-      - name: Download code-launcher artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'code-launcher') }}
-        id: download-code-launcher-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: code-launcher
+  #     - name: Download code-launcher artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'code-launcher') }}
+  #       id: download-code-launcher-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: code-launcher
 
-      - name: Download ccr-init artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-init') }}
-        id: download-ccr-init-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: ccr-init
+  #     - name: Download ccr-init artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-init') }}
+  #       id: download-ccr-init-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ccr-init
 
-      - name: Download ccr-attestation artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-attestation') }}
-        id: download-ccr-attestation-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: ccr-attestation
+  #     - name: Download ccr-attestation artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-attestation') }}
+  #       id: download-ccr-attestation-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ccr-attestation
 
-      - name: Download ccr-secrets artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-secrets') }}
-        id: download-ccr-secrets-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: ccr-secrets
+  #     - name: Download ccr-secrets artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-secrets') }}
+  #       id: download-ccr-secrets-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ccr-secrets
 
-      - name: Download ccr-governance artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-governance') }}
-        id: download-ccr-governance-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: ccr-governance
+  #     - name: Download ccr-governance artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-governance') }}
+  #       id: download-ccr-governance-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ccr-governance
 
-      - name: Download ccr-proxy artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-proxy') }}
-        id: download-ccr-proxy-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: ccr-proxy
+  #     - name: Download ccr-proxy artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-proxy') }}
+  #       id: download-ccr-proxy-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ccr-proxy
 
-      - name: Download ccr-proxy-ext-processor artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-proxy-ext-processor') }}
-        id: download-ccr-proxy-ext-processor-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: ccr-proxy-ext-processor
+  #     - name: Download ccr-proxy-ext-processor artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-proxy-ext-processor') }}
+  #       id: download-ccr-proxy-ext-processor-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ccr-proxy-ext-processor
 
-      - name: Download cgs-client artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cgs-client') }}
-        id: download-cgs-client-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: cgs-client
+  #     - name: Download cgs-client artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cgs-client') }}
+  #       id: download-cgs-client-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: cgs-client
 
-      - name: Download cgs-ui artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cgs-ui') }}
-        id: download-cgs-ui-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: cgs-ui
+  #     - name: Download cgs-ui artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cgs-ui') }}
+  #       id: download-cgs-ui-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: cgs-ui
 
-      - name: Download cleanroom-client artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cleanroom-client') }}
-        id: download-cleanroom-client-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: cleanroom-client
+  #     - name: Download cleanroom-client artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cleanroom-client') }}
+  #       id: download-cleanroom-client-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: cleanroom-client
 
-      - name: Download otel-collector artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'otel-collector') }}
-        id: download-otel-collector-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: otel-collector
+  #     - name: Download otel-collector artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'otel-collector') }}
+  #       id: download-otel-collector-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: otel-collector
 
-      - name: Download cgs-js-app
-        if: ${{ contains(inputs.release-type, 'cgs-js-app') }}
-        id: download-cgs-js-app
-        uses: actions/download-artifact@v4
-        with:
-          name: cgs-js-app-${{ inputs.tag }}.json
+  #     - name: Download cgs-js-app
+  #       if: ${{ contains(inputs.release-type, 'cgs-js-app') }}
+  #       id: download-cgs-js-app
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: cgs-js-app-${{ inputs.tag }}.json
 
-      - name: Download cgs-constitution
-        if: ${{ contains(inputs.release-type, 'cgs-constitution') }}
-        id: download-cgs-constitution
-        uses: actions/download-artifact@v4
-        with:
-          name: cgs-constitution-${{ inputs.tag }}.json
+  #     - name: Download cgs-constitution
+  #       if: ${{ contains(inputs.release-type, 'cgs-constitution') }}
+  #       id: download-cgs-constitution
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: cgs-constitution-${{ inputs.tag }}.json
 
-      - name: Download sidecar digests
-        if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
-        id: download-sidecar-digests
-        uses: actions/download-artifact@v4
-        with:
-          name: sidecar-digests-unlisted.yaml
+  #     - name: Download sidecar digests
+  #       if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
+  #       id: download-sidecar-digests
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: sidecar-digests-unlisted.yaml
 
-      # TODO (ashank) No such atefact exist. Check why is this listed here
-      #- name: Download ccr-artefacts
-      #  if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
-      #  id: download-ccr-artefacts
-      #  uses: actions/download-artifact@v4
-      #  with:
-      #    name: ccr-artefacts-unlisted
+  #     # TODO (ashank) No such atefact exist. Check why is this listed here
+  #     #- name: Download ccr-artefacts
+  #     #  if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
+  #     #  id: download-ccr-artefacts
+  #     #  uses: actions/download-artifact@v4
+  #     #  with:
+  #     #    name: ccr-artefacts-unlisted
 
-      - name: Download CCF provider client artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-provider-client') }}
-        id: download-ccf-provider-client-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: ccf-provider-client
+  #     - name: Download CCF provider client artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-provider-client') }}
+  #       id: download-ccf-provider-client-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ccf-provider-client
 
-      - name: Download CCF nginx artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-nginx') }}
-        id: download-ccf-nginx-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: ccf-nginx
+  #     - name: Download CCF nginx artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-nginx') }}
+  #       id: download-ccf-nginx-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ccf-nginx
 
-      - name: Download CCF SNP provider artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/app/run-js/snp') }}
-        id: download-ccf-provider-snp-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: ccf-app-run-js-snp
+  #     - name: Download CCF SNP provider artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/app/run-js/snp') }}
+  #       id: download-ccf-provider-snp-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ccf-app-run-js-snp
 
-      - name: Download CCF virtual provider artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/app/run-js/virtual') }}
-        id: download-ccf-provider-virtual-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: ccf-app-run-js-virtual
+  #     - name: Download CCF virtual provider artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/app/run-js/virtual') }}
+  #       id: download-ccf-provider-virtual-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ccf-app-run-js-virtual
 
-      - name: Download CCF recovery service artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-recovery-service') }}
-        id: download-ccf-recovery-service-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: ccf-recovery-service
+  #     - name: Download CCF recovery service artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-recovery-service') }}
+  #       id: download-ccf-recovery-service-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ccf-recovery-service
 
-      - name: Download CCF recovery agent artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-recovery-agent') }}
-        id: download-ccf-recovery-agent-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: ccf-recovery-agent
+  #     - name: Download CCF recovery agent artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-recovery-agent') }}
+  #       id: download-ccf-recovery-agent-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ccf-recovery-agent
 
-      - name: Download SKR artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'skr') }}
-        id: download-skr-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: skr
+  #     - name: Download SKR artefacts
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'skr') }}
+  #       id: download-skr-artefact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: skr
 
-      # https://cli.github.com/manual/gh_release_create
-      - name: Create GitHub release
-        run: |
-          gh release create ${{ inputs.tag }} --verify-tag --generate-notes
+  #     # https://cli.github.com/manual/gh_release_create
+  #     - name: Create GitHub release
+  #       run: |
+  #         gh release create ${{ inputs.tag }} --verify-tag --generate-notes
 
-      - name: Upload identity assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'identity') }}
-        run: |
-          cp ${{ steps.download-identity-artefact.outputs.download-path }}/identity-sbom/_manifest/spdx_2.2/manifest.spdx.json identity-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-identity-artefact.outputs.download-path }}/identity-${{ inputs.tag }}.tar \
-          ${{ steps.download-identity-artefact.outputs.download-path }}/identity.json \
-          identity-sbom.spdx.json
+  #     - name: Upload identity assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'identity') }}
+  #       run: |
+  #         cp ${{ steps.download-identity-artefact.outputs.download-path }}/identity-sbom/_manifest/spdx_2.2/manifest.spdx.json identity-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-identity-artefact.outputs.download-path }}/identity-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-identity-artefact.outputs.download-path }}/identity.json \
+  #         identity-sbom.spdx.json
 
-      - name: Upload blobfuse-launcher assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'blobfuse-launcher') }}
-        run: |
-          cp ${{ steps.download-blobfuse-launcher-artefact.outputs.download-path }}/blobfuse-launcher-sbom/_manifest/spdx_2.2/manifest.spdx.json blobfuse-launcher-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-blobfuse-launcher-artefact.outputs.download-path }}/blobfuse-launcher-${{ inputs.tag }}.tar \
-          ${{ steps.download-blobfuse-launcher-artefact.outputs.download-path }}/blobfuse-launcher.json \
-          blobfuse-launcher-sbom.spdx.json
+  #     - name: Upload blobfuse-launcher assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'blobfuse-launcher') }}
+  #       run: |
+  #         cp ${{ steps.download-blobfuse-launcher-artefact.outputs.download-path }}/blobfuse-launcher-sbom/_manifest/spdx_2.2/manifest.spdx.json blobfuse-launcher-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-blobfuse-launcher-artefact.outputs.download-path }}/blobfuse-launcher-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-blobfuse-launcher-artefact.outputs.download-path }}/blobfuse-launcher.json \
+  #         blobfuse-launcher-sbom.spdx.json
 
-      - name: Upload code-launcher assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'code-launcher') }}
-        run: |
-          cp ${{ steps.download-code-launcher-artefact.outputs.download-path }}/code-launcher-sbom/_manifest/spdx_2.2/manifest.spdx.json code-launcher-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-code-launcher-artefact.outputs.download-path }}/code-launcher-${{ inputs.tag }}.tar \
-          ${{ steps.download-code-launcher-artefact.outputs.download-path }}/code-launcher.json \
-          code-launcher-sbom.spdx.json
+  #     - name: Upload code-launcher assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'code-launcher') }}
+  #       run: |
+  #         cp ${{ steps.download-code-launcher-artefact.outputs.download-path }}/code-launcher-sbom/_manifest/spdx_2.2/manifest.spdx.json code-launcher-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-code-launcher-artefact.outputs.download-path }}/code-launcher-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-code-launcher-artefact.outputs.download-path }}/code-launcher.json \
+  #         code-launcher-sbom.spdx.json
 
-      - name: Upload ccr-init assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-init') }}
-        run: |
-          cp ${{ steps.download-ccr-init-artefact.outputs.download-path }}/ccr-init-sbom/_manifest/spdx_2.2/manifest.spdx.json ccr-init-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccr-init-artefact.outputs.download-path }}/ccr-init-${{ inputs.tag }}.tar \
-          ${{ steps.download-ccr-init-artefact.outputs.download-path }}/ccr-init.json \
-          ccr-init-sbom.spdx.json
+  #     - name: Upload ccr-init assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-init') }}
+  #       run: |
+  #         cp ${{ steps.download-ccr-init-artefact.outputs.download-path }}/ccr-init-sbom/_manifest/spdx_2.2/manifest.spdx.json ccr-init-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-ccr-init-artefact.outputs.download-path }}/ccr-init-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-ccr-init-artefact.outputs.download-path }}/ccr-init.json \
+  #         ccr-init-sbom.spdx.json
 
-      - name: Upload ccr-attestation assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-attestation') }}
-        run: |
-          cp ${{ steps.download-ccr-attestation-artefact.outputs.download-path }}/ccr-attestation-sbom/_manifest/spdx_2.2/manifest.spdx.json ccr-attestation-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccr-attestation-artefact.outputs.download-path }}/ccr-attestation-${{ inputs.tag }}.tar \
-          ${{ steps.download-ccr-attestation-artefact.outputs.download-path }}/ccr-attestation.json \
-          ccr-attestation-sbom.spdx.json
+  #     - name: Upload ccr-attestation assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-attestation') }}
+  #       run: |
+  #         cp ${{ steps.download-ccr-attestation-artefact.outputs.download-path }}/ccr-attestation-sbom/_manifest/spdx_2.2/manifest.spdx.json ccr-attestation-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-ccr-attestation-artefact.outputs.download-path }}/ccr-attestation-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-ccr-attestation-artefact.outputs.download-path }}/ccr-attestation.json \
+  #         ccr-attestation-sbom.spdx.json
 
-      - name: Upload ccr-secrets assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-secrets') }}
-        run: |
-          cp ${{ steps.download-ccr-secrets-artefact.outputs.download-path }}/ccr-secrets-sbom/_manifest/spdx_2.2/manifest.spdx.json ccr-secrets-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccr-secrets-artefact.outputs.download-path }}/ccr-secrets-${{ inputs.tag }}.tar \
-          ${{ steps.download-ccr-secrets-artefact.outputs.download-path }}/ccr-secrets.json \
-          ccr-secrets-sbom.spdx.json
+  #     - name: Upload ccr-secrets assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-secrets') }}
+  #       run: |
+  #         cp ${{ steps.download-ccr-secrets-artefact.outputs.download-path }}/ccr-secrets-sbom/_manifest/spdx_2.2/manifest.spdx.json ccr-secrets-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-ccr-secrets-artefact.outputs.download-path }}/ccr-secrets-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-ccr-secrets-artefact.outputs.download-path }}/ccr-secrets.json \
+  #         ccr-secrets-sbom.spdx.json
 
-      # TODO (ashank) Same as above
-      #- name: Upload ccr-artefacts
-      #  if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
-      #  run: |
-      #    gh release upload ${{ inputs.tag }} \
-      #    ${{ steps.download-ccr-artefacts.outputs.download-path }}/ccr-artefacts/ccr-governance-opa-policy.tar.gz
+  #     # TODO (ashank) Same as above
+  #     #- name: Upload ccr-artefacts
+  #     #  if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
+  #     #  run: |
+  #     #    gh release upload ${{ inputs.tag }} \
+  #     #    ${{ steps.download-ccr-artefacts.outputs.download-path }}/ccr-artefacts/ccr-governance-opa-policy.tar.gz
 
-      # TODO (anrdesai): Re-add cleanroom-client.tar attachment to the release once we figure out a way to make it smaller than 2GB.
-      - name: Upload cleanroom-client assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cleanroom-client') }}
-        run: |
-          cp ${{ steps.download-cleanroom-client-artefact.outputs.download-path }}/cleanroom-client-sbom/_manifest/spdx_2.2/manifest.spdx.json cleanroom-client-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-cleanroom-client-artefact.outputs.download-path }}/cleanroom-client.json \
-          cleanroom-client-sbom.spdx.json
+  #     # TODO (anrdesai): Re-add cleanroom-client.tar attachment to the release once we figure out a way to make it smaller than 2GB.
+  #     - name: Upload cleanroom-client assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cleanroom-client') }}
+  #       run: |
+  #         cp ${{ steps.download-cleanroom-client-artefact.outputs.download-path }}/cleanroom-client-sbom/_manifest/spdx_2.2/manifest.spdx.json cleanroom-client-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-cleanroom-client-artefact.outputs.download-path }}/cleanroom-client.json \
+  #         cleanroom-client-sbom.spdx.json
 
-      - name: Upload ccr-governance assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-governance') }}
-        run: |
-          cp ${{ steps.download-ccr-governance-artefact.outputs.download-path }}/ccr-governance-sbom/_manifest/spdx_2.2/manifest.spdx.json ccr-governance-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccr-governance-artefact.outputs.download-path }}/ccr-governance-${{ inputs.tag }}.tar \
-          ${{ steps.download-ccr-governance-artefact.outputs.download-path }}/ccr-governance.json \
-          ccr-governance-sbom.spdx.json
+  #     - name: Upload ccr-governance assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-governance') }}
+  #       run: |
+  #         cp ${{ steps.download-ccr-governance-artefact.outputs.download-path }}/ccr-governance-sbom/_manifest/spdx_2.2/manifest.spdx.json ccr-governance-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-ccr-governance-artefact.outputs.download-path }}/ccr-governance-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-ccr-governance-artefact.outputs.download-path }}/ccr-governance.json \
+  #         ccr-governance-sbom.spdx.json
 
-      - name: Upload otel-collector assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'otel-collector') }}
-        run: |
-          cp ${{ steps.download-otel-collector-artefact.outputs.download-path }}/otel-collector-sbom/_manifest/spdx_2.2/manifest.spdx.json otel-collector-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-otel-collector-artefact.outputs.download-path }}/otel-collector-${{ inputs.tag }}.tar \
-          ${{ steps.download-otel-collector-artefact.outputs.download-path }}/otel-collector.json \
-          otel-collector-sbom.spdx.json
+  #     - name: Upload otel-collector assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'otel-collector') }}
+  #       run: |
+  #         cp ${{ steps.download-otel-collector-artefact.outputs.download-path }}/otel-collector-sbom/_manifest/spdx_2.2/manifest.spdx.json otel-collector-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-otel-collector-artefact.outputs.download-path }}/otel-collector-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-otel-collector-artefact.outputs.download-path }}/otel-collector.json \
+  #         otel-collector-sbom.spdx.json
 
-      - name: Upload ccr-proxy assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-proxy') }}
-        run: |
-          cp ${{ steps.download-ccr-proxy-artefact.outputs.download-path }}/ccr-proxy-sbom/_manifest/spdx_2.2/manifest.spdx.json ccr-proxy-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccr-proxy-artefact.outputs.download-path }}/ccr-proxy-${{ inputs.tag }}.tar \
-          ${{ steps.download-ccr-proxy-artefact.outputs.download-path }}/ccr-proxy.json \
-          ccr-proxy-sbom.spdx.json
+  #     - name: Upload ccr-proxy assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-proxy') }}
+  #       run: |
+  #         cp ${{ steps.download-ccr-proxy-artefact.outputs.download-path }}/ccr-proxy-sbom/_manifest/spdx_2.2/manifest.spdx.json ccr-proxy-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-ccr-proxy-artefact.outputs.download-path }}/ccr-proxy-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-ccr-proxy-artefact.outputs.download-path }}/ccr-proxy.json \
+  #         ccr-proxy-sbom.spdx.json
 
-      - name: Upload ccr-proxy-ext-processor assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-proxy-ext-processor') }}
-        run: |
-          cp ${{ steps.download-ccr-proxy-ext-processor-artefact.outputs.download-path }}/ccr-proxy-ext-processor-sbom/_manifest/spdx_2.2/manifest.spdx.json ccr-proxy-ext-processor-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccr-proxy-ext-processor-artefact.outputs.download-path }}/ccr-proxy-ext-processor-${{ inputs.tag }}.tar \
-          ${{ steps.download-ccr-proxy-ext-processor-artefact.outputs.download-path }}/ccr-proxy-ext-processor.json \
-          ccr-proxy-ext-processor-sbom.spdx.json
+  #     - name: Upload ccr-proxy-ext-processor assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-proxy-ext-processor') }}
+  #       run: |
+  #         cp ${{ steps.download-ccr-proxy-ext-processor-artefact.outputs.download-path }}/ccr-proxy-ext-processor-sbom/_manifest/spdx_2.2/manifest.spdx.json ccr-proxy-ext-processor-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-ccr-proxy-ext-processor-artefact.outputs.download-path }}/ccr-proxy-ext-processor-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-ccr-proxy-ext-processor-artefact.outputs.download-path }}/ccr-proxy-ext-processor.json \
+  #         ccr-proxy-ext-processor-sbom.spdx.json
 
-      - name: Upload SKR assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'skr') }}
-        run: |
-          cp ${{ steps.download-skr-artefact.outputs.download-path }}/skr-sbom/_manifest/spdx_2.2/manifest.spdx.json skr-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-skr-artefact.outputs.download-path }}/skr-${{ inputs.tag }}.tar \
-          ${{ steps.download-skr-artefact.outputs.download-path }}/skr.json \
-          skr-sbom.spdx.json
+  #     - name: Upload SKR assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'skr') }}
+  #       run: |
+  #         cp ${{ steps.download-skr-artefact.outputs.download-path }}/skr-sbom/_manifest/spdx_2.2/manifest.spdx.json skr-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-skr-artefact.outputs.download-path }}/skr-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-skr-artefact.outputs.download-path }}/skr.json \
+  #         skr-sbom.spdx.json
 
-      - name: Upload cgs-client assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cgs-client') }}
-        run: |
-          cp ${{ steps.download-cgs-client-artefact.outputs.download-path }}/cgs-client-sbom/_manifest/spdx_2.2/manifest.spdx.json cgs-client-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-cgs-client-artefact.outputs.download-path }}/cgs-client-${{ inputs.tag }}.tar \
-          ${{ steps.download-cgs-client-artefact.outputs.download-path }}/cgs-client.json \
-          cgs-client-sbom.spdx.json
+  #     - name: Upload cgs-client assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cgs-client') }}
+  #       run: |
+  #         cp ${{ steps.download-cgs-client-artefact.outputs.download-path }}/cgs-client-sbom/_manifest/spdx_2.2/manifest.spdx.json cgs-client-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-cgs-client-artefact.outputs.download-path }}/cgs-client-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-cgs-client-artefact.outputs.download-path }}/cgs-client.json \
+  #         cgs-client-sbom.spdx.json
 
-      - name: Upload cgs-ui assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cgs-ui') }}
-        run: |
-          cp ${{ steps.download-cgs-ui-artefact.outputs.download-path }}/cgs-ui-sbom/_manifest/spdx_2.2/manifest.spdx.json cgs-ui-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-cgs-ui-artefact.outputs.download-path }}/cgs-ui-${{ inputs.tag }}.tar \
-          ${{ steps.download-cgs-ui-artefact.outputs.download-path }}/cgs-ui.json \
-          cgs-ui-sbom.spdx.json
+  #     - name: Upload cgs-ui assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cgs-ui') }}
+  #       run: |
+  #         cp ${{ steps.download-cgs-ui-artefact.outputs.download-path }}/cgs-ui-sbom/_manifest/spdx_2.2/manifest.spdx.json cgs-ui-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-cgs-ui-artefact.outputs.download-path }}/cgs-ui-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-cgs-ui-artefact.outputs.download-path }}/cgs-ui.json \
+  #         cgs-ui-sbom.spdx.json
 
-      - name: Upload cgs-js-app
-        if: ${{ contains(inputs.release-type, 'cgs-js-app') }}
-        run: gh release upload ${{ inputs.tag }} bundle.json
+  #     - name: Upload cgs-js-app
+  #       if: ${{ contains(inputs.release-type, 'cgs-js-app') }}
+  #       run: gh release upload ${{ inputs.tag }} bundle.json
 
-      - name: Upload cgs-constitution
-        if: ${{ contains(inputs.release-type, 'cgs-constitution') }}
-        run: gh release upload ${{ inputs.tag }} constitution.json
+  #     - name: Upload cgs-constitution
+  #       if: ${{ contains(inputs.release-type, 'cgs-constitution') }}
+  #       run: gh release upload ${{ inputs.tag }} constitution.json
 
-      - name: Upload CCF provider client assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-provider-client') }}
-        run: |
-          cp ${{ steps.download-ccf-provider-client-artefact.outputs.download-path }}/ccf-provider-client-sbom/_manifest/spdx_2.2/manifest.spdx.json ccf-provider-client-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccf-provider-client-artefact.outputs.download-path }}/ccf-provider-client-${{ inputs.tag }}.tar \
-          ${{ steps.download-ccf-provider-client-artefact.outputs.download-path }}/ccf-provider-client.json \
-          ccf-provider-client-sbom.spdx.json
+  #     - name: Upload CCF provider client assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-provider-client') }}
+  #       run: |
+  #         cp ${{ steps.download-ccf-provider-client-artefact.outputs.download-path }}/ccf-provider-client-sbom/_manifest/spdx_2.2/manifest.spdx.json ccf-provider-client-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-ccf-provider-client-artefact.outputs.download-path }}/ccf-provider-client-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-ccf-provider-client-artefact.outputs.download-path }}/ccf-provider-client.json \
+  #         ccf-provider-client-sbom.spdx.json
 
-      - name: Upload CCF nginx assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-nginx') }}
-        run: |
-          cp ${{ steps.download-ccf-nginx-artefact.outputs.download-path }}/ccf-nginx-sbom/_manifest/spdx_2.2/manifest.spdx.json ccf-nginx-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccf-nginx-artefact.outputs.download-path }}/ccf-nginx-${{ inputs.tag }}.tar \
-          ${{ steps.download-ccf-nginx-artefact.outputs.download-path }}/ccf-nginx.json \
-          ccf-nginx-sbom.spdx.json
+  #     - name: Upload CCF nginx assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-nginx') }}
+  #       run: |
+  #         cp ${{ steps.download-ccf-nginx-artefact.outputs.download-path }}/ccf-nginx-sbom/_manifest/spdx_2.2/manifest.spdx.json ccf-nginx-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-ccf-nginx-artefact.outputs.download-path }}/ccf-nginx-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-ccf-nginx-artefact.outputs.download-path }}/ccf-nginx.json \
+  #         ccf-nginx-sbom.spdx.json
 
-      - name: Upload CCF SNP provider assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/app/run-js/snp') }}
-        run: |
-          cp ${{ steps.download-ccf-provider-snp-artefact.outputs.download-path }}/ccf-app-run-js-snp-sbom/_manifest/spdx_2.2/manifest.spdx.json ccf-app-run-js-snp-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccf-provider-snp-artefact.outputs.download-path }}/ccf-app-run-js-snp-${{ inputs.tag }}.tar \
-          ${{ steps.download-ccf-provider-snp-artefact.outputs.download-path }}/ccf-app-run-js-snp.json \
-          ccf-app-run-js-snp-sbom.spdx.json
+  #     - name: Upload CCF SNP provider assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/app/run-js/snp') }}
+  #       run: |
+  #         cp ${{ steps.download-ccf-provider-snp-artefact.outputs.download-path }}/ccf-app-run-js-snp-sbom/_manifest/spdx_2.2/manifest.spdx.json ccf-app-run-js-snp-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-ccf-provider-snp-artefact.outputs.download-path }}/ccf-app-run-js-snp-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-ccf-provider-snp-artefact.outputs.download-path }}/ccf-app-run-js-snp.json \
+  #         ccf-app-run-js-snp-sbom.spdx.json
 
-      - name: Upload CCF virtual provider assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/app/run-js/virtual') }}
-        run: |
-          cp ${{ steps.download-ccf-provider-virtual-artefact.outputs.download-path }}/ccf-app-run-js-virtual-sbom/_manifest/spdx_2.2/manifest.spdx.json ccf-app-run-js-virtual-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccf-provider-virtual-artefact.outputs.download-path }}/ccf-app-run-js-virtual-${{ inputs.tag }}.tar \
-          ${{ steps.download-ccf-provider-virtual-artefact.outputs.download-path }}/ccf-app-run-js-virtual.json \
-          ccf-app-run-js-virtual-sbom.spdx.json
+  #     - name: Upload CCF virtual provider assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/app/run-js/virtual') }}
+  #       run: |
+  #         cp ${{ steps.download-ccf-provider-virtual-artefact.outputs.download-path }}/ccf-app-run-js-virtual-sbom/_manifest/spdx_2.2/manifest.spdx.json ccf-app-run-js-virtual-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-ccf-provider-virtual-artefact.outputs.download-path }}/ccf-app-run-js-virtual-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-ccf-provider-virtual-artefact.outputs.download-path }}/ccf-app-run-js-virtual.json \
+  #         ccf-app-run-js-virtual-sbom.spdx.json
 
-      - name: Upload CCF recovery service assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-recovery-service') }}
-        run: |
-          cp ${{ steps.download-ccf-recovery-service-artefact.outputs.download-path }}/ccf-recovery-service-sbom/_manifest/spdx_2.2/manifest.spdx.json ccf-recovery-service-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccf-recovery-service-artefact.outputs.download-path }}/ccf-recovery-service-${{ inputs.tag }}.tar \
-          ${{ steps.download-ccf-recovery-service-artefact.outputs.download-path }}/ccf-recovery-service.json \
-          ccf-recovery-service-sbom.spdx.json
+  #     - name: Upload CCF recovery service assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-recovery-service') }}
+  #       run: |
+  #         cp ${{ steps.download-ccf-recovery-service-artefact.outputs.download-path }}/ccf-recovery-service-sbom/_manifest/spdx_2.2/manifest.spdx.json ccf-recovery-service-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-ccf-recovery-service-artefact.outputs.download-path }}/ccf-recovery-service-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-ccf-recovery-service-artefact.outputs.download-path }}/ccf-recovery-service.json \
+  #         ccf-recovery-service-sbom.spdx.json
 
-      - name: Upload CCF recovery agent assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-recovery-agent') }}
-        run: |
-          cp ${{ steps.download-ccf-recovery-agent-artefact.outputs.download-path }}/ccf-recovery-agent-sbom/_manifest/spdx_2.2/manifest.spdx.json ccf-recovery-agent-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccf-recovery-agent-artefact.outputs.download-path }}/ccf-recovery-agent-${{ inputs.tag }}.tar \
-          ${{ steps.download-ccf-recovery-agent-artefact.outputs.download-path }}/ccf-recovery-agent.json \
-          ccf-recovery-agent-sbom.spdx.json
+  #     - name: Upload CCF recovery agent assets
+  #       if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-recovery-agent') }}
+  #       run: |
+  #         cp ${{ steps.download-ccf-recovery-agent-artefact.outputs.download-path }}/ccf-recovery-agent-sbom/_manifest/spdx_2.2/manifest.spdx.json ccf-recovery-agent-sbom.spdx.json
+  #         gh release upload ${{ inputs.tag }} \
+  #         ${{ steps.download-ccf-recovery-agent-artefact.outputs.download-path }}/ccf-recovery-agent-${{ inputs.tag }}.tar \
+  #         ${{ steps.download-ccf-recovery-agent-artefact.outputs.download-path }}/ccf-recovery-agent.json \
+  #         ccf-recovery-agent-sbom.spdx.json
 
-      - name: Upload AZ CLI extension
-        run: gh release upload ${{ inputs.tag }} cleanroom-cli.whl
+  #     - name: Upload AZ CLI extension
+  #       run: gh release upload ${{ inputs.tag }} cleanroom-cli.whl

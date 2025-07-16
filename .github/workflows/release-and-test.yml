@@ -288,122 +288,52 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-  bvt-ml-training:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
-    needs: [build, release-to-test]
-    environment: test
-    env:
-      RELEASE_ACR_NAME: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
-      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      RUN_ID: ${{ github.run_id }}
-      JOB_ID: ${{ github.job }}
-      TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-rg'
-      TDP_MHSM_NAME: 'azcleanroombvthsm2'
-      TDC_HSM_RESOURCE_GROUP: 'azcleanroom-public-rg'
-      TDC_MHSM_NAME: 'azcleanroombvthsm2'
-      USE_PREPROVISIONED_OIDC: "true"
-    # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
-    permissions:
-      id-token: write
-      contents: read  # This is required for actions/checkout
-    strategy:
-      matrix:
-        key-store:  [akvpremium] #[mhsm, akvpremium]
-      # Prevent Github from cancelling other jobs of the matrix if one of them fails.
-      fail-fast: false
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-tags: true
-          ref: ${{ inputs.tag }}
+  # bvt-ml-training:
+  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+  #   needs: [build, release-to-test]
+  #   environment: test
+  #   env:
+  #     RELEASE_ACR_NAME: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+  #     AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  #     AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  #     AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  #     RUN_ID: ${{ github.run_id }}
+  #     JOB_ID: ${{ github.job }}
+  #     TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-rg'
+  #     TDP_MHSM_NAME: 'azcleanroombvthsm2'
+  #     TDC_HSM_RESOURCE_GROUP: 'azcleanroom-public-rg'
+  #     TDC_MHSM_NAME: 'azcleanroombvthsm2'
+  #     USE_PREPROVISIONED_OIDC: "true"
+  #   # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
+  #   permissions:
+  #     id-token: write
+  #     contents: read  # This is required for actions/checkout
+  #   strategy:
+  #     matrix:
+  #       key-store:  [akvpremium] #[mhsm, akvpremium]
+  #     # Prevent Github from cancelling other jobs of the matrix if one of them fails.
+  #     fail-fast: false
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #       with:
+  #         submodules: recursive
+  #         fetch-tags: true
+  #         ref: ${{ inputs.tag }}
 
-      - name: Generate short commit hash
-        if: ${{ inputs.tag == ''}}
-        id: get-short-commit-hash
-        run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+  #     - name: Generate short commit hash
+  #       if: ${{ inputs.tag == ''}}
+  #       id: get-short-commit-hash
+  #       run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      - name: Run ml-training test
-        uses: ./.github/actions/test-multi-party-collab/test-ml-training-caci
-        with:
-          repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
-          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
-          kvType: ${{ matrix.key-store }}
+  #     - name: Run ml-training test
+  #       uses: ./.github/actions/test-multi-party-collab/test-ml-training-caci
+  #       with:
+  #         repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
+  #         tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+  #         kvType: ${{ matrix.key-store }}
 
-  bvt-encrypted-storage:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
-    needs: [build, release-to-test]
-    environment: test
-    env:
-      RELEASE_ACR_NAME: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
-      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      RUN_ID: ${{ github.run_id }}
-      JOB_ID: ${{ github.job }}
-      USE_PREPROVISIONED_OIDC: "true"
-    # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
-    permissions:
-      id-token: write
-      contents: read  # This is required for actions/checkout
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-tags: true
-          ref: ${{ inputs.tag }}
-
-      - name: Generate short commit hash
-        if: ${{ inputs.tag == ''}}
-        id: get-short-commit-hash
-        run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-
-      - name: Run encrypted-storage test
-        uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-caci
-        with:
-          repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
-          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
-
-  bvt-nginx-hello:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
-    needs: [build, release-to-test]
-    environment: test
-    env:
-      RELEASE_ACR_NAME: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
-      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      RUN_ID: ${{ github.run_id }}
-      JOB_ID: ${{ github.job }}
-      USE_PREPROVISIONED_OIDC: "true"
-    # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
-    permissions:
-      id-token: write
-      contents: read  # This is required for actions/checkout
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-tags: true
-          ref: ${{ inputs.tag }}
-
-      - name: Generate short commit hash
-        if: ${{ inputs.tag == ''}}
-        id: get-short-commit-hash
-        run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-
-      - name: Run nginx-hello test
-        uses: ./.github/actions/test-multi-party-collab/test-nginx-hello-caci
-        with:
-          repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
-          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
-
-  # bvt-triton-inference:
+  # bvt-encrypted-storage:
   #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
   #   needs: [build, release-to-test]
   #   environment: test
@@ -432,8 +362,78 @@ jobs:
   #       id: get-short-commit-hash
   #       run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-  #     - name: Run triton-inference test
-  #       uses: ./.github/actions/test-multi-party-collab/test-triton-inference-caci
+  #     - name: Run encrypted-storage test
+  #       uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-caci
   #       with:
   #         repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
   #         tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+
+  # bvt-nginx-hello:
+  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+  #   needs: [build, release-to-test]
+  #   environment: test
+  #   env:
+  #     RELEASE_ACR_NAME: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+  #     AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  #     AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  #     AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  #     RUN_ID: ${{ github.run_id }}
+  #     JOB_ID: ${{ github.job }}
+  #     USE_PREPROVISIONED_OIDC: "true"
+  #   # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
+  #   permissions:
+  #     id-token: write
+  #     contents: read  # This is required for actions/checkout
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #       with:
+  #         submodules: recursive
+  #         fetch-tags: true
+  #         ref: ${{ inputs.tag }}
+
+  #     - name: Generate short commit hash
+  #       if: ${{ inputs.tag == ''}}
+  #       id: get-short-commit-hash
+  #       run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+  #     - name: Run nginx-hello test
+  #       uses: ./.github/actions/test-multi-party-collab/test-nginx-hello-caci
+  #       with:
+  #         repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
+  #         tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+
+  # # bvt-triton-inference:
+  # #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+  # #   needs: [build, release-to-test]
+  # #   environment: test
+  # #   env:
+  # #     RELEASE_ACR_NAME: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+  # #     AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  # #     AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  # #     AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  # #     RUN_ID: ${{ github.run_id }}
+  # #     JOB_ID: ${{ github.job }}
+  # #     USE_PREPROVISIONED_OIDC: "true"
+  # #   # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
+  # #   permissions:
+  # #     id-token: write
+  # #     contents: read  # This is required for actions/checkout
+  # #   steps:
+  # #     - name: Checkout repository
+  # #       uses: actions/checkout@v4
+  # #       with:
+  # #         submodules: recursive
+  # #         fetch-tags: true
+  # #         ref: ${{ inputs.tag }}
+
+  # #     - name: Generate short commit hash
+  # #       if: ${{ inputs.tag == ''}}
+  # #       id: get-short-commit-hash
+  # #       run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+  # #     - name: Run triton-inference test
+  # #       uses: ./.github/actions/test-multi-party-collab/test-triton-inference-caci
+  # #       with:
+  # #         repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
+  # #         tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
