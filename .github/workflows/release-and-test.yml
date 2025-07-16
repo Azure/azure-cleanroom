@@ -266,7 +266,6 @@ jobs:
           needs-attestation: ${{ inputs.needs-attestation }}
 
       - name: Release cleanroom az cli extension
-        if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
         uses: ./.github/actions/release-azcliext-cleanroom
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}

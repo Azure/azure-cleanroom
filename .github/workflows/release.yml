@@ -77,6 +77,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
 
       - name: Release cleanroom artefacts to prod
         if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
@@ -88,6 +89,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
 
       - name: Release sidecar digests
         if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
@@ -99,6 +101,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
 
       - name: Release governance client containers
         if: ${{ contains(inputs.release-type, 'governance-client-containers') }}
@@ -110,6 +113,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
 
       - name: Release CGS JS App
         if: ${{ contains(inputs.release-type, 'cgs-js-app') }}
@@ -121,6 +125,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
   
       - name: Release CGS constitution
         if: ${{ contains(inputs.release-type, 'cgs-constitution') }}
@@ -132,6 +137,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
 
       - name: Release ccr-containers version document
         if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
@@ -143,6 +149,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
 
       - name: Release constitution version document
         if: ${{ contains(inputs.release-type, 'cgs-constitution') }}
@@ -154,6 +161,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
   
       - name: Release CGS JS app version document
         if: ${{ contains(inputs.release-type, 'cgs-js-app') }}
@@ -165,6 +173,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
 
       - name: Release version documents for governance client containers
         if: ${{ contains(inputs.release-type, 'governance-client-containers') }}
@@ -176,6 +185,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
 
       - name: Release CCF provider client
         if: ${{ contains(inputs.release-type, 'ccf-provider-client') }}
@@ -187,6 +197,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
 
       - name: Release CCF network containers
         if: ${{ contains(inputs.release-type, 'ccf-network-containers') }}
@@ -198,6 +209,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
 
       - name: Release CCF recovery service containers
         if: ${{ contains(inputs.release-type, 'ccf-recovery-service-containers') }}
@@ -209,6 +221,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
 
       - name: Release CCF network security policy
         if: ${{ contains(inputs.release-type, 'ccf-network-containers') }}
@@ -220,6 +233,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
 
       - name: Release CCF recovery service security policy
         if: ${{ contains(inputs.release-type, 'ccf-recovery-service-containers') }}
@@ -231,6 +245,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
 
       - name: Release cleanroom az cli extension
         uses: ./.github/actions/release-azcliext-cleanroom
@@ -241,6 +256,7 @@ jobs:
           client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
 
       - name: Verify attestation
         uses: ./.github/actions/verify-attestation
