@@ -36,8 +36,8 @@ from cleanroom_common.azure_cleanroom_core.models.network import *
 
 MCR_CLEANROOM_VERSIONS_REGISTRY = "mcr.microsoft.com/azurecleanroom"
 MCR_CGS_REGISTRY = "mcr.microsoft.com/azurecleanroom"
-mcr_cgs_constitution_url = f"{MCR_CGS_REGISTRY}/cgs-constitution:4.0.0"
-mcr_cgs_jsapp_url = f"{MCR_CGS_REGISTRY}/cgs-js-app:4.0.0"
+mcr_cgs_constitution_url = f"{MCR_CGS_REGISTRY}/cgs-constitution:5.0.0"
+mcr_cgs_jsapp_url = f"{MCR_CGS_REGISTRY}/cgs-js-app:5.0.0"
 
 compose_file = (
     f"{os.path.dirname(__file__)}{os.path.sep}data{os.path.sep}docker-compose.yaml"
