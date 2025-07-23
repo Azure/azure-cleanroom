@@ -18,6 +18,8 @@ jobs:
     runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     permissions:
       contents: read  # This is required for reading tags
+    env:
+      GH_TOKEN: ${{ github.token }} # Needed for gh api calls
     steps:
       - name: Validate tag points to the current commit
         shell: pwsh
