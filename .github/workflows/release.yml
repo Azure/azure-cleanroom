@@ -14,7 +14,22 @@ on:
         default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers"
 
 jobs:
+  pre-release-validation:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    permissions:
+      contents: read  # This is required for reading tags
+    steps:
+      - name: Validate tag points to the current commit
+        shell: pwsh
+        run: |
+          $commitSha = $(gh api repos/${{ github.repository }}/git/refs/tags/${{ inputs.tag }} | ConvertFrom-Json).object.sha
+          Write-Host "Commit SHA for tag '${{ inputs.tag }}': $commitSha"
+          if ($commitSha -ne "${{ github.workflow_sha }}") {
+            throw "The input tag '${{ inputs.tag }}' and the current commit SHA '${{ github.workflow_sha }}' do not match. Are both pointing to the same commit?"
+          }
+
   build-test-msint:
+    needs: pre-release-validation
     uses: ./.github/workflows/release-and-test.yml
     permissions:
       id-token: write  # needed for release-to-test
@@ -481,6 +496,12 @@ jobs:
         with:
           name: skr
 
+      - name: Download AZ CLI whl
+        id: download-az-cli-artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: cleanroom-cli.whl
+
       # https://cli.github.com/manual/gh_release_create
       - name: Create GitHub release
         run: |
@@ -682,4 +703,5 @@ jobs:
           ccf-recovery-agent-sbom.spdx.json
 
       - name: Upload AZ CLI extension
-        run: gh release upload ${{ inputs.tag }} cleanroom-cli.whl
+        run: gh release upload ${{ inputs.tag }} \
+          ${{ steps.download-az-cli-artefact.outputs.download-path }}/cleanroom-${{ inputs.tag }}-py2.py3-none-any.whl
