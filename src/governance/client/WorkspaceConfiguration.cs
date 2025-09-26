@@ -13,13 +13,23 @@ public class WorkspaceConfiguration
 
     public string? SigningCertId { get; set; } = default!;
 
-    public string CcfEndpoint { get; set; } = default!;
+    public string? CcfEndpoint { get; set; } = default!;
 
-    public string ServiceCert { get; set; } = default!;
+    public string? AuthMode { get; set; } = default!;
+
+    public string? ServiceCert { get; set; } = default!;
+
+    public CcfServiceCertDiscoveryModel? ServiceCertDiscovery { get; set; } = default!;
 
     public string MemberId { get; set; } = default!;
 
+    public JsonObject? UserTokenClaims { get; set; } = default!;
+
     public JsonObject? MemberData { get; set; } = default!;
+
+    public bool IsUser { get; set; } = default!;
+
+    public string Identifier { get; set; } = default!;
 
     public System.Collections.IDictionary EnvironmentVariables { get; set; } = default!;
 }

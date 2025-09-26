@@ -1,2 +1,3 @@
 # Any files generated during the onebox run are put in this folder.
 generated*/
+encrypted-storage/publisher/input-encrypted/*

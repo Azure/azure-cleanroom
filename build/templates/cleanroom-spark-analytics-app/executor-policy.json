@@ -1,0 +1,192 @@
+{
+  "name": "spark-kubernetes-executor",
+  "properties": {
+    "image": "$containerRegistryUrl/workloads/cleanroom-spark-analytics-app@$digest",
+    "command": [
+      "python3",
+      "/app/src/spark_launcher.py",
+      "executor"
+    ],
+    "environmentVariables": [
+      {
+        "name": "SPARK_USER",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "SPARK_DRIVER_URL",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "SPARK_EXECUTOR_CORES",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "SPARK_EXECUTOR_MEMORY",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "SPARK_APPLICATION_ID",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "SPARK_CONF_DIR",
+        "value": "/opt/spark/conf"
+      },
+      {
+        "name": "SPARK_EXECUTOR_ID",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "SPARK_RESOURCE_PROFILE_ID",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "SPARK_DRIVER_POD_IP",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "SPARK_JAVA_OPT_0",
+        "value": "-Djava.net.preferIPv6Addresses=false"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_6",
+        "value": "--add-opens=java.base/java.net=ALL-UNNAMED"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_13",
+        "value": "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_4",
+        "value": "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_18",
+        "value": "-Dspark.driver.blockManager.port=7079"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_1",
+        "value": "-XX:+IgnoreUnrecognizedVMOptions"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_10",
+        "value": "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_9",
+        "value": "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_7",
+        "value": "--add-opens=java.base/java.nio=ALL-UNNAMED"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_17",
+        "value": "-Djdk.reflect.useDirectMethodHandle=false"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_11",
+        "value": "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_2",
+        "value": "--add-opens=java.base/java.lang=ALL-UNNAMED"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_16",
+        "value": "--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_8",
+        "value": "--add-opens=java.base/java.util=ALL-UNNAMED"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_12",
+        "value": "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_15",
+        "value": "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_3",
+        "value": "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_19",
+        "value": "-Dspark.driver.port=7078"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_14",
+        "value": "--add-opens=java.base/sun.security.action=ALL-UNNAMED"
+      },
+      {
+        "name": "SPARK_JAVA_OPT_5",
+        "value": "--add-opens=java.base/java.io=ALL-UNNAMED"
+      },
+      {
+        "name": "SPARK_EXECUTOR_POD_IP",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "SPARK_EXECUTOR_POD_NAME",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "SPARK_LOCAL_DIRS",
+        "value": "/var/data/spark-local-dir"
+      }
+    ],
+    "volumeMounts": [
+      {
+        "name": "spark-local-dir-1",
+        "mountPath": "/var/data/spark-local-dir",
+        "mountType": "emptyDir",
+        "readOnly": false
+      },
+      {
+        "name": "spark-conf-volume-executor",
+        "mountPath": "/opt/spark/conf",
+        "mountType": "emptyDir",
+        "readOnly": true
+      },
+      {
+        "name": "remotemounts",
+        "mountPath": "/mnt/remote",
+        "mountType": "emptyDir",
+        "readOnly": true
+      },
+      {
+        "name": "telemetrymounts",
+        "mountPath": "/mnt/telemetry",
+        "mountType": "emptyDir",
+        "readOnly": false
+      },
+      {
+        "name": "volumestatusmounts",
+        "mountPath": "/mnt/volumestatus",
+        "mountType": "emptyDir",
+        "readOnly": false
+      },
+      {
+        "name": "uds",
+        "mountPath": "/mnt/uds",
+        "mountType": "emptyDir",
+        "readOnly": false
+      }
+    ],
+    "securityContext": {
+      "privileged": "true"
+    }
+  }
+}

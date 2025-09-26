@@ -1,0 +1,43 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "cleanroom-spark-analytics-agent", "cleanroom-spark-analytics-agent\cleanroom-spark-analytics-agent.csproj", "{AF107194-4AD3-4A88-9F72-1F11D1511120}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "restapi-common", "..\internal\restapi-common\restapi-common.csproj", "{8888463D-F004-2537-F586-373CE15FE350}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Attestation", "..\internal\Attestation\Attestation.csproj", "{6DB54E1A-F293-90B7-E472-C46D7ED7D20E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ccr-secrets-common", "..\secrets\common\ccr-secrets-common.csproj", "{E1498292-80DA-3F13-2B21-962DE4857460}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AF107194-4AD3-4A88-9F72-1F11D1511120}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF107194-4AD3-4A88-9F72-1F11D1511120}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF107194-4AD3-4A88-9F72-1F11D1511120}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF107194-4AD3-4A88-9F72-1F11D1511120}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8888463D-F004-2537-F586-373CE15FE350}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8888463D-F004-2537-F586-373CE15FE350}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8888463D-F004-2537-F586-373CE15FE350}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8888463D-F004-2537-F586-373CE15FE350}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6DB54E1A-F293-90B7-E472-C46D7ED7D20E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6DB54E1A-F293-90B7-E472-C46D7ED7D20E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6DB54E1A-F293-90B7-E472-C46D7ED7D20E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6DB54E1A-F293-90B7-E472-C46D7ED7D20E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E1498292-80DA-3F13-2B21-962DE4857460}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E1498292-80DA-3F13-2B21-962DE4857460}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E1498292-80DA-3F13-2B21-962DE4857460}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E1498292-80DA-3F13-2B21-962DE4857460}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {B280E557-ED84-40E2-91B5-55D25C8B8934}
+	EndGlobalSection
+EndGlobal

@@ -19,6 +19,7 @@ $build = "$root/build"
 $port_member0 = "8290"
 $port_member1 = "8291"
 $port_member2 = "8292"
+$port_local_idp = "8319"
 
 . $root/build/helpers.ps1
 
@@ -38,6 +39,7 @@ if (!$NoBuild) {
   pwsh $build/cgs/build-cgs-client.ps1
   pwsh $build/cgs/build-cgs-ui.ps1
   pwsh $build/ccr/build-ccr-governance-virtual.ps1
+  pwsh $build/ccr/build-local-idp.ps1
 }
 
 $env:ccfImageTag = "latest"
@@ -45,12 +47,15 @@ $env:initialMemberName = $initialMemberName
 docker compose -f $PSScriptRoot/docker-compose.yml up -d --remove-orphans
 
 $ccfEndpoint = ""
-if ($env:GITHUB_ACTIONS -ne "true") {
+$localIdpEndpoint = ""
+if ($env:CODESPACES -ne "true" -and $env:GITHUB_ACTIONS -ne "true") {
   $ccfEndpoint = "https://host.docker.internal:8080"
+  $localIdpEndpoint = "http://host.docker.internal:$port_local_idp"
 }
 else {
   # 172.17.0.1: https://stackoverflow.com/questions/48546124/what-is-the-linux-equivalent-of-host-docker-internal
   $ccfEndpoint = "https://172.17.0.1:8080"
+  $localIdpEndpoint = "http://172.17.0.1:$port_local_idp"
 }
 
 # The node is not up yet and the service certificate will not be created until it returns 200.
@@ -132,6 +137,58 @@ $proposalId = (curl -sS -X POST -H "content-type: application/json" localhost:$p
 Write-Output "Accepting the set_member_data proposal"
 curl -sS -X POST localhost:$port_member0/proposals/$proposalId/ballots/vote_accept | jq
 
+# Setting up IDP for user authentication using JWT.
+Write-Output "Setting up local IDP endpoint"
+curl --fail-with-body -X POST "http://localhost:$port_local_idp/setissuerurl" -d `
+  @"
+{
+  "url": "${localIdpEndpoint}/oidc"
+}
+"@ -H "content-type: application/json" | jq
+
+Write-Output "Submitting set_jwt_issuer proposal"
+$proposalId = (curl -sS -X POST -H "content-type: application/json" localhost:$port_member0/proposals/create -d `
+    @"
+{
+  "actions": [ {
+    "name": "set_jwt_issuer",
+    "args": {
+      "issuer": "${localIdpEndpoint}/oidc",
+      "auto_refresh": false
+    }
+  }]
+}
+"@ | jq -r '.proposalId')
+curl -sS -X GET localhost:$port_member0/proposals/$proposalId | jq
+
+Write-Output "Submitting set_jwt_public_signing_keys proposal"
+$idpSigningKey = (curl --fail-with-body -X POST "http://localhost:$port_local_idp/generatesigningkey" --silent | ConvertFrom-Json)
+$idpSigningKey.pem.TrimEnd("`n") | Out-File "$sandbox_common/local_idp_cert.pem"
+$kid = $idpSigningKey.kid
+$x5c = $idpSigningKey.x5c
+Write-Output @"
+{
+  "actions": [ {
+    "name": "set_jwt_public_signing_keys",
+    "args": {
+      "issuer": "${localIdpEndpoint}/oidc",
+      "jwks": {
+        "keys": [
+          {
+            "kty": "RSA",
+            "kid": "${kid}",
+            "x5c": ["${x5c}"]
+          }
+        ]
+      }
+    }
+  }]
+}
+"@ | Out-File "$sandbox_common/set_jwt_public_signing_keys.json"
+$proposalId = (curl -sS --fail-with-body -X POST -H "content-type: application/json" `
+    localhost:$port_member0/proposals/create -d "@$sandbox_common/set_jwt_public_signing_keys.json" | jq -r '.proposalId')
+curl -sS -X GET localhost:$port_member0/proposals/$proposalId | jq
+
 Write-Output "Submitting set_constitution proposal"
 $ccfConstitutionDir = "$root/src/ccf/ccf-provider-common/constitution"
 $cgsConstitutionDir = "$root/src/governance/ccf-app/js/constitution"
@@ -160,16 +217,16 @@ $certContent = (Get-Content $sandbox_common/member1_cert.pem -Raw).ReplaceLineEn
 $proposalId = (curl -sS -X POST -H "content-type: application/json" localhost:$port_member0/proposals/create -d `
     @"
 {
-  "actions": [{
-     "name": "set_member",
-     "args": {
-       "cert": "$certContent",
-       "member_data": {
-         "tenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47",
-         "identifier": "member1"
-       }
-     }
-   }]
+  "actions": [ {
+    "name": "set_member",
+    "args": {
+      "cert": "$certContent",
+      "member_data": {
+        "tenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47",
+        "identifier": "member1"
+      }
+    }
+  }]
 }
 "@ | jq -r '.proposalId')
 
@@ -195,16 +252,16 @@ $certContent = (Get-Content $sandbox_common/member2_cert.pem -Raw).ReplaceLineEn
 $proposalId = (curl -sS -X POST -H "content-type: application/json" localhost:$port_member0/proposals/create -d `
     @"
 {
-  "actions": [{
-     "name": "set_member",
-     "args": {
-       "cert": "$certContent",
-       "member_data": {
-         "tenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47",
-         "identifier": "member2"
-       }
-     }
-   }]
+  "actions": [ {
+    "name": "set_member",
+    "args": {
+      "cert": "$certContent",
+      "member_data": {
+        "tenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47",
+        "identifier": "member2"
+      }
+    }
+  }]
 }
 "@ | jq -r '.proposalId')
 
@@ -230,16 +287,16 @@ Write-Output "Submitting set_js_runtime_options proposal"
 $proposalId = (curl -sS -X POST -H "content-type: application/json" localhost:$port_member0/proposals/create -d `
     @"
 {
-  "actions": [{
-     "name": "set_js_runtime_options",
-     "args": {
-        "max_heap_bytes": 104857600,
-        "max_stack_bytes": 1048576,
-        "max_execution_time_ms": 1000,
-        "log_exception_details": true,
-        "return_exception_details": true
-     }
-   }]
+  "actions": [ {
+    "name": "set_js_runtime_options",
+    "args": {
+      "max_heap_bytes": 104857600,
+      "max_stack_bytes": 1048576,
+      "max_execution_time_ms": 1000,
+      "log_exception_details": true,
+      "return_exception_details": true
+    }
+  }]
 }
 "@ | jq -r '.proposalId')
 
@@ -255,15 +312,15 @@ curl -sS -X POST localhost:$port_member2/proposals/$proposalId/ballots/vote_acce
 Write-Output "Submitting set_js_app proposal"
 @"
 {
-  "actions": [{
-     "name": "set_js_app",
-     "args": {
-        "bundle": $(Get-Content $sandbox_common/dist/bundle.json)
-     }
-   }]
+  "actions": [ {
+    "name": "set_js_app",
+    "args": {
+      "bundle": $(Get-Content $sandbox_common/dist/bundle.json)
+    }
+  }]
 }
 "@ > $sandbox_common/set_js_app_proposal.json
-$proposalId = (curl -sS -X POST -H "content-type: application/json" `
+$proposalId = (curl --fail-with-body -sS -X POST -H "content-type: application/json" `
     localhost:$port_member0/proposals/create `
     --data-binary @$sandbox_common/set_js_app_proposal.json | jq -r '.proposalId')
 
@@ -293,12 +350,12 @@ $certContent = (Get-Content $sandbox_common/service_cert.pem -Raw).ReplaceLineEn
 $proposalId = (curl -sS -X POST -H "content-type: application/json" localhost:$port_member0/proposals/create -d `
     @"
 {
-  "actions": [{
-     "name": "transition_service_to_open",
-     "args": {
-        "next_service_identity": "$certContent"
-     }
-   }]
+  "actions": [ {
+    "name": "transition_service_to_open",
+    "args": {
+      "next_service_identity": "$certContent"
+    }
+  }]
 }
 "@ | jq -r '.proposalId')
 

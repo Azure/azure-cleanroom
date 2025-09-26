@@ -16,15 +16,17 @@
     ],
     "mounts": [
       {
-        "name": "shared",
-        "mountPath": "/app/service",
+        "name": "certs",
+        "mountPath": "/app/certs",
         "mountType": "emptyDir",
         "readOnly": false
       }
     ],
     "command": [
-      "/bin/sh",
-      "https-http/bootstrap.sh"
+      "/bin/bash",
+      "https-http/bootstrap.sh",
+      "--ca-type",
+      "local"
     ]
   },
   {
@@ -83,8 +85,8 @@
     ],
     "mounts": [
       {
-        "name": "shared",
-        "mountPath": "/app/service",
+        "name": "certs",
+        "mountPath": "/app/certs",
         "mountType": "emptyDir",
         "readOnly": false
       },

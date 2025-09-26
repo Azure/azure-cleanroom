@@ -1,0 +1,25 @@
+{
+  "name": "ccr-attestation",
+  "properties": {
+    "image": "$containerRegistryUrl/ccr-attestation@$digest",
+    "command": [
+      "app",
+      "-socket-address",
+      "/mnt/uds/sock"
+    ],
+    "environmentVariables": [
+      {
+        "name": "TELEMETRY_MOUNT_PATH",
+        "value": "$telemetryMountPath"
+      }
+    ],
+    "volumeMounts": [
+      {
+        "name": "uds",
+        "mountPath": "/mnt/uds",
+        "mountType": "emptyDir",
+        "readOnly": false
+      }
+    ]
+  }
+}

@@ -13,6 +13,8 @@ public class DockerConstants
     public const string CcfRecoveryServiceTypeTag = "ccf-recovery-service/type";
     public const string CcfRecoveryServiceNameTag = "ccf-recovery-service/recovery-service-name";
 
-    public const string ServiceFolderMountPath = "/app/service";
-    public const string ServiceCertPemFilePath = $"{ServiceFolderMountPath}/service-cert.pem";
+    public const string CcfConsortiumManagerResourceNameTag = "ccf-consortium-manager/resource-name";
+    public const string CcfConsortiumManagerTypeTag = "ccf-consortium-manager/type";
+    public const string CcfConsortiumManagerNameTag =
+        "ccf-consortium-manager/consortium-manager-name";
 }

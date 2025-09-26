@@ -1,0 +1,75 @@
+﻿@model UsersAndInvitationsViewModel
+@{
+    ViewData["Title"] = "Users";
+}
+
+<h2>Users</h2>
+<table class="table table-hover">
+    <thead>
+        <tr>
+            <th>Username</th>
+            <th>User Id</th>
+            <th>Invitation Id</th>
+            <th>Invitation Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        @{
+            if (@Model.Users != null && @Model.Users.Any())
+    {
+        @foreach (var user in @Model.Users)
+        {
+            <tr>
+                <td>@user.UserName</td>
+                <td>@user.UserId</td>
+                <td>@user.InvitationId</td>
+                <td>@user.InvitationStatus</td>
+            </tr>
+        }
+    }
+    else
+    {
+            <tr>
+                <td><i>No users yet</i></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+    }
+    }
+    </tbody>
+</table>
+
+<h2>Open Invitations</h2>
+<table class="table table-hover">
+    <thead>
+        <tr>
+            <th>Username</th>
+            <th>Invitation Id</th>
+            <th>Invitation Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        @{
+            if (@Model.OpenInvitations != null && @Model.OpenInvitations.Any())
+        {
+            @foreach (var oi in @Model.OpenInvitations)
+            {
+                <tr>
+                    <td>@oi.UserName</td>
+                    <td>@oi.InvitationId</td>
+                    <td>@oi.InvitationStatus</td>
+                </tr>
+            }
+        }
+        else
+        {
+            <tr>
+                <td><i>No open invitations</i></td>
+                <td></td>
+                <td></td>
+            </tr>
+        }
+    }
+    </tbody>
+</table>

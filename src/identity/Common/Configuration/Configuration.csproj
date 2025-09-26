@@ -16,6 +16,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Contracts\Errors\Errors.csproj" />
+    <ProjectReference Include="..\..\..\internal\restapi-common\restapi-common.csproj" />
   </ItemGroup>
 </Project>

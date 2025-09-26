@@ -5,7 +5,7 @@ param
     [string]$resourceGroup,
 
     [string]
-    $location = "westus",
+    $location = "westeurope",
 
     [string]
     $outDir = "$PSScriptRoot/generated",
@@ -32,6 +32,8 @@ az deployment group create `
     --template-file "$outDir/deployments/cleanroom-arm-template.json" `
     --parameters location=$location dnsNameLabel=$dnsNameLabel
 
+$timeout = New-TimeSpan -Minutes 15
+$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 do {
     Write-Host "Sleeping for 15 seconds for IP address to be available."
     Start-Sleep -Seconds 15
@@ -40,6 +42,9 @@ do {
         -g $resourceGroup `
         --query "ipAddress.ip" `
         --output tsv
+    if ($stopwatch.elapsed -gt $timeout) {
+        throw "Hit timeout waiting for IP address to be available."
+    }
 } while ($null -eq $ccrIP)
 
 Write-Host "Clean Room IP address: $ccrIP"

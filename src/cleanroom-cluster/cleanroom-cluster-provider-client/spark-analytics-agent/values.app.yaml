@@ -1,0 +1,33 @@
+images:
+  analyticsagentUrl: <ANALYTICS_AGENT_IMAGE_URL>
+  ccrproxyUrl: <CCR_PROXY_IMAGE_URL>
+  ccrskrUrl: <CCR_SKR_IMAGE_URL>
+  ccrattestationUrl: <CCR_ATTESTATION_IMAGE_URL>
+  ccrgovernanceUrl: <CCR_GOVERNANCE_IMAGE_URL>
+  otelCollectorUrl: <OTEL_COLLECTOR_IMAGE_URL>
+
+ccrproxy:
+  caType: <CA_TYPE>
+  ccrFqdn: <CCR_FQDN>
+
+env:
+  sparkFrontendEndpoint: <SPARK_FRONTEND_ENDPOINT>
+  sparkFrontendSnpHostData: <SPARK_FRONTEND_SNP_HOST_DATA>
+  ccfNetworkRecoveryMembers: <CCF_NETWORK_RECOVERY_MEMBERS>
+
+ccrgovernance:
+  ccrgovEndpoint: <CCR_GOV_ENDPOINT>
+  ccrgovApiPathPrefix: <CCR_GOV_API_PATH_PREFIX>
+  ccrgovServiceCert: <CCR_GOV_SERVICE_CERT>
+  ccrgovServiceCertDiscovery:
+    endpoint: <CCR_GOV_SERVICE_CERT_DISCOVERY_ENDPOINT>
+    snpHostData: <CCR_GOV_SERVICE_CERT_DISCOVERY_SNP_HOST_DATA>
+    skipDigestCheck: <CCR_GOV_SERVICE_CERT_DISCOVERY_SKIP_DIGEST_CHECK>
+    constitutionDigest: <CCR_GOV_SERVICE_CERT_DISCOVERY_CONSTITUTION_DIGEST>
+    jsappBundleDigest: <CCR_GOV_SERVICE_CERT_DISCOVERY_JSAPP_BUNDLE_DIGEST>
+
+telemetry:
+  telemetryCollectionEnabled: <TELEMETRY_COLLECTION_ENABLED>
+  prometheusEndpoint: <PROMETHEUS_ENDPOINT>
+  lokiEndpoint: <LOKI_ENDPOINT>
+  tempoEndpoint: <TEMPO_ENDPOINT>

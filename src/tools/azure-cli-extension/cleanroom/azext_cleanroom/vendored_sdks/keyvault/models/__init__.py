@@ -7,101 +7,103 @@
 # --------------------------------------------------------------------------
 
 try:
-    from ._models_py3 import AccessPolicyEntry
-    from ._models_py3 import Action
-    from ._models_py3 import Attributes
-    from ._models_py3 import CheckMhsmNameAvailabilityParameters
-    from ._models_py3 import CheckMhsmNameAvailabilityResult
-    from ._models_py3 import CheckNameAvailabilityResult
-    from ._models_py3 import CloudErrorBody
-    from ._models_py3 import DeletedManagedHsm
-    from ._models_py3 import DeletedManagedHsmListResult
-    from ._models_py3 import DeletedManagedHsmProperties
-    from ._models_py3 import DeletedVault
-    from ._models_py3 import DeletedVaultListResult
-    from ._models_py3 import DeletedVaultProperties
-    from ._models_py3 import DimensionProperties
-    from ._models_py3 import Error
-    from ._models_py3 import IPRule
-    from ._models_py3 import Key
-    from ._models_py3 import KeyAttributes
-    from ._models_py3 import KeyCreateParameters
-    from ._models_py3 import KeyListResult
-    from ._models_py3 import KeyProperties
-    from ._models_py3 import KeyReleasePolicy
-    from ._models_py3 import KeyRotationPolicyAttributes
-    from ._models_py3 import LifetimeAction
-    from ._models_py3 import LogSpecification
-    from ._models_py3 import MHSMGeoReplicatedRegion
-    from ._models_py3 import MHSMIPRule
-    from ._models_py3 import MHSMNetworkRuleSet
-    from ._models_py3 import MHSMPrivateEndpoint
-    from ._models_py3 import MHSMPrivateEndpointConnection
-    from ._models_py3 import MHSMPrivateEndpointConnectionItem
-    from ._models_py3 import MHSMPrivateEndpointConnectionsListResult
-    from ._models_py3 import MHSMPrivateLinkResource
-    from ._models_py3 import MHSMPrivateLinkResourceListResult
-    from ._models_py3 import MHSMPrivateLinkServiceConnectionState
-    from ._models_py3 import MHSMRegionsListResult
-    from ._models_py3 import MHSMVirtualNetworkRule
-    from ._models_py3 import ManagedHSMSecurityDomainProperties
-    from ._models_py3 import ManagedHsm
-    from ._models_py3 import ManagedHsmAction
-    from ._models_py3 import ManagedHsmError
-    from ._models_py3 import ManagedHsmKey
-    from ._models_py3 import ManagedHsmKeyAttributes
-    from ._models_py3 import ManagedHsmKeyCreateParameters
-    from ._models_py3 import ManagedHsmKeyListResult
-    from ._models_py3 import ManagedHsmKeyProperties
-    from ._models_py3 import ManagedHsmKeyReleasePolicy
-    from ._models_py3 import ManagedHsmKeyRotationPolicyAttributes
-    from ._models_py3 import ManagedHsmLifetimeAction
-    from ._models_py3 import ManagedHsmListResult
-    from ._models_py3 import ManagedHsmProperties
-    from ._models_py3 import ManagedHsmResource
-    from ._models_py3 import ManagedHsmRotationPolicy
-    from ._models_py3 import ManagedHsmSku
-    from ._models_py3 import ManagedHsmTrigger
-    from ._models_py3 import ManagedServiceIdentity
-    from ._models_py3 import MetricSpecification
-    from ._models_py3 import NetworkRuleSet
-    from ._models_py3 import Operation
-    from ._models_py3 import OperationDisplay
-    from ._models_py3 import OperationListResult
-    from ._models_py3 import Permissions
-    from ._models_py3 import PrivateEndpoint
-    from ._models_py3 import PrivateEndpointConnection
-    from ._models_py3 import PrivateEndpointConnectionItem
-    from ._models_py3 import PrivateEndpointConnectionListResult
-    from ._models_py3 import PrivateLinkResource
-    from ._models_py3 import PrivateLinkResourceListResult
-    from ._models_py3 import PrivateLinkServiceConnectionState
-    from ._models_py3 import ProxyResourceWithoutSystemData
-    from ._models_py3 import Resource
-    from ._models_py3 import ResourceListResult
-    from ._models_py3 import RotationPolicy
-    from ._models_py3 import Secret
-    from ._models_py3 import SecretAttributes
-    from ._models_py3 import SecretCreateOrUpdateParameters
-    from ._models_py3 import SecretListResult
-    from ._models_py3 import SecretPatchParameters
-    from ._models_py3 import SecretPatchProperties
-    from ._models_py3 import SecretProperties
-    from ._models_py3 import ServiceSpecification
-    from ._models_py3 import Sku
-    from ._models_py3 import SystemData
-    from ._models_py3 import Trigger
-    from ._models_py3 import UserAssignedIdentity
-    from ._models_py3 import Vault
-    from ._models_py3 import VaultAccessPolicyParameters
-    from ._models_py3 import VaultAccessPolicyProperties
-    from ._models_py3 import VaultCheckNameAvailabilityParameters
-    from ._models_py3 import VaultCreateOrUpdateParameters
-    from ._models_py3 import VaultListResult
-    from ._models_py3 import VaultPatchParameters
-    from ._models_py3 import VaultPatchProperties
-    from ._models_py3 import VaultProperties
-    from ._models_py3 import VirtualNetworkRule
+    from ._models_py3 import (
+        AccessPolicyEntry,
+        Action,
+        Attributes,
+        CheckMhsmNameAvailabilityParameters,
+        CheckMhsmNameAvailabilityResult,
+        CheckNameAvailabilityResult,
+        CloudErrorBody,
+        DeletedManagedHsm,
+        DeletedManagedHsmListResult,
+        DeletedManagedHsmProperties,
+        DeletedVault,
+        DeletedVaultListResult,
+        DeletedVaultProperties,
+        DimensionProperties,
+        Error,
+        IPRule,
+        Key,
+        KeyAttributes,
+        KeyCreateParameters,
+        KeyListResult,
+        KeyProperties,
+        KeyReleasePolicy,
+        KeyRotationPolicyAttributes,
+        LifetimeAction,
+        LogSpecification,
+        ManagedHsm,
+        ManagedHsmAction,
+        ManagedHsmError,
+        ManagedHsmKey,
+        ManagedHsmKeyAttributes,
+        ManagedHsmKeyCreateParameters,
+        ManagedHsmKeyListResult,
+        ManagedHsmKeyProperties,
+        ManagedHsmKeyReleasePolicy,
+        ManagedHsmKeyRotationPolicyAttributes,
+        ManagedHsmLifetimeAction,
+        ManagedHsmListResult,
+        ManagedHsmProperties,
+        ManagedHsmResource,
+        ManagedHsmRotationPolicy,
+        ManagedHSMSecurityDomainProperties,
+        ManagedHsmSku,
+        ManagedHsmTrigger,
+        ManagedServiceIdentity,
+        MetricSpecification,
+        MHSMGeoReplicatedRegion,
+        MHSMIPRule,
+        MHSMNetworkRuleSet,
+        MHSMPrivateEndpoint,
+        MHSMPrivateEndpointConnection,
+        MHSMPrivateEndpointConnectionItem,
+        MHSMPrivateEndpointConnectionsListResult,
+        MHSMPrivateLinkResource,
+        MHSMPrivateLinkResourceListResult,
+        MHSMPrivateLinkServiceConnectionState,
+        MHSMRegionsListResult,
+        MHSMVirtualNetworkRule,
+        NetworkRuleSet,
+        Operation,
+        OperationDisplay,
+        OperationListResult,
+        Permissions,
+        PrivateEndpoint,
+        PrivateEndpointConnection,
+        PrivateEndpointConnectionItem,
+        PrivateEndpointConnectionListResult,
+        PrivateLinkResource,
+        PrivateLinkResourceListResult,
+        PrivateLinkServiceConnectionState,
+        ProxyResourceWithoutSystemData,
+        Resource,
+        ResourceListResult,
+        RotationPolicy,
+        Secret,
+        SecretAttributes,
+        SecretCreateOrUpdateParameters,
+        SecretListResult,
+        SecretPatchParameters,
+        SecretPatchProperties,
+        SecretProperties,
+        ServiceSpecification,
+        Sku,
+        SystemData,
+        Trigger,
+        UserAssignedIdentity,
+        Vault,
+        VaultAccessPolicyParameters,
+        VaultAccessPolicyProperties,
+        VaultCheckNameAvailabilityParameters,
+        VaultCreateOrUpdateParameters,
+        VaultListResult,
+        VaultPatchParameters,
+        VaultPatchProperties,
+        VaultProperties,
+        VirtualNetworkRule,
+    )
 except (SyntaxError, ImportError):
     from ._models import AccessPolicyEntry  # type: ignore
     from ._models import Action  # type: ignore

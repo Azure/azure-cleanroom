@@ -6,7 +6,6 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.Cose;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using Azure.Security.KeyVault.Keys.Cryptography;
 
 namespace CoseUtils;
 
@@ -46,14 +45,7 @@ public static class Cose
         }
         else
         {
-            var cryptographyClient = new CryptographyClient(
-                request.SignKey.KvCertificate!.KeyId,
-                request.SignKey.TokenCredential);
-            signer = new CoseSigner(
-                new ECDsaKeyVault(cert, cryptographyClient),
-                HashAlgorithmName.SHA384,
-                protectedHeaders,
-                unprotectedHeaders);
+            throw new Exception($"request.SignKey.PrivateKey not set.");
         }
 
         var payload = request.Payload ?? string.Empty;
@@ -155,11 +147,8 @@ public static class Cose
 
     private static byte[] FingerprintCertificate(X509Certificate2 cert)
     {
-        using (var sha256 = SHA256.Create())
-        {
-            var hash = sha256.ComputeHash(cert.RawData);
-            var convertedHash = BitConverter.ToString(hash).Replace("-", string.Empty);
-            return Encoding.ASCII.GetBytes(convertedHash.ToLower());
-        }
+        var hash = SHA256.HashData(cert.RawData);
+        var convertedHash = BitConverter.ToString(hash).Replace("-", string.Empty);
+        return Encoding.ASCII.GetBytes(convertedHash.ToLower());
     }
 }

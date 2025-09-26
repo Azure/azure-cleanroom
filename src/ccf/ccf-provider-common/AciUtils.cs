@@ -25,7 +25,7 @@ public static class AciUtils
         {
             NodeName = nodeName,
             ClientRpcAddress = $"{data.IPAddress.Fqdn}:{Ports.RpcMainPort}",
-            NodeEndorsedRpcAddress = $"{data.IPAddress.Fqdn}:{Ports.RpcDebugPort}",
+            NodeEndorsedRpcAddress = $"{data.IPAddress.Fqdn}:{Ports.RpcDebugPort}"
         };
     }
 
@@ -122,7 +122,8 @@ public static class AciUtils
         return new LoadBalancerEndpoint
         {
             Name = nameTagValue,
-            Endpoint = $"https://{data.IPAddress.Fqdn}:{Ports.NginxPort}",
+            Endpoint = $"https://{data.IPAddress.Fqdn}:{Ports.LbMainPort}",
+            AgentEndpoint = $"https://{data.IPAddress.Fqdn}:{Ports.LbAgentPort}"
         };
     }
 
@@ -192,6 +193,19 @@ public static class AciUtils
             AciConstants.CcfRecoveryServiceNameTag,
             type,
             AciConstants.CcfRecoveryServiceTypeTag,
+            providerConfig);
+    }
+
+    public static Task<List<ContainerGroupResource>> GetConsortiumManagerContainerGroups(
+        string consortiumManagerName,
+        string type,
+        JsonObject? providerConfig)
+    {
+        return GetContainerGroups(
+            consortiumManagerName,
+            AciConstants.CcfConsortiumManagerNameTag,
+            type,
+            AciConstants.CcfConsortiumManagerTypeTag,
             providerConfig);
     }
 

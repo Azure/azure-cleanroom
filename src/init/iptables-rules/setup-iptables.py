@@ -1,12 +1,11 @@
 import argparse
 import json
+import logging
 import os
 import subprocess
-import logging
 import sys
 
 import jinja2
-
 
 template_path = os.path.join(os.path.dirname(__file__), "templates")
 

@@ -4,21 +4,27 @@
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Azure.Core;
 using Azure.Identity;
 using Azure.Security.KeyVault.Certificates;
 using CoseUtils;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Controllers;
 
 [ApiController]
 public class WorkspacesController : ClientControllerBase
 {
+    private readonly IConfiguration config;
+
     public WorkspacesController(
         ILogger<WorkspacesController> logger,
+        IConfiguration config,
         IHttpContextAccessor httpContextAccessor)
         : base(logger, httpContextAccessor)
     {
+        this.config = config;
     }
 
     [HttpGet("/ready")]
@@ -34,9 +40,21 @@ public class WorkspacesController : ClientControllerBase
     public async Task<IActionResult> SetWorkspaceConfig(
         [FromForm] WorkspaceConfigurationModel model)
     {
-        if (model.SigningCertPemFile == null && string.IsNullOrEmpty(model.SigningCertId))
+        this.Logger.LogInformation(
+            $"/configure invoked with following inputs:\n" +
+            $"ccfEndpoint: '{model.CcfEndpoint}'\n" +
+            $"serviceCertPemFile: {model.ServiceCertPemFile != null}\n" +
+            $"signingCertId: '{model.SigningCertId}'\n" +
+            $"signingCertPemFile: {model.SigningCertPemFile != null}\n" +
+            $"signingKeyPemFile: {model.SigningKeyPemFile != null}\n" +
+            $"authMode: '{model.AuthMode}'\n" +
+            $"serviceCertDiscovery: '{model.ServiceCertDiscovery}'");
+
+        if (model.SigningCertPemFile == null && string.IsNullOrEmpty(model.SigningCertId) &&
+            string.IsNullOrEmpty(model.AuthMode))
         {
-            return this.BadRequest("Either SigningCertPemFile or SigningCertId must be specified");
+            return this.BadRequest(
+                "Either SigningCertPemFile/SigningCertId/AuthMode must be specified");
         }
 
         if (model.SigningCertPemFile != null && !string.IsNullOrEmpty(model.SigningCertId))
@@ -45,57 +63,14 @@ public class WorkspacesController : ClientControllerBase
                 "Only one of SigningCertPemFile or SigningCertId must be specified");
         }
 
-        CoseSignKey coseSignKey;
-        X509Certificate2 httpsClientCert;
-        if (model.SigningCertPemFile != null)
+        if (!string.IsNullOrEmpty(model.AuthMode))
         {
-            if (model.SigningCertPemFile.Length <= 0)
+            if (model.SigningCertPemFile != null || !string.IsNullOrEmpty(model.SigningCertId))
             {
-                return this.BadRequest("No signing cert file was uploaded.");
+                return this.BadRequest(
+                    "Only one of AuthMode/SigningCertPemFile/SigningCertId must " +
+                    "be specified");
             }
-
-            if (model.SigningKeyPemFile == null || model.SigningKeyPemFile.Length <= 0)
-            {
-                return this.BadRequest("No signing key file was uploaded.");
-            }
-
-            string signingCert;
-            using var reader = new StreamReader(model.SigningCertPemFile.OpenReadStream());
-            signingCert = await reader.ReadToEndAsync();
-
-            string signingKey;
-            using var reader2 = new StreamReader(model.SigningKeyPemFile.OpenReadStream());
-            signingKey = await reader2.ReadToEndAsync();
-
-            coseSignKey = new CoseSignKey(signingCert, signingKey);
-            httpsClientCert = X509Certificate2.CreateFromPem(signingCert, signingKey);
-        }
-        else
-        {
-            Uri signingCertId;
-            try
-            {
-                signingCertId = new Uri(model.SigningCertId!);
-            }
-            catch (Exception e)
-            {
-                return this.BadRequest($"Invalid signingKid value: {e.Message}.");
-            }
-
-            var creds = new DefaultAzureCredential();
-            coseSignKey = await CoseSignKey.FromKeyVault(signingCertId, creds);
-
-            // Download the full cert along with private key for HTTPS client auth.
-            var akvEndpoint = "https://" + signingCertId.Host;
-            var certClient = new CertificateClient(new Uri(akvEndpoint), creds);
-
-            // certificates/{name} or certificates/{name}/{version}
-            var parts = signingCertId.AbsolutePath.Split(
-                "/",
-                StringSplitOptions.RemoveEmptyEntries);
-            string certName = parts[1];
-            string? version = parts.Length == 3 ? parts[2] : null;
-            httpsClientCert = await certClient.DownloadCertificateAsync(certName, version);
         }
 
         string ccfEndpoint = string.Empty;
@@ -112,7 +87,7 @@ public class WorkspacesController : ClientControllerBase
             }
         }
 
-        string serviceCertPem = string.Empty;
+        string? serviceCertPem = null;
         if (model.ServiceCertPemFile != null)
         {
             using (var reader3 = new StreamReader(model.ServiceCertPemFile.OpenReadStream()))
@@ -121,22 +96,278 @@ public class WorkspacesController : ClientControllerBase
             }
         }
 
-        // Governance endpoint uses Cose signed messages for member auth.
-        CcfClientManager.SetGovAuthDefaults(coseSignKey);
+        CcfServiceCertLocator? certLocator = null;
+        if (!string.IsNullOrEmpty(model.ServiceCertDiscovery))
+        {
+            if (serviceCertPem != null)
+            {
+                return this.BadRequest($"A service cert PEM cannot be specified along " +
+                    $"with serviceCertDiscovery.");
+            }
 
-        // App authentication uses member_cert authentication policy which uses HTTPS client cert
-        // based authentication. So we need access to the member cert and private key for setting
-        // up HTTPS client cert auth.
-        CcfClientManager.SetAppAuthDefaults(httpsClientCert);
+            var discoveryModel = JsonSerializer.Deserialize<CcfServiceCertDiscoveryModel>(
+                model.ServiceCertDiscovery)!;
+
+            var url = discoveryModel.CertificateDiscoveryEndpoint.Trim();
+            try
+            {
+                _ = new Uri(url);
+            }
+            catch (Exception e)
+            {
+                return this.BadRequest(
+                    $"Invalid serviceCertDiscovery.certificateDiscoveryEndpoint " +
+                    $"value '{url}': {e.Message}.");
+            }
+
+            if (discoveryModel.HostData == null || !discoveryModel.HostData.Any())
+            {
+                return this.BadRequest($"serviceCertDiscovery.hostData must be specified.");
+            }
+
+            if (discoveryModel.SkipDigestCheck)
+            {
+                if (!string.IsNullOrEmpty(discoveryModel.ConstitutionDigest))
+                {
+                    return this.BadRequest(
+                        $"serviceCertDiscovery.constitutionDigest cannot be specified along with " +
+                        $"serviceCertDiscovery.skipDigestCheck as true.");
+                }
+
+                if (!string.IsNullOrEmpty(discoveryModel.JsAppBundleDigest))
+                {
+                    return this.BadRequest(
+                        $"serviceCertDiscovery.jsAppBundleDigest cannot be specified along with " +
+                        $"serviceCertDiscovery.skipDigestCheck as true.");
+                }
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(discoveryModel.ConstitutionDigest))
+                {
+                    return this.BadRequest(
+                        $"serviceCertDiscovery.constitutionDigest must be specified.");
+                }
+
+                if (string.IsNullOrEmpty(discoveryModel.JsAppBundleDigest))
+                {
+                    return this.BadRequest(
+                        $"serviceCertDiscovery.jsAppBundleDigest must be specified.");
+                }
+            }
+
+            certLocator = new CcfServiceCertLocator(this.Logger, discoveryModel);
+            serviceCertPem = await certLocator.DownloadServiceCertificatePem();
+        }
+
+        if (!string.IsNullOrEmpty(model.AuthMode))
+        {
+            // App authentication uses JWT authentication.
+            if (model.AuthMode == "AzureLogin")
+            {
+                // Request a token to extract details that are useful to show in CLI/UI experiences.
+                var scope = "https://management.core.windows.net";
+                var ctx = new TokenRequestContext(new string[] { scope });
+                var creds = new DefaultAzureCcfTokenCredential();
+                string token = await creds.GetTokenAsync(
+                    ctx,
+                    CancellationToken.None);
+                var parts = token.Split(".");
+                var sharableClaims = CopySharableClaims(
+                    JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[1]))!);
+                CcfClientManager.SetAppAuthDefaults(creds, scope, sharableClaims, model.AuthMode);
+
+                static JsonObject CopySharableClaims(JsonObject claims)
+                {
+                    return new JsonObject
+                    {
+                        ["oid"] = claims["oid"]?.ToString(),
+                        ["unique_name"] = claims["unique_name"]?.ToString(),
+                        ["name"] = claims["name"]?.ToString(),
+                        ["family_name"] = claims["family_name"]?.ToString(),
+                        ["given_name"] = claims["given_name"]?.ToString(),
+                        ["idtyp"] = claims["idtyp"]?.ToString(),
+                        ["sub"] = claims["sub"]?.ToString(),
+                        ["upn"] = claims["upn"]?.ToString(),
+                        ["tid"] = claims["tid"]?.ToString()
+                    };
+                }
+            }
+            else if (model.AuthMode == "MsLogin")
+            {
+                var scope = "User.Read";
+                var ctx = new TokenRequestContext(new string[] { scope });
+                var creds = new MsalCachedCcfTokenCredential(this.config["MSAL_TOKEN_CACHE_DIR"]);
+                string token = await creds.GetTokenAsync(ctx, CancellationToken.None);
+                var parts = token.Split(".");
+                var sharableClaims = CopySharableClaims(
+                    JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[1]))!);
+                CcfClientManager.SetAppAuthDefaults(creds, scope, sharableClaims, model.AuthMode);
+
+                static JsonObject CopySharableClaims(JsonObject claims)
+                {
+                    return new JsonObject
+                    {
+                        ["oid"] = claims["oid"]?.ToString(),
+                        ["preferred_username"] = claims["preferred_username"]?.ToString(),
+                        ["name"] = claims["name"]?.ToString(),
+                        ["sub"] = claims["sub"]?.ToString(),
+                        ["tid"] = claims["tid"]?.ToString()
+                    };
+                }
+            }
+            else if (model.AuthMode == "LocalIdp")
+            {
+                string identityUrl = this.config["LOCAL_IDP_ENDPOINT"]!;
+
+                var scope = "https://does.not.matter";
+                var ctx = new TokenRequestContext(new string[] { scope });
+                var creds = new LocalIdpCachedTokenCredential(identityUrl);
+                string token = await creds.GetTokenAsync(
+                    ctx,
+                    CancellationToken.None);
+                var parts = token.Split(".");
+                var sharableClaims = CopySharableClaims(
+                    JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[1]))!);
+                CcfClientManager.SetAppAuthDefaults(creds, scope, sharableClaims, model.AuthMode);
+
+                static JsonObject CopySharableClaims(JsonObject claims)
+                {
+                    return new JsonObject
+                    {
+                        ["oid"] = claims["oid"]?.ToString(),
+                        ["sub"] = claims["sub"]?.ToString(),
+                        ["tid"] = claims["tid"]?.ToString()
+                    };
+                }
+            }
+            else
+            {
+                return this.BadRequest($"Invalid AuthMode value '{model.AuthMode}'.");
+            }
+        }
+        else
+        {
+            CoseSignKey coseSignKey;
+            X509Certificate2 httpsClientCert;
+            if (model.SigningCertPemFile != null)
+            {
+                if (model.SigningCertPemFile.Length <= 0)
+                {
+                    return this.BadRequest("No signing cert file was uploaded.");
+                }
+
+                if (model.SigningKeyPemFile == null || model.SigningKeyPemFile.Length <= 0)
+                {
+                    return this.BadRequest("No signing key file was uploaded.");
+                }
+
+                string signingCert;
+                using var reader = new StreamReader(model.SigningCertPemFile.OpenReadStream());
+                signingCert = await reader.ReadToEndAsync();
+
+                string signingKey;
+                using var reader2 = new StreamReader(model.SigningKeyPemFile.OpenReadStream());
+                signingKey = await reader2.ReadToEndAsync();
+
+                coseSignKey = new CoseSignKey(signingCert, signingKey);
+                httpsClientCert = X509Certificate2.CreateFromPem(signingCert, signingKey);
+            }
+            else
+            {
+                Uri signingCertId;
+                try
+                {
+                    signingCertId = new Uri(model.SigningCertId!);
+                }
+                catch (Exception e)
+                {
+                    return this.BadRequest($"Invalid signingKid value: {e.Message}.");
+                }
+
+                var creds = new DefaultAzureCredential();
+                coseSignKey = await CoseSignKey.FromKeyVault(signingCertId, creds);
+
+                // Download the full cert along with private key for HTTPS client auth.
+                var akvEndpoint = "https://" + signingCertId.Host;
+                var certClient = new CertificateClient(new Uri(akvEndpoint), creds);
+
+                // certificates/{name} or certificates/{name}/{version}
+                var parts = signingCertId.AbsolutePath.Split(
+                    "/",
+                    StringSplitOptions.RemoveEmptyEntries);
+                string certName = parts[1];
+                string? version = parts.Length == 3 ? parts[2] : null;
+                httpsClientCert = await certClient.DownloadCertificateAsync(certName, version);
+            }
+
+            // Governance endpoint uses Cose signed messages for member auth.
+            CcfClientManager.SetGovAuthDefaults(coseSignKey);
+
+            // App authentication uses member_cert authentication policy which uses HTTPS client cert
+            // based authentication. So we need access to the member cert and private key for setting
+            // up HTTPS client cert auth.
+            CcfClientManager.SetAppAuthDefaults(httpsClientCert);
+        }
 
         // Set workspace configuration values only if the CCF endpoint is specified as part of the
         // configure call. This serves as a default value when running in single CCF client mode.
         if (!string.IsNullOrEmpty(ccfEndpoint))
         {
-            CcfClientManager.SetCcfDefaults(ccfEndpoint, serviceCertPem);
+            CcfClientManager.SetCcfDefaults(ccfEndpoint, serviceCertPem, certLocator);
         }
 
         return this.Ok("Workspace details configured successfully.");
+    }
+
+    [HttpGet("/identity/accessToken")]
+    public async Task<IActionResult> GetAccessToken()
+    {
+        var wsConfig = this.CcfClientManager.GetWsConfig();
+        if (wsConfig == null)
+        {
+            return this.BadRequest("Client has not yet been configured.");
+        }
+
+        if (string.IsNullOrEmpty(wsConfig.AuthMode))
+        {
+            return this.BadRequest("Client is not configured to use JWT authentication.");
+        }
+
+        // App authentication uses JWT authentication.
+        string token;
+        if (wsConfig.AuthMode == "AzureLogin")
+        {
+            // Request a token to return.
+            var scope = "https://management.core.windows.net";
+            var ctx = new TokenRequestContext(new string[] { scope });
+            var creds = new DefaultAzureCcfTokenCredential();
+            token = await creds.GetTokenAsync(ctx, CancellationToken.None);
+        }
+        else if (wsConfig.AuthMode == "MsLogin")
+        {
+            var scope = "User.Read";
+            var ctx = new TokenRequestContext(new string[] { scope });
+            var creds = new MsalCachedCcfTokenCredential(this.config["MSAL_TOKEN_CACHE_DIR"]);
+            token = await creds.GetTokenAsync(ctx, CancellationToken.None);
+        }
+        else if (wsConfig.AuthMode == "LocalIdp")
+        {
+            string identityUrl = this.config["LOCAL_IDP_ENDPOINT"]!;
+            var scope = "https://does.not.matter";
+            var ctx = new TokenRequestContext(new string[] { scope });
+            var creds = new LocalIdpCachedTokenCredential(identityUrl);
+            token = await creds.GetTokenAsync(ctx, CancellationToken.None);
+        }
+        else
+        {
+            return this.BadRequest($"Unsupported AuthMode value '{wsConfig.AuthMode}'.");
+        }
+
+        return this.Ok(new JsonObject
+        {
+            ["accessToken"] = token
+        });
     }
 
     [HttpGet("/show")]
@@ -154,21 +385,46 @@ public class WorkspacesController : ClientControllerBase
                 copy.SigningKey = "<redacted>";
             }
 
-            try
+            if (copy.IsUser)
             {
-                var ccfClient = await this.CcfClientManager.GetGovClient();
-                using HttpResponseMessage response = await ccfClient.GetAsync(
-                    $"gov/service/members?api-version={this.CcfClientManager.GetGovApiVersion()}");
-                await response.ValidateStatusCodeAsync(this.Logger);
-                var jsonResponse = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
-                copy.MemberData =
-                    jsonResponse["value"]!.AsArray()
-                    .FirstOrDefault(m => m!["memberId"]?.ToString() == copy.MemberId)?
-                    ["memberData"]!.AsObject();
+                try
+                {
+                    // Get user/oid and if not null then set identifier value from it else
+                    // set oid value from claim. And cleanup UI code to determine name to display.
+                    var ccfClient = this.CcfClientManager.GetAppClient();
+                    using HttpResponseMessage response = await ccfClient.GetAsync(
+                        "app/users/identities");
+                    await response.ValidateStatusCodeAsync(this.Logger);
+                    var users = (await response.Content.ReadFromJsonAsync<UserIdentities>())!;
+                    var oid = copy.UserTokenClaims!["oid"]!.ToString();
+                    copy.Identifier = users.Value.Find(u => u.Id == oid)?.Data?.Identifier ?? oid;
+                }
+                catch (Exception e)
+                {
+                    this.Logger.LogError(e, "Failed to fetch users. Ignoring.");
+                }
             }
-            catch (Exception e)
+            else
             {
-                this.Logger.LogError(e, "Failed to fetch members. Ignoring.");
+                var ccfClient = this.CcfClientManager.GetNoAuthClient();
+                try
+                {
+                    using HttpResponseMessage response = await ccfClient.GetAsync(
+                    $"gov/service/members?api-version=" +
+                    $"{this.CcfClientManager.GetGovApiVersion()}");
+                    await response.ValidateStatusCodeAsync(this.Logger);
+                    var jsonResponse = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+                    copy.Identifier = copy.MemberId;
+                    copy.MemberData =
+                        jsonResponse["value"]!.AsArray()
+                        .FirstOrDefault(m => m!["memberId"]?.ToString() == copy.MemberId)?
+                        ["memberData"]?.AsObject();
+                    copy.Identifier = copy.MemberData?["identifier"]?.ToString() ?? copy.MemberId;
+                }
+                catch (Exception e)
+                {
+                    this.Logger.LogError(e, "Failed to fetch members. Ignoring.");
+                }
             }
         }
         else
@@ -183,20 +439,17 @@ public class WorkspacesController : ClientControllerBase
     [HttpGet("/constitution")]
     public async Task<IActionResult> GetConstitution()
     {
-        var ccfClient = await this.CcfClientManager.GetGovClient();
-        using HttpResponseMessage response =
-            await ccfClient.GetAsync(
-                $"gov/service/constitution?" +
-                $"api-version={this.CcfClientManager.GetGovApiVersion()}");
-        await response.ValidateStatusCodeAsync(this.Logger);
-        var content = (await response.Content.ReadAsStringAsync())!;
+        var ccfClient = this.CcfClientManager.GetNoAuthClient();
+        var content = await ccfClient.GetConstitution(
+            this.Logger,
+            this.CcfClientManager.GetGovApiVersion());
         return this.Ok(content);
     }
 
     [HttpGet("/service/info")]
     public async Task<IActionResult> GetServiceInfo()
     {
-        var ccfClient = await this.CcfClientManager.GetGovClient();
+        var ccfClient = this.CcfClientManager.GetNoAuthClient();
         using HttpResponseMessage response =
             await ccfClient.GetAsync(
                 $"gov/service/info?api-version={this.CcfClientManager.GetGovApiVersion()}");
@@ -208,7 +461,7 @@ public class WorkspacesController : ClientControllerBase
     [HttpGet("/jsapp/endpoints")]
     public async Task<IActionResult> GetJSAppEndpoints()
     {
-        var ccfClient = await this.CcfClientManager.GetGovClient();
+        var ccfClient = this.CcfClientManager.GetNoAuthClient();
         using HttpResponseMessage response = await ccfClient.GetAsync(
             $"gov/service/javascript-app?" +
             $"api-version={this.CcfClientManager.GetGovApiVersion()}");
@@ -220,7 +473,7 @@ public class WorkspacesController : ClientControllerBase
     [HttpGet("/jsapp/modules")]
     public async Task<IActionResult> JSAppModules()
     {
-        var ccfClient = await this.CcfClientManager.GetGovClient();
+        var ccfClient = this.CcfClientManager.GetNoAuthClient();
         using HttpResponseMessage response = await ccfClient.GetAsync(
             $"gov/service/javascript-modules?" +
             $"api-version={this.CcfClientManager.GetGovApiVersion()}");
@@ -263,7 +516,7 @@ public class WorkspacesController : ClientControllerBase
     [HttpGet("/jsapp/modules/list")]
     public async Task<IActionResult> ListJSAppModules()
     {
-        var ccfClient = await this.CcfClientManager.GetGovClient();
+        var ccfClient = this.CcfClientManager.GetNoAuthClient();
         using HttpResponseMessage response = await ccfClient.GetAsync(
             $"gov/service/javascript-modules?" +
             $"api-version={this.CcfClientManager.GetGovApiVersion()}");
@@ -275,7 +528,7 @@ public class WorkspacesController : ClientControllerBase
     [HttpGet("/jsapp/modules/{moduleName}")]
     public async Task<IActionResult> GetJSAppModule([FromRoute] string moduleName)
     {
-        var ccfClient = await this.CcfClientManager.GetGovClient();
+        var ccfClient = this.CcfClientManager.GetNoAuthClient();
         using HttpResponseMessage response = await ccfClient.GetAsync(
             $"gov/service/javascript-modules/{moduleName}?api-version=" +
             $"{this.CcfClientManager.GetGovApiVersion()}");
@@ -287,120 +540,11 @@ public class WorkspacesController : ClientControllerBase
     [HttpGet("/jsapp/bundle")]
     public async Task<IActionResult> GetJSAppBundle()
     {
-        // There is not direct API to retrieve the original bundle that was submitted via set_jsapp.
-        var ccfClient = await this.CcfClientManager.GetGovClient();
-        JsonObject modules, endpoints;
-
-        using (HttpResponseMessage response = await ccfClient.GetAsync(
-            $"gov/service/javascript-modules?" +
-            $"api-version={this.CcfClientManager.GetGovApiVersion()}"))
-        {
-            await response.ValidateStatusCodeAsync(this.Logger);
-            modules = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
-        }
-
-        using (HttpResponseMessage response = await ccfClient.GetAsync(
-            $"gov/service/javascript-app?" +
-            $"api-version={this.CcfClientManager.GetGovApiVersion()}&case=original"))
-        {
-            await response.ValidateStatusCodeAsync(this.Logger);
-            endpoints = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
-        }
-
-        List<string> moduleNames = new();
-        List<Task<string>> fetchModuleTasks = new();
-        foreach (var item in modules["value"]!.AsArray().AsEnumerable())
-        {
-            var moduleName = item!.AsObject()["moduleName"]!.ToString();
-            moduleNames.Add(moduleName);
-        }
-
-        // Sort the module names in alphabetical order so that we return the response ordered by
-        // name.
-        moduleNames = moduleNames.OrderBy(x => x, StringComparer.Ordinal).ToList();
-        foreach (var moduleName in moduleNames)
-        {
-            var escapedString = Uri.EscapeDataString(moduleName);
-            Task<string> fetchModuleTask = ccfClient.GetStringAsync(
-            $"gov/service/javascript-modules/{escapedString}?" +
-            $"api-version={this.CcfClientManager.GetGovApiVersion()}");
-            fetchModuleTasks.Add(fetchModuleTask);
-        }
-
-        var endpointsInProposalFormat = new JsonObject();
-        foreach (KeyValuePair<string, JsonNode?> apiSpec in
-            endpoints["endpoints"]!.AsObject().AsEnumerable())
-        {
-            // Need to transform the endpoints output to the format that the proposal expects.
-            // "/contracts": {
-            //   "GET": {
-            //     "authnPolicies": [
-            //       "member_cert",
-            //       "user_cert"
-            //     ],
-            //     "forwardingRequired": "sometimes",
-            //     "jsModule": "/endpoints/contracts.js",
-            // =>
-            // "/contracts": {
-            //   "get": {
-            //     "authn_policies": [
-            //       "member_cert",
-            //       "user_cert"
-            //     ],
-            //     "forwarding_required": "sometimes",
-            //     "js_module": "endpoints/contracts.js",=>
-            string api = apiSpec.Key;
-            if (endpointsInProposalFormat[api] == null)
-            {
-                endpointsInProposalFormat[api] = new JsonObject();
-            }
-
-            foreach (KeyValuePair<string, JsonNode?> verbSpec in
-                apiSpec.Value!.AsObject().AsEnumerable())
-            {
-                string verb = verbSpec.Key!.ToLower();
-                var value = new JsonObject();
-                foreach (var item3 in verbSpec.Value!.AsObject().AsEnumerable())
-                {
-                    value[item3.Key] = item3.Value?.DeepClone();
-                }
-
-                // Remove leading / ie "js_module": "/foo/bar" => "js_module": "foo/bar"
-                value["js_module"] = value["js_module"]!.ToString().TrimStart('/');
-
-                // The /javascript-app API is not returning mode value for PUT/POST. Need to fill it
-                // or else proposal submission fails.
-                if ((verb == "put" || verb == "post") && value["mode"] == null)
-                {
-                    value["mode"] = "readwrite";
-                }
-
-                endpointsInProposalFormat[api]!.AsObject()[verb] = value;
-            }
-        }
-
-        await Task.WhenAll(fetchModuleTasks);
-        var modulesArray = new JsonArray();
-        for (int i = 0; i < moduleNames.Count; i++)
-        {
-#pragma warning disable VSTHRD003 // Avoid awaiting foreign Tasks
-            string content = (await fetchModuleTasks[i])!;
-#pragma warning restore VSTHRD003 // Avoid awaiting foreign Tasks
-            modulesArray.Add(new JsonObject
-            {
-                ["name"] = moduleNames[i].TrimStart('/'),
-                ["module"] = content
-            });
-        }
-
-        return this.Ok(new JsonObject
-        {
-            ["metadata"] = new JsonObject
-            {
-                ["endpoints"] = endpointsInProposalFormat
-            },
-            ["modules"] = modulesArray
-        });
+        var ccfClient = this.CcfClientManager.GetNoAuthClient();
+        var bundle = await ccfClient.GetJSAppBundle(
+            this.Logger,
+            this.CcfClientManager.GetGovApiVersion());
+        return this.Ok(bundle);
     }
 
     public class ConfigView

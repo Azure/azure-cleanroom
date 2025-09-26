@@ -19,4 +19,5 @@ export CLIENT_PROXY_PORT=${CLIENT_PROXY_PORT:-10080}
 cat ccr-client-proxy-config.yaml | envsubst '$CLIENT_PROXY_PORT' > /tmp/ccr-client-proxy-config.yaml
 
 echo "Launching envoy"
+# Use exec so that SIGTERM is propagated to the child process and the process can be gracefully stopped.
 exec envoy -c /tmp/ccr-client-proxy-config.yaml -l trace --log-path ccr-client-proxy.log

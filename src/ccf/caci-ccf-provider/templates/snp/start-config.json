@@ -28,7 +28,7 @@
   },
   "command": {
     "type": "Start",
-    "service_certificate_file": "/app/service_cert.pem",
+    "service_certificate_file": "/app/certs/ccf/service_cert.pem",
     "start": {
       "constitution_files": [
         "/app/constitution/default/validate.js",
@@ -49,6 +49,7 @@
       }
     ],
     "snp_security_policy_file": "$UVM_SECURITY_CONTEXT_DIR/security-policy-base64",
-    "snp_uvm_endorsements_file": "$UVM_SECURITY_CONTEXT_DIR/reference-info-base64"
+    "snp_uvm_endorsements_file": "$UVM_SECURITY_CONTEXT_DIR/reference-info-base64",
+    "snp_endorsements_file": "$UVM_SECURITY_CONTEXT_DIR/host-amd-cert-base64"
   }
 }

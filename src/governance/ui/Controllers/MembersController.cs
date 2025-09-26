@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using CgsUI.Models;
 using Microsoft.AspNetCore.Mvc;
 
@@ -43,4 +44,19 @@ public class MembersController : Controller
             });
         }
     }
+
+    public record ListMembers(
+        [property: JsonPropertyName("value")] List<Member> Value);
+
+    public record Member(
+        [property: JsonPropertyName("certificate")] string Certificate,
+        [property: JsonPropertyName("memberData")] MemberData MemberData,
+        [property: JsonPropertyName("memberId")] string MemberId,
+        [property: JsonPropertyName("recoveryRole")] string RecoveryRole,
+        [property: JsonPropertyName("status")] string Status,
+        [property: JsonPropertyName("publicEncryptionKey")] string? PublicEncryptionKey);
+
+    public record MemberData(
+        [property: JsonPropertyName("identifier")] string Identifier,
+        [property: JsonPropertyName("tenantId")] string? TenantId);
 }

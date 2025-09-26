@@ -21,9 +21,9 @@ public class RecoveryServiceClientManager
     {
         var client = this.httpClientManager.GetOrAddClient(
             recoveryService.Endpoint,
+            HttpRetries.Policies.DefaultRetryPolicy(this.logger),
             recoveryService.ServiceCert,
-            "recovery-service",
-            retryPolicy: HttpRetries.Policies.GetDefaultRetryPolicy(this.logger));
+            "recovery-service");
         return Task.FromResult(client);
     }
 

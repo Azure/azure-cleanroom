@@ -1,10 +1,11 @@
+import base64 as b64
+import json
 import logging
 import os
-import json
-import base64 as b64
+
 import requests
-from requests.exceptions import RequestException
 from pydantic import BaseModel
+from requests.exceptions import RequestException
 from rich import print
 
 logger = logging.getLogger("utilities")
@@ -46,8 +47,10 @@ def get_db_config(secret_id):
     try:
         response = requests.post(uri)
         response.raise_for_status()
-    except RequestException as e:
-        raise Exception(f"Get secrets failed: {e}")
+    except requests.exceptions.HTTPError as err:
+        raise Exception(
+            f"GET secrets failed. status_code: {err.response.status_code}, body: {err.response.text}"
+        )
 
     secret_value = CgsSecretResponse(**response.json())
     secret_decoded = b64.b64decode(secret_value.value).decode("utf-8")
@@ -71,8 +74,10 @@ def get_db_password(db_config: DbConfig):
             data=unwrap_request.model_dump_json(),
         )
         response.raise_for_status()
-    except RequestException as e:
-        raise Exception(f"HTTP post secrets/unwrap failed: {e}")
+    except requests.exceptions.HTTPError as err:
+        raise Exception(
+            f"POST secrets/unwrap failed. status_code: {err.response.status_code}, body: {err.response.text}"
+        )
 
     unwrap_response = UnwrapSecretResponse(**response.json())
     return b64.b64decode(unwrap_response.value).decode("utf-8")

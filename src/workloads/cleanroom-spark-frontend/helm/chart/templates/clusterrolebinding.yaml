@@ -1,0 +1,34 @@
+{{- if .Values.serviceAccount.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "webserver.fullname" . }}-spark-frontend
+  labels:
+    {{- include "webserver.labels" . | nindent 4 }}
+rules:
+- apiGroups: ["sparkoperator.k8s.io"]
+  resources: ["sparkapplications"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["mutatingwebhookconfigurations"]
+  verbs: ["get", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "webserver.fullname" . }}-spark-frontend
+  labels:
+    {{- include "webserver.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "webserver.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "webserver.fullname" . }}-spark-frontend
+  apiGroup: rbac.authorization.k8s.io
+---
+{{- end }}

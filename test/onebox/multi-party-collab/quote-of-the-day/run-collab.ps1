@@ -35,10 +35,6 @@ $ccfEndpoint = $(Get-Content $outDir/ccf/ccf.json | ConvertFrom-Json).endpoint
 az cleanroom governance client remove --name "ob-publisher-client"
 
 pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 -registry $registry -repo $repo -tag $tag -ccfEndpoint $ccfEndpoint
-if ($LASTEXITCODE -gt 0) {
-    Write-Host -ForegroundColor Red "run-scenario-generate-template-policy returned non-zero exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
 
 pwsh $root/test/onebox/multi-party-collab/convert-template.ps1 -outDir $outDir -repo $repo -tag $tag
 
@@ -114,23 +110,23 @@ az cleanroom logs download `
     --target-folder $outDir/results
 
 Write-Host "Application logs:"
-cat $outDir/results/application-telemetry*/**/demo-app.log
+cat $outDir/results/application-telemetry*/demo-app.log
 
 # Check that expected output files got created.
 $expectedFiles = @(
-    "$PSScriptRoot/generated/results/application-telemetry*/**/demo-app.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/demo-app*-code-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/demo-app*-code-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/demo-app*-code-launcher.metrics",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/identity.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/identity.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/identity.metrics"
+    "$PSScriptRoot/generated/results/application-telemetry*/demo-app.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/demo-app*-code-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/demo-app*-code-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/demo-app*-code-launcher.metrics",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/identity.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/identity.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/identity.metrics"
 )
 
 $missingFiles = @()

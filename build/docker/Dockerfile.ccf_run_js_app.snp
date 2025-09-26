@@ -1,5 +1,11 @@
+ARG CCF_VERSION=6.0.6
+
 # Build the clean room specific C++ module that gets loaded in CCF.
-FROM ghcr.io/microsoft/ccf/app/dev/snp:ccf-6.0.0-rc1 AS builder
+FROM mcr.microsoft.com/azurelinux/base/core:3.0 AS builder
+RUN tdnf install -y wget ca-certificates clang-tools-extra-devel
+ARG CCF_VERSION
+RUN wget https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_snp_devel_${CCF_VERSION}_x86_64.rpm -O ccf_snp_devel.rpm
+RUN tdnf install --exclude=aznfs -y ccf_snp_devel.rpm
 
 # Copy the source.
 COPY /src/governance/ccf-app/cpp src/cpp
@@ -14,13 +20,19 @@ RUN /scripts/ci-checks.sh
 RUN cd src/cpp
 RUN mkdir build && cd build
 WORKDIR /src/cpp/build
-RUN CC="clang-15" CXX="clang++-15" cmake -GNinja -DCOMPILE_TARGET=snp ..
+RUN CC="clang-18" CXX="clang++-18" cmake -GNinja -DCOMPILE_TARGET=snp ..
 RUN ninja
 
 # Run
-FROM ghcr.io/microsoft/ccf/app/run-js/snp:ccf-6.0.0-rc1
+FROM mcr.microsoft.com/azurelinux/base/core:3.0
+RUN tdnf install -y wget ca-certificates tar
+ARG CCF_VERSION
+RUN wget https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_snp_${CCF_VERSION}_x86_64.rpm -O ccf_snp.rpm
+RUN tdnf install --exclude=aznfs -y ccf_snp.rpm
+RUN cp /opt/ccf_snp/bin/cchost /usr/bin/cchost
+RUN chmod +rx /usr/bin/cchost
 
-COPY --from=builder /src/cpp/build/libjs_cleanroom.snp.so /usr/lib/ccf
+COPY --from=builder /src/cpp/build/libjs_cleanroom.snp.so /usr/lib/ccf/libjs_cleanroom.snp.so
 
 COPY --chmod=755 /src/ccf/ccf-provider-common/scripts/node/bootstrap.sh /app/
 

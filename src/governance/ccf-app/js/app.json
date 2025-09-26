@@ -7,7 +7,8 @@
         "forwarding_required": "sometimes",
         "authn_policies": [
           "member_cert",
-          "user_cert"
+          "user_cert",
+          "jwt"
         ],
         "mode": "readonly",
         "openapi": {}
@@ -30,7 +31,8 @@
         "forwarding_required": "sometimes",
         "authn_policies": [
           "member_cert",
-          "user_cert"
+          "user_cert",
+          "jwt"
         ],
         "mode": "readonly",
         "openapi": {}
@@ -43,7 +45,8 @@
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert",
-          "user_cert"
+          "user_cert",
+          "jwt"
         ],
         "mode": "readonly",
         "openapi": {}
@@ -56,7 +59,8 @@
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert",
-          "user_cert"
+          "user_cert",
+          "jwt"
         ],
         "mode": "readonly",
         "openapi": {}
@@ -69,7 +73,8 @@
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert",
-          "user_cert"
+          "user_cert",
+          "jwt"
         ],
         "mode": "readonly",
         "openapi": {}
@@ -136,7 +141,8 @@
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert",
-          "user_cert"
+          "user_cert",
+          "jwt"
         ],
         "mode": "readonly",
         "openapi": {}
@@ -150,13 +156,30 @@
         "openapi": {}
       }
     },
+    "/contracts/{contractId}/secrets": {
+      "get": {
+        "js_module": "endpoints/secrets.js",
+        "js_function": "listSecrets",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
     "/contracts/{contractId}/secrets/{secretName}": {
       "put": {
         "js_module": "endpoints/secrets.js",
         "js_function": "putSecret",
         "forwarding_required": "always",
         "authn_policies": [
-          "member_cert"
+          "member_cert",
+          "user_cert",
+          "jwt",
+          "no_auth"
         ],
         "mode": "readwrite",
         "openapi": {}
@@ -170,6 +193,28 @@
         "openapi": {}
       }
     },
+    "/contracts/{contractId}/secrets/{secretName}/cleanroompolicy": {
+      "post": {
+        "js_module": "endpoints/secrets.js",
+        "js_function": "setSecretCleanRoomPolicy",
+        "forwarding_required": "always",
+        "authn_policies": [],
+        "mode": "readwrite",
+        "openapi": {}
+      },
+      "get": {
+        "js_module": "endpoints/secrets.js",
+        "js_function": "getSecretCleanRoomPolicy",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
     "/contracts/{contractId}/cleanroompolicy": {
       "get": {
         "js_module": "endpoints/cleanroompolicy.js",
@@ -177,7 +222,8 @@
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert",
-          "user_cert"
+          "user_cert",
+          "jwt"
         ],
         "mode": "readonly",
         "openapi": {}
@@ -188,10 +234,7 @@
         "js_module": "endpoints/deploymentspecs.js",
         "js_function": "getDeploymentSpec",
         "forwarding_required": "always",
-        "authn_policies": [
-          "member_cert",
-          "user_cert"
-        ],
+        "authn_policies": [],
         "mode": "readonly",
         "openapi": {}
       }
@@ -206,10 +249,42 @@
         "openapi": {}
       }
     },
-    "/contracts/{contractId}/acceptedDocuments/{documentId}": {
+    "/contracts/{contractId}/oauth/federation/subjects/{subjectName}/cleanroompolicy": {
       "post": {
-        "js_module": "endpoints/documents.js",
-        "js_function": "getAcceptedDocument",
+        "js_module": "endpoints/token.js",
+        "js_function": "setTokenSubjectCleanRoomPolicy",
+        "forwarding_required": "always",
+        "authn_policies": [],
+        "mode": "readwrite",
+        "openapi": {}
+      },
+      "get": {
+        "js_module": "endpoints/token.js",
+        "js_function": "getTokenSubjectCleanRoomPolicy",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/contracts/{contractId}/acceptedMemberDocuments/{documentId}": {
+      "post": {
+        "js_module": "endpoints/memberdocuments.js",
+        "js_function": "getAcceptedMemberDocument",
+        "forwarding_required": "sometimes",
+        "authn_policies": [],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/contracts/{contractId}/acceptedUserDocuments/{documentId}": {
+      "post": {
+        "js_module": "endpoints/userdocuments.js",
+        "js_function": "getAcceptedUserDocument",
         "forwarding_required": "sometimes",
         "authn_policies": [],
         "mode": "readonly",
@@ -250,33 +325,24 @@
         "openapi": {}
       }
     },
-    "/contracts/{contractId}/ca/isEnabled": {
+    "/memberdocuments": {
       "get": {
-        "js_module": "endpoints/ca/info.js",
-        "js_function": "isCAEnabled",
-        "forwarding_required": "always",
-        "authn_policies": [],
-        "mode": "readonly",
-        "openapi": {}
-      }
-    },
-    "/documents": {
-      "get": {
-        "js_module": "endpoints/documents.js",
-        "js_function": "listDocuments",
+        "js_module": "endpoints/memberdocuments.js",
+        "js_function": "listMemberDocuments",
         "forwarding_required": "sometimes",
         "authn_policies": [
           "member_cert",
-          "user_cert"
+          "user_cert",
+          "jwt"
         ],
         "mode": "readonly",
         "openapi": {}
       }
     },
-    "/documents/{documentId}": {
+    "/memberdocuments/{documentId}": {
       "put": {
-        "js_module": "endpoints/documents.js",
-        "js_function": "putDocument",
+        "js_module": "endpoints/memberdocuments.js",
+        "js_function": "putMemberDocument",
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert"
@@ -285,12 +351,133 @@
         "openapi": {}
       },
       "get": {
-        "js_module": "endpoints/documents.js",
-        "js_function": "getDocument",
+        "js_module": "endpoints/memberdocuments.js",
+        "js_function": "getMemberDocument",
         "forwarding_required": "sometimes",
         "authn_policies": [
           "member_cert",
-          "user_cert"
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/users/identities": {
+      "get": {
+        "js_module": "endpoints/useridentities.js",
+        "js_function": "listUserIdentities",
+        "forwarding_required": "sometimes",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/contracts/{contractId}/users/isactive": {
+      "post": {
+        "js_module": "endpoints/useridentities.js",
+        "js_function": "isActiveUser",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/users/identities/{identityId}": {
+      "get": {
+        "js_module": "endpoints/useridentities.js",
+        "js_function": "getUserIdentity",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/users/invitations": {
+      "get": {
+        "js_module": "endpoints/userinvitations.js",
+        "js_function": "listInvitations",
+        "forwarding_required": "sometimes",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/users/invitations/{invitationId}": {
+      "get": {
+        "js_module": "endpoints/userinvitations.js",
+        "js_function": "getInvitation",
+        "forwarding_required": "sometimes",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/users/invitations/{invitationId}/accept": {
+      "post": {
+        "js_module": "endpoints/userinvitations.js",
+        "js_function": "acceptInvitation",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "jwt"
+        ],
+        "mode": "readwrite",
+        "openapi": {}
+      }
+    },
+    "/userdocuments": {
+      "get": {
+        "js_module": "endpoints/userdocuments.js",
+        "js_function": "listUserDocuments",
+        "forwarding_required": "sometimes",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/userdocuments/{documentId}": {
+      "put": {
+        "js_module": "endpoints/userdocuments.js",
+        "js_function": "putUserDocument",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readwrite",
+        "openapi": {}
+      },
+      "get": {
+        "js_module": "endpoints/userdocuments.js",
+        "js_function": "getUserDocument",
+        "forwarding_required": "sometimes",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
         ],
         "mode": "readonly",
         "openapi": {}
@@ -303,9 +490,130 @@
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert",
-          "user_cert"
+          "user_cert",
+          "jwt"
         ],
         "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/contracts/{contractId}/userdocuments/{documentId}/consentcheck/{option}": {
+      "post": {
+        "js_module": "endpoints/userdocumentruntimeoptions.js",
+        "js_function": "consentCheckUserDocumentRuntimeOption",
+        "forwarding_required": "always",
+        "authn_policies": [],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/userdocuments/{documentId}/checkstatus/{option}": {
+      "post": {
+        "js_module": "endpoints/userdocumentruntimeoptions.js",
+        "js_function": "checkUserDocumentRuntimeOptionStatus",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/userdocuments/{documentId}/runtimeoptions/{option}/enable": {
+      "post": {
+        "js_module": "endpoints/userdocumentruntimeoptions.js",
+        "js_function": "enableUserDocumentRuntimeOption",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readwrite",
+        "openapi": {}
+      }
+    },
+    "/userdocuments/{documentId}/runtimeoptions/{option}/disable": {
+      "post": {
+        "js_module": "endpoints/userdocumentruntimeoptions.js",
+        "js_function": "disableUserDocumentRuntimeOption",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readwrite",
+        "openapi": {}
+      }
+    },
+    "/users/proposals/{proposalId}": {
+      "get": {
+        "js_module": "endpoints/userproposals.js",
+        "js_function": "getProposal",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      },
+      "put": {
+        "js_module": "endpoints/userproposals.js",
+        "js_function": "putProposal",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readwrite",
+        "openapi": {}
+      }
+    },
+    "/users/proposals/{proposalId}/status": {
+      "get": {
+        "js_module": "endpoints/userproposals.js",
+        "js_function": "getProposalStatus",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/users/proposals/{proposalId}/withdraw": {
+      "post": {
+        "js_module": "endpoints/userproposals.js",
+        "js_function": "withdrawProposal",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readwrite",
+        "openapi": {}
+      }
+    },
+    "/users/proposals/{proposalId}/ballots/submit": {
+      "post": {
+        "js_module": "endpoints/userproposals.js",
+        "js_function": "submitBallotProposal",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readwrite",
         "openapi": {}
       }
     },
@@ -359,7 +667,9 @@
         "js_function": "getOidcIssuerInfo",
         "forwarding_required": "always",
         "authn_policies": [
-          "member_cert"
+          "member_cert",
+          "user_cert",
+          "jwt"
         ],
         "mode": "readonly",
         "openapi": {}
@@ -372,7 +682,8 @@
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert",
-          "user_cert"
+          "user_cert",
+          "jwt"
         ],
         "mode": "readonly",
         "openapi": {}

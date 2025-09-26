@@ -143,6 +143,7 @@ func (s *encryptorTestSuite) SetupTest() {
 func (s *encryptorTestSuite) TestCreateFile() {
 	name := generateFileName()
 	h, err := s.encryptor.CreateFile(exported.CreateFileOptions{Name: name})
+	s.encryptor.CommitData(exported.CommitDataOptions{Name: name, BlockSize: BlockSize})
 	s.assert.Nil(err)
 	s.assert.NotNil(h)
 	s.assert.Equal(name, h.Path)
@@ -175,6 +176,7 @@ func (s *encryptorTestSuite) TestCreateFileWithParent() {
 	os.Mkdir(mountPath+dir, 0777)
 	name := generateFileName()
 	h, err := s.encryptor.CreateFile(exported.CreateFileOptions{Name: dir + "/" + name})
+	s.encryptor.CommitData(exported.CommitDataOptions{Name: name, BlockSize: BlockSize})
 	s.assert.Nil(err)
 	s.assert.NotNil(h)
 	s.assert.Equal(dir+"/"+name, h.Path)
@@ -189,6 +191,7 @@ func (s *encryptorTestSuite) TestCreateFileWithParent() {
 func (s *encryptorTestSuite) TestGetAttr() {
 	name := generateFileName()
 	h, err := s.encryptor.CreateFile(exported.CreateFileOptions{Name: name, Mode: 0666})
+	s.encryptor.CommitData(exported.CommitDataOptions{Name: name, BlockSize: BlockSize})
 	s.assert.Nil(err)
 	s.assert.NotNil(h)
 	s.assert.Equal(name, h.Path)
@@ -197,7 +200,9 @@ func (s *encryptorTestSuite) TestGetAttr() {
 	data := make([]byte, fileSize)
 	_, err = rand.Read(data)
 	s.assert.Nil(err)
-	err = writeToFile(s.encryptor.handle, data)
+	fileHandle, err := os.OpenFile(mountPath+name, os.O_RDWR, 0666)
+	s.assert.Nil(err)
+	err = writeToFile(fileHandle, data)
 	s.assert.Nil(err)
 	attr, err := s.encryptor.GetAttr(exported.GetAttrOptions{Name: name})
 	s.assert.Nil(err)
@@ -207,6 +212,7 @@ func (s *encryptorTestSuite) TestGetAttr() {
 func (s *encryptorTestSuite) TestReadInbuffer() {
 	name := generateFileName()
 	h, err := s.encryptor.CreateFile(exported.CreateFileOptions{Name: name, Mode: 0666})
+	s.encryptor.CommitData(exported.CommitDataOptions{Name: name, BlockSize: BlockSize})
 	h.Size = 9*MB + 512*KB
 	s.assert.Nil(err)
 	s.assert.NotNil(h)
@@ -217,7 +223,9 @@ func (s *encryptorTestSuite) TestReadInbuffer() {
 	dataWritten := make([]byte, fileSize)
 	_, err = rand.Read(dataWritten)
 	s.assert.Nil(err)
-	err = writeToFile(s.encryptor.handle, dataWritten)
+	fileHandle, err := os.OpenFile(mountPath+name, os.O_RDWR, 0666)
+	s.assert.Nil(err)
+	err = writeToFile(fileHandle, dataWritten)
 	s.assert.Nil(err)
 
 	chunk := make([]byte, 1*MB)
@@ -231,6 +239,7 @@ func (s *encryptorTestSuite) TestReadInbuffer() {
 func (s *encryptorTestSuite) TestStageData() {
 	name := generateFileName()
 	h, err := s.encryptor.CreateFile(exported.CreateFileOptions{Name: name, Mode: 0666})
+	s.encryptor.CommitData(exported.CommitDataOptions{Name: mountPath + name, BlockSize: BlockSize})
 	s.assert.Nil(err)
 	s.assert.NotNil(h)
 
@@ -275,6 +284,20 @@ func (s *encryptorTestSuite) TestStageData() {
 			s.assert.True(bytes.Equal(data[i*BlockSize:(i+1)*BlockSize], decryptedData))
 		}
 	}
+}
+
+func (s *encryptorTestSuite) TestDeleteFile() {
+	name := generateFileName()
+	h, err := s.encryptor.CreateFile(exported.CreateFileOptions{Name: name, Mode: 0666})
+	s.encryptor.CommitData(exported.CommitDataOptions{Name: name, BlockSize: BlockSize})
+	s.assert.Nil(err)
+	s.assert.NotNil(h)
+	s.assert.Equal(name, h.Path)
+	err = s.encryptor.DeleteFile(exported.DeleteFileOptions{Name: name})
+	s.assert.Nil(err)
+	// verify file does not exist
+	_, err = os.Stat(mountPath + name)
+	s.assert.NotNil(err)
 }
 
 func TestEncryptor(t *testing.T) {

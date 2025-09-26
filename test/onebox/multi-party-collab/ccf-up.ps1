@@ -8,8 +8,13 @@ param (
     [string]$repo,
     [string]$tag,
     [switch]$allowAll,
+    [string]$ccfProviderProjectName = "ccf-provider",
     [string]$outDir = ""
 )
+
+# https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
 
 if ($outDir -eq "") {
     $outDir = "$($MyInvocation.PSScriptRoot)/sandbox_common"
@@ -21,7 +26,6 @@ $env:AZCLI_CCF_PROVIDER_CLIENT_IMAGE = "$repo/ccf/ccf-provider-client:$tag"
 $env:AZCLI_CCF_PROVIDER_PROXY_IMAGE = "$repo/ccr-proxy:$tag"
 $env:AZCLI_CCF_PROVIDER_ATTESTATION_IMAGE = "$repo/ccr-attestation:$tag"
 $env:AZCLI_CCF_PROVIDER_SKR_IMAGE = "$repo/skr:$tag"
-$env:AZCLI_CCF_PROVIDER_NGINX_IMAGE = "$repo/ccf/ccf-nginx:$tag"
 $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_VIRTUAL_IMAGE = "$repo/ccf/app/run-js/virtual:$tag"
 $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_SNP_IMAGE = "$repo/ccf/app/run-js/snp:$tag"
 $env:AZCLI_CCF_PROVIDER_RECOVERY_AGENT_IMAGE = "$repo/ccf/ccf-recovery-agent:$tag"
@@ -42,7 +46,27 @@ az cleanroom ccf network up `
     --resource-group $resourceGroup `
     --location $location `
     --security-policy-creation-option $policyOption `
-    --workspace-folder $outDir
+    --workspace-folder $outDir `
+    --provider-client $ccfProviderProjectName
+
+$agentEndpoint = az cleanroom ccf network recovery-agent show `
+    --name $ccfName `
+    --provider-config $outDir/providerConfig.json `
+    --provider-client $ccfProviderProjectName `
+    --query endpoint `
+    --output tsv
+$snpHostData = az cleanroom ccf network show-report `
+    --name $ccfName `
+    --provider-config $outDir/providerConfig.json `
+    --provider-client $ccfProviderProjectName `
+    --query reports[0].hostData `
+    --output tsv
+@"
+{
+  "endpoint": "$agentEndpoint",
+  "snpHostData": "$snpHostData"
+}
+"@ | Out-File $outDir/ccf.recovery-agent.json
 
 # Below is the gov client name that network up command will start.
 $cgsProjectName = $ccfName + "-operator-governance"
@@ -51,5 +75,6 @@ $proposal = (az cleanroom governance member add `
         --identifier $initialMemberName `
         --governance-client $cgsProjectName | ConvertFrom-Json)
 if ($proposal.proposalState -ne "Accepted") {
-    throw "Expecting add member proposal to get Accepted as no other active members should exist at this point. Proposal state is {$($proposal.proposalState)}. proposalId: {$($proposal.proposalId)}"
+    # On re-runs active members could already exist.
+    # Write-Output "Expecting add member proposal to get Accepted as no other active members should exist at this point. Proposal state is {$($proposal.proposalState)}. proposalId: {$($proposal.proposalId)}"
 }

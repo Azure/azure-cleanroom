@@ -25,53 +25,14 @@ function Get-Digest {
     return "sha256:$digest"
 }
 
-function Get-Container-Rego-Policy {
-    [CmdletBinding()]
-    param (
+function Get-Container-Policy-From-Rego {
+    param(
         [Parameter(Mandatory = $true)]
-        [string]$repo,
-
-        [Parameter(Mandatory = $true)]
-        [string]$containerName,
+        [string]$regoFilePath,
 
         [Parameter(Mandatory = $true)]
-        [string]$digest,
-
-        [switch]$debugMode,
-
-        [string]$outDir = ""
+        [string]$containerImage
     )
-
-    if ($outDir -eq "") {
-        $outDir = "."
-    }
-
-    $containerImage = "${repo}/${containerName}@${digest}"
-    $policyJson = Get-Content -Path "$PSScriptRoot/templates/$containerName-policy.json" | ConvertFrom-Json
-    $policyJson.containerImage = $containerImage
-
-    $ccePolicyJson = [ordered]@{
-        version    = "1.0"
-        containers = @($policyJson)
-    }
-
-    # Don't remove -Depth 100 or else @() becomes "" and not empty array [] in the json.
-    $ccePolicyJson | ConvertTo-Json -Depth 100 | Out-File ${outDir}/${containerName}-ccepolicy-input.json
-
-    if ($debugMode) {
-        Write-Host "Generating CCE Policy with --debug-mode parameter"
-        az confcom acipolicygen `
-            -i ${outDir}/${containerName}-ccepolicy-input.json `
-            --debug-mode `
-            --outraw `
-        | Out-File ${outDir}/${containerName}-ccepolicy-input.rego
-    }
-    else {
-        az confcom acipolicygen `
-            -i ${outDir}/${containerName}-ccepolicy-input.json `
-            --outraw `
-        | Out-File ${outDir}/${containerName}-ccepolicy-input.rego
-    }
 
     # extract the value of the 'containers' variable in the rego by doing an opa eval query whose
     # result is in a JSON format and the "bindings" object in the json will have the containers 
@@ -210,7 +171,7 @@ function Get-Container-Rego-Policy {
     }
 
     $result = (docker run `
-            -v ${outDir}/${containerName}-ccepolicy-input.rego:/input.rego `
+            -v ${regoFilePath}:/input.rego `
             --rm `
             $opaImage eval `
             "some i; data.policy.containers[i].id == `"$containerImage`";container := data.policy.containers[i]" -d /input.rego)
@@ -221,4 +182,139 @@ function Get-Container-Rego-Policy {
     }
 
     return $containerPolicy
+}
+
+function Get-Container-Rego-Policy-Json {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$repo,
+
+        [Parameter(Mandatory = $true)]
+        [string]$containerName,
+
+        [Parameter(Mandatory = $true)]
+        [string]$digest,
+
+        [switch]$debugMode,
+
+        [string]$outDir = ""
+    )
+
+    if ($outDir -eq "") {
+        $outDir = "."
+    }
+
+    $containerImage = "${repo}/${containerName}@${digest}"
+    $policyJson = Get-Content -Path "$PSScriptRoot/templates/ccr-policies/$containerName-policy.json" | ConvertFrom-Json
+    $policyJson.containerImage = $containerImage
+
+    $ccePolicyJson = [ordered]@{
+        version    = "1.0"
+        containers = @($policyJson)
+    }
+
+    # Don't remove -Depth 100 or else @() becomes "" and not empty array [] in the json.
+    $ccePolicyJson | ConvertTo-Json -Depth 100 | Out-File ${outDir}/${containerName}-ccepolicy-input.json
+
+    if ($debugMode) {
+        Write-Host "Generating CCE Policy with --debug-mode parameter"
+        az confcom acipolicygen `
+            -i ${outDir}/${containerName}-ccepolicy-input.json `
+            --debug-mode `
+            --outraw `
+        | Out-File ${outDir}/${containerName}-ccepolicy-input.rego
+    }
+    else {
+        az confcom acipolicygen `
+            -i ${outDir}/${containerName}-ccepolicy-input.json `
+            --outraw `
+        | Out-File ${outDir}/${containerName}-ccepolicy-input.rego
+    }
+
+    return Get-Container-Policy-From-Rego `
+        -regoFilePath ${outDir}/${containerName}-ccepolicy-input.rego `
+        -containerImage $containerImage
+}
+
+
+function Get-VN2-Container-Rego-Policy-Json {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$repo,
+
+        [Parameter(Mandatory = $true)]
+        [string]$containerName,
+
+        [Parameter(Mandatory = $true)]
+        [string]$digest,
+
+        [switch]$debugMode,
+
+        [string]$outDir = ""
+    )
+
+    if ($outDir -eq "") {
+        $outDir = "."
+    }
+
+    $containerImage = "${repo}/${containerName}@${digest}"
+    $policyJson = Get-Content -Path "$PSScriptRoot/templates/ccr-policies/vn2/$containerName-virtual-node-policy.json" | ConvertFrom-Json
+    $policyJson.properties.image = $containerImage
+    $ccePolicyJson = [ordered]@{
+        version    = "1.0"
+        scenario   = "vn2"
+        containers = (@($policyJson | ConvertTo-Json -Depth 100 | ConvertFrom-Json))
+    }
+    $ccePolicyJson | ConvertTo-Json -Depth 100 | Out-File ${outDir}/${containerName}-vn2-ccepolicy-input.json
+
+    if ($debugMode) {
+        Write-Host "Generating CCE Policy with --debug-mode parameter"
+        az confcom acipolicygen `
+            -i ${outDir}/${containerName}-vn2-ccepolicy-input.json `
+            --debug-mode `
+            --outraw `
+        | Out-File ${outDir}/${containerName}-vn2-ccepolicy-input.rego
+    }
+    else {
+        az confcom acipolicygen `
+            -i ${outDir}/${containerName}-vn2-ccepolicy-input.json `
+            --outraw `
+        | Out-File ${outDir}/${containerName}-vn2-ccepolicy-input.rego
+    }
+
+    return Get-Container-Policy-From-Rego `
+        -regoFilePath ${outDir}/${containerName}-vn2-ccepolicy-input.rego `
+        -containerImage $containerImage
+}
+
+function Get-SemanticVersionFromTag {
+    param (
+        [string]$tag
+    )
+
+    # Check if the tag is in the format of x.y.z (with optional parts)
+    if ($tag -match '^\d+\.\d+\.\d+') {
+        $parts = $tag.Split('.')
+        $major = $parts[0]
+        $minor = $parts[1]
+        $patch = $parts[2]
+        $extra = ""
+        if ($parts.Count -eq 4) {
+            $extra = "-" + $parts[3]
+        }
+
+        return "$major.$minor.$patch$extra"
+    }
+    
+    # If not a version format, truncate to 8 characters and use as suffix
+    $truncatedTag = $tag
+    if ($tag.Length -gt 8) {
+        $truncatedTag = $tag.Substring(0, 8)
+    }
+    
+    # Return the formatted version. Add a "v" prefix below as $truncatedTag like 0207 gives
+    # error "Version segment starts with 0".
+    return "1.0.42-v$truncatedTag"
 }

@@ -17,6 +17,9 @@ namespace AttestationClient;
 
 public class Attestation
 {
+    private const string AllowAllHostData =
+        "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20";
+
     public static async Task<AttestationReport> GetReportAsync(byte[] reportData)
     {
         var udsEndPoint = new UnixDomainSocketEndPoint("/mnt/uds/sock");
@@ -43,27 +46,27 @@ public class Attestation
         };
     }
 
-    public static async Task<string> GetHostDataAsync()
+    public static bool IsSevSnp()
     {
-        var securityContextDir = Environment.GetEnvironmentVariable("UVM_SECURITY_CONTEXT_DIR");
-        if (string.IsNullOrEmpty(securityContextDir))
-        {
-            throw new Exception("UVM_SECURITY_CONTEXT_DIR is not set.");
-        }
+        return !IsVirtualEnvironment();
+    }
 
-        var securityPolicyFile = Path.Combine(securityContextDir, "security-policy-base64");
-        if (!Path.Exists(securityPolicyFile))
-        {
-            throw new Exception($"{securityPolicyFile} is not present.");
-        }
+    public static bool IsVirtualEnvironment()
+    {
+        return Environment.GetEnvironmentVariable("INSECURE_VIRTUAL_ENVIRONMENT") == "true";
+    }
 
-        using var sha256 = SHA256.Create();
-        var policy = await File.ReadAllTextAsync(securityPolicyFile);
-        var hostData = BitConverter.ToString(
-            sha256.ComputeHash(Convert.FromBase64String(policy)))
-            .Replace("-", string.Empty)
-            .ToLower();
-        return hostData;
+    public static async Task<string> GetHostData()
+    {
+        if (IsSevSnp())
+        {
+            var hostData = await GetHostDataAsync();
+            return hostData;
+        }
+        else
+        {
+            return AllowAllHostData;
+        }
     }
 
     public static async Task<AttestationReportKey>
@@ -200,9 +203,29 @@ public class Attestation
 
     public static byte[] AsReportDataBytes(string publicKey)
     {
-        using var sha256 = SHA256.Create();
-        return sha256.ComputeHash(
-            Encoding.UTF8.GetBytes(Convert.ToBase64String(Encoding.UTF8.GetBytes(publicKey))));
+        return SHA256.HashData(Encoding.UTF8.GetBytes(Convert.ToBase64String(
+            Encoding.UTF8.GetBytes(publicKey))));
+    }
+
+    private static async Task<string> GetHostDataAsync()
+    {
+        var securityContextDir = Environment.GetEnvironmentVariable("UVM_SECURITY_CONTEXT_DIR");
+        if (string.IsNullOrEmpty(securityContextDir))
+        {
+            throw new Exception("UVM_SECURITY_CONTEXT_DIR is not set.");
+        }
+
+        var securityPolicyFile = Path.Combine(securityContextDir, "security-policy-base64");
+        if (!Path.Exists(securityPolicyFile))
+        {
+            throw new Exception($"{securityPolicyFile} is not present.");
+        }
+
+        var policy = await File.ReadAllTextAsync(securityPolicyFile);
+        var hostData = BitConverter.ToString(SHA256.HashData(Convert.FromBase64String(policy)))
+            .Replace("-", string.Empty)
+            .ToLower();
+        return hostData;
     }
 
     private static X509Certificate2 CreateX509Certificate2(ECDsa key, string certName)

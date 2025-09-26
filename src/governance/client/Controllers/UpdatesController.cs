@@ -19,7 +19,7 @@ public class UpdatesController : ClientControllerBase
     [HttpGet("/checkUpdates")]
     public async Task<CheckUpdateResponse> CheckUpdates()
     {
-        var ccfClient = await this.CcfClientManager.GetGovClient();
+        var ccfClient = this.CcfClientManager.GetNoAuthClient();
         using HttpResponseMessage response =
             await ccfClient.GetAsync($"gov/members/proposals" +
             $"?api-version={this.CcfClientManager.GetGovApiVersion()}");

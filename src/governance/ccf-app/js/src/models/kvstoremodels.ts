@@ -24,7 +24,7 @@ export interface ContractTelemetryStatusStoreItem {
   status: string;
 }
 
-export interface AcceptedDocumentStoreItem {
+export interface AcceptedMemberDocumentStoreItem {
   contractId: string;
   data: any;
   proposalId: string;
@@ -33,6 +33,27 @@ export interface AcceptedDocumentStoreItem {
 export interface DocumentStoreItem {
   contractId: string;
   data: any;
+}
+
+export interface UserDocumentRuntimeOptionStatusStoreItem {
+  serializedApproverToStatusMap: string;
+}
+
+export interface AcceptedUserDocumentStoreItem {
+  contractId: string;
+  data: any;
+  proposalId: string;
+  proposerId: string;
+  approvers?: UserProposalApprover[];
+  finalVotes: {
+    approverId: string;
+    ballot: string;
+  }[];
+}
+export interface UserDocumentStoreItem {
+  contractId: string;
+  data: any;
+  approvers?: UserProposalApprover[];
 }
 
 export interface ProposalStoreItem {
@@ -46,6 +67,30 @@ export interface Action {
 
 export interface ProposalInfoItem {
   state: string;
+}
+
+export interface UserProposalStoreItem {
+  actions: UserAction[];
+}
+
+export interface UserAction {
+  name: string;
+  approvers?: UserProposalApprover[];
+  args: any;
+}
+
+export interface UserProposalApprover {
+  approverId: string;
+  approverIdType: string;
+}
+
+export interface UserProposalInfoItem {
+  proposerId: string;
+  state: string;
+  ballots: {
+    approverId: string;
+    ballot: string;
+  }[];
 }
 
 export interface SecretStoreItem {
@@ -66,3 +111,25 @@ export interface DeploymentSpecItem {
 export interface RuntimeOptionStoreItem {
   status: string;
 }
+
+export interface UserIdentityStoreItem {
+  accountType: string;
+  invitationId: string;
+  data: any;
+}
+
+export interface UserInvitationStoreItem {
+  accountType: string;
+}
+
+export interface UserInvitationInfoStoreItem {
+  status: string;
+  userInfo: {
+    userId: string;
+    data: {
+      tenantId?: string;
+    };
+  };
+}
+
+export interface AcceptedUserInvitationStoreItem {}

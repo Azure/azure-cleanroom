@@ -1,6 +1,6 @@
 [submodule "external/azure-storage-fuse"]
 	path = external/azure-storage-fuse
 	url = https://github.com/Azure/azure-storage-fuse.git
-[submodule "external/confidential-sidecar-containers"]
-	path = external/confidential-sidecar-containers
-	url = https://github.com/microsoft/confidential-sidecar-containers
+[submodule "external/virtualnodesOnAzureContainerInstances"]
+	path = external/virtualnodesOnAzureContainerInstances
+	url = https://github.com/microsoft/virtualnodesOnAzureContainerInstances

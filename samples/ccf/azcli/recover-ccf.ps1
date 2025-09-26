@@ -28,11 +28,7 @@ param
     $recoveryServiceName = "",
 
     [string]
-    $recoveryMemberName = "",
-
-    [string]$repo = "localhost:5000",
-
-    [string]$tag = "latest"
+    $recoveryMemberName = ""
 )
 
 #https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
@@ -249,11 +245,12 @@ else {
 }
 
 # Deploy the governance client for the operator to take any gov actions.
+$setup = Get-Content $sandbox_common/setup.json | ConvertFrom-Json
+$repo = $setup.repo
+$tag = $setup.tag
 if ($repo -ne "") {
-    $server = $repo
-    $localTag = $tag
-    $env:AZCLI_CGS_CLIENT_IMAGE = "$server/cgs-client:$localTag"
-    $env:AZCLI_CGS_UI_IMAGE = "$server/cgs-ui:$localTag"
+    $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$tag"
+    $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$tag"
 }
 else {
     $env:AZCLI_CGS_CLIENT_IMAGE = ""
@@ -268,10 +265,25 @@ if (Test-Path $sandbox_common/${operatorName}_cert.id) {
         --name $cgsProjectName
 }
 else {
-    az cleanroom governance client deploy `
-        --ccf-endpoint $ccfEndpoint `
-        --signing-key $sandbox_common/${operatorName}_privk.pem `
-        --signing-cert $sandbox_common/${operatorName}_cert.pem `
-        --service-cert $sandbox_common/service_cert.pem `
-        --name $cgsProjectName
+    $useServiceCertDiscovery = $setup.useServiceCertDiscovery
+    if ($useServiceCertDiscovery) {
+        Write-Output "As use service cert discovery is enabled not restarting cgs client as new service cert should get picked up automatically."
+        # Making any call to CGS client to confirm it picks up the new service cert and is successful.
+        az cleanroom governance member show --governance-client $cgsProjectName 1>$null
+        $settings = (az cleanroom governance client show --name $cgsProjectName | ConvertFrom-Json)
+        $discoveredCert = $settings.serviceCert.TrimEnd("`n")
+        if ($discoveredCert -ne $serviceCertStr) {
+            Write-Output "Service cert from discovery endpoint:`n$discoveredCert"
+            Write-Output "Service cert after recovery from /node/network:`n$serviceCertStr"
+            throw "Service cert mismatch between discovery endpoint and /node/network."
+        }
+    }
+    else {
+        az cleanroom governance client deploy `
+            --ccf-endpoint $ccfEndpoint `
+            --signing-key $sandbox_common/${operatorName}_privk.pem `
+            --signing-cert $sandbox_common/${operatorName}_cert.pem `
+            --service-cert $sandbox_common/service_cert.pem `
+            --name $cgsProjectName
+    }
 }

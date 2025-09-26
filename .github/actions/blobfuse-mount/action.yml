@@ -1,0 +1,45 @@
+name: "Blobfuse Mount"
+description: To mount blobfuse2 and perform pre-mount cleanup.
+
+inputs:
+  mount_dir:
+    description: 'Mount directory'
+    required: true
+  temp_dir:
+    description: 'Temporary directory'
+    required: true
+  mountStep:
+    description: 'Step to mount the container'
+    required: true
+  ro_mount:
+    description: 'Read-only mount'
+    required: false
+    default: 'false'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Create mount and temp directory
+      shell: bash
+      run: |
+        mkdir -p ${{ inputs.mount_dir }}
+        mkdir -p ${{ inputs.temp_dir }}
+
+    - name: Cleanup before mount
+      uses: ./.github/actions/blobfuse-cleanup
+      with:
+        mount_dir: ${{ inputs.mount_dir }}
+        temp_dir: ${{ inputs.temp_dir }}
+
+    - name: Mount the container
+      shell: bash
+      run: |
+        ${{ inputs.mountStep }}
+
+    - name: Waiting for mount
+      shell: bash
+      run: sleep 10s
+
+    - name: Print Process info
+      shell: bash
+      run: sudo ps -aux | grep blobfuse2

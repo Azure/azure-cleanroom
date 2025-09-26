@@ -16,6 +16,9 @@ $root = git rev-parse --show-toplevel
 
 . $root/build/helpers.ps1
 
+Write-Output "Versions pre upgrade:"
+az cleanroom governance service version --governance-client $projectName
+
 $versions = (az cleanroom governance service version --governance-client $projectName) | ConvertFrom-Json
 if ($versions.constitution.version -cne $version) {
     $x = $versions.constitution.version
@@ -39,6 +42,7 @@ if ($upgrades.upgrades.Count -ne 0) {
     exit 1
 }
 
+Write-Output "Upgrading constitution"
 az cleanroom governance service upgrade-constitution `
     --constitution-url "${repo}/cgs-constitution:$version" `
     --governance-client $projectName
@@ -54,6 +58,7 @@ az cleanroom governance proposal vote `
     --action accept `
     --governance-client $projectName
 
+Write-Output "Upgrading jsapp"
 az cleanroom governance service upgrade-js-app `
     --js-app-url "${repo}/cgs-js-app:$version" `
     --governance-client $projectName
@@ -68,3 +73,6 @@ az cleanroom governance proposal vote `
     --proposal-id $proposalId `
     --action accept `
     --governance-client $projectName
+
+Write-Output "Versions post upgrade:"
+az cleanroom governance service version --governance-client $projectName

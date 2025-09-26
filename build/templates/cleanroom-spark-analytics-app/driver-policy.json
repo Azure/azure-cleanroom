@@ -1,0 +1,82 @@
+{
+  "name": "spark-kubernetes-driver",
+  "properties": {
+    "image": "$containerRegistryUrl/workloads/cleanroom-spark-analytics-app@$digest",
+    "command": [
+      "python3",
+      "/app/src/spark_launcher.py",
+      "driver",
+      "--properties-file",
+      "/opt/spark/conf/spark.properties",
+      "--class",
+      "org.apache.spark.deploy.PythonRunner",
+      "local:///app/src/run_query.py"
+    ],
+    "environmentVariables": [
+      {
+        "name": "SPARK_USER",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "SPARK_APPLICATION_ID",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "SPARK_DRIVER_BIND_ADDRESS",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "SPARK_LOCAL_DIRS",
+        "value": "/var/data/spark-local-dir"
+      },
+      {
+        "name": "SPARK_CONF_DIR",
+        "value": "/opt/spark/conf"
+      }
+    ],
+    "volumeMounts": [
+      {
+        "name": "spark-local-dir-1",
+        "mountPath": "/var/data/spark-local-dir",
+        "mountType": "emptyDir",
+        "readOnly": false
+      },
+      {
+        "name": "spark-conf-volume-driver",
+        "mountPath": "/opt/spark/conf",
+        "mountType": "emptyDir",
+        "readOnly": true
+      },
+      {
+        "name": "remotemounts",
+        "mountPath": "/mnt/remote",
+        "mountType": "emptyDir",
+        "readOnly": true
+      },
+      {
+        "name": "telemetrymounts",
+        "mountPath": "/mnt/telemetry",
+        "mountType": "emptyDir",
+        "readOnly": false
+      },
+      {
+        "name": "volumestatusmounts",
+        "mountPath": "/mnt/volumestatus",
+        "mountType": "emptyDir",
+        "readOnly": false
+      },
+      {
+        "name": "uds",
+        "mountPath": "/mnt/uds",
+        "mountType": "emptyDir",
+        "readOnly": false
+      }
+    ],
+    "securityContext": {
+      "privileged": "true"
+    }
+  }
+}

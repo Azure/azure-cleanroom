@@ -51,32 +51,12 @@ runs:
     shell: pwsh
     run: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
 
-  - uses: actions/upload-artifact@v4
+  - name: Upload generated
+    uses: actions/upload-artifact@v4
     with:
-      name: results-encrypted-storage
-      path: ./test/onebox/multi-party-collab/encrypted-storage/generated/results-decrypted
+      name: generated-encrypted-storage
+      path: ./test/onebox/multi-party-collab/encrypted-storage/generated
       overwrite: true
-    if: ${{ !cancelled() }}
-
-  - uses: actions/upload-artifact@v4
-    with:
-        name: configurations-encrypted-storage
-        path: ./test/onebox/multi-party-collab/encrypted-storage/generated/configurations
-        overwrite: true
-    if: ${{ !cancelled() }}
-
-  - uses: actions/upload-artifact@v4
-    with:
-        name: deployments-encrypted-storage
-        path: ./test/onebox/multi-party-collab/encrypted-storage/generated/deployments
-        overwrite: true
-    if: ${{ !cancelled() }}
-
-  - uses: actions/upload-artifact@v4
-    with:
-        name: ccf-encrypted-storage
-        path: ./test/onebox/multi-party-collab/encrypted-storage/generated/ccf
-        overwrite: true
     if: ${{ !cancelled() }}
 
   - name: Delete resource groups

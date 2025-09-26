@@ -17,17 +17,21 @@ public class ApiStartup
 {
     private readonly ILoggerFactory loggerFactory;
 
-    public ApiStartup(IConfiguration config, string name)
+    public ApiStartup(IConfiguration config, string name, Action<ILoggingBuilder>? configure = null)
     {
         this.loggerFactory = LoggerFactory.Create(builder =>
         {
             builder.ClearProviders();
+            builder.AddConfiguration(config.GetSection("Logging"));
             builder.AddSimpleConsole(options =>
             {
-                options.IncludeScopes = true;
+                options.IncludeScopes = false;
                 options.TimestampFormat = "yyyy-MM-ddThh:mm:ssZ ";
                 options.UseUtcTimestamp = true;
+                options.SingleLine = true;
             });
+
+            configure?.Invoke(builder);
         });
         this.Logger = this.loggerFactory.CreateLogger(name);
         this.Configuration = config;
@@ -45,6 +49,7 @@ public class ApiStartup
             options.Filters.Add<HttpRequestWithStatusExceptionFilter>();
         });
         services.AddSwaggerGen();
+        services.AddSingleton(this.loggerFactory);
         services.AddSingleton(this.Logger);
         this.OnConfigureServices(services);
     }
@@ -68,5 +73,9 @@ public class ApiStartup
         app.UseAuthorization();
 
         app.MapControllers();
+    }
+
+    public virtual void OnConfigure(WebApplication app, IWebHostEnvironment env)
+    {
     }
 }

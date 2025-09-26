@@ -34,19 +34,12 @@ runs:
       with:
         name: ccr-attestation
         tag: ${{ inputs.tag }}
-        dockerfile: external/confidential-sidecar-containers/docker/attestation-container/Dockerfile
-        context: ${{ github.workspace }}/external/confidential-sidecar-containers
+        dockerfile: build/docker/Dockerfile.ccr-attestation
+        context: ${{ github.workspace }}
 
     - uses: ./.github/actions/build-container-and-artefacts
       with:
         name: ccf-recovery-agent
         tag: ${{ inputs.tag }}
         dockerfile: build/docker/Dockerfile.ccf-recovery-agent
-        context: ${{ github.workspace }}
-
-    - uses: ./.github/actions/build-container-and-artefacts
-      with:
-        name: ccf-nginx
-        tag: ${{ inputs.tag }}
-        dockerfile: build/docker/Dockerfile.ccf-nginx
         context: ${{ github.workspace }}

@@ -1,0 +1,27 @@
+FROM cleanroombuild.azurecr.io/mirror/docker/library/spark:3.5.5
+
+# Set the working directory in the container
+WORKDIR /app
+
+COPY src/workloads/analytics/requirements.txt .
+
+USER root
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+# The spark uid is mentioned in the spark image. Set it back as the current user.
+USER ${spark_uid}
+
+COPY src/workloads/analytics/src src
+
+# Set PYTHONUNBUFFERED to ensure that Python output is sent straight to the terminal without buffering.
+# Otherwise, the output may be buffered and not appear immediately.
+ENV PYTHONUNBUFFERED=1
+
+# Need to add this environment variable so the relative imports in the Python code work correctly.
+ENV PYTHONPATH="${PYTHONPATH}:/app/src"
+
+# We will override the entrypoint of the spark image with our own script.
+# This script will wait for all the mount points to be available and then call the original
+# entrypoint script with the original arguments.
+ENTRYPOINT ["python3" , "/app/src/spark_launcher.py"]

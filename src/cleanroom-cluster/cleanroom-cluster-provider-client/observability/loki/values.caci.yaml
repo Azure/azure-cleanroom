@@ -1,0 +1,8 @@
+singleBinary:
+  persistence:
+    storageClass: azureblob-nfs-premium
+    size: 10Pi
+
+loki:
+  serviceLabels:
+    service: external-dns

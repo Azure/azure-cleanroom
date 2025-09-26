@@ -66,31 +66,11 @@ runs:
       if: ${{ !cancelled() }}
       run: kubectl logs -l app=ccr-client-proxy --tail=-1 --all-containers --ignore-errors --prefix
 
-    - uses: actions/upload-artifact@v4
+    - name: Upload generated
+      uses: actions/upload-artifact@v4
       with:
-          name: results-encrypted-storage-cleanroom-client
-          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated/results
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - uses: actions/upload-artifact@v4
-      with:
-          name: configurations-encrypted-storage-cleanroom-client
-          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated/configurations
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - uses: actions/upload-artifact@v4
-      with:
-          name: deployments-encrypted-storage-cleanroom-client
-          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated/deployments
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - uses: actions/upload-artifact@v4
-      with:
-          name: ccf-encrypted-storage-cleanroom-client
-          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated/ccf
+          name: generated-encrypted-storage-cleanroom-client
+          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated
           overwrite: true
       if: ${{ !cancelled() }}
 

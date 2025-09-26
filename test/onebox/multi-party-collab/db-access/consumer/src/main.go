@@ -144,7 +144,7 @@ func GetDbConfig() (*DbConfig, error) {
 
 	req, err := http.NewRequest("POST", uri, nil)
 	if err != nil {
-		return nil, errors.Wrapf(err, "MewRequest creation failed")
+		return nil, errors.Wrapf(err, "NewRequest creation failed")
 	}
 
 	client := &http.Client{}
@@ -231,15 +231,14 @@ func GetDbPassword(passwordConfig *WrappedSecretConfig) (string, error) {
 }
 
 func httpResponseBody(httpResponse *http.Response) ([]byte, error) {
-	if httpResponse.StatusCode != 200 {
-		return nil, errors.Errorf("HTTP response status equal to %s", httpResponse.Status)
-	}
-
-	// Pull out response body
 	defer httpResponse.Body.Close()
 	httpResponseBodyBytes, err := io.ReadAll(httpResponse.Body)
 	if err != nil {
 		return nil, errors.Wrapf(err, "reading HTTP response body failed")
+	}
+
+	if httpResponse.StatusCode != 200 {
+		return nil, errors.Errorf("code: %d, body: %s", httpResponse.StatusCode, string(httpResponseBodyBytes))
 	}
 
 	return httpResponseBodyBytes, nil

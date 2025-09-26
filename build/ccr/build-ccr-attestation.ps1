@@ -21,10 +21,8 @@ else {
 }
 
 $root = git rev-parse --show-toplevel
-$external = Join-Path $root -ChildPath "/external"
-git submodule update --init --recursive $external/confidential-sidecar-containers
 
-docker build -t $imageName -f $external/confidential-sidecar-containers/docker/attestation-container/Dockerfile $external/confidential-sidecar-containers
+docker build -t $imageName -f $PSScriptRoot/../docker/Dockerfile.ccr-attestation $root
 if ($push) {
   docker push $imageName
 }

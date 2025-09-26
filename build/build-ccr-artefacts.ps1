@@ -24,6 +24,6 @@ $buildRoot = "$root/build"
 $index = 0
 foreach ($artefact in $ccrArtefacts) {
     Write-Host -ForegroundColor DarkGreen "Building $artefact container ($($index++)/$($ccrArtefacts.Count))"
-    pwsh $buildRoot/ccr/build-$artefact.ps1 -tag $tag -repo $repo -push:$push
+    pwsh $buildRoot/ccr/build-$artefact.ps1 -tag $tag -repo $repo -push:$push -outputPath $outputPath
     Write-Host -ForegroundColor DarkGray "================================================================="
 }

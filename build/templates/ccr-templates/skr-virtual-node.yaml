@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: skr-sidecar
+    image: $containerRegistryUrl/skr@$digest
+    command:
+    - /skr.sh
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+    env:
+    - name: SkrSideCarArgs
+      value: ewogICAiY2VydGNhY2hlIjogewogICAgICAiZW5kcG9pbnQiOiAiYW1lcmljYXMuYWNjY2FjaGUuYXp1cmUubmV0IiwKICAgICAgInRlZV90eXBlIjogIlNldlNucFZNIiwKICAgICAgImFwaV92ZXJzaW9uIjogImFwaS12ZXJzaW9uPTIwMjAtMTAtMTUtcHJldmlldyIKICAgfQp9
+    - name: Port
+      value: "8284"
+    - name: LogFile
+      value: skr.json
+    - name: LogLevel
+      value: Info
+    - name: TELEMETRY_MOUNT_PATH
+      value: $telemetryMountPath
+

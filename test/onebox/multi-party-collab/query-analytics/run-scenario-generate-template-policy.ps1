@@ -12,6 +12,9 @@ param
     $ccfOutDir = "",
 
     [string]
+    $datastoreOutdir = "",
+
+    [string]
     $contractId = "collab1",
 
     [ValidateSet('mcr', 'local', 'acr')]
@@ -32,12 +35,13 @@ $PSNativeCommandUseErrorActionPreference = $true
 # This script assumes a CCF instance was deployed in docker with the initial member that acts as the
 # consumer for the multi-party collab sample.
 $root = git rev-parse --show-toplevel
-$collabSamplePath = "$root/samples/multi-party-collab"
-$consumerDataSamplePath = "$root/samples/multi-party-collab/scenarios/analytics/consumer-demo/consumer-input"
-$publisherDataSamplePath = "$root/samples/multi-party-collab/scenarios/analytics/publisher-demo/publisher-input"
 
 if ($ccfOutDir -eq "") {
-    $ccfOutDir = "$root/test/onebox/multi-party-collab/query-analytics/generated/ccf"
+    $ccfOutDir = "$outDir/ccf"
+}
+
+if ($datastoreOutdir -eq "") {
+    $datastoreOutdir = "$outDir/datastores"
 }
 
 $serviceCert = $ccfOutDir + "/service_cert.pem"
@@ -46,6 +50,24 @@ if (-not (Test-Path -Path $serviceCert)) {
 }
 
 mkdir -p "$outDir/configurations"
+$consumerDataSamplePath = "$root/samples/multi-party-collab/scenarios/analytics/consumer-demo/consumer-input"
+$publisherDataSamplePath = "$root/samples/multi-party-collab/scenarios/analytics/publisher-demo/publisher-input"
+mkdir -p $consumerDataSamplePath
+mkdir -p $publisherDataSamplePath
+
+# Generate data
+$src = "https://github.com/Azure-Samples/Synapse/raw/refs/heads/main/Data/Tweets"
+$consumerHandles = ("BrigitMurtaughTweets", "FranmerMSTweets", "JeremyLiknessTweets")
+$producerHandles = ("RahulPotharajuTweets", "MikeDoesBigDataTweets", "SQLCindyTweets")
+
+foreach ($handle in $consumerHandles) {
+    curl -L "$src/$handle.csv" -o "$consumerDataSamplePath/$handle.csv"
+}
+
+foreach ($handle in $producerHandles) {
+    curl -L "$src/$handle.csv" -o "$publisherDataSamplePath/$handle.csv"
+}
+
 $publisherConfig = "$outDir/configurations/publisher-config"
 $consumerConfig = "$outDir/configurations/consumer-config"
 $datastoreOutdir = "$outDir/datastores"
@@ -57,6 +79,13 @@ mkdir -p "$datastoreOutdir/keys"
 $publisherKeyStore = "$datastoreOutdir/keys/analytics-publisher-datastore-config-publisher-keys"
 $consumerKeyStore = "$datastoreOutdir/keys/analytics-publisher-datastore-config-consumer-keys"
 
+mkdir -p "$datastoreOutdir/secrets"
+$publisherSecretStoreConfig = "$datastoreOutdir/secrets/analytics-publisher-secretstore-config"
+$consumerSecretStoreConfig = "$datastoreOutdir/secrets/analytics-consumer-secretstore-config"
+
+$publisherLocalSecretStore = "$datastoreOutdir/secrets/analytics-publisher-secretstore-local"
+$consumerLocalSecretStore = "$datastoreOutdir/secrets/analytics-consumer-secretstore-local"
+
 $resourceGroupTags = ""
 if ($env:GITHUB_ACTIONS -eq "true") {
     $publisherResourceGroup = "cl-ob-publisher-${env:JOB_ID}-${env:RUN_ID}"
@@ -64,8 +93,9 @@ if ($env:GITHUB_ACTIONS -eq "true") {
     $resourceGroupTags = "github_actions=multi-party-collab-${env:JOB_ID}-${env:RUN_ID}"
 }
 else {
-    $publisherResourceGroup = "cl-ob-publisher-${env:USER}"
-    $consumerResourceGroup = "cl-ob-consumer-${env:USER}"
+    $user = $env:CODESPACES -eq "true" ? $env:GITHUB_USER : $env:USER
+    $publisherResourceGroup = "cl-ob-publisher-${user}"
+    $consumerResourceGroup = "cl-ob-consumer-${user}"
 }
 
 # Set tenant Id as a part of the consumer's member data.
@@ -157,19 +187,33 @@ if ($recoveryThreshold -ne $newThreshold) {
 }
 
 # Create storage account, KV and MI resources.
-pwsh $collabSamplePath/prepare-resources.ps1 `
+pwsh $PSScriptRoot/../prepare-resources.ps1 `
     -resourceGroup $publisherResourceGroup `
     -resourceGroupTags $resourceGroupTags `
     -kvType akvpremium `
     -outDir $outDir
+
 $result = Get-Content "$outDir/$publisherResourceGroup/resources.generated.json" | ConvertFrom-Json
+
+az cleanroom secretstore add `
+    --name publisher-local-store `
+    --config $publisherSecretStoreConfig `
+    --backingstore-type Local_File `
+    --backingstore-path $publisherLocalSecretStore
+
+# Create a datasource entry.
 az cleanroom datastore add `
     --name publisher-input `
     --config $publisherDatastoreConfig `
-    --keystore $publisherKeyStore `
+    --secretstore publisher-local-store `
+    --secretstore-config $publisherSecretStoreConfig `
     --encryption-mode CPK `
     --backingstore-type Azure_BlobStorage `
     --backingstore-id $result.sa.id
+
+pwsh $root/test/onebox/multi-party-collab/wait-for-container-access.ps1 `
+    --containerName publisher-input `
+    --storageAccountId $result.sa.id
 
 # Encrypt and upload content.
 az cleanroom datastore upload `
@@ -177,14 +221,22 @@ az cleanroom datastore upload `
     --config $publisherDatastoreConfig `
     --src $publisherDataSamplePath
 
+# Add DEK and KEK secret stores.
+az cleanroom secretstore add `
+    --name publisher-dek-store `
+    --config $publisherSecretStoreConfig `
+    --backingstore-type Azure_KeyVault `
+    --backingstore-id $result.dek.kv.id
+
+az cleanroom secretstore add `
+    --name publisher-kek-store `
+    --config $publisherSecretStoreConfig `
+    --backingstore-type Azure_KeyVault_Managed_HSM `
+    --backingstore-id $result.kek.kv.id `
+    --attestation-endpoint $result.maa_endpoint
+
 # Build the cleanroom config for the publisher.
 az cleanroom config init --cleanroom-config $publisherConfig
-
-# Create a KEK entry in the configuration.
-az cleanroom config set-kek `
-    --kek-key-vault $result.kek.kv.id `
-    --maa-url $result.maa_endpoint `
-    --cleanroom-config $publisherConfig
 
 $identity = $(az resource show --ids $result.mi.id --query "properties") | ConvertFrom-Json
 
@@ -196,13 +248,19 @@ az cleanroom config add-identity az-federated `
     --tenant-id $identity.tenantId `
     --backing-identity cleanroom_cgs_oidc
 
+$kekName = $($($(New-Guid).Guid) -replace '-').ToLower()
+Write-Host "Using KEK name {$kekName} for publisher"
+
 # Create a datasource entry in the configuration.
 az cleanroom config add-datasource `
     --cleanroom-config $publisherConfig `
     --datastore-name publisher-input `
     --datastore-config $publisherDatastoreConfig `
+    --secretstore-config $publisherSecretStoreConfig `
+    --dek-secret-store publisher-dek-store `
+    --kek-secret-store publisher-kek-store `
     --identity publisher-identity `
-    --key-vault $result.dek.kv.id
+    --kek-name $kekName
 
 $containerSuffix = $($($(New-Guid).Guid) -replace '-').ToLower()
 Write-Host "Using container suffix {$containerSuffix} for application-telemetry"
@@ -212,11 +270,14 @@ az cleanroom config set-logging `
     --cleanroom-config $publisherConfig `
     --storage-account $result.sa.id `
     --identity publisher-identity `
-    --key-vault $result.dek.kv.id `
     --datastore-config $publisherDatastoreConfig `
-    --datastore-keystore $publisherKeyStore `
+    --secretstore-config $publisherSecretStoreConfig `
+    --datastore-secret-store publisher-local-store `
+    --dek-secret-store publisher-dek-store `
+    --kek-secret-store publisher-kek-store `
     --encryption-mode CPK `
-    --container-suffix $containerSuffix
+    --container-suffix $containerSuffix `
+    --kek-name $kekName
 
 $containerSuffix = $($($(New-Guid).Guid) -replace '-').ToLower()
 Write-Host "Using container suffix {$containerSuffix} for infrastructure-telemetry"
@@ -224,48 +285,73 @@ az cleanroom config set-telemetry `
     --cleanroom-config $publisherConfig `
     --storage-account $result.sa.id `
     --identity publisher-identity `
-    --key-vault $result.dek.kv.id `
     --datastore-config $publisherDatastoreConfig `
-    --datastore-keystore $publisherKeyStore `
+    --secretstore-config $publisherSecretStoreConfig `
+    --datastore-secret-store publisher-local-store `
+    --dek-secret-store publisher-dek-store `
+    --kek-secret-store publisher-kek-store `
     --encryption-mode CPK `
-    --container-suffix $containerSuffix
+    --container-suffix $containerSuffix `
+    --kek-name $kekName
 
 # Create storage account, KV and MI resources.
-pwsh $collabSamplePath/prepare-resources.ps1 `
+pwsh $PSScriptRoot/../prepare-resources.ps1 `
     -resourceGroup $consumerResourceGroup `
     -resourceGroupTags $resourceGroupTags `
     -kvType akvpremium `
     -outDir $outDir
 $result = Get-Content "$outDir/$consumerResourceGroup/resources.generated.json" | ConvertFrom-Json
 
-$containerName = $($($(New-Guid).Guid) -replace '-').ToLower()
-Write-Host "Using container name {$containerName} for datastore {consumer-input}"
+az cleanroom secretstore add `
+    --name consumer-local-store `
+    --config $consumerSecretStoreConfig `
+    --backingstore-type Local_File `
+    --backingstore-path $consumerLocalSecretStore
+
 # Create a datasource entry.
 az cleanroom datastore add `
     --name consumer-input `
     --config $consumerDatastoreConfig `
-    --keystore $consumerKeyStore `
-    --encryption-mode CPK `
-    --backingstore-type Azure_BlobStorage `
-    --backingstore-id $result.sa.id `
-    --container-name $containerName
-
-az cleanroom datastore add `
-    --name consumer-output `
-    --config $consumerDatastoreConfig `
-    --keystore $consumerKeyStore `
+    --secretstore consumer-local-store `
+    --secretstore-config $consumerSecretStoreConfig `
     --encryption-mode CPK `
     --backingstore-type Azure_BlobStorage `
     --backingstore-id $result.sa.id
 
+pwsh $root/test/onebox/multi-party-collab/wait-for-container-access.ps1 `
+    --containerName consumer-input `
+    --storageAccountId $result.sa.id
+
+az cleanroom datastore upload `
+    --name consumer-input `
+    --config $consumerDatastoreConfig `
+    --src $consumerDataSamplePath
+
+az cleanroom datastore add `
+    --name consumer-output `
+    --config $consumerDatastoreConfig `
+    --secretstore consumer-local-store `
+    --secretstore-config $consumerSecretStoreConfig `
+    --encryption-mode CPK `
+    --backingstore-type Azure_BlobStorage `
+    --backingstore-id $result.sa.id
+
+# Add DEK and KEK secret stores.
+az cleanroom secretstore add `
+    --name consumer-dek-store `
+    --config $consumerSecretStoreConfig `
+    --backingstore-type Azure_KeyVault `
+    --backingstore-id $result.dek.kv.id
+
+az cleanroom secretstore add `
+    --name consumer-kek-store `
+    --config $consumerSecretStoreConfig `
+    --backingstore-type Azure_KeyVault_Managed_HSM `
+    --backingstore-id $result.kek.kv.id `
+    --attestation-endpoint $result.maa_endpoint
+
 # Build the cleanroom config for the publisher.
 az cleanroom config init --cleanroom-config $consumerConfig
-
-# Create a KEK entry in the configuration.
-az cleanroom config set-kek `
-    --kek-key-vault $result.kek.kv.id `
-    --maa-url $result.maa_endpoint `
-    --cleanroom-config $consumerConfig
 
 $identity = $(az resource show --ids $result.mi.id --query "properties") | ConvertFrom-Json
 
@@ -277,43 +363,50 @@ az cleanroom config add-identity az-federated `
     --tenant-id $identity.tenantId `
     --backing-identity cleanroom_cgs_oidc
 
-az cleanroom datastore upload `
-    --name consumer-input `
-    --config $consumerDatastoreConfig `
-    --src $consumerDataSamplePath
+$kekName = $($($(New-Guid).Guid) -replace '-').ToLower()
+Write-Host "Using KEK name {$kekName} for consumer"
 
 # Create a datasource entry in the configuration.
 az cleanroom config add-datasource `
     --cleanroom-config $consumerConfig `
     --datastore-name consumer-input `
     --datastore-config $consumerDatastoreConfig `
+    --secretstore-config $consumerSecretStoreConfig `
+    --dek-secret-store consumer-dek-store `
+    --kek-secret-store consumer-kek-store `
     --identity consumer-identity `
-    --key-vault $result.dek.kv.id
+    --kek-name $kekName
 
 # Create a datasink entry in the configuration.
 az cleanroom config add-datasink `
     --cleanroom-config $consumerConfig `
     --datastore-name consumer-output `
     --datastore-config $consumerDatastoreConfig `
+    --secretstore-config $consumerSecretStoreConfig `
+    --dek-secret-store consumer-dek-store `
+    --kek-secret-store consumer-kek-store `
     --identity consumer-identity `
-    --key-vault $result.dek.kv.id
+    --kek-name $kekName
 
+pwsh $PSScriptRoot/build-application.ps1 -tag $tag -repo $repo -push
 az cleanroom config add-application `
     --cleanroom-config $consumerConfig `
     --name demo-app `
-    --image "cleanroomsamples.azurecr.io/azure-cleanroom-samples/demos/analytics@sha256:260becd228b930c4bbaca348b1c226a563f58af7d97c67a963db6a1bf4a48212" `
-    --command "python3.10 ./analytics.py" `
+    --image "$repo/analytics:$tag" `
+    --command "python ./analytics.py" `
     --datasources "publisher-input=/mnt/remote/publisher-input" `
     "consumer-input=/mnt/remote/consumer-input" `
     --env-vars STORAGE_PATH_1=/mnt/remote/publisher-input `
     STORAGE_PATH_2=/mnt/remote/consumer-input `
     --cpu 0.5 `
-    --memory 4
+    --memory 4 `
+    --port 8310 `
+    --auto-start
 
-az cleanroom config add-application-endpoint `
+# Note: This will allow all incoming connections to the application.
+az cleanroom config network http enable `
     --cleanroom-config $consumerConfig `
-    --application-name demo-app `
-    --port 8310
+    --direction inbound
 
 # Generate the cleanroom config which contains all the datasources, sinks and applications that are
 # configured by both the producer and consumer.
@@ -417,8 +510,13 @@ az cleanroom governance contract runtime-option propose `
     --contract-id $contractId `
     --governance-client "ob-consumer-client"
 
+Write-Output "Enabling CA..."
+az cleanroom governance ca propose-enable `
+    --contract-id $contractId `
+    --governance-client "ob-consumer-client"
+
 $clientName = "ob-publisher-client"
-pwsh $collabSamplePath/verify-deployment-proposals.ps1 `
+pwsh $PSScriptRoot/../verify-deployment-proposals.ps1 `
     -cleanroomConfig $publisherConfig `
     -governanceClient $clientName
 
@@ -472,8 +570,20 @@ az cleanroom governance proposal vote `
     --action accept `
     --governance-client $clientName
 
+# Vote on the proposed CA enable.
+$proposalId = az cleanroom governance ca show `
+    --contract-id $contractId `
+    --governance-client $clientName `
+    --query "proposalIds[0]" `
+    --output tsv
+
+az cleanroom governance proposal vote `
+    --proposal-id $proposalId `
+    --action accept `
+    --governance-client $clientName
+
 $clientName = "ob-consumer-client"
-pwsh $collabSamplePath/verify-deployment-proposals.ps1 `
+pwsh $PSScriptRoot/../verify-deployment-proposals.ps1 `
     -cleanroomConfig $consumerConfig `
     -governanceClient $clientName
 
@@ -527,18 +637,47 @@ az cleanroom governance proposal vote `
     --action accept `
     --governance-client $clientName
 
+# Vote on the proposed CA enable.
+$proposalId = az cleanroom governance ca show `
+    --contract-id $contractId `
+    --governance-client $clientName `
+    --query "proposalIds[0]" `
+    --output tsv
+
+az cleanroom governance proposal vote `
+    --proposal-id $proposalId `
+    --action accept `
+    --governance-client $clientName
+
+az cleanroom governance ca generate-key `
+    --contract-id $contractId `
+    --governance-client $clientName
+
+az cleanroom governance ca show `
+    --contract-id $contractId `
+    --governance-client $clientName `
+    --query "caCert" `
+    --output tsv > $outDir/cleanroomca.crt
+
 # Creates a KEK with SKR policy, wraps DEKs with the KEK and put in kv.
 az cleanroom config wrap-deks `
     --contract-id $contractId `
     --cleanroom-config $publisherConfig `
     --datastore-config $publisherDatastoreConfig `
-    --key-store $publisherKeyStore `
+    --secretstore-config $publisherSecretStoreConfig `
     --governance-client "ob-publisher-client"
 
 # Setup OIDC issuer and managed identity access to storage/KV in publisher tenant.
-pwsh $collabSamplePath/setup-access.ps1 `
+pwsh $PSScriptRoot/../setup-oidc-issuer.ps1 `
     -resourceGroup $publisherResourceGroup `
-    -contractId $contractId  `
+    -outDir $outDir `
+    -governanceClient "ob-publisher-client"
+$issuerUrl = Get-Content $outDir/$publisherResourceGroup/issuer-url.txt
+
+pwsh $PSScriptRoot/../setup-access.ps1 `
+    -resourceGroup $publisherResourceGroup `
+    -subject $contractId `
+    -issuerUrl $issuerUrl `
     -kvType akvpremium `
     -outDir $outDir `
     -governanceClient "ob-publisher-client"
@@ -548,13 +687,20 @@ az cleanroom config wrap-deks `
     --contract-id $contractId `
     --cleanroom-config $consumerConfig `
     --datastore-config $consumerDatastoreConfig `
-    --key-store $consumerKeyStore `
+    --secretstore-config $consumerSecretStoreConfig `
     --governance-client "ob-consumer-client"
 
 # Setup OIDC issuer endpoint and managed identity access to storage/KV in consumer tenant.
-pwsh $collabSamplePath/setup-access.ps1 `
+pwsh $PSScriptRoot/../setup-oidc-issuer.ps1 `
     -resourceGroup $consumerResourceGroup `
-    -contractId $contractId `
+    -outDir $outDir `
+    -governanceClient "ob-consumer-client"
+$issuerUrl = Get-Content $outDir/$consumerResourceGroup/issuer-url.txt
+
+pwsh $PSScriptRoot/../setup-access.ps1 `
+    -resourceGroup $consumerResourceGroup `
+    -subject $contractId `
+    -issuerUrl $issuerUrl `
     -kvType akvpremium `
     -outDir $outDir `
     -governanceClient "ob-consumer-client"
@@ -562,19 +708,19 @@ pwsh $collabSamplePath/setup-access.ps1 `
 # defining query
 $data = "SELECT author, COUNT(*) AS Number_Of_Mentions FROM COMBINED_TWEETS WHERE mentions LIKE '%MikeDoesBigData%'  GROUP BY author ORDER BY Number_Of_Mentions DESC"
 $documentId = "12"
-az cleanroom governance document create `
+az cleanroom governance member-document create `
     --data $data `
     --id $documentId `
     --contract-id $contractId `
     --governance-client "ob-consumer-client"
 
-$version = az cleanroom governance document show `
+$version = az cleanroom governance member-document show `
     --id $documentId `
     --governance-client "ob-consumer-client" `
 | jq -r ".version"
 
 # Submitting a document proposal.
-$proposalId = az cleanroom governance document propose `
+$proposalId = az cleanroom governance member-document propose `
     --version $version `
     --id $documentId `
     --governance-client "ob-consumer-client" `
@@ -582,7 +728,7 @@ $proposalId = az cleanroom governance document propose `
 
 # Vote on the query
 #Consumer
-az cleanroom governance document vote `
+az cleanroom governance member-document vote `
     --id $documentId `
     --proposal-id $proposalId `
     --action accept `
@@ -590,7 +736,7 @@ az cleanroom governance document vote `
 | jq
 
 #publisher
-az cleanroom governance document vote `
+az cleanroom governance member-document vote `
     --id $documentId `
     --proposal-id $proposalId `
     --action accept `

@@ -10,14 +10,15 @@ COPY Directory.Packages.props /app
 COPY Directory.Build.props /app
 COPY src/tools/local-skr/*.sln /app/src/tools/local-skr/
 COPY src/tools/local-skr/*.csproj /app/src/tools/local-skr/
+COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
 RUN dotnet restore /app/src/tools/local-skr/local-skr.sln
 
 # copy everything else and build app
-COPY src/internal/restapi-common /app/src/internal/restapi-common
 COPY stylecop.json /app
 COPY Menees.Analyzers.Settings.xml /app
 COPY .editorconfig /app
+COPY src/internal /app/src/internal
 COPY src/tools/local-skr /app/src/tools/local-skr
 
 # Publish the application

@@ -6,10 +6,10 @@
   - [Events](#events)
   - [Secrets](#secrets)
   - [Oidc](#oidc)
+  - [CA](#ca)
 - [OpenID Connect Issuer](#openid-connect-issuer)
   - [Issuer URL endpoint security](#issuer-url-endpoint-security)
   - [Setup a public, secured OIDC issuer URL using Azure Blob Storage](#setup-a-public-secured-oidc-issuer-url-using-azure-blob-storage)
-- [Governance upgrade](#governance-upgrade)
 - [Links](#links)
 
 ## Endpoints
@@ -45,6 +45,10 @@ Members can create/update secrets while only clean room instances can get the se
 ### Oidc
 [src/endpoints/oidc](src/endpoints/oidc)  
 OIDC issuer endpoint for the IdP running in CGS. The clean room instance must present a valid attestation report with expected host data and report data values (as set via the clean room policy) for the governance service to create a token. This ensures that only trusted code running in clean rooms can get tokens issued from CGS.
+
+### CA
+[src/endpoints/ca](src/endpoints/ca/)
+Clean room instances can request CGS CA endorsed certificates for starting any SSL servers. The clean room instance must present a valid attestation report with expected host data and report data values (as set via the clean room policy) for the governance service to accept the request and generate a CGS CA endorsed certificate.
 
 ## OpenID Connect Issuer
 CGS can act as an Identity provider (IdP)/OIDC issuer and one can leverage [federated identity credential with external identity provider](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation-create-trust-user-assigned-managed-identity?pivots=identity-wif-mi-methods-azp#other) to create a trust relationship between a user-assigned managed identity and CGS as the external identity provider. Microsoft Entra leverages OpenID Connect (OIDC) to discover public signing keys and verify the authenticity of the token issued by CGS before exchanging it for an access token. You can then consume the Microsoft Entra access token to access Azure cloud resources via the Azure Identity SDKs or the Microsoft Authentication Library (MSAL).
@@ -158,9 +162,6 @@ So we need to manually publish the discovery and JWKS documents at an issuer URL
     # Mmembers need to vote and accept the above proposal.
     ```
     See [OIDC Issuer (IdP) management](../../../../samples/governance/README.md#oidc-issuer-idp-management) for more details on how to set the Issuer URL in CGS.
-
-## Governance upgrade
-See steps [here](../../../../samples/multi-party-collab/scenarios/upgrade/README.md) for updating the governance client and service upgrade.
 
 ## Links
 **Workload identity federation**

@@ -6,6 +6,8 @@ WORKDIR /root
 RUN apk update && apk upgrade && apk add bash
 
 # Install python/pip
+# Set PYTHONUNBUFFERED to ensure that Python output is sent straight to the terminal without buffering.
+# Otherwise, the output may be buffered and not appear immediately.
 ENV PYTHONUNBUFFERED=1
 RUN apk add --update --no-cache python3 && ln -sf python3 /usr/bin/python
 RUN python3 -m ensurepip

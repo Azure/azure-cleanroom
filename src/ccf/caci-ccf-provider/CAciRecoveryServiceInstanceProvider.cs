@@ -19,12 +19,10 @@ using CcfRecoveryProvider;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
-namespace VirtualCcfProvider;
+namespace CAciCcfProvider;
 
 public class CAciRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstanceProvider
 {
-    private const string ServiceFolderMountPath = "/app/service";
-    private const string ServiceCertPemFilePath = $"{ServiceFolderMountPath}/service-cert.pem";
     private readonly ILogger logger;
     private readonly IConfiguration configuration;
 
@@ -133,8 +131,7 @@ public class CAciRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstancePr
                 base64EncodedJoinPolicy);
         }
 
-        using var sha256 = SHA256.Create();
-        var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(policyRego));
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(policyRego));
         var securityPolicyDigest = BitConverter.ToString(hashBytes)
             .Replace("-", string.Empty).ToLower();
 
@@ -429,7 +426,7 @@ public class CAciRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstancePr
                             },
                             new ContainerEnvironmentVariable("SERVICE_CERT_LOCATION")
                             {
-                                Value = ServiceCertPemFilePath
+                                Value = MountPaths.RecoveryServiceCertPemFile
                             },
                             new ContainerEnvironmentVariable("CCF_NETWORK_INITIAL_JOIN_POLICY")
                             {
@@ -439,7 +436,7 @@ public class CAciRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstancePr
                         VolumeMounts =
                         {
                             new ContainerVolumeMount("uds", "/mnt/uds"),
-                            new ContainerVolumeMount("shared", "/app/service")
+                            new ContainerVolumeMount("certs", MountPaths.CertsFolderMountPath)
                         }
                     },
                 new(
@@ -501,8 +498,10 @@ public class CAciRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstancePr
                     },
                     Command =
                     {
-                        "/bin/sh",
-                        "https-http/bootstrap.sh"
+                        "/bin/bash",
+                        "https-http/bootstrap.sh",
+                        "--ca-type",
+                        "local"
                     },
                     EnvironmentVariables =
                     {
@@ -512,12 +511,12 @@ public class CAciRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstancePr
                         },
                         new ContainerEnvironmentVariable("CCR_ENVOY_SERVICE_CERT_OUTPUT_FILE")
                         {
-                            Value = ServiceCertPemFilePath
+                            Value = MountPaths.RecoveryServiceCertPemFile
                         }
                     },
                     VolumeMounts =
                     {
-                        new ContainerVolumeMount("shared", ServiceFolderMountPath)
+                        new ContainerVolumeMount("certs", MountPaths.CertsFolderMountPath)
                     }
                 },
                 },
@@ -570,7 +569,7 @@ public class CAciRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstancePr
                     {
                         EmptyDir = BinaryData.FromObjectAsJson(new Dictionary<string, object>())
                     },
-                    new ContainerVolume("shared")
+                    new ContainerVolume("certs")
                     {
                         EmptyDir = BinaryData.FromObjectAsJson(new Dictionary<string, object>())
                     }

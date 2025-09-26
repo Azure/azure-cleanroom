@@ -1,0 +1,205 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "webserver.fullname" . }}
+  labels:
+    {{- include "webserver.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "webserver.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "webserver.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "webserver.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- if .Values.ccrattestation.enabled }}
+        - name: ccr-attestation
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.images.ccrattestationUrl }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          restartPolicy: Always
+          command:
+            - "app"
+            - "-socket-address"
+            - "/mnt/uds/sock"
+          volumeMounts:
+            - mountPath: /mnt/uds
+              name: uds
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.telemetry.telemetryCollectionEnabled }}
+        - name: otel-collector
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.images.otelCollectorUrl }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          restartPolicy: Always
+          env:
+            - name: TELEMETRY_COLLECTION_ENABLED
+              value: "{{ .Values.telemetry.telemetryCollectionEnabled }}"
+            - name: PROMETHEUS_ENDPOINT
+              value: "{{ .Values.telemetry.prometheusEndpoint }}"
+            - name: LOKI_ENDPOINT
+              value: "{{ .Values.telemetry.lokiEndpoint }}"
+            - name: TEMPO_ENDPOINT
+              value: "{{ .Values.telemetry.tempoEndpoint }}"
+          ports:
+            - name: telemetry
+              containerPort: 4317
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
+        - name: ccr-proxy
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.images.ccrproxyUrl }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          restartPolicy: Always
+          command: 
+            - "/bin/bash"
+            - "https-http/bootstrap.sh"
+            - "--ca-type"
+            - "local"
+          env:
+            - name: CCR_ENVOY_DESTINATION_PORT
+              value: "8000"
+            - name: CCR_ENVOY_SERVICE_CERT_OUTPUT_FILE
+              value: "/app/service/service-cert.pem"
+            - name: CCR_FQDN
+              value: {{ include "webserver.fullname" . }}.{{ .Release.Namespace }}.svc
+            - name: CCR_LOCAL_CA_CERT_OUT_DIR
+              value: "/app/localcacert"
+          ports:
+            - name: https
+              containerPort: 443
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /app/service
+              name: shared
+            - mountPath: /app/localcacert
+              name: localcacert
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.images.frontendUrl }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: ["python", "-m", "src.main", "--config", "/app/config/settings.yaml"]
+          env:
+            - name: CLEANROOM_CONTAINER_REGISTRY_URL
+              value: {{ .Values.settings.cleanroom.registryUrl | quote }}
+            - name: CLEANROOM_CONTAINER_REGISTRY_USE_HTTP
+              value: {{ .Values.settings.cleanroom.useHttp | quote }}
+            - name: CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL
+              value: {{ .Values.settings.cleanroom.sidecarsPolicyDocumentRegistryUrl | quote }}
+            - name: CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL
+              value: {{ .Values.settings.cleanroom.versionsDocument | quote }}
+            - name: CLEANROOM_SPARK_ANALYTICS_IMAGE_URL
+              value: {{ .Values.settings.applications.analytics.image | quote }}
+            - name: CLEANROOM_SPARK_ANALYTICS_POLICY_FILE
+              value: {{ .Values.settings.applications.analytics.policyFile | quote }}
+            {{- if .Values.env.insecureVirtualEnv }}
+            - name: INSECURE_VIRTUAL_ENVIRONMENT
+              value: "true"
+            {{- end }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+          {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+            - name: appsettings-volume
+              mountPath: /app/config
+            - name: shared
+              mountPath: /app/service
+          {{- if .Values.ccrattestation.enabled }}
+            - name: uds
+              mountPath: /mnt/uds
+          {{- end }}
+      volumes:
+      {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+        - name: appsettings-volume
+          configMap:
+            name: webserver-config
+            items:
+              - key: settings
+                path: settings.yaml
+        - name: uds
+          emptyDir: {}
+        - name: shared
+          emptyDir: {}
+        - name: localcacert
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

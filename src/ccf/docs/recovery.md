@@ -22,7 +22,7 @@ for CCF the aim is to orchestrate a CCF network recovery that meets the followin
 - The recovery operator has no voting powers in the consortium
 - The recovery operator is not capable of decrypting the private ledger entries out of band and access ledger secrets
 
-To have the 0-trust requirements on this recovery operator that is both verifiable and technically enforceable the recovery operator role is performed by a *CCF Recovery Service* (`ccf-recovery-service`) that runs in Confidential Computing environment (CACI). The measurement of the code that the service runs gets attested and its behavior can hence be verified.  Further a *CCF Recovery Agent* (`ccf-recovery-agent`) runs as part of the CCF network (within the CCF node) to interact with the CCF members, Recovery Service and the CCF network (`cchost`) and completes the overall orchestration of the scenarios. 
+To have the 0-trust requirements on this recovery operator that is both verifiable and technically enforceable the recovery operator role is performed by a *CCF Recovery Service* (`ccf-recovery-service`) that runs in Confidential Computing environment (CACI). The measurement of the code that the service runs gets attested and its behavior can hence be verified.  Further a *CCF Recovery Agent* (`ccf-recovery-agent`) runs as part of the CCF network (within the CCF node) to interact with the CCF members, the recovery service and the CCF network (`cchost`) and completes the orchestration of the recovery scenarios. 
 
 # 2. High level deployment layout
 Below diagram captures a single node CCF network deployment layout along with the recovery components. The remaining sections go into the details of the interactions.
@@ -30,14 +30,14 @@ Below diagram captures a single node CCF network deployment layout along with th
 ![alt text](./ccf-recovery-layout.png)
 
 # 3. Recovery Service key generation
- To act as a recovery member the recovery service generates in-memory encryption and signing key pairs and then imports the same into Azure Key Vault with an immutable key release policy that is tied to the host-data measurement of its code and the platform its running on. It also uploads the attestation reports tied to these key pairs as secrets in Azure Key Vault. The secrets along with the keys can be used by the service at the time of key release to validate that the released key was a key pair that was generated and imported by an instance of this service runing in a TEE in the past.
+ To act as a recovery member the recovery service generates encryption and signing key pairs and then imports the same into Azure Key Vault with an immutable key release policy. The key release policy is tied to the host-data measurement of its code and the platform that it is running on. It further uploads attestation reports tied to each of these key pairs as secrets in Azure Key Vault. At the time of key release the secrets along with the keys can be used by the service to validate that the released key was a key pair that was generated and imported by an instance of this service running in a TEE.
 
 We thus ensure that the recovery operator's signing and encryption keys are never generated nor accessible outside of a verifiably trusted confidential computing environment.
 
 # 4. Recovery Service key consumption
-The recovery operator encryption/signing keys need to be used to cose-sign requests being made to the CCF network as the recovery member and to also decrypt an encrypted recovery share and submit the same to CCF at the time of recovery. To orchestrate these flows that maintain 0-trust assurances a component named *CCF Recovery Agent* (`ccf-recovery-agent`) runs as a sidecar container within the same confidential container group as the `ccfhost` process and only this agent can interact with the CCF recovery service for it to either sign requests or decrypt an encrypted share.
+The recovery member encryption/signing keys are used to cose-sign requests being made to the CCF network and to also decrypt an encrypted recovery share and submit the same to CCF at the time of recovery. To orchestrate these flows that maintain 0-trust assurances a component named *CCF Recovery Agent* (`ccf-recovery-agent`) runs as a sidecar container within the same confidential container group as the `cchost` process. Only this agent is allowed to request the CCF recovery service to either sign requests or decrypt an encrypted share.
 
-By virtue of running in the same container group instance as the `cchost` we can have a measurement of both these containers and create an attestation report that can be presented to the CCF recovery service whenever the agent invokes the service.
+By virtue of the agent running in same container group as the `cchost` we have a measurement of both the containers and can create an attestation report that can be presented to the CCF recovery service whenever the agent invokes the service.
 
 The next few sections capture the protocol for any interactions from the agent to the service and from the members to the agent. After that we go over the exact sequence of steps required for CCF network creation and recovery to realize this *Confidential Recovery* capability.
 
@@ -78,7 +78,7 @@ sequenceDiagram
     cragent-->>cragent: End of request
     deactivate cragent
 ```
-With the above protocol the recovery service can perform sensitive actions and relay the response back to the agent so that it can submit the same to CCF with the assurance that its response is available only to a client it trusts (as per acceptable host-data measurement values). The response is encrypted via a key that is available only with the client that generated the key pair and its corresponding attestation report.
+With the above protocol the recovery service can perform sensitive actions and relay the response back to the agent so that it can submit the same to CCF, with the assurance that its response is available only to a client it trusts (as per acceptable host-data measurement values). The response is encrypted via a key that is available only with the client that generated the key pair and its corresponding attestation report.
 
 # 6. CCF member to Recovery Agent communication protocol
 The recovery agent interactions with the recovery service (as per protocol above) happen as part of a request that a member of consortium initiates. For example, as part of network creation or recovery a member of the consortium would request the recovery agent to perform certain actions that then involve the recovery service (exact sequence of the interactions are captured later on). The protocol for any interaction from a member (or more precisely client code that can sign requests as a member) with the agent is as follows:
@@ -110,9 +110,9 @@ The recovery agent interactions with the recovery service (as per protocol above
     cragent->>m0: reply
     deactivate cragent
 ```
-With the above protocol the recovery agent perform sensitive actions in concert with the recovery service only if the client was an active member of the consortium. The agent is assured that an active member is making a request while recovery service is assured that its responses will only be available to a recovery agent running right next to (within TCB) the `cchost` instance of the network for which it is sending its response.
+With the above protocol the recovery agent perform sensitive actions in concert with the recovery service only if the client was an active member of the consortium. The agent ensures that an active member is making a request while recovery service ensures that its responses will only be available to a recovery agent running right next to (within TCB) the `cchost` instance of the network for which it is sending responses.
 
-With the above member to agent and agent to service communication protocols in place the exact sequence of message exchanges that happen as part of CCF network creation and CCF network recovery are captured below.
+With the above in mind the exact sequence of message exchanges that happen as part of CCF network creation and CCF network recovery are captured below.
 
 # 7. CCF network creation with Confidential Recovery
 ```mermaid

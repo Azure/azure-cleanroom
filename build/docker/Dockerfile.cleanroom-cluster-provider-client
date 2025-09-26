@@ -1,0 +1,75 @@
+# Use the official .NET Core SDK as the base image
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+
+# Set the working directory
+WORKDIR /app
+
+# copy csproj and restore as distinct layers
+# https://blog.nimbleways.com/docker-build-caching-for-dotnet-applications-done-right-with-dotnet-subset/
+COPY Directory.Packages.props /app
+COPY Directory.Build.props /app
+COPY src/cleanroom-cluster/*.sln /app/src/cleanroom-cluster/
+COPY src/cleanroom-cluster/cleanroom-cluster-provider-client/*.csproj /app/src/cleanroom-cluster/cleanroom-cluster-provider-client/
+COPY src/cleanroom-cluster/cleanroom-cluster-provider/*.csproj /app/src/cleanroom-cluster/cleanroom-cluster-provider/
+COPY src/cleanroom-cluster/caci-cleanroom-cluster-provider/*.csproj /app/src/cleanroom-cluster/caci-cleanroom-cluster-provider/
+COPY src/cleanroom-cluster/virtual-cleanroom-cluster-provider/*.csproj /app/src/cleanroom-cluster/virtual-cleanroom-cluster-provider/
+COPY src/cleanroom-cluster/cleanroom-cluster-provider-common/*.csproj /app/src/cleanroom-cluster/cleanroom-cluster-provider-common/
+COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
+COPY src/internal/Cose/*.csproj /app/src/internal/Cose/
+COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
+RUN dotnet restore /app/src/cleanroom-cluster/cluster.sln
+
+# copy everything else and build app
+COPY stylecop.json /app
+COPY Menees.Analyzers.Settings.xml /app
+COPY .editorconfig /app
+COPY src/internal /app/src/internal
+COPY src/cleanroom-cluster /app/src/cleanroom-cluster
+
+# Publish the application
+RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/cleanroom-cluster/cleanroom-cluster-provider-client/cleanroom-cluster-provider-client.csproj
+
+# Use the official .NET Core runtime as the base image for the final stage
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+
+RUN apt-get update && apt-get install -y curl
+
+# Install kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+    chmod +x ./kubectl && \
+    mv ./kubectl /usr/local/bin/kubectl
+
+# Install helm
+RUN curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 && \
+    chmod 700 get_helm.sh && \
+    ./get_helm.sh && \
+    rm get_helm.sh
+
+# Install kind
+RUN curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64 && \
+    chmod +x ./kind && \
+    mv ./kind /usr/local/bin/
+
+RUN VERSION="1.2.0" && \
+    curl -LO "https://github.com/oras-project/oras/releases/download/v${VERSION}/oras_${VERSION}_linux_amd64.tar.gz" && \
+    mkdir -p oras-install/ && \
+    tar -zxf oras_${VERSION}_*.tar.gz -C oras-install/ && \
+    mv oras-install/oras /usr/local/bin/ && \
+    rm -rf oras_${VERSION}_*.tar.gz oras-install/
+
+# Install the docker cli (not daemon) as kind requires it
+ENV DOCKERVERSION=28.0.4
+RUN curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKERVERSION}.tgz \
+  && tar xzvf docker-${DOCKERVERSION}.tgz --strip 1 -C /usr/local/bin docker/docker \
+  && rm docker-${DOCKERVERSION}.tgz
+
+COPY /external/virtualnodesOnAzureContainerInstances/Helm /virtualnodesOnAzureContainerInstances/Helm
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the published output from the build stage to the runtime stage
+COPY --from=build /app/publish .
+
+# Set the entry point for the container
+ENTRYPOINT ["dotnet", "cleanroom-cluster-provider-client.dll"]

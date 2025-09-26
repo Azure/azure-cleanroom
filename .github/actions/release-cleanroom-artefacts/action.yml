@@ -48,7 +48,7 @@ runs:
     - uses: actions/upload-artifact@v4
       with:
         name: ccr-artefacts-${{ inputs.environment }}
-        path: ./ccr-artefacts
+        path: ${{ github.workspace }}/ccr-artefacts/ccr-governance-opa-policy.tar.gz
         overwrite: true
 
     - uses: ./.github/actions/attest-artefact

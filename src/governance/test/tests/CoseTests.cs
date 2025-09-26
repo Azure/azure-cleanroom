@@ -134,11 +134,11 @@ public class CoseTests
         var creds = new DefaultAzureCredential();
         var certName = "mcert-cose-test";
         var certClient = new CertificateClient(new Uri(akvEndpoint), creds);
-        KeyVaultCertificate certificate;
+        X509Certificate2 certificate;
 
         try
         {
-            certificate = await certClient.GetCertificateAsync(certName);
+            certificate = await certClient.DownloadCertificateAsync(certName);
         }
         catch (RequestFailedException rfe) when (rfe.ErrorCode == "CertificateNotFound")
         {
@@ -162,9 +162,11 @@ public class CoseTests
                         }
                     },
                 });
-            certificate = await createOperation.WaitForCompletionAsync(
-            TimeSpan.FromSeconds(5),
-            CancellationToken.None);
+            await createOperation.WaitForCompletionAsync(
+                TimeSpan.FromSeconds(5),
+                CancellationToken.None);
+
+            certificate = await certClient.DownloadCertificateAsync(certName);
         }
 
         Dictionary<string, string> protectedHeaders = new()
@@ -173,7 +175,7 @@ public class CoseTests
             { "ms.bar", "bar" }
         };
 
-        var coseSignKey = new CoseSignKey(certificate, creds);
+        var coseSignKey = new CoseSignKey(new Uri($"{akvEndpoint}/{certName}"), certificate, creds);
         var message = Cose.Sign(new CoseSignRequest(
             coseSignKey,
             protectedHeaders,

@@ -70,8 +70,9 @@ if ($env:GITHUB_ACTIONS -eq "true") {
     $resourceGroupTags = "github_actions=multi-party-collab-${env:JOB_ID}-${env:RUN_ID}"
 }
 else {
-    $publisherResourceGroup = "cl-ob-publisher-${env:USER}"
-    $consumerResourceGroup = "cl-ob-consumer-${env:USER}"
+    $user = $env:CODESPACES -eq "true" ? $env:GITHUB_USER : $env:USER
+    $publisherResourceGroup = "cl-ob-publisher-${user}"
+    $consumerResourceGroup = "cl-ob-consumer-${user}"
 }
 
 # Set tenant Id as a part of the consumer's member data.
@@ -187,6 +188,10 @@ az cleanroom datastore add `
     --backingstore-type Azure_BlobStorage `
     --backingstore-id $result.sa.id
 
+pwsh $root/test/onebox/multi-party-collab/wait-for-container-access.ps1 `
+    --containerName publisher-input `
+    --storageAccountId $result.sa.id
+
 mkdir -p $outDir/publisher/input-encrypted
 # Encrypt and upload content.
 az cleanroom datastore encrypt `
@@ -247,10 +252,7 @@ az cleanroom config set-logging `
     --identity publisher-identity `
     --datastore-config $publisherDatastoreConfig `
     --secretstore-config $publisherSecretStoreConfig `
-    --datastore-secret-store publisher-local-store `
-    --dek-secret-store publisher-dek-store `
-    --kek-secret-store publisher-kek-store `
-    --encryption-mode CSE `
+    --encryption-mode SSE `
     --container-suffix $containerSuffix
 
 $containerSuffix = $($($(New-Guid).Guid) -replace '-').ToLower()
@@ -261,10 +263,7 @@ az cleanroom config set-telemetry `
     --identity publisher-identity `
     --datastore-config $publisherDatastoreConfig `
     --secretstore-config $publisherSecretStoreConfig `
-    --datastore-secret-store publisher-local-store `
-    --dek-secret-store publisher-dek-store `
-    --kek-secret-store publisher-kek-store `
-    --encryption-mode CSE `
+    --encryption-mode SSE `
     --container-suffix $containerSuffix
 
 # Create storage account, KV and MI resources.
@@ -620,9 +619,16 @@ az cleanroom config wrap-deks `
     --governance-client "ob-publisher-client"
 
 # Setup OIDC issuer and managed identity access to storage/KV in publisher tenant.
+pwsh $PSScriptRoot/../setup-oidc-issuer.ps1 `
+    -resourceGroup $publisherResourceGroup `
+    -outDir $outDir `
+    -governanceClient "ob-publisher-client"
+$issuerUrl = Get-Content $outDir/$publisherResourceGroup/issuer-url.txt
+
 pwsh $PSScriptRoot/../setup-access.ps1 `
     -resourceGroup $publisherResourceGroup `
-    -contractId $contractId  `
+    -subject $contractId `
+    -issuerUrl $issuerUrl `
     -outDir $outDir `
     -kvType akvpremium `
     -governanceClient "ob-publisher-client"
@@ -636,9 +642,16 @@ az cleanroom config wrap-deks `
     --governance-client "ob-consumer-client"
 
 # Setup OIDC issuer endpoint and managed identity access to storage/KV in consumer tenant.
+pwsh $PSScriptRoot/../setup-oidc-issuer.ps1 `
+    -resourceGroup $consumerResourceGroup `
+    -outDir $outDir `
+    -governanceClient "ob-consumer-client"
+$issuerUrl = Get-Content $outDir/$consumerResourceGroup/issuer-url.txt
+
 pwsh $PSScriptRoot/../setup-access.ps1 `
     -resourceGroup $consumerResourceGroup `
-    -contractId $contractId `
+    -subject $contractId `
+    -issuerUrl $issuerUrl `
     -outDir $outDir `
     -kvType akvpremium `
     -governanceClient "ob-consumer-client"

@@ -2,7 +2,8 @@ import * as ccfapp from "@microsoft/ccf-app";
 import { ccf } from "@microsoft/ccf-app/global";
 import { ProposalInfoItem } from "../models/kvstoremodels";
 import { GetProposalResponse, Proposal } from "../models/proposalmodels";
-import { parseRequestQuery } from "../utils/utils";
+import { parseRequestQuery, validateCallerAuthorized } from "../utils/utils";
+import { ErrorResponse } from "../models/errorresponse";
 
 // Code adapted from https://raw.githubusercontent.com/microsoft/ccf-app-samples/main/auditable-logging-app/src/endpoints/log.ts
 
@@ -14,7 +15,12 @@ const proposalsInfoStore = ccfapp.typedKv(
 
 export function getProposalHistorical(
   request: ccfapp.Request
-): ccfapp.Response<GetProposalResponse> {
+): ccfapp.Response<GetProposalResponse> | ccfapp.Response<ErrorResponse> {
+  const error = validateCallerAuthorized(request);
+  if (error !== undefined) {
+    return error;
+  }
+
   const proposalId = request.params.proposalId;
   const parsedQuery = parseRequestQuery(request);
   let { from_seqno, to_seqno, max_seqno_per_page } = parsedQuery;

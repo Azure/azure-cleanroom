@@ -1,0 +1,29 @@
+# From https://black.readthedocs.io/en/stable/integrations/github_actions.html
+# From https://pycqa.github.io/isort/docs/configuration/github_action.html
+name: Python Linter
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+    - develop
+    - release
+
+# When a new revision is pushed to a PR, cancel all in-progress CI runs for that
+# PR. See https://docs.github.com/en/actions/using-jobs/using-concurrency
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-docker-on-data-disk
+      - name: Run isort
+        uses: isort/isort-action@master
+        with:
+          configuration: "--check-only --profile black"
+      - name: Run Black
+        uses: psf/black@stable

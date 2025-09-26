@@ -8,15 +8,27 @@ namespace Controllers;
 
 public static class Ccf
 {
+    public class MemberInfoList
+    {
+        [JsonPropertyName("value")]
+        public List<MemberInfo> Value { get; set; } = default!;
+    }
+
     public class MemberInfo
     {
-        [JsonPropertyName("cert")]
-        public string Cert { get; set; } = default!;
+        [JsonPropertyName("certificate")]
+        public string Certificate { get; set; } = default!;
 
-        [JsonPropertyName("member_data")]
+        [JsonPropertyName("memberData")]
         public JsonObject MemberData { get; set; } = default!;
 
-        [JsonPropertyName("public_encryption_key")]
+        [JsonPropertyName("memberId")]
+        public string MemberId { get; set; } = default!;
+
+        [JsonPropertyName("recoveryRole")]
+        public string RecoveryRole { get; set; } = default!;
+
+        [JsonPropertyName("publicEncryptionKey")]
         public string PublicEncryptionKey { get; set; } = default!;
 
         [JsonPropertyName("status")]
@@ -25,9 +37,6 @@ public static class Ccf
 
     public class JoinPolicyInfo
     {
-        [JsonPropertyName("sgx")]
-        public JsonObject Sgx { get; set; } = default!;
-
         [JsonPropertyName("snp")]
         public SnpSection Snp { get; set; } = default!;
 

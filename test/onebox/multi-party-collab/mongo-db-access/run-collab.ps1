@@ -36,10 +36,6 @@ az cleanroom governance client remove --name "ob-publisher-client"
 $ccfEndpoint = $(Get-Content $outDir/ccf/ccf.json | ConvertFrom-Json).endpoint
 
 pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 -registry $registry -repo $repo -tag $tag -ccfEndpoint $ccfEndpoint
-if ($LASTEXITCODE -gt 0) {
-    Write-Host -ForegroundColor Red "run-scenario-generate-template-policy returned non-zero exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
 
 pwsh $root/test/onebox/multi-party-collab/convert-template.ps1 -outDir $outDir -repo $repo -tag $tag
 
@@ -70,15 +66,13 @@ while ((curl -o /dev/null -w "%{http_code}" -s http://ccr.cleanroom.local:8080 -
     }
 }
 
-$memberId = (az cleanroom governance client show `
-        --name "ob-publisher-client" `
-        --query "memberId" `
-        --output tsv)
-$DB_CONFIG_CGS_SECRET_ID = "${memberId}:dbconfig"
+$secretId = Get-Content $PSScriptRoot/generated/secretid.json | ConvertFrom-Json
+
+$unexpectedResponse = $false
 $expectedResponse = "Query executed successfully."
 $responseJson = curl -v -s http://ccr.cleanroom.local:8080/run_query --proxy http://127.0.0.1:10081 -H "content-type: application/json" -d @"
 {
-    "db_config_secret_name" : "$DB_CONFIG_CGS_SECRET_ID"
+    "db_config_secret_name" : "$($secretId.dbConfigSecretId)"
 }
 "@
 Write-Host "Received response: $responseJson"
@@ -88,24 +82,20 @@ $response = $responseJson | ConvertFrom-Json
 # The response of the /run_query endpoint contains the result of the query and the string 
 # 'Query executed successfully.'. We will match the string to check for a successful response.
 if ($($response.message) -ne $expectedResponse) {
-    Write-Host -ForegroundColor Red "Did not get expected response. Received: $response."
-    exit 1
+    Write-Host -ForegroundColor Red "Did not get expected response. Received: '$($response.message)'. Expected: '$expectedResponse'."
+    $unexpectedResponse = $true
 }
-$memberId = (az cleanroom governance client show `
-        --name "ob-consumer-client" `
-        --query "memberId" `
-        --output tsv)
-$CONSUMER_DB_CONFIG_CGS_SECRET_ID = "${memberId}:consumerdbconfig"
 
 $expectedResponse = '{"detail":"Failed to connect to MongoDB"}'
 $response = curl -v -s http://ccr.cleanroom.local:8080/run_query --proxy http://127.0.0.1:10081 -H "content-type: application/json" -d @"
 {
-    "db_config_secret_name" : "$CONSUMER_DB_CONFIG_CGS_SECRET_ID"
+    "db_config_secret_name" : "$($secretId.consumerDbConfigSecretId)"
 }
+
 "@
 if ($response -ne $expectedResponse) {
-    Write-Host -ForegroundColor Red "Did not get expected response. Received: $response."
-    exit 1
+    Write-Host -ForegroundColor Red "Did not get expected response. Received: '$response'. Expected: '$expectedResponse'."
+    $unexpectedResponse = $true
 }
 
 # Download telemetry and logs.
@@ -114,16 +104,16 @@ Write-Host "Exporting logs..."
 $response = curl -X POST -s http://ccr.cleanroom.local:8200/gov/exportLogs --proxy http://127.0.0.1:10081
 $expectedResponse = '{"message":"Application telemetry data exported successfully."}'
 if ($response -ne $expectedResponse) {
-    Write-Host -ForegroundColor Red "Did not get expected response. Received: $response."
-    exit 1
+    Write-Host -ForegroundColor Red "Did not get expected response. Received: '$response'. Expected: '$expectedResponse'."
+    $unexpectedResponse = $true
 }
 
 Write-Host "Exporting telemetry..."
 $response = curl -X POST -s http://ccr.cleanroom.local:8200/gov/exportTelemetry --proxy http://127.0.0.1:10081
 $expectedResponse = '{"message":"Infrastructure telemetry data exported successfully."}'
 if ($response -ne $expectedResponse) {
-    Write-Host -ForegroundColor Red "Did not get expected response. Received: $response."
-    exit 1
+    Write-Host -ForegroundColor Red "Did not get expected response. Received: '$response'. Expected: '$expectedResponse'."
+    $unexpectedResponse = $true
 }
 
 mkdir -p $outDir/results
@@ -138,23 +128,23 @@ az cleanroom logs download `
     --target-folder $outDir/results
 
 Write-Host "Application logs:"
-cat $outDir/results/application-telemetry*/**/demo-app.log
+cat $outDir/results/application-telemetry*/demo-app.log
 
 # Check that expected output files got created.
 $expectedFiles = @(
-    "$PSScriptRoot/generated/results/application-telemetry*/**/demo-app.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/demo-app*-code-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/demo-app*-code-launcher.metrics",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/demo-app*-code-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/identity.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/identity.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/identity.metrics"
+    "$PSScriptRoot/generated/results/application-telemetry*/demo-app.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/demo-app*-code-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/demo-app*-code-launcher.metrics",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/demo-app*-code-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/identity.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/identity.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/identity.metrics"
 )
 
 $missingFiles = @()
@@ -170,5 +160,10 @@ if ($missingFiles.Count -gt 0) {
         Write-Host -ForegroundColor Red $file
     }
     
+    exit 1
+}
+
+if ($unexpectedResponse) {
+    Write-Host -ForegroundColor Red "Received unexpected response(s). Check failures above."
     exit 1
 }

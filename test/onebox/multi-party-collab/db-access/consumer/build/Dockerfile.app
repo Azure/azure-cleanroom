@@ -1,5 +1,5 @@
 # Image for building the executable.
-FROM mcr.microsoft.com/oss/go/microsoft/golang:1.23.1 AS build-image
+FROM mcr.microsoft.com/oss/go/microsoft/golang:1.24.4 AS build-image
 
 # Install prerequisities.
 RUN apt-get update -y && \
@@ -22,7 +22,7 @@ WORKDIR /app/src
 RUN go build -o /app/main
 
 # Optimize the final image size by creating an image with only the executable.
-FROM mcr.microsoft.com/oss/go/microsoft/golang:1.23.1
+FROM mcr.microsoft.com/oss/go/microsoft/golang:1.24.4
 
 COPY --from=build-image /app/main ./main
 RUN chmod +x ./main

@@ -1,6 +1,0 @@
-# Run
-FROM mcr.microsoft.com/mirror/docker/library/nginx:1.25
-
-COPY --chmod=755 /src/ccf/virtual-ccf-provider/scripts/nginx/bootstrap.sh /etc/nginx
-
-CMD ["/bin/bash", "/etc/nginx/bootstrap.sh"]

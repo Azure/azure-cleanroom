@@ -11,7 +11,12 @@ public class WorkspaceConfigurationModel
 
     public IFormFile? ServiceCertPemFile { get; set; } = default!;
 
+    // Json string.
+    public string? ServiceCertDiscovery { get; set; } = default!;
+
     public string? SigningCertId { get; set; } = default!;
+
+    public string? AuthMode { get; set; } = default!;
 
     public string? CcfEndpoint { get; set; } = default!;
 }

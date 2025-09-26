@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/mirror/docker/library/ubuntu:20.04 AS build-image
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:22.04 AS build-image
 
 # Install prerequisities.
 RUN apt-get update -y && \
@@ -21,16 +21,14 @@ COPY src/blobfuse-launcher/encryptor azure-storage-fuse/encryptor
 RUN cd azure-storage-fuse/encryptor && go test -v ./...
 RUN cd azure-storage-fuse/encryptor && go build -buildmode=plugin -o encryptor.so
 
-FROM mcr.microsoft.com/mirror/docker/library/ubuntu:20.04
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:22.04
 
 # Install blobfuse dependencies.
 RUN apt-get update -y && \
     apt-get -y --no-install-recommends install \
     software-properties-common fuse3 curl
 
-# Install python 3.10. https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
-RUN add-apt-repository ppa:deadsnakes/ppa && \
-    apt-get -y install python3.10 python3.10-distutils
+RUN apt-get -y install python3.10 python3.10-distutils
 
 # Install pip.
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
@@ -38,10 +36,10 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 COPY --from=build-image /azure-storage-fuse/blobfuse2 /usr/local/bin/
 COPY --from=build-image /azure-storage-fuse/encryptor/encryptor.so .
 COPY src/scripts/wait-for-it.sh ./wait-for-it.sh
-COPY src/blobfuse-launcher/*.py .
 COPY src/blobfuse-launcher/requirements.txt .
+RUN python3.10 -m pip install -r requirements.txt
 COPY src/blobfuse-launcher/encryptor-config.yaml .
+COPY src/blobfuse-launcher/*.py .
 ENV BLOBFUSE_PLUGIN_PATH=./encryptor.so
 RUN ldconfig /usr/local/lib64/
-RUN python3.10 -m pip install -r requirements.txt
 RUN chmod +x ./wait-for-it.sh

@@ -8,7 +8,8 @@ if [ -z "$CONFIG_DATA_TGZ" ]; then
 fi
 
 CONFIG_EXTRACT_DIR=${CONFIG_EXTRACT_DIR:-"/app"}
-LOGS_DIR=${LOGS_DIR:-"/app/logs"} 
+LOGS_DIR=${LOGS_DIR:-"/app/logs"}
+CCF_LOG_LEVEL=${CCF_LOG_LEVEL:-"info"}
 
 echo "Expanding config payload into $CONFIG_EXTRACT_DIR"
 echo "$CONFIG_DATA_TGZ" | base64 -d | tar xz -C $CONFIG_EXTRACT_DIR
@@ -25,4 +26,5 @@ mkdir -p $LOGS_DIR
 echo "Launching cchost"
 cchostLog="$LOGS_DIR/cchost_$(date +"%Y_%m_%d_%I_%M_%p").log"
 ln -f -s $cchostLog "/app/cchost.log"
-exec /usr/bin/cchost --config $CONFIG_EXTRACT_DIR/cchost_config.json 2>&1 | tee $cchostLog
+# Use exec so that SIGTERM is propagated to the child process and the process can be gracefully stopped.
+exec /usr/bin/cchost --config $CONFIG_EXTRACT_DIR/cchost_config.json --enclave-log-level $CCF_LOG_LEVEL 2>&1 | tee $cchostLog

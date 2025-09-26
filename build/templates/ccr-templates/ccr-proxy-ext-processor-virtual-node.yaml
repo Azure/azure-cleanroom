@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: ccr-proxy-ext-processor-$name
+    image: $containerRegistryUrl/ccr-proxy-ext-processor@$digest
+    command:
+    - /bin/sh
+    - -c
+    - ./run.sh
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+    env:
+    - name: PORT
+      value: $port
+    - name: BUNDLE_RESOURCE_PATH
+      value: $policyBundleUrl
+    - name: CCR_POLICY_ALLOW_ALL
+      value: $allowAll
+    - name: TELEMETRY_MOUNT_PATH
+      value: $telemetryMountPath

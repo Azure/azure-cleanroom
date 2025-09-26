@@ -106,7 +106,7 @@ public class AkvKeyStore : IKeyStore
         }
 
         var creds = new DefaultAzureCredential();
-        if (CcfUtils.IsSevSnp())
+        if (Attestation.IsSevSnp())
         {
             encKeyAndReport = await Attestation.GenerateRsaKeyPairAndReportAsync();
         }
@@ -230,7 +230,7 @@ public class AkvKeyStore : IKeyStore
             return existingKeyInfo;
         }
 
-        if (CcfUtils.IsSevSnp())
+        if (Attestation.IsSevSnp())
         {
             signingKeyAndReport = await Attestation.GenerateEcdsaKeyPairAndReportAsync();
         }
@@ -614,7 +614,7 @@ public class AkvKeyStore : IKeyStore
 
     private async Task<List<string>> GetRecoveryServicesHostData()
     {
-        var hostData = await CcfUtils.GetHostData();
+        var hostData = await Attestation.GetHostData();
         return [hostData];
     }
 }

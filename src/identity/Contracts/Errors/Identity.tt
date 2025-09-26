@@ -1,6 +1,0 @@
-<#@ template debug="true" hostspecific="true" language="C#" #>
-<#@ output extension="codegen.cs" #>
-<#@ include file="$(T4Include)/ErrorsGenerator.ttinclude" #>
-<#
-    GenerateErrors(rootNamespace: "Microsoft.Azure.CleanRoomSidecar.Identity");
-#>

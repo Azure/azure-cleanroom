@@ -1,0 +1,40 @@
+{
+  "name": "otel-collector",
+  "properties": {
+    "image": "$containerRegistryUrl/otel-collector@$digest",
+    "command": [],
+    "environmentVariables": [
+      {
+        "name": "TELEMETRY_COLLECTION_ENABLED",
+        "value": "$telemetryCollectionEnabled"
+      },
+      {
+        "name": "TELEMETRY_PATH",
+        "value": "$telemetryPath"
+      },
+      {
+        "name": "PROMETHEUS_ENDPOINT",
+        "value": "$prometheusEndpoint"
+      },
+      {
+        "name": "LOKI_ENDPOINT",
+        "value": "$lokiEndpoint"
+      },
+      {
+        "name": "TEMPO_ENDPOINT",
+        "value": "$tempoEndpoint"
+      }
+    ],
+    "securityContext": {
+      "privileged": "false"
+    },
+    "volumeMounts": [
+      {
+        "name": "telemetrymounts",
+        "mountPath": "$telemetryMountPath",
+        "mountType": "emptyDir",
+        "readOnly": false
+      }
+    ]
+  }
+}

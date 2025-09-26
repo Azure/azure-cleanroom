@@ -34,11 +34,3 @@ export interface GenerateEndorsedCertRequestData {
   subjectAlternateNames?: string[];
   validityPeriodDays: number;
 }
-
-export interface isCAEnabledRequest {
-  attestation: SnpEvidence;
-}
-
-export interface isCAEnabledResponse {
-  enabled: boolean;
-}

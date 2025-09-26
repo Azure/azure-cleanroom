@@ -1,22 +1,22 @@
 import logging
+from functools import wraps
+from typing import Any
+
 import podman
 import podman.api
 import podman.domain
 import podman.domain.containers
-
-from functools import wraps
-from typing import Any
+from opentelemetry import trace
 
 from cleanroomspec.models.python.model import *
+
 from ..connectors.httpconnectors import (
     ACROAuthHttpConnector,
     GovernanceHttpConnector,
     IdentityHttpConnector,
 )
-from ..utilities import utilities
 from ..constants import constants
-
-from opentelemetry import trace
+from ..utilities import utilities
 
 
 def invoke_podman(func):
@@ -117,7 +117,6 @@ async def start_application_container(
     application: Application, telemetry_path: str, **kwargs
 ):
     from podman.domain.images_manager import ImagesManager
-
     from podman.errors import NotFound, PodmanError
 
     client = kwargs["_podmanClient"]

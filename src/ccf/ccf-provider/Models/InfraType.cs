@@ -15,12 +15,6 @@ public enum InfraType
     /// <summary>
     /// CCF nodes are started in Docker containers. Meant for local dev/test.
     /// </summary>
-    @virtual,
-
-    /// <summary>
-    /// CCF nodes are started in standard ACI deployment. Meant for dev/test where hosting the CCF
-    /// network in Azure is required.
-    /// </summary>
-    virtualaci
+    @virtual
 }
 #pragma warning restore SA1300 // Element should begin with upper-case letter

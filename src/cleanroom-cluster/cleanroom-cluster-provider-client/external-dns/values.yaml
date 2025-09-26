@@ -1,0 +1,45 @@
+fullnameOverride: external-dns
+
+serviceAccount:
+  labels:
+    azure.workload.identity/use: "true"
+  annotations:
+    azure.workload.identity/client-id: "<CLIENT_ID>"
+
+podLabels:
+  azure.workload.identity/use: "true"
+
+extraVolumes:
+  - name: azure-config-file
+    secret:
+      secretName: external-dns-azure
+
+extraVolumeMounts:
+  - name: azure-config-file
+    mountPath: /etc/kubernetes
+    readOnly: true
+
+provider:
+  name: azure-private-dns
+
+# So that external-dns picks only the driver service which would be labeled as below.
+labelFilter: service=external-dns
+
+# So that DNS updates happen faster (default is 1m refresh)
+interval: 10s
+
+# -- How DNS records are synchronized between sources and providers; available values are `sync` & `upsert-only`.
+policy: sync
+
+# https://kubernetes-sigs.github.io/external-dns/v0.16.1/docs/sources/service/#domain-names
+# ... or the --combine-fqdn-annotation flag was specified, then adds domain names
+# generated from any--fqdn-template flag.
+# Have the above two arguments enables publishing the FQDN of the headless service created for the driver pod
+# which is of the form "spark-pi-python-3-825fe2965bf55e28-driver-svc.default.svc".
+# Adding max retries to 10 in order to give adequate time for federated credentials propagation
+# using https://github.com/Azure/azure-sdk-for-go/blob/8e0e2345f57218b29d3d411646bac932d0e4358d/sdk/azcore/runtime/policy_retry.go
+# as a reference for retry policies.
+extraArgs:
+  - --combine-fqdn-annotation
+  - --fqdn-template={{ "{{" }}.Name{{ "}}" }}.{{ "{{" }}.Namespace{{ "}}" }}.svc
+  - --azure-maxretries-count=10

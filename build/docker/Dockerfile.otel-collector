@@ -1,6 +1,29 @@
-FROM mcr.microsoft.com/oss/otel/opentelemetry-collector-contrib:0.105.0
+FROM cleanroombuild.azurecr.io/otel/opentelemetry-collector-builder:0.131.0 AS collector-builder
 
-WORKDIR /
+WORKDIR /build
+COPY src/otel-collector/builder-config.yaml ./builder-config.yaml
 
-USER 10001:10001
-COPY src/scripts/otel-collector/otel-config.yaml /etc/otelcol-contrib/config.yaml
+RUN ocb --config=builder-config.yaml
+
+FROM mcr.microsoft.com/mirror/docker/library/python:3.11
+
+WORKDIR /app
+COPY src/otel-collector/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY --from=collector-builder /build/otelcol-custom/otelcol-custom /usr/local/bin/otelcol-custom
+RUN chmod +x /usr/local/bin/otelcol-custom
+
+# 10001 is the user with which the Otel collector runs.
+# If we don't create this user in the python image, the container fails to start with "unknown user".
+RUN groupadd -g 10001 otel && useradd -m -u 10001 -g otel otel
+
+WORKDIR /app
+COPY src/otel-collector/ .
+RUN mkdir /etc/otel
+RUN chown otel /etc/otel
+
+USER otel
+ENV PYTHONUNBUFFERED=1
+
+ENTRYPOINT ["python3", "otel-collector-launcher.py", "--out-dir", "/etc/otel"]

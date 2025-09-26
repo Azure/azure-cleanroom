@@ -35,13 +35,19 @@ public class ContractsController : ClientControllerBase
     }
 
     [HttpGet("/contracts")]
-    public async Task<JsonArray> ListContracts()
+    public async Task<JsonObject> ListContracts([FromQuery] string? state = null)
     {
         var appClient = this.CcfClientManager.GetAppClient();
-        using HttpResponseMessage response = await appClient.GetAsync($"app/contracts");
+        string path = "app/contracts";
+        if (!string.IsNullOrEmpty(state))
+        {
+            path += $"?state={state}";
+        }
+
+        using HttpResponseMessage response = await appClient.GetAsync(path);
         this.Response.CopyHeaders(response.Headers);
         await response.ValidateStatusCodeAsync(this.Logger);
-        var jsonResponse = await response.Content.ReadFromJsonAsync<JsonArray>();
+        var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
         return jsonResponse!;
     }
 

@@ -86,14 +86,3 @@ runs:
         subscription-id: ${{ inputs.subscription-id }}
         needs-attestation: ${{ inputs.needs-attestation }}
 
-    - uses: ./.github/actions/release-container
-      with:
-        name: ccf/ccf-nginx
-        tag: ${{ inputs.tag }}
-        environment: ${{ inputs.environment }}
-        artefact-name: ccf-nginx
-        registry-name: ${{ inputs.registry-name }}
-        client-id: ${{ inputs.client-id }}
-        tenant-id: ${{ inputs.tenant-id }}
-        subscription-id: ${{ inputs.subscription-id }}
-        needs-attestation: ${{ inputs.needs-attestation }}

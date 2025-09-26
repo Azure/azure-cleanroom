@@ -1,3 +1,0 @@
-# Test related dependencies
-docker
-pytest

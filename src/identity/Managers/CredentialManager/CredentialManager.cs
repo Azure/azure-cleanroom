@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 using Azure.Core;
+using Controllers;
 using Identity.Configuration;
-using Microsoft.Azure.CleanRoomSidecar.Identity.Errors;
 using Microsoft.Extensions.Logging;
 
 namespace Identity.CredentialManager;
@@ -50,7 +50,9 @@ public class CredentialManager
             return credential;
         }
 
-        throw IdentityException.InvalidClientId(clientId);
+        throw new ApiException(new ODataError(
+            code: "InvalidClientId",
+            message: $"Invalid client ID specified: {clientId}"));
     }
 
     private void InitializeCredentials()

@@ -116,7 +116,11 @@ public class CcfRecoveryServiceProvider
         string endpoint,
         Func<Task>? onRetry = null)
     {
-        using var client = HttpClientManager.NewInsecureClient(endpoint, this.logger);
+        // No retry policy is specified as retries are handled in the loop below.
+        using var client = HttpClientManager.NewInsecureClient(
+            endpoint,
+            this.logger,
+            HttpRetries.Policies.NoRetries);
 
         // Use a shorter timeout than the default (100s) so that we retry faster to connect to the
         // endpoint that is warming up.

@@ -53,8 +53,10 @@ public static class HttpResponseMessageExtensions
             return;
         }
 
+        var ccfClient = clientManager.GetNoAuthClient();
         timeout ??= TimeSpan.FromSeconds(5);
         var status = await TrackTransactionStatusAsync(
+            ccfClient,
             endpoint,
             logger,
             clientManager,
@@ -78,13 +80,13 @@ public static class HttpResponseMessageExtensions
     }
 
     private static async Task<string> TrackTransactionStatusAsync(
+        HttpClient ccfClient,
         string endpoint,
         ILogger logger,
         CcfClientManager clientManager,
         string transactionId,
         TimeSpan timeout)
     {
-        var ccfClient = await clientManager.GetGovClient();
         string transactionUrl = $"{endpoint}?transaction_id={transactionId}";
         var endTime = DateTimeOffset.Now + timeout;
         using var response1 = await ccfClient.GetAsync(transactionUrl);

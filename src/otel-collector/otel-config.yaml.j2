@@ -1,0 +1,94 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 0
+    send_batch_size: 90
+    send_batch_max_size: 100
+
+exporters:
+{%- if prometheus_enabled %}
+  prometheusremotewrite:
+    endpoint: {{ prometheus_endpoint }}
+    tls:
+      insecure: {{ prometheus_insecure }}
+{%- endif %}
+{%- if loki_enabled %}
+  otlphttp/logs:
+    endpoint: {{ loki_endpoint }}
+    tls:
+      insecure: {{ loki_insecure }}
+{%- endif %}
+{%- if tempo_enabled %}
+  otlp/tempo:
+    endpoint: {{ tempo_endpoint }}
+    tls:
+      insecure: {{ tempo_insecure }}
+{%- endif %}
+{%- if file_exporters_enabled %}
+  file/traces:
+    path: {{ telemetry_path }}/infrastructure/*.traces
+    group_by:
+      enabled: true
+      resource_attribute: service.name
+  file/metrics:
+    path: {{ telemetry_path }}/infrastructure/*.metrics
+    group_by:
+      enabled: true
+      resource_attribute: service.name
+  file/logs:
+    path: {{ telemetry_path }}/infrastructure/*.log
+    group_by:
+      enabled: true
+      resource_attribute: service.name
+{%- endif %}
+  debug:
+    verbosity: basic
+    sampling_initial: 5
+    sampling_thereafter: 200
+  debug/noop:
+    verbosity: basic
+    sampling_initial: 0
+    sampling_thereafter: 0
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: []
+      exporters: 
+        - debug
+{%- if file_exporters_enabled %}
+        - file/traces
+{% endif %}
+{%- if tempo_enabled %}
+        - otlp/tempo
+{% endif %}
+    metrics:
+      receivers: [otlp]
+      processors: []
+      exporters: 
+        - debug
+{%- if file_exporters_enabled %}
+        - file/metrics
+{% endif %}
+{%- if prometheus_enabled %}
+        - prometheusremotewrite
+{%- endif %}
+    logs:
+      receivers: [otlp]
+      processors: []
+      exporters: 
+        - debug
+{%- if file_exporters_enabled %}
+        - file/logs
+{% endif %}
+{%- if loki_enabled %}
+        - otlphttp/logs
+{%- endif %}

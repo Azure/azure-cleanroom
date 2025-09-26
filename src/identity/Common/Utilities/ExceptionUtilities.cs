@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.Azure.CleanRoomSidecar.Identity.Errors;
+using Controllers;
 
 namespace Utilities;
 
@@ -12,17 +12,9 @@ public static class ExceptionUtilities
         string errorCode;
 
         // Try to get richer data for dimension values if possible.
-        if (ex is IdentityException identityException)
+        if (ex is ApiException identityException)
         {
-            if ((identityException.ErrorCode == IdentityErrorCode.InternalError) &&
-                identityException.InnerException != null)
-            {
-                errorCode = identityException.InnerException.GetType().Name;
-            }
-            else
-            {
-                errorCode = identityException.ErrorCode.ToString();
-            }
+            errorCode = identityException.Code;
         }
         else
         {

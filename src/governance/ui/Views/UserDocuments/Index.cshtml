@@ -1,0 +1,28 @@
+﻿@model ListUserDocumentsViewModel
+@{
+    ViewData["Title"] = "User Documents";
+}
+
+<h2>User Documents</h2>
+<table class="table table-hover">
+    <thead>
+        <tr>
+            <th>Id</th>
+            <th>Details</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var doc in @Model.Value)
+        {
+            <tr>
+                <td>@doc.Id</td>
+                <td>
+                    <!-- <snippet_AspController> -->
+                    <a asp-controller="UserDocuments"
+                       asp-action="Detail" asp-route-id="@doc.Id">Details</a>
+                    <!-- </snippet_AspController> -->
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>

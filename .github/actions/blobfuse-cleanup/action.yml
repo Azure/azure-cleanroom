@@ -1,0 +1,30 @@
+name: "Blobfuse Cleanup"
+description: To clean up blobfuse2 mounts and temporary directories.
+
+inputs:
+  mount_dir:
+    description: 'Mount directory'
+    required: true
+  temp_dir:
+    description: 'Temporary directory'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check process info
+      shell: bash
+      run: |
+        ps -ef | grep blobfuse2
+        df -h
+
+    - name: Cleanup
+      shell: bash
+      run: |
+        fusermount -u ${{ inputs.mount_dir }} || true
+        fusermount3 -u ${{ inputs.mount_dir }} || true
+        ls -lh ${{ inputs.mount_dir }}
+        sudo rm -rf ${{ inputs.mount_dir }}/*
+        ls -lh ${{ inputs.temp_dir }}
+        sudo rm -rf ${{ inputs.temp_dir }}/*
+      if: always()

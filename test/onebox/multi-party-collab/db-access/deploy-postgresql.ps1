@@ -43,10 +43,20 @@ function Deploy-PostgreSQL {
         user     = $user
         password = $password
     }
-    $ipAddress = az container show `
-        --name $aciName `
-        -g $resourceGroup `
-        --query "ipAddress" | ConvertFrom-Json
+    $timeout = New-TimeSpan -Minutes 15
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    do {
+        Write-Host "Sleeping for 15 seconds for IP address to be available."
+        Start-Sleep -Seconds 15
+        $ipAddress = az container show `
+            --name $aciName `
+            -g $resourceGroup `
+            --query "ipAddress" | ConvertFrom-Json
+        if ($stopwatch.elapsed -gt $timeout) {
+            throw "Hit timeout waiting for IP address to be available."
+        }
+    } while ($null -eq $ipAddress.ip)
+
     $result.endpoint = $ipAddress.fqdn
     $result.ip = $ipAddress.ip
     return $result

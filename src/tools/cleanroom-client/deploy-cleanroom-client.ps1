@@ -76,10 +76,20 @@ docker run -d `
     -p ${port}:80 `
     --network credential-proxy-bridge `
     -e MSI_ENDPOINT="http://${credproxy_name}:8080/token" `
+    -e IDENTITY_ENDPOINT="http://${credproxy_name}:8080/token" `
+    -e IDENTITY_HEADER="dummy_required_value" `
     -e SCRATCH_DIR="${outDir}" `
     -e AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL="$env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL" `
+    -e AZCLI_CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL="$env:AZCLI_CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL" `
     -e AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL="$env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL" `
+    -e AZCLI_CLEANROOM_CONTAINER_REGISTRY_USE_HTTP="$env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_USE_HTTP" `
     cleanroom-client
+
+if ($env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL.Contains("ccr-registry:5000")) {
+    # If the registry is local, we need to connect the cleanroom-client container to the kind network
+    # so that it can access the ccr-registry.
+    docker network connect kind cleanroom-client
+}
 
 # Login to Azure using managed identity via the credentials-proxy.
 $sleepTime = 5

@@ -1,3 +1,23 @@
+function Get-UbuntuVersion {
+    if (-Not (Test-Path "/etc/os-release")) {
+        throw "This script must be run on a Linux system with /etc/os-release."
+    }
+
+    $osRelease = Get-Content "/etc/os-release" | ForEach-Object {
+        $parts = $_ -split '='
+        if ($parts.Length -eq 2) {
+            @{ Key = $parts[0]; Value = $parts[1].Trim('"') }
+        }
+    } | ForEach-Object { [PSCustomObject]$_ } | Group-Object Key -AsHashTable -AsString
+
+    $name = $osRelease["NAME"].Value
+    if ($name -ne "Ubuntu") {
+        throw "Not running on Ubuntu. /etc/os-release NAME value is: $name"
+    }
+
+    return $osRelease["VERSION_ID"].Value
+}
+
 function Deploy-MongoDB {
     [CmdletBinding()]
     param (
@@ -50,10 +70,21 @@ function Deploy-MongoDB {
         user     = $user
         password = $password
     }
-    $ipAddress = az container show `
-        --name $aciName `
-        -g $resourceGroup `
-        --query "ipAddress" | ConvertFrom-Json
+
+    $timeout = New-TimeSpan -Minutes 15
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    do {
+        Write-Host "Sleeping for 15 seconds for IP address to be available."
+        Start-Sleep -Seconds 15
+        $ipAddress = az container show `
+            --name $aciName `
+            -g $resourceGroup `
+            --query "ipAddress" | ConvertFrom-Json
+        if ($stopwatch.elapsed -gt $timeout) {
+            throw "Hit timeout waiting for IP address to be available."
+        }
+    } while ($null -eq $ipAddress.ip)
+
     $result.endpoint = $ipAddress.fqdn
     $result.ip = $ipAddress.ip
 
@@ -61,15 +92,26 @@ function Deploy-MongoDB {
         # Download the MongoDB tools to the local machine.
         $toolsDir = "$root/test/onebox/multi-party-collab/mongo-db-access/tools"
         Write-Host "Downloading MongoDB tools to $toolsDir."
-        wget https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-x86_64-100.11.0.tgz -P $toolsDir
-        tar -xzf $toolsDir/mongodb-database-tools-ubuntu2204-x86_64-100.11.0.tgz -C $toolsDir
-        $env:PATH = "$toolsDir/mongodb-database-tools-ubuntu2204-x86_64-100.11.0/bin:${env:PATH}"
+        $ubuntuVersion = Get-UbuntuVersion
+        if ($ubuntuVersion -eq "22.04") {
+            $toolsVersion = "ubuntu2204-x86_64-100.11.0"
+        }
+        elseif ($ubuntuVersion -eq "20.04") {
+            $toolsVersion = "ubuntu2004-x86_64-100.11.0"
+        }
+        else {
+            throw "Unsupported OS version: $ubuntuVersion"
+        }
+
+        wget https://fastdl.mongodb.org/tools/db/mongodb-database-tools-$toolsVersion.tgz -P $toolsDir
+        tar -xzf $toolsDir/mongodb-database-tools-$toolsVersion.tgz -C $toolsDir
+        $env:PATH = "$toolsDir/mongodb-database-tools-$toolsVersion/bin:${env:PATH}"
 
         $dataDir = "$root/test/onebox/multi-party-collab/mongo-db-access/publisher/input"
         mkdir -p $dataDir
         Write-Host "Downloading sample data to $dataDir."
         pwsh $PSScriptRoot/download-sample-data.ps1 -outDir $dataDir
-        Write-Host "Populating sample data into the Mongo DB instance."
+        Write-Host "Populating sample data into the Mongo DB instance hosted at $($result.endpoint)."
         mongoimport $root/test/onebox/multi-party-collab/mongo-db-access/publisher/input/sales.json `
             --uri "mongodb://${user}:${password}@$($result.endpoint):27017" `
             --authenticationDatabase admin `

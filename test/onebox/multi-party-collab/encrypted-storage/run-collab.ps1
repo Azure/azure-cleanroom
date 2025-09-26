@@ -12,6 +12,10 @@ param
     [string]$tag = "latest"
 )
 
+# https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
+
 $outDir = "$PSScriptRoot/generated"
 rm -rf $outDir
 Write-Host "Using $registry registry for cleanroom container images."
@@ -31,10 +35,6 @@ az cleanroom governance client remove --name "ob-publisher-client"
 $datastoreOutdir = "$outDir/datastores"
 
 pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 -registry $registry -repo $repo -tag $tag -ccfEndpoint $ccfEndpoint -outDir $outDir -datastoreOutDir $datastoreOutdir
-if ($LASTEXITCODE -gt 0) {
-    Write-Host -ForegroundColor Red "run-scenario-generate-template-policy returned non-zero exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
 
 $registry_local_endpoint = ""
 if ($registry -eq "local") {
@@ -55,9 +55,19 @@ bash $root/src/scripts/wait-for-it.sh --timeout=20 --strict 127.0.0.1:10081 -- e
 # The application is configured for auto-start. Hence, no need to issue the start API.
 # curl -X POST -s http://ccr.cleanroom.local:8200/gov/demo-app/start --proxy http://127.0.0.1:10081
 
-pwsh $PSScriptRoot/../wait-for-cleanroom.ps1 `
-    -appName demo-app `
-    -proxyUrl http://127.0.0.1:10081
+$script:waitForCleanRoomFailed = $false
+$script:waitForCleanRoomExitCode = 0
+& {
+    # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
+    $PSNativeCommandUseErrorActionPreference = $false
+    pwsh $PSScriptRoot/../wait-for-cleanroom.ps1 `
+        -appName demo-app `
+        -proxyUrl http://127.0.0.1:10081
+    if ($LASTEXITCODE -gt 0) {
+        $script:executionFailed = $true
+        $script:waitForCleanRoomExitCode = $LASTEXITCODE
+    }
+}
 
 # Wait for flush
 Start-Sleep -Seconds 5
@@ -76,65 +86,52 @@ if ($response -ne $expectedResponse) {
     Write-Host -ForegroundColor Red "Did not get expected response. Received: $response."
     exit 1
 }
-
 if (!$skiplogs) {
     mkdir -p $outDir/results
+    $resultsDir = "$outDir/results"
     az cleanroom datastore download `
         --config $datastoreOutdir/encrypted-storage-consumer-datastore-config `
         --name consumer-output `
-        --dst $outDir/results
+        --dst $resultsDir
 
     az cleanroom telemetry download `
         --cleanroom-config $outDir/configurations/publisher-config `
         --datastore-config $datastoreOutdir/encrypted-storage-publisher-datastore-config `
-        --target-folder $outDir/results
+        --target-folder $resultsDir
 
     az cleanroom logs download `
         --cleanroom-config $outDir/configurations/publisher-config `
         --datastore-config $datastoreOutdir/encrypted-storage-publisher-datastore-config `
-        --target-folder $outDir/results
+        --target-folder $resultsDir
 
     az cleanroom datastore decrypt `
         --config $datastoreOutdir/encrypted-storage-consumer-datastore-config `
         --name consumer-output `
-        --source-path $outDir/results `
-        --destination-path $outDir/results-decrypted
-
-    az cleanroom logs decrypt `
-        --cleanroom-config $outDir/configurations/publisher-config `
-        --datastore-config $datastoreOutdir/encrypted-storage-publisher-datastore-config `
-        --source-path $outDir/results `
-        --destination-path $outDir/results-decrypted
-        
-    az cleanroom telemetry decrypt `
-        --cleanroom-config $outDir/configurations/publisher-config `
-        --datastore-config $datastoreOutdir/encrypted-storage-publisher-datastore-config `
-        --source-path $outDir/results `
+        --source-path $resultsDir/consumer-output `
         --destination-path $outDir/results-decrypted
 
     Write-Host "Application logs:"
-    cat $outDir/results-decrypted/application-telemetry*/**/demo-app.log
+    cat $resultsDir/application-telemetry*/demo-app.log
 }
-
 # Check that expected output files got created.
 $expectedFiles = @(
-    "$PSScriptRoot/generated/results-decrypted/consumer-output/**/output.gz",
-    "$PSScriptRoot/generated/results-decrypted/application-telemetry*/**/demo-app.log",
-    "$PSScriptRoot/generated/results-decrypted/infrastructure-telemetry*/**/application-telemetry*-blobfuse.log",
-    "$PSScriptRoot/generated/results-decrypted/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results-decrypted/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results-decrypted/infrastructure-telemetry*/**/demo-app*-code-launcher.log",
-    "$PSScriptRoot/generated/results-decrypted/infrastructure-telemetry*/**/demo-app*-code-launcher.traces",
-    "$PSScriptRoot/generated/results-decrypted/infrastructure-telemetry*/**/demo-app*-code-launcher.metrics",
-    "$PSScriptRoot/generated/results-decrypted/infrastructure-telemetry*/**/consumer-output*-blobfuse.log",
-    "$PSScriptRoot/generated/results-decrypted/infrastructure-telemetry*/**/consumer-output*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results-decrypted/infrastructure-telemetry*/**/consumer-output*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results-decrypted/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse.log",
-    "$PSScriptRoot/generated/results-decrypted/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results-decrypted/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results-decrypted/infrastructure-telemetry*/**/publisher-input*-blobfuse.log",
-    "$PSScriptRoot/generated/results-decrypted/infrastructure-telemetry*/**/publisher-input*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results-decrypted/infrastructure-telemetry*/**/publisher-input*-blobfuse-launcher.traces"
+    "$outDir/results-decrypted/consumer-output/**/output.gz",
+    "$resultsDir/application-telemetry*/demo-app.log",
+    "$resultsDir/infrastructure-telemetry*/application-telemetry*-blobfuse.log",
+    "$resultsDir/infrastructure-telemetry*/application-telemetry*-blobfuse-launcher.log",
+    "$resultsDir/infrastructure-telemetry*/application-telemetry*-blobfuse-launcher.traces",
+    "$resultsDir/infrastructure-telemetry*/demo-app*-code-launcher.log",
+    "$resultsDir/infrastructure-telemetry*/demo-app*-code-launcher.traces",
+    "$resultsDir/infrastructure-telemetry*/demo-app*-code-launcher.metrics",
+    "$resultsDir/infrastructure-telemetry*/consumer-output*-blobfuse.log",
+    "$resultsDir/infrastructure-telemetry*/consumer-output*-blobfuse-launcher.log",
+    "$resultsDir/infrastructure-telemetry*/consumer-output*-blobfuse-launcher.traces",
+    "$resultsDir/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse.log",
+    "$resultsDir/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse-launcher.log",
+    "$resultsDir/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse-launcher.traces",
+    "$resultsDir/infrastructure-telemetry*/publisher-input*-blobfuse.log",
+    "$resultsDir/infrastructure-telemetry*/publisher-input*-blobfuse-launcher.log",
+    "$resultsDir/infrastructure-telemetry*/publisher-input*-blobfuse-launcher.traces"
 )
 
 $missingFiles = @()
@@ -151,4 +148,9 @@ if ($missingFiles.Count -gt 0) {
     }
     
     exit 1
+}
+
+if ($script:waitForCleanRoomFailed) {
+    Write-Host "waitforcleanroom.ps1 had exited with: $script:waitForCleanRoomExitCode"
+    exit $script:waitForCleanRoomExitCode
 }

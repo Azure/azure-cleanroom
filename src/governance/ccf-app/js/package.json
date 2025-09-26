@@ -11,7 +11,7 @@
     "node": ">=14"
   },
   "dependencies": {
-    "@microsoft/ccf-app": "^6.0.0-rc1",
+    "@microsoft/ccf-app": "^6.0.1",
     "js-base64": "^3.7.6"
   },
   "devDependencies": {

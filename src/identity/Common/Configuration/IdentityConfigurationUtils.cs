@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Text;
-using Microsoft.Azure.CleanRoomSidecar.Identity.Errors;
+using Controllers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 
@@ -97,16 +97,20 @@ public static class IdentityConfigurationUtils
     {
         if (config == null)
         {
-            throw IdentityException.InvalidConfiguration(
-                $"{nameof(IdentityConfiguration)} is null.");
+            throw new ApiException(new ODataError(
+                code: "InvalidConfiguration",
+                message: $"The configuration specified is invalid - " +
+                $"{nameof(IdentityConfiguration)} is null."));
         }
 
         foreach (var managedIdentity in config.Identities.ManagedIdentities)
         {
             if (string.IsNullOrEmpty(managedIdentity.ClientId))
             {
-                throw IdentityException.InvalidConfiguration(
-                    $"Managed Identity has an empty client ID.");
+                throw new ApiException(new ODataError(
+                    code: "InvalidConfiguration",
+                    message: $"The configuration specified is invalid - " +
+                    $"Managed Identity has an empty client ID."));
             }
         }
 
@@ -114,31 +118,39 @@ public static class IdentityConfigurationUtils
         {
             if (string.IsNullOrEmpty(applicationIdentity.ClientId))
             {
-                throw IdentityException.InvalidConfiguration(
-                    $"Application Identity has an empty client ID.");
+                throw new ApiException(new ODataError(
+                    code: "InvalidConfiguration",
+                    message: $"The configuration specified is invalid - " +
+                    $"Application Identity has an empty client ID."));
             }
 
             if (applicationIdentity.Credential == null)
             {
-                throw IdentityException.InvalidConfiguration(
+                throw new ApiException(new ODataError(
+                    code: "InvalidConfiguration",
+                    message: $"The configuration specified is invalid - " +
                     $"Application Identity must have credential details specified, client ID: " +
-                    $"{applicationIdentity.ClientId}.");
+                    $"{applicationIdentity.ClientId}."));
             }
 
             if (applicationIdentity.Credential.CredentialType == CredentialType.FederatedCredential)
             {
                 if (applicationIdentity.Credential.SecretConfiguration != null)
                 {
-                    throw IdentityException.InvalidConfiguration(
+                    throw new ApiException(new ODataError(
+                        code: "InvalidConfiguration",
+                        message: $"The configuration specified is invalid - " +
                         $"{nameof(SecretConfiguration)} must not be specified for a Federated " +
-                        $"credential, client ID: {applicationIdentity.ClientId}.");
+                        $"credential, client ID: {applicationIdentity.ClientId}."));
                 }
 
                 if (applicationIdentity.Credential.FederationConfiguration == null)
                 {
-                    throw IdentityException.InvalidConfiguration(
+                    throw new ApiException(new ODataError(
+                        code: "InvalidConfiguration",
+                        message: $"The configuration specified is invalid - " +
                         $"A federated credential must have an associated configuration, " +
-                        $"client ID: {applicationIdentity.ClientId}.");
+                        $"client ID: {applicationIdentity.ClientId}."));
                 }
             }
 
@@ -147,16 +159,20 @@ public static class IdentityConfigurationUtils
             {
                 if (applicationIdentity.Credential.SecretConfiguration == null)
                 {
-                    throw IdentityException.InvalidConfiguration(
+                    throw new ApiException(new ODataError(
+                        code: "InvalidConfiguration",
+                        message: $"The configuration specified is invalid - " +
                         $"Application Identity must have a {nameof(SecretConfiguration)} " +
-                        $"specified, client ID: {applicationIdentity.ClientId}.");
+                        $"specified, client ID: {applicationIdentity.ClientId}."));
                 }
 
                 if (applicationIdentity.Credential.SecretConfiguration.SecretStore == null)
                 {
-                    throw IdentityException.InvalidConfiguration(
+                    throw new ApiException(new ODataError(
+                        code: "InvalidConfiguration",
+                        message: $"The configuration specified is invalid - " +
                         $"Application Identity is missing a {nameof(SecretStore)}" +
-                        $", client ID: {applicationIdentity.ClientId}.");
+                        $", client ID: {applicationIdentity.ClientId}."));
                 }
             }
         }

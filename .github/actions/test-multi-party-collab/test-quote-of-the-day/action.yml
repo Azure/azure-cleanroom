@@ -29,7 +29,15 @@ runs:
 
     - name: Log in to Azure Container Registry
       shell: pwsh
-      run: az acr login -n ${{ inputs.repo }}
+      run: |
+        $pattern = '(.*?)(\.azurecr\.io.*)'
+        if ("${{ inputs.repo }}" -match $pattern) {
+            $acrName = $matches[1]
+        } else {
+            $acrName =  "${{ inputs.repo }}"
+        }
+
+        az acr login -n $acrName
 
     - name: Run collab scenario on Kind
       shell: pwsh
@@ -55,31 +63,11 @@ runs:
       if: ${{ !cancelled() }}
       run: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
 
-    - uses: actions/upload-artifact@v4
+    - name: Upload generated
+      uses: actions/upload-artifact@v4
       with:
-        name: results-quote-of-the-day
-        path: ./test/onebox/multi-party-collab/quote-of-the-day/generated/results
-        overwrite: true
-      if: ${{ !cancelled() }}
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: configurations-quote-of-the-day
-        path: ./test/onebox/multi-party-collab/quote-of-the-day/generated/configurations
-        overwrite: true
-      if: ${{ !cancelled() }}
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: deployments-quote-of-the-day
-        path: ./test/onebox/multi-party-collab/quote-of-the-day/generated/deployments
-        overwrite: true
-      if: ${{ !cancelled() }}
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: ccf-quote-of-the-day
-        path: ./test/onebox/multi-party-collab/quote-of-the-day/generated/ccf
+        name: generated-quote-of-the-day
+        path: ./test/onebox/multi-party-collab/quote-of-the-day/generated
         overwrite: true
       if: ${{ !cancelled() }}
 

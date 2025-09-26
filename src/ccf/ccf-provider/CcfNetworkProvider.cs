@@ -17,6 +17,7 @@ using Controllers;
 using CoseUtils;
 using LoadBalancerProvider;
 using Microsoft.Extensions.Logging;
+using Polly;
 
 namespace CcfProvider;
 
@@ -53,7 +54,8 @@ public class CcfNetworkProvider
         List<InitialMember> initialMembers,
         string? nodeLogLevel,
         SecurityPolicyConfiguration policyOption,
-        JsonObject? providerConfig)
+        JsonObject? providerConfig,
+        IProgress<string> progress)
     {
         var startNodeName = networkName + "-0";
         var nodeData = new NodeData
@@ -64,6 +66,7 @@ public class CcfNetworkProvider
 
         string lbName = "lb-nw-" + networkName;
         var lbFqdn = this.lbProvider.GenerateLoadBalancerFqdn(lbName, networkName, providerConfig);
+        progress.Report($"Creating start node '{startNodeName}'...");
         var startNodeEndpoint = await this.nodeProvider.CreateStartNode(
             startNodeName,
             networkName,
@@ -79,6 +82,7 @@ public class CcfNetworkProvider
             startNodeEndpoint.ClientRpcAddress,
             onRetry: () => this.CheckNodeHealthy(networkName, startNodeName, providerConfig));
 
+        progress.Report($"Waiting for start node to become ready...");
         await this.WaitForStartNodeReady(startNodeEndpoint, serviceCertPem);
 
         this.logger.LogInformation(
@@ -99,15 +103,31 @@ public class CcfNetworkProvider
             lbFqdn.NodeSanFormat(),
             serviceCertPem,
             DesiredJoinNodeState.PartOfNetwork,
-            ordinal);
+            ordinal,
+            progress);
 
         List<string> servers =
             [startNodeEndpoint.ClientRpcAddress, .. joinNodes.Select(n => n.ClientRpcAddress)];
+        List<string> agentServers = [.. (await this.nodeProvider.GetRecoveryAgents(
+            networkName,
+            providerConfig))!.Select(a =>
+            {
+                var u = new Uri(a.Endpoint);
+                return $"{u.Host}:{u.Port}";
+            })];
+        progress.Report("Creating load balancer...");
         var lbEndpoint =
-            await this.lbProvider.CreateLoadBalancer(lbName, networkName, servers, providerConfig);
+            await this.lbProvider.CreateLoadBalancer(
+                lbName,
+                networkName,
+                servers,
+                agentServers,
+                providerConfig);
 
+        progress.Report($"Waiting for load balancer to become ready...");
         await this.WaitForLoadBalancerReady(lbEndpoint, serviceCertPem);
 
+        progress.Report($"CCF endpoint is up at: {lbEndpoint.Endpoint}.");
         this.logger.LogInformation($"CCF endpoint is up at: {lbEndpoint.Endpoint}.");
         return new CcfNetwork
         {
@@ -201,7 +221,10 @@ public class CcfNetworkProvider
             $"Current primary node: " +
             $"{primaryNodeEndpoint.NodeName}, endpoint: {primaryNodeEndpoint.ClientRpcAddress}");
 
-        var primaryClient = this.GetOrAddServiceClient(primaryNodeEndpoint, serviceCertPem);
+        var primaryClient = this.GetOrAddServiceClient(
+            primaryNodeEndpoint,
+            serviceCertPem,
+            HttpRetries.Policies.DefaultRetryPolicy(this.logger));
 
         // First clean up any nodes already in Retired state so that we don't count them towards
         // node addition/removal as these are stale and would have been left behind from a
@@ -358,12 +381,23 @@ public class CcfNetworkProvider
                 n => !nodesHealth.Any(nh => nh.Name == n.NodeName &&
                 nh.Status == nameof(NodeStatus.NeedsReplacement)));
             List<string> servers = new(availableNodeEndpoints.Select(n => n.ClientRpcAddress));
+            List<string> agentServers = [.. (await this.nodeProvider.GetRecoveryAgents(
+                networkName,
+                providerConfig))!
+                .Where(a => availableNodeEndpoints.Any(n => n.NodeName == a.Name))
+                .Select(a =>
+            {
+                var u = new Uri(a.Endpoint);
+                return $"{u.Host}:{u.Port}";
+            })];
             this.logger.LogInformation(
-                $"Updating LB with servers: {JsonSerializer.Serialize(servers)}.");
+                $"Updating LB with servers: {JsonSerializer.Serialize(servers)}, " +
+                $"agent servers: {JsonSerializer.Serialize(agentServers)}.");
             lbEndpoint = await this.lbProvider.UpdateLoadBalancer(
                 lbEndpoint.Name,
                 networkName,
                 servers,
+                agentServers,
                 providerConfig);
 
             await this.WaitForLoadBalancerReady(lbEndpoint, serviceCertPem);
@@ -387,7 +421,8 @@ public class CcfNetworkProvider
         string? nodeLogLevel,
         SecurityPolicyConfiguration policyOption,
         string previousServiceCertificate,
-        JsonObject? providerConfig)
+        JsonObject? providerConfig,
+        IProgress<string> progress)
     {
         List<string> recoveryNodeNames =
             await this.nodeProvider.GetCandidateRecoveryNodes(networkToRecoverName, providerConfig);
@@ -411,6 +446,7 @@ public class CcfNetworkProvider
                     Id = ToId(recoverNodeName)
                 };
 
+                progress.Report($"Creating recover node '{recoverNodeName}'...");
                 var recoverNodeEndpoint = await this.nodeProvider.CreateRecoverNode(
                     recoverNodeName,
                     targetNetworkName,
@@ -427,6 +463,8 @@ public class CcfNetworkProvider
                     recoverNodeEndpoint.ClientRpcAddress,
                     onRetry: () => this.CheckNodeHealthy(targetNetworkName, recoverNodeName, providerConfig));
 
+                progress.Report($"Waiting for public network recovery on node " +
+                    $"'{recoverNodeName}'...");
                 (NetworkNode node, long lastSignedSeqNo) = await this.WaitForRecoverNodeReady(
                     recoverNodeEndpoint,
                     serviceCertPem,
@@ -453,14 +491,23 @@ public class CcfNetworkProvider
                 $"lastSignedSeqNo: {nodeToUse.lastSignedSeqNo} will be used for recovery. " +
                 $"Shutting down other {nodesToShutdown.Count()} nodes.");
             List<Task> deleteTasks = new();
+            if (nodesToShutdown.Any())
+            {
+                progress.Report($"Using node {nodeToUse.ep.NodeName} for recovery. " +
+                    $"Removing other recover nodes.");
+            }
+
             foreach (var (node, lastSignedSeqNo, ep, serviceCertPem) in nodesToShutdown)
             {
-                deleteTasks.Add(
-                    this.nodeProvider.DeleteNode(
+                deleteTasks.Add(Task.Run(async () =>
+                {
+                    progress.Report($"Removing node {node.NodeData.Name}...");
+                    await this.nodeProvider.DeleteNode(
                         targetNetworkName,
                         node.NodeData.Name,
                         node.NodeData,
-                        providerConfig));
+                        providerConfig);
+                }));
             }
 
             await Task.WhenAll(deleteTasks);
@@ -486,16 +533,28 @@ public class CcfNetworkProvider
             lbFqdn.NodeSanFormat(),
             nodeToUse.serviceCertPem,
             DesiredJoinNodeState.PartOfPublicNetwork,
-            ordinal);
+            ordinal,
+            progress);
 
         List<string> servers =
             [nodeToUse.ep.ClientRpcAddress, .. joinNodes.Select(n => n.ClientRpcAddress)];
+        List<string> agentServers = [.. (await this.nodeProvider.GetRecoveryAgents(
+            targetNetworkName,
+            providerConfig))!.Select(a =>
+            {
+                var u = new Uri(a.Endpoint);
+                return $"{u.Host}:{u.Port}";
+            })];
+
+        progress.Report("Creating load balancer...");
         var lbEndpoint = await this.lbProvider.CreateLoadBalancer(
             lbName,
             targetNetworkName,
             servers,
+            agentServers,
             providerConfig);
 
+        progress.Report($"Waiting for load balancer to become ready...");
         await this.WaitForLoadBalancerReady(lbEndpoint, nodeToUse.serviceCertPem);
 
         this.logger.LogInformation($"CCF endpoint is up at: {lbEndpoint.Endpoint}.");
@@ -796,7 +855,8 @@ public class CcfNetworkProvider
         SecurityPolicyConfiguration policyOption,
         string previousServiceCertificate,
         RSA rsaEncKey,
-        JsonObject? providerConfig)
+        JsonObject? providerConfig,
+        IProgress<string> progress)
     {
         // Before proceeding further check that signing cert/key that would be required to submit
         // any proposal are configured.
@@ -812,6 +872,7 @@ public class CcfNetworkProvider
         //   for recovery.
         // - Wait for recovery node to become PartOfNetwork.
         // - Remove any retired (pre-DR) nodes.
+        progress.Report("Removing stale node(s)...");
         await this.DeleteNetwork(networkName, DeleteOption.RetainStorage, providerConfig);
 
         var recoveryNetwork = await this.RecoverPublicNetwork(
@@ -821,7 +882,8 @@ public class CcfNetworkProvider
             nodeLogLevel,
             policyOption,
             previousServiceCertificate,
-            providerConfig);
+            providerConfig,
+            progress);
 
         await this.TransitionToOpen(networkName, previousServiceCertificate, providerConfig);
 
@@ -855,17 +917,22 @@ public class CcfNetworkProvider
                 recoverNodeEndpoint.NodeName,
                 providerConfig));
 
+        progress.Report($"Waiting for network recovery completion...");
         await this.WaitForRecoverNodeReady(
             recoverNodeEndpoint,
             serviceCertPem,
             DesiredJoinNodeState.PartOfNetwork);
 
-        var primaryClient = this.GetOrAddServiceClient(recoverNodeEndpoint, serviceCertPem);
+        var primaryClient = this.GetOrAddServiceClient(
+            recoverNodeEndpoint,
+            serviceCertPem,
+            HttpRetries.Policies.DefaultRetryPolicy(this.logger));
         await this.CleanupRetiredNodesPostRecovery(
             networkName,
             providerConfig,
             primaryClient);
 
+        progress.Report($"CCF endpoint is up at: {recoveryNetwork.Endpoint}.");
         return recoveryNetwork;
     }
 
@@ -878,7 +945,8 @@ public class CcfNetworkProvider
         CcfNetworkRecoveryAgentProvider recoveryAgentProvider,
         string confidentialRecoveryMemberName,
         CcfRecoveryService recoveryService,
-        JsonObject? providerConfig)
+        JsonObject? providerConfig,
+        IProgress<string> progress)
     {
         // Before proceeding further check that signing cert/key that would be required to submit
         // any proposal are configured.
@@ -904,6 +972,7 @@ public class CcfNetworkProvider
         //   for recovery.
         // - Wait for recovery node to become PartOfNetwork.
         // - Remove any retired (pre-DR) nodes.
+        progress.Report("Removing stale node(s)...");
         await this.DeleteNetwork(networkName, DeleteOption.RetainStorage, providerConfig);
 
         var recoveryNetwork = await this.RecoverPublicNetwork(
@@ -913,7 +982,8 @@ public class CcfNetworkProvider
             nodeLogLevel,
             policyOption,
             previousServiceCertificate,
-            providerConfig);
+            providerConfig,
+            progress);
 
         await this.TransitionToOpen(networkName, previousServiceCertificate, providerConfig);
 
@@ -946,16 +1016,22 @@ public class CcfNetworkProvider
                 recoverNodeEndpoint.NodeName,
                 providerConfig));
 
+        progress.Report($"Waiting for network recovery completion...");
         await this.WaitForRecoverNodeReady(
             recoverNodeEndpoint,
             serviceCertPem,
             DesiredJoinNodeState.PartOfNetwork);
 
-        var primaryClient = this.GetOrAddServiceClient(recoverNodeEndpoint, serviceCertPem);
+        var primaryClient = this.GetOrAddServiceClient(
+            recoverNodeEndpoint,
+            serviceCertPem,
+            HttpRetries.Policies.DefaultRetryPolicy(this.logger));
         await this.CleanupRetiredNodesPostRecovery(
             networkName,
             providerConfig,
             primaryClient);
+
+        progress.Report($"CCF endpoint is up at: {recoveryNetwork.Endpoint}.");
         return recoveryNetwork;
     }
 
@@ -1033,9 +1109,11 @@ public class CcfNetworkProvider
         NodeEndpoint startNodeEndpoint,
         string serviceCertPem)
     {
+        // No retry policy is specified as retries are handled in the loop below.
         var nodeSelfSignedCertPem = await this.GetNodeSelfSignedCert(startNodeEndpoint);
         var client = this.GetOrAddNodeClient(
             startNodeEndpoint,
+            HttpRetries.Policies.NoRetries,
             serviceCertPem,
             nodeSelfSignedCertPem);
 
@@ -1071,7 +1149,8 @@ public class CcfNetworkProvider
         List<string> san,
         string serviceCertPem,
         DesiredJoinNodeState desiredJoinNodeState,
-        int startOrdinal)
+        int startOrdinal,
+        IProgress<string> progress)
     {
         List<Task> joinTasks = new();
         ConcurrentBag<NodeEndpoint> joinNodes = new();
@@ -1087,6 +1166,7 @@ public class CcfNetworkProvider
                     Id = ToId(joinNodeName)
                 };
 
+                progress.Report($"Creating join node '{joinNodeName}'...");
                 var joinNodeEndpoint = await this.nodeProvider.CreateJoinNode(
                     joinNodeName,
                     networkName,
@@ -1103,6 +1183,7 @@ public class CcfNetworkProvider
                 await this.CheckNodeHealthy(networkName, joinNodeName, providerConfig);
 
                 joinNodes.Add(joinNodeEndpoint);
+                progress.Report($"Waiting for join node '{joinNodeName}' to become ready...");
                 await this.WaitForJoinNodeReady(
                     networkName,
                     providerConfig,
@@ -1132,7 +1213,10 @@ public class CcfNetworkProvider
         string serviceCertPem,
         DesiredJoinNodeState desiredState)
     {
-        var serviceClient = this.GetOrAddServiceClient(targetNodeEndpoint, serviceCertPem);
+        var serviceClient = this.GetOrAddServiceClient(
+            targetNodeEndpoint,
+            serviceCertPem,
+            HttpRetries.Policies.DefaultRetryPolicy(this.logger));
 
         // For nodes joining in network open state we need to transition the node to trusted
         // before the node can finish joining successfully.
@@ -1193,8 +1277,11 @@ public class CcfNetworkProvider
                 networkName,
                 joinNodeEndpoint.NodeName,
                 providerConfig));
+
+        // No retry policy is specified as retries are handled in the loop below.
         var client = this.GetOrAddNodeClient(
             joinNodeEndpoint,
+            HttpRetries.Policies.NoRetries,
             serviceCertPem,
             selfSignedCertPem);
 
@@ -1428,9 +1515,11 @@ public class CcfNetworkProvider
     string serviceCertPem,
     DesiredJoinNodeState desiredJoinNodeState)
     {
+        // No retry policy is specified as retries are handled in the loop below.
         var nodeSelfSignedCertPem = await this.GetNodeSelfSignedCert(recoverNodeEndpoint);
         var client = this.GetOrAddNodeClient(
             recoverNodeEndpoint,
+            HttpRetries.Policies.NoRetries,
             serviceCertPem,
             nodeSelfSignedCertPem);
 
@@ -1496,7 +1585,11 @@ public class CcfNetworkProvider
         var endpoint = lbEndpoint.Endpoint;
 
         // Wait for the CCF service to respond via the load balancer.
-        var lbClient = this.GetOrAddServiceClient(lbEndpoint, serviceCertPem);
+        // No retry policy is specified as retries are handled in the loop below.
+        var lbClient = this.GetOrAddServiceClient(
+            lbEndpoint,
+            serviceCertPem,
+            HttpRetries.Policies.NoRetries);
 
         while (true)
         {
@@ -1551,7 +1644,10 @@ public class CcfNetworkProvider
             LoadBalancerEndpoint lbEndpoint)
     {
         var serviceCertPem = await this.GetServiceCert(lbEndpoint.Name, lbEndpoint.Endpoint);
-        var serviceClient = this.GetOrAddServiceClient(lbEndpoint, serviceCertPem);
+        var serviceClient = this.GetOrAddServiceClient(
+            lbEndpoint,
+            serviceCertPem,
+            HttpRetries.Policies.DefaultRetryPolicy(this.logger));
         var nodes = (await serviceClient.GetFromJsonAsync<NetworkNodeList>("/node/network/nodes"))!;
         var primary = nodes.Nodes.Find(n => n.Primary);
         if (primary == null)
@@ -1576,7 +1672,11 @@ public class CcfNetworkProvider
         string endpoint,
         Func<Task>? onRetry = null)
     {
-        using var client = HttpClientManager.NewInsecureClient(endpoint, this.logger);
+        // No retry policy is specified as retries are handled in the loop below.
+        using var client = HttpClientManager.NewInsecureClient(
+            endpoint,
+            this.logger,
+            HttpRetries.Policies.NoRetries);
 
         // Use a shorter timeout than the default (100s) so that we retry faster to connect to the
         // endpoint that is warming up.
@@ -1636,7 +1736,11 @@ public class CcfNetworkProvider
         var endpoint = nodeEndpoint.ClientRpcAddress;
         var nodeName = nodeEndpoint.NodeName;
 
-        using var client = HttpClientManager.NewInsecureClient(endpoint, this.logger);
+        // No retry policy is specified as retries are handled in the loop below.
+        using var client = HttpClientManager.NewInsecureClient(
+            endpoint,
+            this.logger,
+            HttpRetries.Policies.NoRetries);
 
         // Use a shorter timeout than the default (100s) so that we retry faster to connect to the
         // endpoint that is warming up.
@@ -1699,7 +1803,8 @@ public class CcfNetworkProvider
                 // This helps debug issues.
                 using var debugClient = HttpClientManager.NewInsecureClient(
                     nodeEndpoint.NodeEndorsedRpcAddress,
-                    this.logger);
+                    this.logger,
+                    HttpRetries.Policies.NoRetries);
                 debugClient.Timeout = TimeSpan.FromSeconds(30);
 
                 var nodeStateResponse = await debugClient.GetAsync("/node/state");
@@ -1733,6 +1838,7 @@ public class CcfNetworkProvider
 
     private HttpClient GetOrAddNodeClient(
         NodeEndpoint nodeEndpoint,
+        IAsyncPolicy<HttpResponseMessage> retryPolicy,
         string serviceCertPem,
         string nodeSelfSignedCertPem)
     {
@@ -1746,35 +1852,32 @@ public class CcfNetworkProvider
                 serviceCertPem,
                 nodeSelfSignedCertPem
             },
+            retryPolicy,
             nodeName);
     }
 
     private HttpClient GetOrAddServiceClient(
         NodeEndpoint nodeEndpoint,
-        string serviceCertPem)
+        string serviceCertPem,
+        IAsyncPolicy<HttpResponseMessage> retryPolicy)
     {
-        return this.GetOrAddServiceClient(
-            nodeEndpoint.NodeName,
+        return this.httpClientManager.GetOrAddClient(
             nodeEndpoint.ClientRpcAddress,
-            serviceCertPem);
+            retryPolicy,
+            serviceCertPem,
+            nodeEndpoint.NodeName);
     }
 
     private HttpClient GetOrAddServiceClient(
         LoadBalancerEndpoint lbEndpoint,
-        string serviceCertPem)
+        string serviceCertPem,
+        IAsyncPolicy<HttpResponseMessage> retryPolicy)
     {
-        return this.GetOrAddServiceClient(
-            lbEndpoint.Name,
+        return this.httpClientManager.GetOrAddClient(
             lbEndpoint.Endpoint,
-            serviceCertPem);
-    }
-
-    private HttpClient GetOrAddServiceClient(
-        string endpointName,
-        string endpoint,
-        string serviceCertPem)
-    {
-        return this.httpClientManager.GetOrAddClient(endpoint, serviceCertPem, endpointName);
+            retryPolicy,
+            serviceCertPem,
+            lbEndpoint.Name);
     }
 
     private async Task<JsonObject> CreateProposal(
@@ -2173,14 +2276,6 @@ public class CcfNetworkProvider
                 $"Node instance {nodeName} is reporting unhealthy: " +
                 $"{JsonSerializer.Serialize(nodeHealth, Utils.Options)}");
         }
-    }
-
-    private async Task<Dictionary<string, Ccf.MemberInfo>> GetMembers(
-        HttpClient ccfClient)
-    {
-        var members = (await ccfClient.GetFromJsonAsync<Dictionary<string, Ccf.MemberInfo>>(
-            "gov/members"))!;
-        return members;
     }
 
     private async Task AddAndAcceptRecoveryOperator(

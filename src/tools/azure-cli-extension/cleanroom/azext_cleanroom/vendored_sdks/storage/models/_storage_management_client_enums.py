@@ -7,8 +7,9 @@
 # --------------------------------------------------------------------------
 
 from enum import Enum
-from six import with_metaclass
+
 from azure.core import CaseInsensitiveEnumMeta
+from six import with_metaclass
 
 
 class AccessTier(with_metaclass(CaseInsensitiveEnumMeta, str, Enum)):

@@ -1,6 +1,5 @@
-from azure.cli.core import AzCommandsLoader
-
 from azext_cleanroom._help import helps  # pylint: disable=unused-import
+from azure.cli.core import AzCommandsLoader
 
 
 class CleanRoomCommandsLoader(AzCommandsLoader):

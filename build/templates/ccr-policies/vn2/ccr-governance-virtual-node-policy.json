@@ -1,0 +1,53 @@
+{
+  "name": "ccr-governance",
+  "properties": {
+    "image": "$containerRegistryUrl/ccr-governance@$digest",
+    "command": [],
+    "environmentVariables": [
+      {
+        "name": "ccrgovEndpoint",
+        "value": "$cgsEndpoint"
+      },
+      {
+        "name": "ccrgovApiPathPrefix",
+        "value": "app/contracts/$contractId"
+      },
+      {
+        "name": "serviceCert",
+        "value": "$serviceCertBase64"
+      },
+      {
+        "name": "serviceCertDiscoveryEndpoint",
+        "value": "$serviceCertDiscoveryEndpoint"
+      },
+      {
+        "name": "serviceCertDiscoverySnpHostData",
+        "value": "$serviceCertDiscoverySnpHostData"
+      },
+      {
+        "name": "serviceCertDiscoverySkipDigestCheck",
+        "value": "$serviceCertDiscoverySkipDigestCheck"
+      },
+      {
+        "name": "serviceCertDiscoveryConstitutionDigest",
+        "value": "$serviceCertDiscoveryConstitutionDigest"
+      },
+      {
+        "name": "serviceCertDiscoveryJsappBundleDigest",
+        "value": "$serviceCertDiscoveryJsappBundleDigest"
+      },
+      {
+        "name": "TELEMETRY_MOUNT_PATH",
+        "value": "$telemetryMountPath"
+      }
+    ],
+    "volumeMounts": [
+      {
+        "name": "uds",
+        "mountPath": "/mnt/uds",
+        "mountType": "emptyDir",
+        "readOnly": false
+      }
+    ]
+  }
+}

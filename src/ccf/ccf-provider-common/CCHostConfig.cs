@@ -98,18 +98,32 @@ public class CCHostConfig
     {
         await this.SetMembers(initialMembers);
         this.SetConstitution(constitutionFilesDir);
+        string serviceCertDir = this.outDir + "/certs/ccf";
+        Directory.CreateDirectory(serviceCertDir);
     }
 
     public async Task SetJoinConfiguration(string targetRpcAddress, string serviceCertPem)
     {
         this.cchostConfig["command"]!["join"]!["target_rpc_address"] = targetRpcAddress;
-        string serviceCertPath = this.outDir + "/service_cert.pem";
+        string serviceCertPath = this.outDir + "/certs/ccf/service_cert.pem";
+        string? directory = Path.GetDirectoryName(serviceCertPath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         await File.WriteAllTextAsync(serviceCertPath, serviceCertPem);
     }
 
     public async Task SetRecoverConfiguration(string previousServiceCertPem)
     {
-        var serviceCertPath = this.outDir + "/previous_service_cert.pem";
+        var serviceCertPath = this.outDir + "/certs/ccf/previous_service_cert.pem";
+        string? directory = Path.GetDirectoryName(serviceCertPath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         await File.WriteAllTextAsync(serviceCertPath, previousServiceCertPem);
     }
 

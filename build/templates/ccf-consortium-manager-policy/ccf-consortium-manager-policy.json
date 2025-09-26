@@ -1,0 +1,92 @@
+[
+  {
+    "name": "ccr-proxy",
+    "containerImage": "$containerRegistryUrl/ccr-proxy@$digest",
+    "environmentVariables": [
+      {
+        "name": "CCR_ENVOY_DESTINATION_PORT",
+        "value": ".*",
+        "strategy": "re2"
+      },
+      {
+        "name": "CCR_ENVOY_SERVICE_CERT_OUTPUT_FILE",
+        "value": ".*",
+        "strategy": "re2"
+      }
+    ],
+    "mounts": [
+      {
+        "name": "certs",
+        "mountPath": "/app/certs",
+        "mountType": "emptyDir",
+        "readOnly": false
+      }
+    ],
+    "command": [
+      "/bin/bash",
+      "https-http/bootstrap.sh",
+      "--ca-type",
+      "local"
+    ]
+  },
+  {
+    "name": "ccf-consortium-manager",
+    "containerImage": "$containerRegistryUrl/ccf/ccf-consortium-manager@$digest",
+    "command": [],
+    "environmentVariables": [
+      {
+        "name": "ASPNETCORE_URLS",
+        "value": ".*",
+        "strategy": "re2"
+      },
+      {
+        "name": "SKR_ENDPOINT",
+        "value": "http://localhost:.*",
+        "strategy": "re2"
+      }
+    ],
+    "mounts": [
+      {
+        "name": "certs",
+        "mountPath": "/app/certs",
+        "mountType": "emptyDir",
+        "readOnly": false
+      },
+      {
+        "name": "uds",
+        "mountPath": "/mnt/uds",
+        "mountType": "emptyDir",
+        "readOnly": false
+      }
+    ]
+  },
+  {
+    "name": "skr",
+    "containerImage": "$containerRegistryUrl/skr@$digest",
+    "command": [
+      "/skr.sh"
+    ],
+    "environmentVariables": [
+      {
+        "name": "SkrSideCarArgs",
+        "value": "ewogICAiY2VydGNhY2hlIjogewogICAgICAiZW5kcG9pbnQiOiAiYW1lcmljYXMuYWNjY2FjaGUuYXp1cmUubmV0IiwKICAgICAgInRlZV90eXBlIjogIlNldlNucFZNIiwKICAgICAgImFwaV92ZXJzaW9uIjogImFwaS12ZXJzaW9uPTIwMjAtMTAtMTUtcHJldmlldyIKICAgfQp9",
+        "strategy": "string"
+      },
+      {
+        "name": "Port",
+        "value": ".*",
+        "strategy": "re2"
+      },
+      {
+        "name": "LogFile",
+        "value": ".*",
+        "strategy": "re2"
+      },
+      {
+        "name": "LogLevel",
+        "value": "Info",
+        "strategy": "string"
+      }
+    ]
+  }
+]

@@ -30,32 +30,6 @@ public class CAController : ControllerBase
     internal WebContext WebContext =>
         (WebContext)this.ControllerContext.HttpContext.Items[WebContext.WebContextIdentifer]!;
 
-    [HttpGet("/ca/isEnabled")]
-    public async Task<IActionResult> IsCAEnabled()
-    {
-        var appClient = await this.ccfClientManager.GetAppClient();
-        var wsConfig = await this.ccfClientManager.GetWsConfig();
-        var content = Attestation.PrepareRequestContent(
-            wsConfig.Attestation.Report);
-
-        using (HttpRequestMessage request = new(
-            HttpMethod.Get,
-            this.routes.IsCAEnabled(this.WebContext)))
-        {
-            request.Content = new StringContent(
-                content.ToJsonString(),
-                Encoding.UTF8,
-                "application/json");
-
-            using HttpResponseMessage response = await appClient.SendAsync(request);
-            this.Response.CopyHeaders(response.Headers);
-            await response.ValidateStatusCodeAsync(this.logger);
-            var jsonResponse = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
-            this.logger.LogInformation(jsonResponse.ToString());
-            return this.Ok(JsonSerializer.Deserialize<JsonObject>(jsonResponse.ToString()));
-        }
-    }
-
     [HttpPost("/ca/generateEndorsedCert")]
     public async Task<IActionResult> GenerateEndorsedCert([FromBody] JsonObject data)
     {

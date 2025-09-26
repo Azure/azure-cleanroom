@@ -4,11 +4,11 @@
 using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
+using CcfCommon;
 using CcfProvider;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using Microsoft.Extensions.Logging;
-using static VirtualCcfProvider.DockerRecoveryServiceInstanceProvider;
 
 namespace VirtualCcfProvider;
 
@@ -206,7 +206,7 @@ internal static class DockerClientEx
     {
         int publicPort = container.GetPublicPort(Ports.RpcMainPort);
         int publicDebugPort = container.GetPublicPort(Ports.RpcDebugPort);
-        var host = IsGitHubActionsEnv() ? "172.17.0.1" : "host.docker.internal";
+        var host = IsGitHubActionsEnv() || IsCodespacesEnv() ? "172.17.0.1" : "host.docker.internal";
 
         return new NodeEndpoint
         {
@@ -231,7 +231,7 @@ internal static class DockerClientEx
         string resourceNameTag)
     {
         int publicPort = container.GetPublicPort(Ports.EnvoyPort);
-        var host = IsGitHubActionsEnv() ? "172.17.0.1" : "host.docker.internal";
+        var host = IsGitHubActionsEnv() || IsCodespacesEnv() ? "172.17.0.1" : "host.docker.internal";
 
         return new EnvoyEndpoint
         {
@@ -248,6 +248,7 @@ internal static class DockerClientEx
         string containerName,
         string serviceName,
         string hostServiceCertDir,
+        string serviceCertOutputFile,
         string resourceNameTag,
         Dictionary<string, string> labels)
     {
@@ -271,7 +272,7 @@ internal static class DockerClientEx
                 $"CCR_ENVOY_DESTINATION_ENDPOINT={envoyDestinationEndpoint}",
                 $"CCR_ENVOY_DESTINATION_PORT={envoyDestinationPort}",
                 $"CCR_ENVOY_CLUSTER_TYPE=STRICT_DNS",
-                $"CCR_ENVOY_SERVICE_CERT_OUTPUT_FILE={DockerConstants.ServiceCertPemFilePath}"
+                $"CCR_ENVOY_SERVICE_CERT_OUTPUT_FILE={serviceCertOutputFile}"
             },
             ExposedPorts = new Dictionary<string, EmptyStruct>
             {
@@ -281,14 +282,16 @@ internal static class DockerClientEx
             },
             Entrypoint = new List<string>
             {
-                "/bin/sh",
-                "https-http/bootstrap.sh"
+                "/bin/bash",
+                "https-http/bootstrap.sh",
+                "--ca-type",
+                "local"
             },
             HostConfig = new HostConfig
             {
                 Binds = new List<string>
                 {
-                    $"{hostServiceCertDir}:{DockerConstants.ServiceFolderMountPath}"
+                    $"{hostServiceCertDir}:{MountPaths.CertsFolderMountPath}"
                 },
                 NetworkMode = serviceName,
                 PortBindings = new Dictionary<string, IList<PortBinding>>
@@ -316,6 +319,114 @@ internal static class DockerClientEx
         // Fetch again after starting to get the port mapping information.
         container = await client.GetContainerById(container.ID);
         return container.ToEnvoyEndpoint(resourceNameTag);
+    }
+
+    public static async Task<CredentialsProxyEndpoint> CreateCredentialsProxyContainer(
+        this DockerClient client,
+        ILogger logger,
+        string containerName,
+        string serviceName,
+        Dictionary<string, string> labels)
+    {
+        string? user = Environment.GetEnvironmentVariable("CREDENTIALS_PROXY_USER");
+        string? hostVolumePath = Environment.GetEnvironmentVariable(
+            "CREDENTIALS_PROXY_HOST_AZURE_VOLUME");
+        if (string.IsNullOrEmpty(hostVolumePath))
+        {
+            throw new ArgumentException("CREDENTIALS_PROXY_HOST_AZURE_VOLUME is not set.");
+        }
+
+        var imageParams = new ImagesCreateParameters
+        {
+            FromImage = ImageUtils.CredentialsProxyImage(),
+            Tag = ImageUtils.CredentialsProxyTag(),
+        };
+        await client.Images.CreateImageAsync(
+            imageParams,
+            authConfig: null,
+            new Progress<JSONMessage>(m => logger.LogInformation(m.ToProgressMessage())));
+
+        var createParams = new CreateContainerParameters
+        {
+            Labels = labels,
+            Name = containerName,
+            Image = $"{imageParams.FromImage}:{imageParams.Tag}",
+            ExposedPorts = new Dictionary<string, EmptyStruct>
+            {
+                {
+                    $"{Ports.CredentialsProxyPort}/tcp", new EmptyStruct()
+                }
+            },
+            HostConfig = new HostConfig
+            {
+                NetworkMode = serviceName
+            },
+        };
+
+        if (!string.IsNullOrEmpty(user))
+        {
+            createParams.User = user;
+        }
+
+        createParams.HostConfig.Binds = new List<string>
+        {
+            $"{hostVolumePath}:/app/.azure"
+        };
+
+        var container = await client.CreateOrGetContainer(createParams);
+
+        await client.Containers.StartContainerAsync(
+            container.ID,
+            new ContainerStartParameters());
+
+        return new CredentialsProxyEndpoint
+        {
+            IdentityEndpoint = $"http://{containerName}:8080/token",
+            ImdsEndpoint = "dummy_required_value"
+        };
+    }
+
+    public static async Task<string> CreateLocalSkrContainer(
+        this DockerClient client,
+        ILogger logger,
+        string containerName,
+        string serviceName,
+        Dictionary<string, string> labels)
+    {
+        var imageParams = new ImagesCreateParameters
+        {
+            FromImage = ImageUtils.LocalSkrImage(),
+            Tag = ImageUtils.LocalSkrTag(),
+        };
+        await client.Images.CreateImageAsync(
+            imageParams,
+            authConfig: null,
+            new Progress<JSONMessage>(m => logger.LogInformation(m.ToProgressMessage())));
+
+        var createParams = new CreateContainerParameters
+        {
+            Labels = labels,
+            Name = containerName,
+            Image = $"{imageParams.FromImage}:{imageParams.Tag}",
+            ExposedPorts = new Dictionary<string, EmptyStruct>
+            {
+                {
+                    $"{Ports.SkrPort}/tcp", new EmptyStruct()
+                }
+            },
+            HostConfig = new HostConfig
+            {
+                NetworkMode = serviceName
+            },
+        };
+
+        var container = await client.CreateOrGetContainer(createParams);
+
+        await client.Containers.StartContainerAsync(
+            container.ID,
+            new ContainerStartParameters());
+
+        return $"http://{containerName}:{Ports.SkrPort}";
     }
 
     public static string GetServiceCertDirectory(string type, string instanceName)
@@ -368,5 +479,24 @@ internal static class DockerClientEx
     private static bool IsGitHubActionsEnv()
     {
         return Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true";
+    }
+
+    private static bool IsCodespacesEnv()
+    {
+        return Environment.GetEnvironmentVariable("CODESPACES") == "true";
+    }
+
+    public class CredentialsProxyEndpoint
+    {
+        public string IdentityEndpoint { get; set; } = default!;
+
+        public string ImdsEndpoint { get; set; } = default!;
+    }
+
+    public class EnvoyEndpoint
+    {
+        public string Name { get; set; } = default!;
+
+        public string Endpoint { get; set; } = default!;
     }
 }

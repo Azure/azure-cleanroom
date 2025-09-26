@@ -15,6 +15,10 @@ export interface GetContractResponse {
   }[];
 }
 
+export interface ListContractsResponse {
+  value: ListContractResponse[];
+}
+
 export interface ListContractResponse {
   id: string;
 }

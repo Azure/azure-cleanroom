@@ -1,41 +1,34 @@
 import argparse
 import asyncio
 import base64
+import logging
 import os
 import subprocess
 import sys
+import time
 import uuid
-import logging
+from datetime import datetime, timedelta, timezone
 
+import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from podman.errors.exceptions import PodmanError, APIError
-import uvicorn
-
-from opentelemetry import _logs
-from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-from opentelemetry.exporter.otlp.proto.grpc._log_exporter import (
-    OTLPLogExporter,
-)
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry import _logs, metrics, trace
+from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
-from opentelemetry import metrics
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-
-from opentelemetry.instrumentation.requests import RequestsInstrumentor
-from opentelemetry.instrumentation.logging import LoggingInstrumentor
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-
-
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from podman.errors.exceptions import APIError, PodmanError
 from src.cmd_executors.executors import ACRCmdExecutor
-from src.utilities import utilities, podman_utilities
+from src.utilities import podman_utilities, utilities
 
 from cleanroomspec.models.python.model import (
     Application,
@@ -81,7 +74,9 @@ logger_provider.add_log_record_processor(
 _logs.set_logger_provider(logger_provider)
 
 # Create a logger from the global logger provider.
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
+)
 handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
 logger = logging.getLogger("code-launcher")
 logger.addHandler(handler)
@@ -223,6 +218,20 @@ async def consent_check_failure_handler(request: Request, exc: ConsentCheckFailu
     )
 
 
+@app.middleware("http")
+async def log_request_timing(request: Request, call_next):
+    logger.info(f"Incoming request: {request.method} {request.url.path}")
+
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+
+    logger.info(
+        f"{request.method} {request.url.path} took {process_time:.3f} seconds to process"
+    )
+    return response
+
+
 @app.post("/gov/{application_name}/start")
 async def start(application_name):
     from src.connectors.httpconnectors import GovernanceHttpConnector
@@ -249,8 +258,8 @@ async def start(application_name):
 
 @app.get("/gov/{application_name}/status")
 async def getStatus(application_name):
-    from src.exceptions.custom_exceptions import PodmanContainerNotFound
     from src.connectors.httpconnectors import GovernanceHttpConnector
+    from src.exceptions.custom_exceptions import PodmanContainerNotFound
 
     try:
         return await podman_utilities.get_application_status(application_name)
@@ -273,9 +282,8 @@ async def getStatus(application_name):
 @app.post("/gov/exportLogs")
 async def exportLogs():
     import shutil
-    from src.connectors.httpconnectors import (
-        GovernanceHttpConnector,
-    )
+
+    from src.connectors.httpconnectors import GovernanceHttpConnector
 
     await GovernanceHttpConnector.check_consent(ConsentCheckScope.Logging.value)
     application_telemetry_path = utilities.wait_for_mount_point("application-telemetry")
@@ -305,9 +313,8 @@ async def exportLogs():
 @app.post("/gov/exportTelemetry")
 async def exportTelemetry():
     import shutil
-    from src.connectors.httpconnectors import (
-        GovernanceHttpConnector,
-    )
+
+    from src.connectors.httpconnectors import GovernanceHttpConnector
 
     await GovernanceHttpConnector.check_consent(ConsentCheckScope.Telemetry.value)
     infrastructure_telemetry_path = utilities.wait_for_mount_point(
@@ -376,8 +383,8 @@ async def main(cmd_args):
     log_args(logger, cmd_arguments)
 
     from src.connectors.httpconnectors import (
-        IdentityHttpConnector,
         GovernanceHttpConnector,
+        IdentityHttpConnector,
     )
 
     IdentityHttpConnector.set_port(cmd_arguments.identity_port)

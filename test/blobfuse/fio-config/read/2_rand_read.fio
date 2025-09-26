@@ -1,0 +1,15 @@
+# This job performs random reads from a 50 GB file.
+
+[global]
+name=blobfuse_benchmark
+bs=256k
+runtime=60s
+time_based
+filename=read_fio.data
+group_reporting
+
+[random_read]
+size=50G
+rw=randread
+ioengine=sync
+fallocate=none

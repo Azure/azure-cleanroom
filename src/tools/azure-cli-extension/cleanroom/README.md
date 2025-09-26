@@ -20,7 +20,8 @@
     - [Controlling Log collection](#controlling-log-collection)
     - [Controlling Telemetry collection](#controlling-telemetry-collection)
     - [Events management](#events-management)
-    - [Document management](#document-management)
+    - [Member Document management](#member-document-management)
+    - [User Document management](#user-document-management)
     - [Member addition](#member-addition)
       - [Using member keys stored in Azure Key Vault](#using-member-keys-stored-in-azure-key-vault)
   - [CCF](#ccf)
@@ -28,7 +29,6 @@
     - [Network management](#network-management)
       - [Platform: AMD SEV-SNP using Confidential ACI](#platform-amd-sev-snp-using-confidential-aci)
       - [Platform: Insecure Virtual using Docker](#platform-insecure-virtual-using-docker)
-      - [Platform: Insecure Virtual using ACI](#platform-insecure-virtual-using-aci)
 - [Links](#links)
 - [Generating code under `vendored_sdks`](#generating-code-under-vendored_sdks)
 
@@ -379,30 +379,64 @@ az cleanroom governance contract event list --contract-id $contractId --all
   ]
 }
 ```
-### Document management
+### Member Document management
 ```powershell
 # Create a new document under a contract.
 $contractId="<AnExistingContractId>"
 $documentId="1221"
 $data = '{"hello": "world"}'
-az cleanroom governance document create --data $data --id $documentId --contract-id $contractId
+az cleanroom governance member-document create --data $data --id $documentId --contract-id $contractId
 
 # Update an existing document.
-$version=(Get-Document -id $documentId | jq -r ".version")
+$version=(Get-MemberDocument -id $documentId | jq -r ".version")
 $data = '{"hello": "world", "foo": "bar"}'
-Create-Document -data $data -id $documentId --contract-id $contractId -version $version
-$version=(az cleanroom governance document show --id $documentId --query "version" --output tsv)
+Create-MemberDocument -data $data -id $documentId --contract-id $contractId -version $version
+$version=(az cleanroom governance member-document show --id $documentId --query "version" --output tsv)
 $data = '{"hello": "world", "foo": "bar"}'
-az cleanroom governance document create --data $data --id $documentId --version $version
+az cleanroom governance member-document create --data $data --id $documentId --version $version
 
 # Submitting a document proposal.
-$version=(Get-Document -id $documentId | jq -r ".version")
-$proposalId=(Propose-Document -version $version -id $documentId | jq -r '.proposalId')
-$version=(az cleanroom governance document show --id $documentId --query "version" --output tsv)
-$proposalId=(az cleanroom governance document propose --version $version --id $documentId --query "proposalId" --output tsv)
+$version=(Get-MemberDocument -id $documentId | jq -r ".version")
+$proposalId=(Propose-MemberDocument -version $version -id $documentId | jq -r '.proposalId')
+$version=(az cleanroom governance member-document show --id $documentId --query "version" --output tsv)
+$proposalId=(az cleanroom governance member-document propose --version $version --id $documentId --query "proposalId" --output tsv)
 
 # Vote on a document. If there are multiple members then each member needs to vote before the document gets accepted.
-az cleanroom governance document vote --id $documentId --proposal-id $proposalId --action accept
+az cleanroom governance member-document vote --id $documentId --proposal-id $proposalId --action accept
+```
+
+### User Document management
+```powershell
+# Create a new document under a contract.
+$contractId="<AnExistingContractId>"
+$documentId="1221"
+$data = '{"hello": "world"}'
+az cleanroom governance user-document create --data $data --id $documentId --contract-id $contractId
+
+# Update an existing document.
+$version=(Get-UserDocument -id $documentId | jq -r ".version")
+$data = '{"hello": "world", "foo": "bar"}'
+Create-UserDocument -data $data -id $documentId --contract-id $contractId -version $version
+$version=(az cleanroom governance user-document show --id $documentId --query "version" --output tsv)
+$data = '{"hello": "world", "foo": "bar"}'
+az cleanroom governance user-document create --data $data --id $documentId --version $version
+
+# Submitting a document proposal.
+$version=(Get-UserDocument -id $documentId | jq -r ".version")
+$proposalId=(Propose-UserDocument -version $version -id $documentId | jq -r '.proposalId')
+$version=(az cleanroom governance user-document show --id $documentId --query "version" --output tsv)
+$proposalId=(az cleanroom governance user-document propose --version $version --id $documentId --query "proposalId" --output tsv)
+
+# Vote on a document. If there are multiple approvers then each approver needs to vote before the document gets accepted.
+az cleanroom governance user-document vote --id $documentId --proposal-id $proposalId --action accept
+
+# Disable execution of an accepted document. Use --action enable to reverse the action.
+# Any approver can disable/enable document execution.
+az cleanroom governance user-document runtime-option set --option execution --action disable --document-id $documentId
+
+# Check the execution status of an accepted document.
+# UserDocument execution status remains disabled as long as one or more approvers have disabled execution.
+az cleanroom governance user-document runtime-option get --option execution --document-id $documentId
 ```
 
 ### Member addition
@@ -512,11 +546,11 @@ This will generate two files: `operator_cert.pem` and `operator_enc_pubk.pem` wh
 **CCF Network creation**  
 Below steps deploy a CCF network with 3 CCF nodes. Each node runs in its own confidential container group instance.
 ```powershell
-$location= "westus"
+$location= "westeurope"
 $uniqueString = $((New-Guid).ToString().Substring(0, 8))
 $resourceGroup = "ccf-deploy-$uniqueString"
 $storageAccountName = "ccf${uniqueString}sa"
-az group create --name $resourceGroup --location westus
+az group create --name $resourceGroup --location westeurope
 
 $networkName = "ccf-network"
 $subscriptionId = az account show --query "id" -o tsv
@@ -657,61 +691,6 @@ $networkName="my-ccf-network"
 az cleanroom ccf network delete `
     --name $networkName `
     --infra-type virtual
-```
-#### Platform: Insecure Virtual using ACI
-The insecure virtual platform using standard (non-confidential) ACI is meant for dev/test scenarios 
-to have a CCF endpoint that runs in Azure where scenario testing requires the CCF endpoint to be 
-available over the Internet.
-This setup runs the same insecure virtual CCF image as the Docker environment setup.
-
-**CCF Network creation**
-```powershell
-$networkName="ccf-network-virtual"
-$resourceGroup="<>"
-$subscriptionId="<>"
-$location="westeurope"
-@"
-[{
-    "certificate": "./operator_cert.pem",
-    "encryptionPublicKey": "./operator_enc_pubk.pem",
-    "memberData": {
-        "identifier": "operator"
-    }
-}]
-"@ > members.json
-
-@"
-{
-    "location": "$location",
-    "subscriptionId": "$subscriptionId",
-    "resourceGroupName": "$resourceGroup"
-}
-"@ > providerConfig.json
-
-# Command takes a few minutes to execute.
-az cleanroom ccf network create `
-    --name $networkName `
-    --node-count 3 `
-    --members ./members.json `
-    --infra-type virtualaci `
-    --provider-config ./providerConfig.json
-{
-  "endpoint": "https://ccf-network-virtual-lb-kvobzwyuuhvun.westeurope.azurecontainer.io:443",
-  "port": 443
-}
-
-az cleanroom ccf network show `
-    --name $networkName `
-    --infra-type caci `
-    --provider-config "{'subscriptionId':'$subscriptionId','resourceGroupName':'$resourceGroup'}"
-```
-
-**CCF Network deletion**
-```powershell
-az cleanroom ccf network delete `
-    --name $networkName `
-    --infra-type virtualaci `
-    --provider-config ./providerConfig.json
 ```
 
 # Links

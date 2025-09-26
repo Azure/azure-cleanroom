@@ -41,7 +41,7 @@ $env:initialMemberName = $initialMemberName
 docker compose -f $PSScriptRoot/docker-compose.yml up -d --remove-orphans
 
 $ccfEndpoint = ""
-if ($env:GITHUB_ACTIONS -ne "true") {
+if ($env:CODESPACES -ne "true" -and $env:GITHUB_ACTIONS -ne "true") {
   $ccfEndpoint = "https://host.docker.internal:9080"
 }
 else {

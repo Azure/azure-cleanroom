@@ -1,6 +1,7 @@
 import * as ccfapp from "@microsoft/ccf-app";
 import { ErrorResponse } from "../models/errorresponse";
 import { RuntimeOptionStoreItem } from "../models";
+import { validateCallerAuthorized } from "../utils/utils";
 
 const runtimeOptionsStore = ccfapp.typedKv(
   "public:ccf.gov.cgs_runtime_options",
@@ -17,6 +18,10 @@ const runtimeOptions = [
 export function checkRuntimeOptionStatus(
   request: ccfapp.Request
 ): ccfapp.Response | ccfapp.Response<ErrorResponse> {
+  const error = validateCallerAuthorized(request);
+  if (error !== undefined) {
+    return error;
+  }
   const option = request.params.option;
   if (!runtimeOptions.includes(option)) {
     return {

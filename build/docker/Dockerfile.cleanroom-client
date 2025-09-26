@@ -13,7 +13,7 @@ RUN pip install /dist/cleanroom-*-py2.py3-none-any.whl
 COPY ./app /code/app
 RUN python3 /code/app/extract-openapi.py main:app
 
-FROM scratch as openapi-dist
+FROM scratch AS openapi-dist
 COPY --from=openapi-image /code/openapi.yaml ./
 
 FROM mcr.microsoft.com/mirror/docker/library/python:3.11

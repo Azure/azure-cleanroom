@@ -11,9 +11,12 @@ param
 
     [string]$tag = "latest"
 )
+# https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
 
 $outDir = "$PSScriptRoot/generated"
-rm -rf $outDir
+# rm -rf $outDir
 Write-Host "Using $registry registry for cleanroom container images."
 $root = git rev-parse --show-toplevel
 $ccfOutDir = "$outDir/ccf"
@@ -21,20 +24,26 @@ $datastoreOutdir = "$outDir/datastores"
 mkdir -p "$datastoreOutdir"
 $samplePath = "$root/test/onebox/multi-party-collab"
 
+$env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_USE_HTTP = "false"
 if ($registry -ne "mcr") {
     $env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL = "$repo"
-    $env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = "$repo/sidecar-digests:$tag"
+    if ($repo -eq "localhost:5000") {
+        # localhost:5000 is not reachable from the cleanroom-client container, so we need to use ccr-registry:5000.
+        $containerReachableRepo = "ccr-registry:5000"
+        $env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_USE_HTTP = "true"
+    }
+    else {
+        $containerReachableRepo = $repo
+    }
+
+    $env:AZCLI_CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL = "$containerReachableRepo"
+    $env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = "$containerReachableRepo/sidecar-digests:$tag"
 }
 
 pwsh $root/src/tools/cleanroom-client/deploy-cleanroom-client.ps1 `
     -outDir $outDir `
     -datastoreOutDir $datastoreOutdir `
     -dataDir $samplePath
-
-if ($LASTEXITCODE -gt 0) {
-    Write-Host -ForegroundColor Red "deploy-cleanroom-client returned non-zero exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
 
 pwsh $root/test/onebox/multi-party-collab/deploy-virtual-cleanroom-governance.ps1 `
     -NoBuild:$NoBuild `
@@ -49,19 +58,16 @@ $ccfEndpoint = $(Get-Content $outDir/ccf/ccf.json | ConvertFrom-Json).endpoint
 az cleanroom governance client remove --name "ob-publisher-client"
 
 $cleanroomClientEndpoint = "localhost:8321"
+$contractId = (New-Guid).ToString().Substring(0, 8)
 pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 `
     -registry $registry  `
     -repo $repo `
     -tag $tag `
     -ccfEndpoint $ccfEndpoint `
+    -contractId $contractId `
     -cleanroomClientEndpoint $cleanroomClientEndpoint `
     -ccfOutDir $ccfOutDir `
     -datastoreOutDir $datastoreOutdir
-
-if ($LASTEXITCODE -gt 0) {
-    Write-Host -ForegroundColor Red "run-scenario-generate-template-policy returned non-zero exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
 
 $registry_local_endpoint = ""
 if ($registry -eq "local") {
@@ -79,17 +85,23 @@ kubectl port-forward ccr-client-proxy 10081:10080 &
 
 # Need to wait a bit for the port-forward to start.
 bash $root/src/scripts/wait-for-it.sh --timeout=20 --strict 127.0.0.1:10081 -- echo "ccr-client-proxy is available"
-if ($LASTEXITCODE -gt 0) {
-    Write-Host -ForegroundColor Red "Hit timeout waiting for ccr-client-proxy to be available. wait-for-it.sh returned returned non-zero exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
 
 # Run the application.
 # curl -X POST -s http://ccr.cleanroom.local:8200/gov/demo-app/start --proxy http://127.0.0.1:10081
 
-pwsh $root/test/onebox/multi-party-collab/wait-for-cleanroom.ps1 `
-    -appName demo-app `
-    -proxyUrl http://127.0.0.1:10081
+$script:waitForCleanRoomFailed = $false
+$script:waitForCleanRoomExitCode = 0
+& {
+    # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
+    $PSNativeCommandUseErrorActionPreference = $false
+    pwsh $root/test/onebox/multi-party-collab/wait-for-cleanroom.ps1 `
+        -appName demo-app `
+        -proxyUrl http://127.0.0.1:10081
+    if ($LASTEXITCODE -gt 0) {
+        $script:executionFailed = $true
+        $script:waitForCleanRoomExitCode = $LASTEXITCODE
+    }
+}
 
 Write-Host "Exporting logs..."
 $response = curl -X POST -s http://ccr.cleanroom.local:8200/gov/exportLogs --proxy http://127.0.0.1:10081
@@ -136,26 +148,26 @@ curl --fail-with-body `
 "@
 
 Write-Host "Application logs:"
-cat $outDir/results/application-telemetry*/**/demo-app.log
+cat $outDir/results/application-telemetry*/demo-app.log
 
 # Check that expected output files got created.
 $expectedFiles = @(
-    "$PSScriptRoot/generated/results/consumer-output/**/output.gz",
-    "$PSScriptRoot/generated/results/application-telemetry*/**/demo-app.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/demo-app*-code-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/demo-app*-code-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/consumer-output*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/consumer-output*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/consumer-output*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/publisher-input*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/publisher-input*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/publisher-input*-blobfuse-launcher.traces"
+    "$PSScriptRoot/generated/results/consumer-output/output.gz",
+    "$PSScriptRoot/generated/results/application-telemetry*/demo-app.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/demo-app*-code-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/demo-app*-code-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/consumer-output*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/consumer-output*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/consumer-output*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/publisher-input*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/publisher-input*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/publisher-input*-blobfuse-launcher.traces"
 )
 
 $missingFiles = @()
@@ -172,4 +184,9 @@ if ($missingFiles.Count -gt 0) {
     }
     
     exit 1
+}
+
+if ($script:waitForCleanRoomFailed) {
+    Write-Host "waitforcleanroom.ps1 had exited with: $script:waitForCleanRoomExitCode"
+    exit $script:waitForCleanRoomExitCode
 }

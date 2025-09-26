@@ -1,4 +1,4 @@
-﻿@model List<ContractViewModel>
+﻿@model ListContractsViewModel
 @{
     ViewData["Title"] = "Contracts";
 }
@@ -15,7 +15,7 @@
         </tr>
     </thead>
     <tbody>
-        @foreach (var contract in @Model)
+        @foreach (var contract in @Model.Value)
         {
             <tr>
                 <td>@contract.Id</td>

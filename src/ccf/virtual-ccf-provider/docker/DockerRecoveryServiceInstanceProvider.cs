@@ -11,6 +11,7 @@ using Docker.DotNet;
 using Docker.DotNet.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using static VirtualCcfProvider.DockerClientEx;
 
 namespace VirtualCcfProvider;
 
@@ -231,7 +232,7 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
                 $"MAA_ENDPOINT={maaEndpoint}",
                 $"SKR_ENDPOINT={skrEndpoint}",
                 $"CCF_NETWORK_INITIAL_JOIN_POLICY={base64EncodedPolicy}",
-                $"SERVICE_CERT_LOCATION={DockerConstants.ServiceCertPemFilePath}",
+                $"SERVICE_CERT_LOCATION={MountPaths.RecoveryServiceCertPemFile}",
                 $"INSECURE_VIRTUAL_ENVIRONMENT=true"
             },
             ExposedPorts = new Dictionary<string, EmptyStruct>
@@ -244,7 +245,7 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
             {
                 Binds = new List<string>
                 {
-                    $"{hostServiceCertDir}:{DockerConstants.ServiceFolderMountPath}:ro",
+                    $"{hostServiceCertDir}:{MountPaths.CertsFolderMountPath}:ro",
                     $"{hostInsecureVirtualDir}:/app/insecure-virtual:ro"
                 },
                 NetworkMode = serviceName,
@@ -331,27 +332,11 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
         JsonObject? providerConfig)
     {
         string containerName = "credentials-proxy-" + instanceName;
-        string? user = Environment.GetEnvironmentVariable("CREDENTIALS_PROXY_USER");
-        string? hostVolumePath = Environment.GetEnvironmentVariable(
-            "CREDENTIALS_PROXY_HOST_AZURE_VOLUME");
-        if (string.IsNullOrEmpty(hostVolumePath))
-        {
-            throw new ArgumentException("CREDENTIALS_PROXY_HOST_AZURE_VOLUME is not set.");
-        }
-
-        var imageParams = new ImagesCreateParameters
-        {
-            FromImage = ImageUtils.CredentialsProxyImage(),
-            Tag = ImageUtils.CredentialsProxyTag(),
-        };
-        await this.client.Images.CreateImageAsync(
-            imageParams,
-            authConfig: null,
-            new Progress<JSONMessage>(m => this.logger.LogInformation(m.ToProgressMessage())));
-
-        var createParams = new CreateContainerParameters
-        {
-            Labels = new Dictionary<string, string>
+        return await this.client.CreateCredentialsProxyContainer(
+            this.logger,
+            containerName,
+            serviceName,
+            new Dictionary<string, string>
             {
                 {
                     DockerConstants.CcfRecoveryServiceNameTag,
@@ -365,42 +350,7 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
                     DockerConstants.CcfRecoveryServiceResourceNameTag,
                     instanceName
                 }
-            },
-            Name = containerName,
-            Image = $"{imageParams.FromImage}:{imageParams.Tag}",
-            ExposedPorts = new Dictionary<string, EmptyStruct>
-            {
-                {
-                    $"{Ports.CredentialsProxyPort}/tcp", new EmptyStruct()
-                }
-            },
-            HostConfig = new HostConfig
-            {
-                NetworkMode = serviceName
-            },
-        };
-
-        if (!string.IsNullOrEmpty(user))
-        {
-            createParams.User = user;
-        }
-
-        createParams.HostConfig.Binds = new List<string>
-        {
-            $"{hostVolumePath}:/app/.azure"
-        };
-
-        var container = await this.client.CreateOrGetContainer(createParams);
-
-        await this.client.Containers.StartContainerAsync(
-            container.ID,
-            new ContainerStartParameters());
-
-        return new CredentialsProxyEndpoint
-        {
-            IdentityEndpoint = $"http://{containerName}:8080/token",
-            ImdsEndpoint = "dummy_required_value"
-        };
+            });
     }
 
     private RecoveryServiceHealth ToRecoveryServiceHealth(ContainerListResponse container)
@@ -428,20 +378,11 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
         JsonObject? providerConfig)
     {
         string containerName = "local-skr-" + instanceName;
-
-        var imageParams = new ImagesCreateParameters
-        {
-            FromImage = ImageUtils.LocalSkrImage(),
-            Tag = ImageUtils.LocalSkrTag(),
-        };
-        await this.client.Images.CreateImageAsync(
-            imageParams,
-            authConfig: null,
-            new Progress<JSONMessage>(m => this.logger.LogInformation(m.ToProgressMessage())));
-
-        var createParams = new CreateContainerParameters
-        {
-            Labels = new Dictionary<string, string>
+        return await this.client.CreateLocalSkrContainer(
+            this.logger,
+            containerName,
+            serviceName,
+            new Dictionary<string, string>
             {
                 {
                     DockerConstants.CcfRecoveryServiceNameTag,
@@ -455,28 +396,7 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
                     DockerConstants.CcfRecoveryServiceResourceNameTag,
                     instanceName
                 }
-            },
-            Name = containerName,
-            Image = $"{imageParams.FromImage}:{imageParams.Tag}",
-            ExposedPorts = new Dictionary<string, EmptyStruct>
-            {
-                {
-                    $"{Ports.SkrPort}/tcp", new EmptyStruct()
-                }
-            },
-            HostConfig = new HostConfig
-            {
-                NetworkMode = serviceName
-            },
-        };
-
-        var container = await this.client.CreateOrGetContainer(createParams);
-
-        await this.client.Containers.StartContainerAsync(
-            container.ID,
-            new ContainerStartParameters());
-
-        return $"http://{containerName}:{Ports.SkrPort}";
+            });
     }
 
     private Task<EnvoyEndpoint> CreateEnvoyProxyContainer(
@@ -502,6 +422,7 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
             containerName,
             serviceName,
             hostServiceCertDir,
+            MountPaths.RecoveryServiceCertPemFile,
             DockerConstants.CcfRecoveryServiceResourceNameTag,
             new Dictionary<string, string>
             {
@@ -518,19 +439,5 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
                     instanceName
                 }
             });
-    }
-
-    public class CredentialsProxyEndpoint
-    {
-        public string IdentityEndpoint { get; set; } = default!;
-
-        public string ImdsEndpoint { get; set; } = default!;
-    }
-
-    public class EnvoyEndpoint
-    {
-        public string Name { get; set; } = default!;
-
-        public string Endpoint { get; set; } = default!;
     }
 }

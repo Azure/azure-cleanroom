@@ -29,7 +29,15 @@ runs:
 
     - name: Log in to Azure Container Registry
       shell: pwsh
-      run: az acr login -n ${{ inputs.repo }}
+      run: |
+        $pattern = '(.*?)(\.azurecr\.io.*)'
+        if ("${{ inputs.repo }}" -match $pattern) {
+            $acrName = $matches[1]
+        } else {
+            $acrName =  "${{ inputs.repo }}"
+        }
+
+        az acr login -n $acrName
 
     - name: Run collab scenario on Kind
       shell: pwsh
@@ -55,36 +63,12 @@ runs:
       shell: pwsh
       run: kubectl logs -l app=ccr-client-proxy --tail=-1 --all-containers --ignore-errors --prefix
 
-    - name: Upload results
+    - name: Upload generated
       uses: actions/upload-artifact@v4
       with:
-        name: results-nginx-hello
-        path: ./test/onebox/multi-party-collab/nginx-hello/generated/results
+        name: generated-nginx-hello
+        path: ./test/onebox/multi-party-collab/nginx-hello/generated
         overwrite: true
-      if: ${{ !cancelled() }}
-
-    - name: Upload configurations
-      uses: actions/upload-artifact@v4
-      with:
-          name: configurations-nginx-hello
-          path: ./test/onebox/multi-party-collab/nginx-hello/generated/configurations
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - name: Upload deployments
-      uses: actions/upload-artifact@v4
-      with:
-          name: deployments-nginx-hello
-          path: ./test/onebox/multi-party-collab/nginx-hello/generated/deployments
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - name: Upload ccf
-      uses: actions/upload-artifact@v4
-      with:
-          name: ccf-nginx-hello
-          path: ./test/onebox/multi-party-collab/nginx-hello/generated/ccf
-          overwrite: true
       if: ${{ !cancelled() }}
 
     - name: Delete resource groups

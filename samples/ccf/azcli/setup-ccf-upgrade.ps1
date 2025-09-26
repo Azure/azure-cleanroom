@@ -4,11 +4,7 @@ param
     [switch]
     $confidentialRecovery,
 
-    $numChangesToMake = 1,
-
-    [string]$repo = "",
-
-    [string]$tag = "latest"
+    $numChangesToMake = 1
 )
 
 #https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
@@ -58,11 +54,13 @@ if ($proposal.proposalState -ne "Accepted") {
     # Assuming deploy-cgs.ps1 script was executed, it adds 1 active member so attempt to accept the proposal via that.
     Write-Output "add-snp-host-data proposal state is '$($proposal.proposalState)'. Launching governance client and accepting as $initialMemberName."
 
+    $setup = Get-Content $sandbox_common/setup.json | ConvertFrom-Json
+    $repo = $setup.repo
+    $tag = $setup.tag
+
     if ($repo -ne "") {
-        $server = $repo
-        $localTag = $tag
-        $env:AZCLI_CGS_CLIENT_IMAGE = "$server/cgs-client:$localTag"
-        $env:AZCLI_CGS_UI_IMAGE = "$server/cgs-ui:$localTag"
+        $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$tag"
+        $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$tag"
     }
     else {
         $env:AZCLI_CGS_CLIENT_IMAGE = ""

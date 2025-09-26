@@ -1,0 +1,45 @@
+# Use the official .NET Core SDK as the base image
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+
+# Set the working directory
+WORKDIR /app
+
+# copy csproj and restore as distinct layers
+# https://blog.nimbleways.com/docker-build-caching-for-dotnet-applications-done-right-with-dotnet-subset/
+COPY Directory.Packages.props /app
+COPY Directory.Build.props /app
+COPY src/tools/attestation-report-generator/*.sln /app/src/tools/attestation-report-generator/
+COPY src/tools/attestation-report-generator/*.csproj /app/src/tools/attestation-report-generator/
+COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
+COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
+RUN dotnet restore /app/src/tools/attestation-report-generator/attestation-report-generator.sln
+
+# copy everything else and build app
+COPY stylecop.json /app
+COPY Menees.Analyzers.Settings.xml /app
+COPY .editorconfig /app
+COPY src/internal /app/src/internal
+COPY src/tools/attestation-report-generator /app/src/tools/attestation-report-generator
+
+
+# Publish the application
+RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/tools/attestation-report-generator/attestation-report-generator.csproj
+
+# Use the official .NET Core runtime as the base image for the final stage
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+
+# Note: install iproute2 for ss command.
+RUN apt-get update && apt-get install -y curl jq iproute2
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the published output from the build stage to the runtime stage
+COPY --from=build /app/publish .
+
+# Listen on 9300 within the container.
+ARG PORT=9300
+ENV ASPNETCORE_URLS=http://+:${PORT}
+
+# Set the entry point for the container
+ENTRYPOINT ["dotnet", "attestation-report-generator.dll"]

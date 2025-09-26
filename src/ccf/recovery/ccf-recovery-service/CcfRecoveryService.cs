@@ -13,8 +13,6 @@ namespace Controllers;
 
 public class CcfRecoveryService
 {
-    private const string DefaultServiceCertLocation = "/app/service/service-cert.pem";
-
     private readonly ILogger logger;
     private readonly IMemberStore memberStore;
     private readonly string serviceCertLocation;
@@ -26,7 +24,7 @@ public class CcfRecoveryService
     {
         this.logger = logger;
         this.memberStore = memberStore;
-        this.serviceCertLocation = serviceCertLocation ?? DefaultServiceCertLocation;
+        this.serviceCertLocation = serviceCertLocation ?? MountPaths.RecoveryServiceCertPemFile;
     }
 
     public async Task<RecoveryMember> GenerateMember(string memberName)
@@ -41,7 +39,7 @@ public class CcfRecoveryService
             SigningCert = signingKeyInfo.SigningCert,
             RecoveryService = new()
             {
-                HostData = await CcfUtils.GetHostData()
+                HostData = await Attestation.GetHostData()
             }
         };
 
@@ -61,7 +59,7 @@ public class CcfRecoveryService
                 SigningCert = signingKeyInfo.SigningCert,
                 RecoveryService = new()
                 {
-                    HostData = await CcfUtils.GetHostData()
+                    HostData = await Attestation.GetHostData()
                 }
             };
         }
@@ -189,20 +187,19 @@ public class CcfRecoveryService
         {
             throw new ApiException(
                 HttpStatusCode.ServiceUnavailable,
-                "ServiceCertNotFound",
-                "Could not locate the service certificate for this service.");
+                "RecoveryServiceCertNotFound",
+                "Could not locate the service certificate for the recovery service.");
         }
 
         var serviceCert = await File.ReadAllTextAsync(this.serviceCertLocation);
 
         string platform;
         AttestationReport? report = null;
-        if (CcfUtils.IsSevSnp())
+        if (Attestation.IsSevSnp())
         {
             platform = "snp";
             var bytes = Encoding.UTF8.GetBytes(serviceCert);
-            using var sha256 = SHA256.Create();
-            var hash = sha256.ComputeHash(bytes);
+            var hash = SHA256.HashData(bytes);
             report = await Attestation.GetReportAsync(hash);
         }
         else
@@ -210,7 +207,7 @@ public class CcfRecoveryService
             platform = "virtual";
         }
 
-        string hostData = await CcfUtils.GetHostData();
+        string hostData = await Attestation.GetHostData();
         return new RecoveryServiceReport
         {
             Platform = platform,

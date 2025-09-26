@@ -1,0 +1,1 @@
+SELECT * FROM publisher_data

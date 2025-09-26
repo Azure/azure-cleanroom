@@ -38,6 +38,7 @@ internal class FederatedCredentialProvider : ITokenCredentialProvider
     private static HttpClient httpClient = new();
     private readonly ILogger logger;
     private readonly string audience;
+    private readonly string? issuer;
     private readonly string subject;
     private readonly string idTokenEndpoint;
     private readonly Dictionary<string, object> retryContextData;
@@ -50,16 +51,19 @@ internal class FederatedCredentialProvider : ITokenCredentialProvider
     /// </param>
     /// <param name="subject">The subject claim.</param>
     /// <param name="audience">The audience claim.</param>
+    /// <param name="issuer">Any issuer claim.</param>
     /// <param name="logger">The logger to be used.</param>
     public FederatedCredentialProvider(
         string idTokenEndpoint,
         string subject,
         string audience,
+        string? issuer,
         ILogger logger)
     {
         this.logger = logger;
         this.subject = subject;
         this.audience = audience;
+        this.issuer = issuer;
         this.idTokenEndpoint = idTokenEndpoint;
         this.retryContextData = new Dictionary<string, object>
         {
@@ -80,15 +84,20 @@ internal class FederatedCredentialProvider : ITokenCredentialProvider
             {
                 string url = $"{this.idTokenEndpoint.TrimEnd('/')}/oauth/token?" +
                     $"sub={this.subject}&tenantId={tenantId}&aud={this.audience}";
+                if (!string.IsNullOrEmpty(this.issuer))
+                {
+                    url += $"&iss={this.issuer}";
+                }
+
                 JsonObject? result = await RetryPolicies.DefaultPolicy.ExecuteAsync(
-                    async (ctx) =>
-                    {
-                        this.logger.LogInformation($"Fetching client assertion from '{url}'");
-                        HttpResponseMessage response = await httpClient.PostAsync(url, null);
-                        await response.ValidateStatusCodeAsync(this.logger);
-                        return await response.Content.ReadFromJsonAsync<JsonObject>();
-                    },
-                    new Context("oauth/token", this.retryContextData));
+                async (ctx) =>
+                {
+                    this.logger.LogInformation($"Fetching client assertion from '{url}'");
+                    HttpResponseMessage response = await httpClient.PostAsync(url, null);
+                    await response.ValidateStatusCodeAsync(this.logger);
+                    return await response.Content.ReadFromJsonAsync<JsonObject>();
+                },
+                new Context("oauth/token", this.retryContextData));
 
                 return result?["value"]?.ToString();
             });

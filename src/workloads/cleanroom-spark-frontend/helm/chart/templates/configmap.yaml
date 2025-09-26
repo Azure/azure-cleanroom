@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webserver-config
+  namespace: {{ .Release.Namespace }}
+data:
+  settings: |
+    service:
+      name: {{ include "webserver.fullname" . | quote}}
+      namespace: {{ .Release.Namespace | quote }}
+      telemetry:
+        telemetryCollectionEnabled: {{ .Values.telemetry.telemetryCollectionEnabled | quote }}
+        prometheusEnabled: {{ .Values.telemetry.prometheusEnabled | quote }}
+        lokiEnabled: {{ .Values.telemetry.lokiEnabled | quote }}
+        tempoEnabled: {{ .Values.telemetry.tempoEnabled | quote }}
+        prometheusEndpoint: {{ .Values.telemetry.prometheusEndpoint | quote }}
+        lokiEndpoint: {{ .Values.telemetry.lokiEndpoint | quote }}
+        tempoEndpoint: {{ .Values.telemetry.tempoEndpoint | quote }}
+    spark:
+      computeProvider: {{ .Values.settings.spark.computeProvider | quote }}
+    applications:
+      analytics:
+        namespace: {{ .Values.settings.applications.analytics.namespace | quote }}
+        applicationFile: {{ .Values.settings.applications.analytics.applicationFile | quote }}
+        allowAll: {{ .Values.settings.applications.analytics.allowAll | quote }}
+        debugMode: {{ .Values.settings.applications.analytics.debugMode | quote }}
+        sql:
+          driver:
+            cores: {{ .Values.settings.applications.analytics.sql.driver.cores | quote }}
+            memory: {{ .Values.settings.applications.analytics.sql.driver.memory | quote }}
+            serviceAccount: {{ .Values.settings.applications.analytics.sql.driver.serviceAccount | quote}}
+          executor:
+            cores: {{ .Values.settings.applications.analytics.sql.executor.cores | quote }}
+            memory: {{ .Values.settings.applications.analytics.sql.executor.memory | quote }}
+            instances: {{ .Values.settings.applications.analytics.sql.executor.instances | quote }}
+            deleteOnTermination: {{ .Values.settings.applications.analytics.sql.executor.deleteOnTermination | quote }}

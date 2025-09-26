@@ -74,8 +74,9 @@ if ($env:GITHUB_ACTIONS -eq "true") {
     $resourceGroupTags = "github_actions=multi-party-collab-$kvType-${env:JOB_ID}-${env:RUN_ID}"
 }
 else {
-    $tdpResourceGroup = "cl-ob-tdp-${env:USER}"
-    $tdcResourceGroup = "cl-ob-tdc-${env:USER}"
+    $user = $env:CODESPACES -eq "true" ? $env:GITHUB_USER : $env:USER
+    $tdpResourceGroup = "cl-ob-tdp-${user}"
+    $tdcResourceGroup = "cl-ob-tdc-${user}"
 }
 
 # "isv" member makes a proposal for adding the new member "tdc" and "tdp".
@@ -215,6 +216,9 @@ az cleanroom datastore add `
     --backingstore-type Azure_BlobStorage `
     --backingstore-id $result.sa.id
 
+pwsh $root/test/onebox/multi-party-collab/wait-for-container-access.ps1 `
+    --containerName cowin `
+    --storageAccountId $result.sa.id
 # Encrypt and upload content.
 az cleanroom datastore upload `
     --name cowin `
@@ -231,6 +235,10 @@ az cleanroom datastore add `
     --backingstore-type Azure_BlobStorage `
     --backingstore-id $result.sa.id
 
+pwsh $root/test/onebox/multi-party-collab/wait-for-container-access.ps1 `
+    --containerName icmr `
+    --storageAccountId $result.sa.id
+
 # Encrypt and upload content.
 az cleanroom datastore upload `
     --name icmr `
@@ -246,6 +254,10 @@ az cleanroom datastore add `
     --encryption-mode CPK `
     --backingstore-type Azure_BlobStorage `
     --backingstore-id $result.sa.id
+
+pwsh $root/test/onebox/multi-party-collab/wait-for-container-access.ps1 `
+    --containerName index `
+    --storageAccountId $result.sa.id
 
 # Encrypt and upload content.
 az cleanroom datastore upload `
@@ -378,6 +390,10 @@ az cleanroom datastore add `
     --backingstore-type Azure_BlobStorage `
     --backingstore-id $result.sa.id
 
+pwsh $root/test/onebox/multi-party-collab/wait-for-container-access.ps1 `
+    --containerName model `
+    --storageAccountId $result.sa.id
+    
 # Encrypt and upload content.
 az cleanroom datastore upload `
     --name model `
@@ -393,6 +409,10 @@ az cleanroom datastore add `
     --backingstore-type Azure_BlobStorage `
     --backingstore-id $result.sa.id
 
+pwsh $root/test/onebox/multi-party-collab/wait-for-container-access.ps1 `
+    --containerName config `
+    --storageAccountId $result.sa.id
+    
 # Encrypt and upload content.
 az cleanroom datastore upload `
     --name config `
@@ -597,6 +617,11 @@ az cleanroom governance contract runtime-option propose `
     --contract-id $contractId `
     --governance-client "ob-isv-client"
 
+Write-Output "Enabling CA..."
+az cleanroom governance ca propose-enable `
+    --contract-id $contractId `
+    --governance-client "ob-isv-client"
+
 $clientName = "ob-tdp-client"
 pwsh $PSScriptRoot/../verify-deployment-proposals.ps1 `
     -cleanroomConfig $tdpConfig `
@@ -642,6 +667,18 @@ az cleanroom governance proposal vote `
 # Vote on the enable telemetry proposal.
 $proposalId = az cleanroom governance contract runtime-option get `
     --option telemetry `
+    --contract-id $contractId `
+    --governance-client $clientName `
+    --query "proposalIds[0]" `
+    --output tsv
+
+az cleanroom governance proposal vote `
+    --proposal-id $proposalId `
+    --action accept `
+    --governance-client $clientName
+
+# Vote on the proposed CA enable.
+$proposalId = az cleanroom governance ca show `
     --contract-id $contractId `
     --governance-client $clientName `
     --query "proposalIds[0]" `
@@ -707,6 +744,18 @@ az cleanroom governance proposal vote `
     --action accept `
     --governance-client $clientName
 
+# Vote on the proposed CA enable.
+$proposalId = az cleanroom governance ca show `
+    --contract-id $contractId `
+    --governance-client $clientName `
+    --query "proposalIds[0]" `
+    --output tsv
+
+az cleanroom governance proposal vote `
+    --proposal-id $proposalId `
+    --action accept `
+    --governance-client $clientName
+
 $clientName = "ob-isv-client"
 pwsh $PSScriptRoot/../verify-deployment-proposals.ps1 `
     -cleanroomConfig $tdcConfig `
@@ -761,7 +810,29 @@ az cleanroom governance proposal vote `
     --proposal-id $proposalId `
     --action accept `
     --governance-client $clientName
-    
+
+# Vote on the proposed CA enable.
+$proposalId = az cleanroom governance ca show `
+    --contract-id $contractId `
+    --governance-client $clientName `
+    --query "proposalIds[0]" `
+    --output tsv
+
+az cleanroom governance proposal vote `
+    --proposal-id $proposalId `
+    --action accept `
+    --governance-client $clientName
+
+az cleanroom governance ca generate-key `
+    --contract-id $contractId `
+    --governance-client $clientName
+
+az cleanroom governance ca show `
+    --contract-id $contractId `
+    --governance-client $clientName `
+    --query "caCert" `
+    --output tsv > $outDir/cleanroomca.crt
+
 # Creates a KEK with SKR policy, wraps DEKs with the KEK and put in kv.
 az cleanroom config wrap-deks `
     --contract-id $contractId `
@@ -771,9 +842,16 @@ az cleanroom config wrap-deks `
     --governance-client "ob-tdp-client"
 
 # Setup OIDC issuer and managed identity access to storage/KV in tdp tenant.
+pwsh $PSScriptRoot/../setup-oidc-issuer.ps1 `
+    -resourceGroup $tdpResourceGroup `
+    -outDir $outDir `
+    -governanceClient "ob-tdp-client"
+$issuerUrl = Get-Content $outDir/$tdpResourceGroup/issuer-url.txt
+
 pwsh $PSScriptRoot/../setup-access.ps1 `
     -resourceGroup $tdpResourceGroup `
-    -contractId $contractId  `
+    -subject $contractId `
+    -issuerUrl $issuerUrl `
     -outDir $outDir `
     -kvType $kvType `
     -governanceClient "ob-tdp-client"
@@ -787,9 +865,16 @@ az cleanroom config wrap-deks `
     --governance-client "ob-tdc-client"
 
 # Setup OIDC issuer endpoint and managed identity access to storage/KV in tdc tenant.
+pwsh $PSScriptRoot/../setup-oidc-issuer.ps1 `
+    -resourceGroup $tdcResourceGroup `
+    -outDir $outDir `
+    -governanceClient "ob-tdc-client"
+$issuerUrl = Get-Content $outDir/$tdcResourceGroup/issuer-url.txt
+
 pwsh $PSScriptRoot/../setup-access.ps1 `
     -resourceGroup $tdcResourceGroup `
-    -contractId $contractId `
+    -subject $contractId `
+    -issuerUrl $issuerUrl `
     -outDir $outDir `
     -kvType $kvType `
     -governanceClient "ob-tdc-client"

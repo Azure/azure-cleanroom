@@ -163,6 +163,11 @@ public class FederationConfiguration
     /// Gets or sets the audience for the federated credential.
     /// </summary>
     public string Audience { get; set; } = default!;
+
+    /// <summary>
+    /// Gets or sets the issuer for the federated credential.
+    /// </summary>
+    public string? Issuer { get; set; }
 }
 
 /// <summary>

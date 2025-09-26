@@ -1,0 +1,27 @@
+# Test dependencies for Azure Cleanroom CLI extension tests
+# 
+# This file contains the Azure CLI dependencies needed to run all tests
+# without missing dependency warnings. Install with:
+#   pip install -r requirements.txt
+#
+# Core Azure CLI dependencies
+azure-cli-core==2.60.0
+azure-core==1.30.1
+
+# Additional Azure CLI packages that may be needed
+azure-cli-telemetry
+azure-common
+
+# Cryptography dependencies (for configuration encryption/decryption)
+pycryptodome==3.19.1
+cryptography==44.0.1
+
+# Development and testing utilities
+azdev==0.1.67
+
+# Optional: Full Azure CLI for complete compatibility testing
+# azure-cli
+
+# Note: The above dependencies should allow all test methods to run
+# without ImportError exceptions. If you encounter additional missing
+# dependencies, they can be added here.

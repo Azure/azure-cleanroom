@@ -17,15 +17,15 @@ public class SettingsViewModel
 
     public string MemberId { get; set; } = default!;
 
-    public string? Name
-    {
-        get
-        {
-            return this.MemberData?["identifier"]?.ToString() ?? this.MemberId;
-        }
-    }
+    public bool IsUser { get; set; } = default!;
+
+    public string Identifier { get; set; } = default!;
+
+    public string? Name => this.Identifier ?? "unknown";
 
     public JsonObject MemberData { get; set; } = default!;
+
+    public JsonObject UserTokenClaims { get; set; } = default!;
 
     public UpdatesViewModel Updates { get; set; } = default!;
 }

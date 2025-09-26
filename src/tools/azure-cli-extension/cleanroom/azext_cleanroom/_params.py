@@ -4,15 +4,14 @@
 # pylint: disable=missing-module-docstring
 # pylint: disable=missing-function-docstring
 
-from typing import Required
-from knack.arguments import CLIArgumentType
 from azure.cli.core.commands.parameters import (
-    resource_group_name_type,
-    name_type,
     get_enum_type,
+    name_type,
+    resource_group_name_type,
 )
-from cleanroom_common.azure_cleanroom_core.models.datastore import DatastoreEntry
+from cleanroom_common.azure_cleanroom_core.models.datastore import DataStoreEntry
 from cleanroom_common.azure_cleanroom_core.models.network import TrafficDirection
+from knack.arguments import CLIArgumentType
 
 
 def validate_key_value(string, separator="="):
@@ -61,6 +60,9 @@ def validate_datasinks(ns):
 
 
 default_security_policy_creation_option = "cached"
+
+# TODO (gsinha): Changed to "cached" once policy generation is stable and available on mcr.
+default_workloads_security_policy_creation_option = "allow-all"
 
 
 def load_arguments(self, _):
@@ -116,6 +118,58 @@ def load_arguments(self, _):
             "service_cert",
             help="Path to the PEM-encoded service cert",
             options_list=["--service-cert", "-s"],
+            required=False,
+        )
+        c.argument(
+            "service_cert_discovery_endpoint",
+            help="Endpoint to obtain the CCF service cert and SNP attestation report for the same",
+            options_list=["--service-cert-discovery-endpoint"],
+            required=False,
+        )
+        c.argument(
+            "service_cert_discovery_snp_host_data",
+            help="Expected SNP attestation report host data value to verify for the report fetched via the service cert discovery endpoint",
+            options_list=["--service-cert-discovery-snp-host-data"],
+            required=False,
+        )
+        c.argument(
+            "service_cert_discovery_constitution_digest",
+            help="Expected constitution digest value to verify for the report fetched via the service cert discovery endpoint. If no value is specified then the digest check is skipped.",
+            options_list=["--service-cert-discovery-constitution-digest"],
+            required=False,
+        )
+        c.argument(
+            "service_cert_discovery_jsapp_bundle_digest",
+            help="Expected jsapp bundle digest value to verify for the report fetched via the service cert discovery endpoint. If no value is specified then the digest check is skipped.",
+            options_list=["--service-cert-discovery-jsapp-bundle-digest"],
+            required=False,
+        )
+        c.argument(
+            "use_azlogin_identity",
+            help="Whether to use the az login identity to request the access token for user JWT authentication to the CCF network (https://microsoft.github.io/CCF/main/build_apps/auth/jwt.html)",
+            options_list=["--use-azlogin-identity"],
+            action="store_true",
+            required=False,
+        )
+        c.argument(
+            "use_microsoft_identity",
+            help="Whether to use Microsoft Login identity to request the access token for user JWT authentication to the CCF network (https://microsoft.github.io/CCF/main/build_apps/auth/jwt.html)",
+            options_list=["--use-microsoft-identity"],
+            action="store_true",
+            required=False,
+        )
+        c.argument(
+            "use_local_identity",
+            help="Whether to use Local Identity Provider to request the access token for user JWT authentication to the CCF network (https://microsoft.github.io/CCF/main/build_apps/auth/jwt.html)",
+            options_list=["--use-local-identity"],
+            action="store_true",
+            required=False,
+        )
+        c.argument(
+            "local_identity_endpoint",
+            help="The IDP endpoint. Must be used in conjunction with --use-local-idp.",
+            options_list=["--local-identity-endpoint"],
+            required=False,
         )
 
     # governance contract
@@ -214,11 +268,110 @@ def load_arguments(self, _):
             options_list=["--action"],
         )
 
+    with self.argument_context("cleanroom governance user-identity") as c:
+        c.argument(
+            "gov_client_name",
+            help="Name of the client instance",
+            options_list=["--governance-client"],
+        )
+
+    with self.argument_context("cleanroom governance user-identity add") as c:
+        c.argument(
+            "object_id",
+            help="The object ID of the user/service principal to be added",
+            options_list=["--object-id"],
+            required=False,
+        )
+        c.argument(
+            "accepted_invitation_id",
+            help="The invitation ID for an accepted invitation for which the user/service principal is to be added",
+            options_list=["--accepted-invitation-id"],
+            required=False,
+        )
+        c.argument(
+            "identifier",
+            help="A unique identifier for the user (for easy identification)",
+            options_list=["--identifier"],
+            required=False,
+        )
+        c.argument(
+            "tenant_id",
+            help="The tenant ID for the object ID of the user/service principal to be added",
+            options_list=["--tenant-id"],
+            required=False,
+        )
+        c.argument(
+            "account_type",
+            arg_type=get_enum_type(["microsoft"]),
+            help="The type of account associated with the object ID",
+            options_list=["--account-type"],
+            required=False,
+        )
+
+    with self.argument_context("cleanroom governance user-identity remove") as c:
+        c.argument(
+            "object_id",
+            help="The object ID of the user/service principal in Microsoft Entra ID to be removed",
+            options_list=["--object-id"],
+        )
+
+    with self.argument_context(
+        "cleanroom governance user-identity invitation create"
+    ) as c:
+        c.argument(
+            "invitation_id",
+            help="The id to use for this invitation. Generated randomly if not provided.",
+            options_list=["--invitation-id"],
+            required=False,
+        )
+        c.argument(
+            "username",
+            help="The email address for a user of application Id for a service principal being invited",
+            options_list=["--username", "-u"],
+        )
+        c.argument(
+            "tenant_id",
+            help="The tenant id for the service principal being invited",
+            options_list=["--tenant-id"],
+            required=False,
+        )
+        c.argument(
+            "account_type",
+            arg_type=get_enum_type(["microsoft"]),
+            help="The type of account associated with the email",
+            options_list=["--account-type"],
+            required=False,
+            default="microsoft",
+        )
+        c.argument(
+            "identity_type",
+            arg_type=get_enum_type(["user", "service-principal"]),
+            help="To indicate the type of identity being invited",
+            options_list=["--identity-type"],
+            default="user",
+        )
+
+    with self.argument_context(
+        "cleanroom governance user-identity invitation accept"
+    ) as c:
+        c.argument(
+            "invitation_id",
+            help="The id of the invitation being accepted",
+            options_list=["--invitation-id"],
+        )
+
     with self.argument_context("cleanroom governance proposal") as c:
         c.argument(
             "gov_client_name",
             help="Name of the client instance",
             options_list=["--governance-client"],
+        )
+
+    with self.argument_context("cleanroom governance proposal create") as c:
+        c.argument(
+            "content",
+            help="The proposal content",
+            options_list=["--content"],
         )
 
     with self.argument_context("cleanroom governance proposal show") as c:
@@ -417,7 +570,7 @@ def load_arguments(self, _):
             options_list=["--scope"],
         )
 
-    with self.argument_context("cleanroom governance document") as c:
+    with self.argument_context("cleanroom governance member-document") as c:
         c.argument(
             "gov_client_name",
             help="Name of the client instance",
@@ -429,7 +582,7 @@ def load_arguments(self, _):
             options_list=["--id"],
         )
 
-    with self.argument_context("cleanroom governance document create") as c:
+    with self.argument_context("cleanroom governance member-document create") as c:
         c.argument(
             "contract_id",
             help="Contract Id",
@@ -446,14 +599,14 @@ def load_arguments(self, _):
             options_list=["--version"],
         )
 
-    with self.argument_context("cleanroom governance document propose") as c:
+    with self.argument_context("cleanroom governance member-document propose") as c:
         c.argument(
             "version",
             help="Document version being proposed",
             options_list=["--version"],
         )
 
-    with self.argument_context("cleanroom governance document vote") as c:
+    with self.argument_context("cleanroom governance member-document vote") as c:
         c.argument(
             "proposal_id",
             help="Proposal Id to vote on",
@@ -463,6 +616,96 @@ def load_arguments(self, _):
             "action",
             arg_type=get_enum_type(["accept", "reject"]),
             help="Whether to accept or reject the proposal",
+            options_list=["--action"],
+        )
+
+    with self.argument_context("cleanroom governance user-document") as c:
+        c.argument(
+            "gov_client_name",
+            help="Name of the client instance",
+            options_list=["--governance-client"],
+        )
+        c.argument(
+            "document_id",
+            help="Document Id",
+            options_list=["--id"],
+        )
+
+    with self.argument_context("cleanroom governance user-document create") as c:
+        c.argument(
+            "contract_id",
+            help="Contract Id",
+            options_list=["--contract-id"],
+        )
+        c.argument(
+            "data",
+            help="Document data",
+            options_list=["--data"],
+        )
+        c.argument(
+            "version",
+            help="Document version if updating an exsiting document",
+            options_list=["--version"],
+        )
+        c.argument(
+            "approvers",
+            help="Approver list as JSON, or a path to a file containing a JSON description.",
+            options_list=["--approvers"],
+            required=False,
+        )
+
+    with self.argument_context("cleanroom governance user-document propose") as c:
+        c.argument(
+            "version",
+            help="Document version being proposed",
+            options_list=["--version"],
+        )
+
+    with self.argument_context("cleanroom governance user-document vote") as c:
+        c.argument(
+            "proposal_id",
+            help="Proposal Id to vote on",
+            options_list=["--proposal-id"],
+        )
+        c.argument(
+            "action",
+            arg_type=get_enum_type(["accept", "reject"]),
+            help="Whether to accept or reject the proposal",
+            options_list=["--action"],
+        )
+
+    with self.argument_context(
+        "cleanroom governance user-document runtime-option"
+    ) as c:
+        c.argument(
+            "document_id",
+            help="The document Id",
+            options_list=["--document-id"],
+        )
+
+    with self.argument_context(
+        "cleanroom governance user-document runtime-option get"
+    ) as c:
+        c.argument(
+            "option_name",
+            arg_type=get_enum_type(["execution", "telemetry"]),
+            help="The option name",
+            options_list=["--option"],
+        )
+
+    with self.argument_context(
+        "cleanroom governance user-document runtime-option set"
+    ) as c:
+        c.argument(
+            "option_name",
+            arg_type=get_enum_type(["execution", "telemetry"]),
+            help="The option name",
+            options_list=["--option"],
+        )
+        c.argument(
+            "action",
+            arg_type=get_enum_type(["enable", "disable"]),
+            help="The action",
             options_list=["--action"],
         )
 
@@ -781,6 +1024,7 @@ def load_arguments(self, _):
             "datastore_config_file",
             help="The configuration file storing information about the datastore.",
             options_list=["--datastore-config"],
+            required=False,
         )
         c.argument(
             "identity",
@@ -808,15 +1052,12 @@ def load_arguments(self, _):
             "datastore_config_file",
             help="The configuration file storing information about the datastore.",
             options_list=["--datastore-config"],
+            required=False,
         )
         c.argument(
             "identity",
             help="The identity to use for accessing the datastore.",
-        )
-        c.argument(
-            "wrapped_dek_key_vault",
-            help="The key vault to use to store the DEK.",
-            options_list=["--key-vault"],
+            required=False,
         )
         c.argument(
             "access_name",
@@ -836,6 +1077,7 @@ def load_arguments(self, _):
             "datastore_config_file",
             help="The configuration file storing information about the datastore.",
             options_list=["--datastore-config"],
+            required=False,
         )
         c.argument(
             "secretstore_config_file",
@@ -849,11 +1091,6 @@ def load_arguments(self, _):
         c.argument(
             "identity",
             help="The identity to use for the datastore",
-        )
-        c.argument(
-            "wrapped_dek_key_vault",
-            help="The key vault to use to store the DEK.",
-            options_list=["--key-vault"],
         )
         c.argument(
             "container_name",
@@ -867,6 +1104,7 @@ def load_arguments(self, _):
             "datastore_config_file",
             help="The configuration file storing information about the datastore.",
             options_list=["--datastore-config"],
+            required=False,
         )
         c.argument(
             "secretstore_config_file",
@@ -880,11 +1118,6 @@ def load_arguments(self, _):
         c.argument(
             "identity",
             help="The identity to use for the datastore",
-        )
-        c.argument(
-            "wrapped_dek_key_vault",
-            help="The key vault to use to store the DEK.",
-            options_list=["--key-vault"],
         )
         c.argument(
             "container_name",
@@ -900,6 +1133,7 @@ def load_arguments(self, _):
 
     with self.argument_context("cleanroom config add-identity az-federated") as c:
         c.argument("backing_identity", default="cleanroom_cgs_oidc")
+        c.argument("issuer_url", required=False)
 
     with self.argument_context("cleanroom config add-identity oidc-attested") as c:
         c.argument("issuer_url", default="https://cgs/oidc")
@@ -943,6 +1177,278 @@ def load_arguments(self, _):
             "telemetry_folder",
             help="The location of the downloaded telemetry files.",
             options_list=["--telemetry-folder"],
+        )
+
+    # Clean Room cluster provider
+    with self.argument_context("cleanroom cluster provider deploy") as c:
+        c.argument(
+            "provider_client_name",
+            help="Name to use for the provider client instance",
+            options_list=["--name"],
+            required=False,
+            default="cleanroom-cluster-provider",
+        )
+    with self.argument_context("cleanroom cluster provider remove") as c:
+        c.argument(
+            "provider_client_name",
+            help="Name to use for the provider client instance",
+            options_list=["--name"],
+            required=False,
+            default="cleanroom-cluster-provider",
+        )
+
+    # cluster
+    with self.argument_context("cleanroom cluster") as c:
+        c.argument(
+            "provider_client_name",
+            help="Name of the client instance",
+            options_list=["--provider-client"],
+            required=False,
+            default="cleanroom-cluster-provider",
+        )
+        c.argument(
+            "infra_type",
+            arg_type=get_enum_type(["caci", "virtual"]),
+            help="The platform used for hosting the cluster",
+            options_list=["--infra-type"],
+            required=False,
+            default="caci",
+        )
+
+    with self.argument_context("cleanroom cluster up") as c:
+        c.argument(
+            "cluster_name",
+            help="A unique name for the cluster",
+            options_list=["--name"],
+        )
+        c.argument(
+            "resource_group",
+            help="A resource group under which to create the resources used by the cluster",
+            options_list=["--resource-group"],
+        )
+        c.argument(
+            "ws_folder",
+            help="An existing folder to use to place various configuration files that get created. If not specified then a folder gets automatically created under $HOME.",
+            options_list=["--workspace-folder"],
+            required=False,
+        )
+        c.argument(
+            "location",
+            help="The location to created Azure resources. Defaults to resource group's location if not specified.",
+            options_list=["--location"],
+            required=False,
+        )
+
+    with self.argument_context("cleanroom cluster create") as c:
+        c.argument(
+            "cluster_name",
+            help="A unique name for the cluster",
+            options_list=["--name"],
+        )
+        c.argument(
+            "provider_config",
+            help="Infra specific provider_config details as JSON, or a path to a file containing a JSON description.",
+            options_list=["--provider-config"],
+            required=False,
+        )
+        c.argument(
+            "enable_observability",
+            action="store_true",
+            help="Whether to enable observability on the cluster",
+            options_list=["--enable-observability"],
+            required=False,
+        )
+        c.argument(
+            "enable_analytics_workload",
+            action="store_true",
+            help="Whether to enable analytics workload support on the cluster",
+            options_list=["--enable-analytics-workload"],
+            required=False,
+        )
+        c.argument(
+            "analytics_workload_config_url",
+            help="The url containing the inputs required to enable analytics workload on the cluster",
+            options_list=["--analytics-workload-config-url"],
+            required=False,
+        )
+        c.argument(
+            "analytics_workload_config_url_ca_cert",
+            help="CA certificate to verify the peer for the url",
+            options_list=["--analytics-workload-config-url-ca-cert"],
+            required=False,
+        )
+        c.argument(
+            "analytics_workload_disable_telemetry_collection",
+            action="store_true",
+            help="Whether to disable telemetry collection for analytics workload",
+            options_list=["--analytics-workload-disable-telemetry-collection"],
+            required=False,
+            default=False,
+        )
+        c.argument(
+            "analytics_workload_security_policy_creation_option",
+            arg_type=get_enum_type(
+                ["cached", "cached-debug", "allow-all", "user-supplied"]
+            ),
+            help="Whether to use the cached policy files or use the allow all security policy",
+            options_list=["--analytics-workload-security-policy-creation-option"],
+            required=False,
+            default=default_workloads_security_policy_creation_option,
+        )
+        c.argument(
+            "analytics_workload_security_policy",
+            help="Path to a file containing or a base64 encoded string itself that specifies the security policy to use instead of passing a --analytics-workload-security-policy-creation-option value.",
+            options_list=["--analytics-workload-security-policy"],
+            required=False,
+        )
+
+    with self.argument_context("cleanroom cluster update") as c:
+        c.argument(
+            "cluster_name",
+            help="The name of the cluster",
+            options_list=["--name"],
+        )
+        c.argument(
+            "provider_config",
+            help="Infra specific provider_config details as JSON, or a path to a file containing a JSON description.",
+            options_list=["--provider-config"],
+            required=False,
+        )
+        c.argument(
+            "enable_observability",
+            action="store_true",
+            help="Whether to enable observability on the cluster",
+            options_list=["--enable-observability"],
+            required=False,
+            default=False,
+        )
+        c.argument(
+            "enable_analytics_workload",
+            action="store_true",
+            help="Whether to enable analytics workload support on the cluster",
+            options_list=["--enable-analytics-workload"],
+            required=False,
+        )
+        c.argument(
+            "analytics_workload_config_url",
+            help="The url containing the inputs required to enable analytics workload on the cluster",
+            options_list=["--analytics-workload-config-url"],
+            required=False,
+        )
+        c.argument(
+            "analytics_workload_config_url_ca_cert",
+            help="CA certificate to verify the peer for the url",
+            options_list=["--analytics-workload-config-url-ca-cert"],
+            required=False,
+        )
+        c.argument(
+            "analytics_workload_disable_telemetry_collection",
+            action="store_true",
+            help="Whether to disable telemetry collection for analytics workload",
+            options_list=["--analytics-workload-disable-telemetry-collection"],
+            required=False,
+            default=False,
+        )
+        c.argument(
+            "analytics_workload_security_policy_creation_option",
+            arg_type=get_enum_type(
+                ["cached", "cached-debug", "allow-all", "user-supplied"]
+            ),
+            help="Whether to use the cached policy files or use the allow all security policy",
+            options_list=["--analytics-workload-security-policy-creation-option"],
+            required=False,
+            default=default_workloads_security_policy_creation_option,
+        )
+        c.argument(
+            "analytics_workload_security_policy",
+            help="Path to a file containing or a base64 encoded string itself that specifies the security policy to use instead of passing a --analytics-workload-security-policy-creation-option value.",
+            options_list=["--analytics-workload-security-policy"],
+            required=False,
+        )
+
+    with self.argument_context("cleanroom cluster show") as c:
+        c.argument(
+            "cluster_name",
+            help="The name of the cluster",
+            options_list=["--name"],
+        )
+        c.argument(
+            "provider_config",
+            help="Infra specific provider_config details as JSON, or a path to a file containing a JSON description.",
+            options_list=["--provider-config"],
+            required=False,
+        )
+
+    with self.argument_context("cleanroom cluster delete") as c:
+        c.argument(
+            "cluster_name",
+            help="The name of the cluster",
+            options_list=["--name"],
+        )
+        c.argument(
+            "provider_config",
+            help="Infra specific provider_config details as JSON, or a path to a file containing a JSON description.",
+            options_list=["--provider-config"],
+            required=False,
+        )
+
+    with self.argument_context("cleanroom cluster get-kubeconfig") as c:
+        c.argument(
+            "cluster_name",
+            help="The name of the cluster",
+            options_list=["--name"],
+        )
+        c.argument(
+            "provider_config",
+            help="Infra specific provider_config details as JSON, or a path to a file containing a JSON description.",
+            options_list=["--provider-config"],
+            required=False,
+        )
+        c.argument(
+            "file",
+            help="The kubernetes configuration file to create.",
+            options_list=["--file", "-f"],
+        )
+
+    with self.argument_context(
+        "cleanroom cluster analytics-workload deployment generate"
+    ) as c:
+        c.argument(
+            "provider_config",
+            help="Infra specific provider_config details as JSON, or a path to a file containing a JSON description.",
+            options_list=["--provider-config"],
+            required=False,
+        )
+        c.argument(
+            "contract_id",
+            help="The contract containing the inputs required to enable analytics workload on the cluster",
+            options_list=["--contract-id"],
+        )
+        c.argument(
+            "disable_telemetry_collection",
+            help="Defines whether to disable telemetry collection in the analytics workload.",
+            options_list=["--disable-telemetry-collection"],
+            action="store_true",
+            required=False,
+            default=False,
+        )
+        c.argument(
+            "gov_client_name",
+            help="Name of the governance client instance to use to access the contract",
+            options_list=["--governance-client"],
+        )
+        c.argument(
+            "security_policy_creation_option",
+            arg_type=get_enum_type(["cached", "cached-debug", "allow-all"]),
+            help="Whether to use the cached policy files or use the allow all security policy",
+            options_list=["--security-policy-creation-option"],
+            required=False,
+            default=default_workloads_security_policy_creation_option,
+        )
+        c.argument(
+            "output_dir",
+            help="The output directory where files will get created",
+            options_list=["--output-dir"],
         )
 
     # CCF provider
@@ -1011,7 +1517,7 @@ def load_arguments(self, _):
         )
         c.argument(
             "infra_type",
-            arg_type=get_enum_type(["caci", "virtual", "virtualaci"]),
+            arg_type=get_enum_type(["caci", "virtual"]),
             help="The platform used for hosting the CCF network",
             options_list=["--infra-type"],
             required=False,
@@ -1189,6 +1695,12 @@ def load_arguments(self, _):
             options_list=["--security-policy-creation-option"],
             required=False,
             default=default_security_policy_creation_option,
+        )
+        c.argument(
+            "security_policy",
+            help="Path to a file containing or a base64 encoded string itself that specifies the security policy to use instead of passing a --security-policy-creation-option value.",
+            options_list=["--security-policy"],
+            required=False,
         )
         c.argument(
             "previous_service_cert",
@@ -1399,6 +1911,21 @@ def load_arguments(self, _):
         )
 
     with self.argument_context("cleanroom ccf network recovery-agent show-report") as c:
+        c.argument(
+            "network_name",
+            help="The name of the CCF network",
+            options_list=["--name"],
+        )
+        c.argument(
+            "provider_config",
+            help="Infra specific provider_config details as JSON, or a path to a file containing a JSON description.",
+            options_list=["--provider-config"],
+            required=False,
+        )
+
+    with self.argument_context(
+        "cleanroom ccf network recovery-agent show-network-report"
+    ) as c:
         c.argument(
             "network_name",
             help="The name of the CCF network",
@@ -1703,6 +2230,44 @@ def load_arguments(self, _):
             required=True,
         )
 
+    # CCF consortium manager
+    with self.argument_context("cleanroom ccf consortium-manager") as c:
+        c.argument(
+            "provider_client_name",
+            help="Name of the client instance",
+            options_list=["--provider-client"],
+            required=False,
+            default="ccf-provider",
+        )
+        c.argument(
+            "infra_type",
+            arg_type=get_enum_type(["caci", "virtual"]),
+            help="The platform used for hosting the CCF consortium manager",
+            options_list=["--infra-type"],
+            required=False,
+            default="caci",
+        )
+        c.argument(
+            "provider_config",
+            help="Infra specific provider_config details as JSON, or a path to a file containing a JSON description.",
+            options_list=["--provider-config"],
+            required=False,
+        )
+
+    with self.argument_context("cleanroom ccf consortium-manager create") as c:
+        c.argument(
+            "consortium_manager_name",
+            help="A unique name for the CCF consortium manager",
+            options_list=["--name"],
+        )
+
+    with self.argument_context("cleanroom ccf consortium-manager show") as c:
+        c.argument(
+            "consortium_manager_name",
+            help="A unique name for the CCF consortium manager",
+            options_list=["--name"],
+        )
+
     with self.argument_context("cleanroom datastore") as c:
         c.argument(
             "datastore_name",
@@ -1712,7 +2277,8 @@ def load_arguments(self, _):
         c.argument(
             "datastore_config_file",
             help="The configuration file storing information about the datastore.",
-            options_list=["--datastore-config", "--config"],
+            options_list=["--datastore-config-file", "--config"],
+            required=False,
         )
     with self.argument_context("cleanroom datastore add") as c:
         c.argument(
@@ -1727,21 +2293,24 @@ def load_arguments(self, _):
         )
         c.argument(
             "encryption_mode",
-            arg_type=get_enum_type(DatastoreEntry.EncryptionMode),
+            arg_type=get_enum_type(DataStoreEntry.EncryptionMode),
+            required=False,
         )
         c.argument(
             "secretstore_config_file",
             help="The config file of the secret store",
             options_list=["--secretstore-config-file", "--secretstore-config"],
+            required=False,
         )
         c.argument(
             "datastore_secret_store",
             help="The name of the secret store to use for the datastore",
             options_list=["--secretstore", "--datastore-secretstore"],
+            required=False,
         )
         c.argument(
             "backingstore_type",
-            arg_type=get_enum_type(DatastoreEntry.StoreType),
+            arg_type=get_enum_type(DataStoreEntry.StoreType),
         )
     with self.argument_context("cleanroom datastore upload") as c:
         c.argument(

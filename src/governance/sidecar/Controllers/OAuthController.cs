@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using AttestationClient;
@@ -32,7 +33,8 @@ public class OAuthController : ControllerBase
     public async Task<IActionResult> GetToken(
     [FromQuery] string sub,
     [FromQuery] string tenantId,
-    [FromQuery] string aud)
+    [FromQuery] string aud,
+    [FromQuery] string? iss = null)
     {
         var appClient = await this.ccfClientManager.GetAppClient();
         var wsConfig = await this.ccfClientManager.GetWsConfig();
@@ -51,6 +53,10 @@ public class OAuthController : ControllerBase
             $"&sub={sub}" +
             $"&tid={tenantId}" +
             $"&aud={aud}";
+        if (!string.IsNullOrEmpty(iss))
+        {
+            query += $"&iss={iss}";
+        }
 
         using (HttpRequestMessage request = new(
             HttpMethod.Post,
@@ -74,6 +80,40 @@ public class OAuthController : ControllerBase
             {
                 ["value"] = token
             });
+        }
+    }
+
+    [HttpPost("/oauth/federation/subjects/{sub}/cleanroompolicy")]
+    public async Task<IActionResult> SetTokenSubjectCleanRoomPolicy(
+        [FromRoute] string sub,
+        [FromBody] JsonObject data)
+    {
+        var appClient = await this.ccfClientManager.GetAppClient();
+        var wsConfig = await this.ccfClientManager.GetWsConfig();
+        var paddingMode = RSASignaturePaddingMode.Pss;
+
+        var dataBytes = Encoding.UTF8.GetBytes(data.ToJsonString());
+        var signature = Signing.SignData(dataBytes, wsConfig.Attestation.PrivateKey, paddingMode);
+
+        var content = Attestation.PrepareSignedDataRequestContent(
+            dataBytes,
+            signature,
+            wsConfig.Attestation.PublicKey,
+            wsConfig.Attestation.Report);
+
+        using (HttpRequestMessage request = new(
+            HttpMethod.Post,
+            this.routes.TokenSubjectCleanRoomPolicy(this.WebContext, sub)))
+        {
+            request.Content = new StringContent(
+                content.ToJsonString(),
+                Encoding.UTF8,
+                "application/json");
+
+            using HttpResponseMessage response = await appClient.SendAsync(request);
+            this.Response.CopyHeaders(response.Headers);
+            await response.ValidateStatusCodeAsync(this.logger);
+            return this.Ok();
         }
     }
 }

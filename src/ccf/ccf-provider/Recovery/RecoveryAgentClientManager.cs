@@ -38,9 +38,9 @@ public class RecoveryAgentClientManager
     {
         var client = this.httpClientManager.GetOrAddClient(
             agentEndpoint,
+            HttpRetries.Policies.DefaultRetryPolicy(this.logger),
             serviceCert,
-            "recovery-agent",
-            retryPolicy: HttpRetries.Policies.GetDefaultRetryPolicy(this.logger));
+            "recovery-agent");
         return Task.FromResult(client);
     }
 

@@ -1,11 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using CAciCcfProvider;
+using CcfConsortiumMgrProvider;
 using CcfProvider;
+using CcfProviderClient;
 using CcfRecoveryProvider;
+using LoadBalancerProvider;
 using Microsoft.AspNetCore.Mvc;
-using VirtualCcfProvider;
 
 namespace Controllers;
 
@@ -13,42 +14,60 @@ public abstract class CCfClientController : ControllerBase
 {
     private readonly ILogger logger;
     private readonly IConfiguration configuration;
+    private readonly ProvidersRegistry providers;
 
     public CCfClientController(
         ILogger logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ProvidersRegistry providers)
     {
         this.logger = logger;
         this.configuration = configuration;
+        this.providers = providers;
     }
+
+    protected static IProgress<string> NoOpProgressReporter => new Progress<string>(m => { });
 
     protected ICcfNodeProvider GetNodeProvider(InfraType infraType)
     {
-        switch (infraType)
+        return infraType switch
         {
-            case InfraType.@virtual:
-                return new DockerNodeProvider(this.logger, this.configuration);
-            case InfraType.virtualaci:
-                return new AciNodeProvider(this.logger, this.configuration);
-            case InfraType.caci:
-                return new CAciNodeProvider(this.logger, this.configuration);
-            default:
-                throw new NotSupportedException($"Infra type '{infraType}' is not supported.");
-        }
+            InfraType.@virtual => this.providers.DockerNodeProvider,
+            InfraType.caci => this.providers.CaciNodeProvider,
+            _ => throw new NotSupportedException($"Infra type '{infraType}' is not supported."),
+        };
+    }
+
+    protected ICcfLoadBalancerProvider GetLoadBalancerProvider(InfraType infraType)
+    {
+        return infraType switch
+        {
+            InfraType.@virtual => this.providers.DockerEnvoyLbProvider,
+            InfraType.caci => this.providers.AciEnvoyLbProvider,
+            _ => throw new NotSupportedException($"Infra type '{infraType}' is not supported."),
+        };
     }
 
     protected ICcfRecoveryServiceInstanceProvider GetRecoverySvcInstanceProvider(
         RsInfraType infraType)
     {
-        switch (infraType)
+        return infraType switch
         {
-            case RsInfraType.@virtual:
-                return new DockerRecoveryServiceInstanceProvider(this.logger, this.configuration);
-            case RsInfraType.caci:
-                return new CAciRecoveryServiceInstanceProvider(this.logger, this.configuration);
-            default:
-                throw new NotSupportedException($"Infra type '{infraType}' is not supported.");
-        }
+            RsInfraType.@virtual => this.providers.DockerRsProvider,
+            RsInfraType.caci => this.providers.CaciRsProvider,
+            _ => throw new NotSupportedException($"Infra type '{infraType}' is not supported."),
+        };
+    }
+
+    protected ICcfConsortiumManagerInstanceProvider GetConsortiumMgrInstanceProvider(
+        CMInfraType infraType)
+    {
+        return infraType switch
+        {
+            CMInfraType.@virtual => this.providers.DockerCmProvider,
+            CMInfraType.caci => this.providers.CaciCmProvider,
+            _ => throw new NotSupportedException($"Infra type '{infraType}' is not supported."),
+        };
     }
 
     protected CcfRecoveryServiceProvider GetRecoveryServiceProvider(
@@ -60,5 +79,14 @@ public abstract class CCfClientController : ControllerBase
             this.logger,
             provider);
         return ccfRecoverySvcProvider;
+    }
+
+    protected CcfConsortiumManagerProvider GetConsortiumManagerProvider(string infraType)
+    {
+        var type = Enum.Parse<CMInfraType>(infraType, ignoreCase: true);
+        ICcfConsortiumManagerInstanceProvider instanceProvider =
+            this.GetConsortiumMgrInstanceProvider(type);
+
+        return new CcfConsortiumManagerProvider(this.logger, instanceProvider);
     }
 }

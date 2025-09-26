@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: identity-sidecar
+    image: $containerRegistryUrl/identity@$digest
+    command:
+    - dotnet
+    - Microsoft.Azure.CleanRoomSidecar.Identity.IdentitySidecar.dll
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+    env:
+    - name: IdentitySideCarArgs
+      value: $IdentitySidecarArgsBase64
+    - name: OTEL_METRIC_EXPORT_INTERVAL
+      value: $OtelMetricExportInterval
+    - name: TELEMETRY_MOUNT_PATH
+      value: $telemetryMountPath

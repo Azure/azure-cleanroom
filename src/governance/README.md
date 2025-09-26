@@ -8,6 +8,7 @@
   - [sidecar](#sidecar)
   - [ui](#ui)
   - [test](#test)
+- [Governance upgrade](#governance-upgrade)
 
 ## Introduction
 The Clean Room Governance Service (CGS) provides the following capabilities:
@@ -59,3 +60,7 @@ This folder contains the MVC application to ease interactions with the CGS insta
 
 ### test
 This folder contains the unit tests for the above components.
+
+## Governance upgrade
+See steps [here](docs/upgrade/README.md) for performing governance client and service upgrades.
+

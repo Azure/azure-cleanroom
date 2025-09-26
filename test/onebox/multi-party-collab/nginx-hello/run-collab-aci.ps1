@@ -37,7 +37,6 @@ $outDir = "$PSScriptRoot/generated"
 $datastoreOutdir = "$outDir/datastores"
 
 $root = git rev-parse --show-toplevel
-. $root/test/onebox/multi-party-collab/deploy-aci-cleanroom-governance.ps1
 
 Write-Host "Using $usingRegistry registry for cleanroom container images."
 
@@ -47,7 +46,8 @@ if ($env:GITHUB_ACTIONS -eq "true") {
     $resourceGroupTags = "github_actions=multi-party-collab-${env:JOB_ID}-${env:RUN_ID}"
 }
 else {
-    $ISV_RESOURCE_GROUP = "cl-ob-isv-${env:USER}"
+    $user = $env:CODESPACES -eq "true" ? $env:GITHUB_USER : $env:USER
+    $ISV_RESOURCE_GROUP = "cl-ob-isv-${user}"
 }
 
 function Get-UniqueString ([string]$id, $length = 13) {
@@ -58,13 +58,12 @@ function Get-UniqueString ([string]$id, $length = 13) {
 $uniqueString = Get-UniqueString("${ISV_RESOURCE_GROUP}")
 $CCF_NAME = "${uniqueString}-ccf"
 
-# Keeping this in westus while other samples run in westeurope to find out any issues if platform 
-# changes underneath are rolling out in a staged manner and one datacenter sees it before the other.
-$ISV_RESOURCE_GROUP_LOCATION = "westus"
+$ISV_RESOURCE_GROUP_LOCATION = "westeurope"
 Write-Host "Creating resource group $ISV_RESOURCE_GROUP in $ISV_RESOURCE_GROUP_LOCATION"
 az group create --location $ISV_RESOURCE_GROUP_LOCATION --name $ISV_RESOURCE_GROUP --tags $resourceGroupTags
 
-$result = Deploy-Aci-Governance `
+$ccfProviderProjectName = "ob-nginx-hello-ccf-provider"
+pwsh $root/test/onebox/multi-party-collab/deploy-caci-cleanroom-governance.ps1 `
     -resourceGroup $ISV_RESOURCE_GROUP `
     -ccfName $CCF_NAME `
     -location $ISV_RESOURCE_GROUP_LOCATION `
@@ -75,31 +74,28 @@ $result = Deploy-Aci-Governance `
     -allowAll:$allowAll `
     -projectName "ob-nginx-client" `
     -initialMemberName "nginx" `
-    -outDir $outDir
+    -outDir $outDir `
+    -ccfProviderProjectName $ccfProviderProjectName
+$response = (az cleanroom ccf network show `
+        --name $CCF_NAME `
+        --provider-config $outDir/ccf/providerConfig.json `
+        --provider-client $ccfProviderProjectName | ConvertFrom-Json)
+$ccfEndpoint = $response.endpoint
 
 $withSecurityPolicy = !$allowAll
 pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 `
     -registry $registryArg `
     -repo $repo `
     -tag $tag `
-    -ccfEndpoint $result.ccfEndpoint `
+    -ccfEndpoint $ccfEndpoint `
     -outDir $outDir `
     -datastoreOutDir $datastoreOutdir `
     -withSecurityPolicy:$withSecurityPolicy
 
-if ($LASTEXITCODE -gt 0) {
-    Write-Host -ForegroundColor Red "run-scenario-generate-template-policy returned non-zero exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
-
 pwsh $root/build/ccr/build-ccr-client-proxy.ps1 
 
-$failed = $false
 $dnsNameLabel = Get-UniqueString("cl-${ISV_RESOURCE_GROUP}")
 pwsh $PSScriptRoot/../deploy-caci-cleanroom.ps1 -resourceGroup $ISV_RESOURCE_GROUP -location $ISV_RESOURCE_GROUP_LOCATION -dnsNameLabel $dnsNameLabel -outDir $outDir
-if ($LASTEXITCODE -gt 0) {
-    $failed = $true
-}
 
 curl -X POST -s http://ccr.cleanroom.local:8200/gov/nginx-hello/start --proxy http://127.0.0.1:10080
 
@@ -173,16 +169,16 @@ az cleanroom logs download `
 
 # Check that expected output files got created.
 $expectedFiles = @(
-    "$PSScriptRoot/generated/results/application-telemetry*/**/nginx-hello.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/nginx-hello*-code-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/nginx-hello*-code-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/nginx-hello*-code-launcher.metrics",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.traces"
+    "$PSScriptRoot/generated/results/application-telemetry*/nginx-hello.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/nginx-hello*-code-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/nginx-hello*-code-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/nginx-hello*-code-launcher.metrics",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse-launcher.traces"
 )
 
 $missingFiles = @()
@@ -197,10 +193,5 @@ if ($missingFiles.Count -gt 0) {
     foreach ($file in $missingFiles) {
         Write-Host -ForegroundColor Red $file
     }
-    exit 1
-}
-
-if ($failed) {
-    Write-Host -ForegroundColor Red "deploy-caci-cleanroom returned non-zero exit code"
     exit 1
 }

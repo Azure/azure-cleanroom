@@ -1,0 +1,51 @@
+# Use the official .NET Core SDK as the base image
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+
+# Set the working directory
+WORKDIR /app
+
+# copy csproj and restore as distinct layers
+# https://blog.nimbleways.com/docker-build-caching-for-dotnet-applications-done-right-with-dotnet-subset/
+COPY Directory.Packages.props /app
+COPY Directory.Build.props /app
+COPY src/ccf/*.sln /app/src/ccf/
+COPY src/ccf/ccf-provider-client/*.csproj /app/src/ccf/ccf-provider-client/
+COPY src/ccf/recovery/ccf-recovery-agent/*.csproj /app/src/ccf/recovery/ccf-recovery-agent/
+COPY src/ccf/recovery/ccf-recovery-service/*.csproj /app/src/ccf/recovery/ccf-recovery-service/
+COPY src/ccf/recovery/ccf-recovery-service-provider/*.csproj /app/src/ccf/recovery/ccf-recovery-service-provider/
+COPY src/ccf/ccf-provider/*.csproj /app/src/ccf/ccf-provider/
+COPY src/ccf/virtual-ccf-provider/*.csproj /app/src/ccf/virtual-ccf-provider/
+COPY src/ccf/caci-ccf-provider/*.csproj /app/src/ccf/caci-ccf-provider/
+COPY src/ccf/ccf-common/*.csproj /app/src/ccf/ccf-common/
+COPY src/ccf/ccf-provider-common/*.csproj /app/src/ccf/ccf-provider-common/
+COPY src/ccf/ccf-common/*.csproj /app/src/ccf/ccf-common/
+COPY src/ccf/tests/*.csproj /app/src/ccf/tests/
+COPY src/ccf/load-balancer/load-balancer-provider/*.csproj /app/src/ccf/load-balancer/load-balancer-provider/
+COPY src/ccf/consortium-manager/ccf-consortium-manager/*.csproj /app/src/ccf/consortium-manager/ccf-consortium-manager/
+COPY src/ccf/consortium-manager/ccf-consortium-manager-provider/*.csproj /app/src/ccf/consortium-manager/ccf-consortium-manager-provider/
+COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
+COPY src/internal/Cose/*.csproj /app/src/internal/Cose/
+COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
+RUN dotnet restore /app/src/ccf/ccf.sln
+
+# copy everything else and build app
+COPY stylecop.json /app
+COPY Menees.Analyzers.Settings.xml /app
+COPY .editorconfig /app
+COPY src/internal /app/src/internal
+COPY src/ccf /app/src/ccf
+
+# Publish the application
+RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/ccf/consortium-manager/ccf-consortium-manager/ccf-consortium-manager.csproj
+
+# Use the official .NET Core runtime as the base image for the final stage
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the published output from the build stage to the runtime stage
+COPY --from=build /app/publish .
+
+# Set the entry point for the container
+ENTRYPOINT ["dotnet", "ccf-consortium-manager.dll"]

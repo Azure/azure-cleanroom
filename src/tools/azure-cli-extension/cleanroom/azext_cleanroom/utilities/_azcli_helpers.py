@@ -6,8 +6,8 @@ logger = get_logger(__name__)
 def az_cli(args_str: str):
     import os
 
-    from knack.util import CommandResultItem
     from azure.cli.core import get_default_cli
+    from knack.util import CommandResultItem
 
     args = args_str.split()
     cli = get_default_cli()

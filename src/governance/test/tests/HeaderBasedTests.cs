@@ -67,7 +67,7 @@ public class HeaderBasedTests : TestBase
         this.ContractId = contractId;
 
         this.ccfEndpoint = this.Configuration["headerTesting:ccfEndpoint"]!;
-        if (this.IsGitHubActionsEnv())
+        if (this.IsGitHubActionsEnv() || this.IsCodespacesEnv())
         {
             // 172.17.0.1:
             // https://stackoverflow.com/questions/48546124/what-is-the-linux-equivalent-of-host-docker-internal

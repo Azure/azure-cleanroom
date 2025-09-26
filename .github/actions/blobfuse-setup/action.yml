@@ -1,0 +1,56 @@
+name: "Blobfuse Setup"
+description: "Setup Blobfuse and its dependencies"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Go
+      shell: bash
+      run: |
+        sudo chmod +x ./build/go_installer.sh
+        sudo ./build/go_installer.sh .
+        echo "PATH=$PATH:/usr/local/go/bin" >> $GITHUB_ENV
+
+    - name: Install Blobfuse dependencies
+      shell: bash
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install gcc libfuse3-dev parallel -y
+        sudo apt-get install fuse3 -y
+
+    - name: Build and Install Blobfuse
+      shell: bash
+      run: |
+        sudo chmod +x ./external/azure-storage-fuse/build.sh
+        (cd ./external/azure-storage-fuse/ && ./build.sh)
+        cp -r ./src/blobfuse-launcher/encryptor ./external/azure-storage-fuse/encryptor
+        (cd ./external/azure-storage-fuse/encryptor && go build -buildmode=plugin -o encryptor.so)
+        cp ./external/azure-storage-fuse/blobfuse2 /usr/local/bin/
+        echo "user_allow_other" | sudo tee -a /etc/fuse.conf
+
+    - name: Create Azure Storage Account and Container
+      shell: bash
+      run: |
+        RESOURCE_GROUP=${{ env.RESOURCE_GROUP }}
+        LOCATION=westus
+        CONTAINER_NAME=di-test
+        STORAGE_ACCOUNT=${{ env.ACCOUNT_NAME}}
+        SOURCE_CONTAINER_NAME=di-source
+        echo "RESOURCE_GROUP=$RESOURCE_GROUP" >> $GITHUB_ENV
+        echo "STORAGE_ACCOUNT=$STORAGE_ACCOUNT" >> $GITHUB_ENV
+        echo "LOCATION=$LOCATION" >> $GITHUB_ENV
+        echo "CONTAINER_NAME=$CONTAINER_NAME" >> $GITHUB_ENV
+        echo "SOURCE_CONTAINER_NAME=$SOURCE_CONTAINER_NAME" >> $GITHUB_ENV
+
+        az group create --name $RESOURCE_GROUP --location $LOCATION
+        STORAGE_ACCOUNT_ENDPOINT=$(az storage account create --name $STORAGE_ACCOUNT \
+          --resource-group $RESOURCE_GROUP --query "primaryEndpoints.blob" --output tsv)
+        echo "STORAGE_ACCOUNT_ENDPOINT=$STORAGE_ACCOUNT_ENDPOINT" >> $GITHUB_ENV
+        az storage container create --resource-group $RESOURCE_GROUP --account-name $STORAGE_ACCOUNT \
+          --name $CONTAINER_NAME --auth-mode login
+        az storage container create --resource-group $RESOURCE_GROUP --account-name $STORAGE_ACCOUNT \
+          --name $SOURCE_CONTAINER_NAME --auth-mode login
+        az role assignment create --assignee ${{ env.CLIENT_ID }} \
+          --role "Storage Blob Data Contributor" \
+          --scope /subscriptions/${{ env.SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT
+        sleep 120s

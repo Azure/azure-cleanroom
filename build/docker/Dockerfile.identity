@@ -5,12 +5,13 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /app
 
 # Copy the entire directory to the container
-COPY src /app/src
 COPY Directory.Packages.props /app
 COPY Directory.Build.props /app
 COPY stylecop.json /app
 COPY Menees.Analyzers.Settings.xml /app
 COPY .editorconfig /app
+COPY src/identity /app/src/identity
+COPY src/internal /app/src/internal
 
 # Publish the application
 RUN dotnet restore /app/src/identity/Identity.sln

@@ -1,0 +1,163 @@
+[
+  {
+    "name": "cleanroom-spark-frontend",
+    "properties": {
+      "image": "$containerRegistryUrl/workloads/cleanroom-spark-frontend@$digest",
+      "command": [
+        "python",
+        "-m",
+        "src.main",
+        "--config",
+        "/app/config/settings.yaml"],
+      "environmentVariables": [
+        {
+          "name": "SERVICE_CERT_LOCATION",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CLEANROOM_CONTAINER_REGISTRY_URL",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CLEANROOM_SPARK_ANALYTICS_IMAGE_URL",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CLEANROOM_SPARK_ANALYTICS_POLICY_FILE",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "POD_NAME",
+          "value": ".*",
+          "regex": true
+        }
+      ],
+      "volumeMounts": [
+        {
+          "name": "appsettings-volume",
+          "mountPath": "/app/config",
+          "mountType": "emptyDir",
+          "readOnly": true
+        },
+        {
+          "name": "shared",
+          "mountPath": "/app/service",
+          "mountType": "emptyDir",
+          "readOnly": false
+        },
+        {
+          "name": "uds",
+          "mountPath": "/mnt/uds",
+          "mountType": "emptyDir",
+          "readOnly": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "otel-collector",
+    "properties": {
+      "image": "$containerRegistryUrl/otel-collector@$digest",
+      "environmentVariables": [
+        {
+          "name": "TELEMETRY_COLLECTION_ENABLED",
+          "value": "$telemetryCollectionEnabled"
+        },
+        {
+          "name": "PROMETHEUS_ENDPOINT",
+          "value": "$prometheusEndpoint"
+        },
+        {
+          "name": "LOKI_ENDPOINT",
+          "value": "$lokiEndpoint"
+        },
+        {
+          "name": "TEMPO_ENDPOINT",
+          "value": "$tempoEndpoint"
+        }
+      ]
+    }
+  },
+  {
+    "name": "ccr-proxy",
+    "properties": {
+      "image": "$containerRegistryUrl/ccr-proxy@$digest",
+      "environmentVariables": [
+        {
+          "name": "CCR_ENVOY_DESTINATION_PORT",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CCR_ENVOY_SERVICE_CERT_OUTPUT_FILE",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CCR_FQDN",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CCR_LOCAL_CA_CERT_OUT_DIR",
+          "value": "/app/localcacert",
+          "required": true
+        }
+      ],
+      "volumeMounts": [
+        {
+          "name": "shared",
+          "mountPath": "/app/service",
+          "mountType": "emptyDir",
+          "readOnly": false
+        },
+        {
+          "name": "localcacert",
+          "mountPath": "/app/localcacert",
+          "mountType": "emptyDir",
+          "readOnly": false
+        }
+      ],
+      "command": [
+        "/bin/bash",
+        "https-http/bootstrap.sh",
+        "--ca-type",
+        "local"
+      ]
+    }
+  },
+  {
+    "name": "ccr-attestation",
+    "properties": {
+      "image": "$containerRegistryUrl/ccr-attestation@$digest",
+      "command": [
+        "app",
+        "-socket-address",
+        "/mnt/uds/sock"
+      ],
+      "environmentVariables": [],
+      "volumeMounts": [
+        {
+          "name": "uds",
+          "mountPath": "/mnt/uds",
+          "mountType": "emptyDir",
+          "readOnly": false
+        }
+      ]
+    }
+  }
+]

@@ -9,27 +9,16 @@ namespace HttpRetries;
 
 public static class Policies
 {
-    public static readonly IAsyncPolicy DefaultRetryPolicy =
-        Policy.Handle<Exception>((e) => RetryUtilities.IsRetryableException(e))
-        .WaitAndRetryAsync(
-            3,
-            retryAttempt =>
-            {
-                Random jitterer = new();
-                return TimeSpan.FromSeconds(5) + TimeSpan.FromSeconds(jitterer.Next(0, 15));
-            },
-            (exception, timeSpan, retryCount, context) =>
-            {
-                ILogger logger = (ILogger)context["logger"];
-                logger.LogWarning(
-                    $"Hit retryable exception while performing operation: " +
-                    $"{context.OperationKey}. Retrying after " +
-                    $"{timeSpan}. RetryCount: {retryCount}. Exception: {exception}.");
-            });
+    private static IAsyncPolicy<HttpResponseMessage>? defaultRetryPolicy;
 
-    public static IAsyncPolicy<HttpResponseMessage> GetDefaultRetryPolicy(ILogger logger)
+    public static IAsyncPolicy<HttpResponseMessage> NoRetries =>
+        Policy.NoOpAsync<HttpResponseMessage>().WithPolicyKey("NoRetryPolicy");
+
+    public static IAsyncPolicy<HttpResponseMessage> DefaultRetryPolicy(ILogger logger)
     {
-        return Policy<HttpResponseMessage>
+        // Note: Might end up assigning more than once if invoked concurrently but can live
+        // with that here.
+        defaultRetryPolicy ??= Policy<HttpResponseMessage>
             .Handle<Exception>(RetryUtilities.IsRetryableException)
             .OrTransientHttpStatusCode()
             .WaitAndRetryAsync(
@@ -41,10 +30,16 @@ public static class Policies
                 },
                 (result, timeSpan, retryCount, context) =>
                 {
+                    string action = $"{result.Result?.RequestMessage?.Method} " +
+                    $"{result.Result?.RequestMessage?.RequestUri}";
                     logger.LogWarning(
-                        $"Hit retryable exception while performing operation. Retrying after " +
+                        $"Hit retryable exception while performing operation '{action}'. " +
+                        $"Retrying after " +
                         $"{timeSpan}. RetryCount: {retryCount}. Code: " +
-                        $"{result.Result?.StatusCode}. Exception: {result.Exception}.");
-                });
+                        $"'{result?.Result?.StatusCode}'. Exception: '{result?.Exception}'.");
+                }).
+                WithPolicyKey("DefaultRetryPolicy");
+
+        return defaultRetryPolicy;
     }
 }

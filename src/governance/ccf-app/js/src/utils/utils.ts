@@ -8,8 +8,14 @@ import {
 import { Sign } from "../models/sign";
 import { SnpAttestationResult } from "../attestation/snpattestation";
 import { MemberInfo } from "../models/membermodels";
-import { ProposalInfoItem, ProposalStoreItem } from "../models";
+import {
+  ProposalInfoItem,
+  ProposalStoreItem,
+  UserIdentityStoreItem
+} from "../models";
 import { ICleanRoomPolicyProps } from "../attestation/ICleanRoomPolicyProps";
+import { ErrorResponse } from "../models/errorresponse";
+import { SetSubjectPolicyRequestData } from "../models/tokenmodels";
 
 export function hex(buf: ArrayBuffer) {
   return Array.from(new Uint8Array(buf))
@@ -37,10 +43,111 @@ export interface Caller {
 }
 
 export function getCallerId(request: ccfapp.Request): string {
-  // Note that the following way of getting caller ID doesn't work for 'jwt' auth policy and
-  // 'no_auth' auth policy.
-  const caller = request.caller as unknown as Caller;
-  return caller.id;
+  if (
+    request.caller.policy === "member_cert" ||
+    request.caller.policy == "user_cert"
+  ) {
+    const caller = request.caller as unknown as Caller;
+    return caller.id;
+  } else if (request.caller.policy === "jwt") {
+    const caller = request.caller as ccfapp.JwtAuthnIdentity;
+    interface Payload {
+      oid: string;
+    }
+    const jwtPayload = caller.jwt.payload as Payload;
+    if (jwtPayload.oid === undefined) {
+      throw new Error(
+        "OID claim is not present in the JWT token. Cannot get caller ID."
+      );
+    }
+
+    // The caller ID is the OID claim in the JWT token.
+    return caller.jwt.payload.oid;
+  } else {
+    throw new Error(
+      `Unknown authentication policy: ${request.caller.policy}. Cannot get caller ID.`
+    );
+  }
+}
+
+export function validateCallerAuthorized(
+  request: ccfapp.Request
+): ccfapp.Response<ErrorResponse> {
+  // For member_cert and user_cert auth policies, no explicit authorization is needed.
+  if (
+    request.caller.policy === "member_cert" ||
+    request.caller.policy == "user_cert"
+  ) {
+    return;
+  }
+
+  if (request.caller.policy === "jwt") {
+    const callerId = getCallerId(request);
+    const userIdentityStore = ccfapp.typedKv(
+      "public:ccf.gov.user_identities",
+      ccfapp.string,
+      ccfapp.json<UserIdentityStoreItem>()
+    );
+
+    const user = userIdentityStore.get(callerId);
+    if (user === undefined) {
+      return {
+        statusCode: 403,
+        body: new ErrorResponse(
+          "CallerNotAuthorized",
+          `User ${callerId} is not authorized to invoke this endpoint.`
+        )
+      };
+    }
+
+    const tenantId = user.data.tenantId;
+    const incomingTenantId = request.caller.jwt.payload.tid;
+    if (tenantId != incomingTenantId) {
+      return {
+        statusCode: 403,
+        body: new ErrorResponse(
+          "CallerTenantNotAuthorized",
+          `Tenant ${incomingTenantId} is not authorized to invoke this endpoint. Expected tenant ID is ${tenantId}.`
+        )
+      };
+    }
+
+    return;
+  }
+
+  return {
+    statusCode: 400,
+    body: new ErrorResponse(
+      "UnknownAuthenticationPolicy",
+      `Validation for ${request.caller.policy} is not supported.`
+    )
+  };
+}
+
+export function getIssuerType(issuer: string, tid: string): string {
+  if (
+    issuer ===
+    "https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0"
+  ) {
+    return "MsPersonal";
+  } else if (issuer === "https://login.microsoftonline.com/consumers/v2.0") {
+    return "MsPersonal";
+  } else if (
+    issuer === "https://login.microsoftonline.com/organizations/v2.0"
+  ) {
+    return "EntraID";
+  } else if (issuer === "https://login.microsoftonline.com/common/v2.0") {
+    return "EntraID";
+  } else if (
+    tid !== undefined &&
+    issuer == `https://login.microsoftonline.com/${tid}/v2.0`
+  ) {
+    return "EntraID";
+  } else if (tid !== undefined && issuer == `https://sts.windows.net/${tid}/`) {
+    return "EntraID";
+  } else {
+    throw new Error(`Unknown issuer: ${issuer}`);
+  }
 }
 
 export function isMember(memberId: string): boolean {
@@ -67,7 +174,7 @@ export function isUser(userId: string): boolean {
 
 export function getTenantId(memberId: string): string {
   const info = getMemberInfo(memberId);
-  return info.member_data != null ? info.member_data.tenantId : "";
+  return info && info.member_data != null ? info.member_data.tenantId : "";
 }
 
 function getMemberInfo(memberId: string): MemberInfo {
@@ -77,8 +184,10 @@ function getMemberInfo(memberId: string): MemberInfo {
     ccfapp.arrayBuffer
   );
   const value = memberInfo.get(ccf.strToBuf(memberId));
-  const info = ccf.bufToJsonCompatible(value) as MemberInfo;
-  return info;
+  if (value !== undefined) {
+    const info = ccf.bufToJsonCompatible(value) as MemberInfo;
+    return info;
+  }
 }
 
 export function verifyReportData(
@@ -216,11 +325,198 @@ export function findOpenProposals(name: string, contractId: string): string[] {
   return proposalIds;
 }
 
-export function getCleanRoomPolicyProps(
+export function getContractCleanRoomPolicyProps(
   contractId: string
 ): ICleanRoomPolicyProps {
+  return getCleanRoomPolicyProps(getContractCleanRoomPolicyMapName(contractId));
+}
+
+export function getCustomCleanRoomPolicyProps(
+  key: string
+): ICleanRoomPolicyProps {
+  return getCleanRoomPolicyProps(getCustomCleanRoomPolicyMapName(key));
+}
+
+export function isEmpty(cleanroomPolicy: ICleanRoomPolicyProps): boolean {
+  return Object.keys(cleanroomPolicy).length === 0;
+}
+
+export function setCustomCleanRoomPolicy(
+  key: string,
+  args: SetSubjectPolicyRequestData
+) {
+  const mapName = getCustomCleanRoomPolicyMapName(key);
+  // Function to add policy claims
+  const add = (claims) => {
+    let items = [];
+    console.log(
+      `Add claims to clean room policy under map (${mapName}): ${JSON.stringify(claims)}`
+    );
+    Object.keys(claims).forEach((key) => {
+      let itemToAdd = claims[key];
+      // Make sure itemToAdd is always an array
+      if (!Array.isArray(itemToAdd)) {
+        itemToAdd = [itemToAdd];
+      }
+
+      const keyBuf = ccf.strToBuf(key);
+      if (ccf.kv[mapName].has(keyBuf)) {
+        // Key is already available
+        const itemsBuf = ccf.kv[mapName].get(keyBuf);
+        const existingItemStr = ccf.bufToStr(itemsBuf);
+        console.log(`key: ${key} already exist: ${existingItemStr}`);
+        items = JSON.parse(existingItemStr);
+        if (typeof itemToAdd[0] === "boolean") {
+          // booleans are single value arrays
+          items = itemToAdd;
+        } else {
+          // loop through the input and add it to the existing set
+          itemToAdd.forEach((i) => {
+            if (items.filter((ii) => ii === i).length === 0) {
+              // Element does not exist in items, add it.
+              items.push(i);
+            }
+          });
+        }
+      } else {
+        // set single value
+        // Make sure that the itemToAdd doesn't have duplicates.
+        items = Array.from(new Set(itemToAdd));
+      }
+
+      // prepare and store items
+      const jsonItems = JSON.stringify(items);
+      const jsonItemsBuf = ccf.strToBuf(jsonItems);
+      console.log(
+        `Accepted clean room policy item. Key: ${key}, value: ${jsonItems}`
+      );
+      ccf.kv[mapName].set(keyBuf, jsonItemsBuf);
+    });
+  };
+
+  // Function to remove clean room policy claims
+  const remove = (claims) => {
+    let items = [];
+    console.log(
+      `Remove claims to clean room policy under map (${mapName}): ${JSON.stringify(claims)}`
+    );
+    Object.keys(claims).forEach((key) => {
+      let itemToRemove = claims[key];
+      // Make sure itemToRemove is always an array
+      if (!Array.isArray(itemToRemove)) {
+        itemToRemove = [itemToRemove];
+      }
+
+      const keyBuf = ccf.strToBuf(key);
+      if (ccf.kv[mapName].has(keyBuf)) {
+        // Key must be available
+        const itemsBuf = ccf.kv[mapName].get(keyBuf);
+        const existingItemStr = ccf.bufToStr(itemsBuf);
+        console.log(`key: ${key} exist: ${existingItemStr}`);
+        items = JSON.parse(existingItemStr);
+        if (typeof itemToRemove[0] === "boolean") {
+          // booleans are single value arrays, removing will remove the whole key
+          ccf.kv[mapName].delete(keyBuf);
+        } else {
+          // loop through the input and delete it from the existing set
+          itemToRemove.forEach((i) => {
+            if (items.filter((ii) => ii === i).length === 0) {
+              throw new Error(
+                `Trying to remove value '${i}' from ${items} and it does not exist`
+              );
+            }
+            // Remove value from list
+            const index = items.indexOf(i);
+            if (index > -1) {
+              items.splice(index, 1);
+            }
+          });
+          // update items
+          if (items.length === 0) {
+            ccf.kv[mapName].delete(keyBuf);
+          } else {
+            const jsonItems = JSON.stringify(items);
+            const jsonItemsBuf = ccf.strToBuf(jsonItems);
+            ccf.kv[mapName].set(keyBuf, jsonItemsBuf);
+          }
+        }
+      } else {
+        throw new Error(
+          `Cannot remove values of ${key} because the key does not exist in the clean room policy claims`
+        );
+      }
+    });
+  };
+
+  // Function to validate the input before doing add/remove processing
+  const validate = (args) => {
+    if (args.type !== "add" && args.type !== "remove") {
+      throw new Error(
+        `Clean Room Policy with type '${args.type}' is not supported`
+      );
+    }
+
+    const CLAIMS = {
+      "x-ms-attestation-type": "string",
+      "x-ms-compliance-status": "string",
+      "x-ms-policy-hash": "string",
+      "vm-configuration-secure-boot": "boolean",
+      "vm-configuration-secure-boot-template-id": "string",
+      "vm-configuration-tpm-enabled": "boolean",
+      "vm-configuration-vmUniqueId": "string",
+      "x-ms-sevsnpvm-authorkeydigest": "string",
+      "x-ms-sevsnpvm-bootloader-svn": "number",
+      "x-ms-sevsnpvm-familyId": "string",
+      "x-ms-sevsnpvm-guestsvn": "number",
+      "x-ms-sevsnpvm-hostdata": "string",
+      "x-ms-sevsnpvm-idkeydigest": "string",
+      "x-ms-sevsnpvm-imageId": "string",
+      "x-ms-sevsnpvm-is-debuggable": "boolean",
+      "x-ms-sevsnpvm-launchmeasurement": "string",
+      "x-ms-sevsnpvm-microcode-svn": "number",
+      "x-ms-sevsnpvm-migration-allowed": "boolean",
+      "x-ms-sevsnpvm-reportdata": "string",
+      "x-ms-sevsnpvm-reportid": "string",
+      "x-ms-sevsnpvm-smt-allowed": "boolean",
+      "x-ms-sevsnpvm-snpfw-svn": "number",
+      "x-ms-sevsnpvm-tee-svn": "number",
+      "x-ms-sevsnpvm-vmpl": "number",
+      "x-ms-ver": "string"
+    };
+
+    Object.keys(args.claims).forEach((key) => {
+      if (CLAIMS[key] === undefined) {
+        throw new Error(`The claim '${key}' is not an allowed claim`);
+      }
+    });
+  };
+
+  validate(args);
+
+  const type = args.type;
+  switch (type) {
+    case "add":
+      add(args.claims);
+      break;
+    case "remove":
+      remove(args.claims);
+      break;
+    default:
+      throw new Error(`Clean Room Policy with type '${type}' is not supported`);
+  }
+}
+
+function getContractCleanRoomPolicyMapName(contractId: string): string {
+  return "public:ccf.gov.policies.cleanroom-" + contractId;
+}
+
+function getCustomCleanRoomPolicyMapName(key: string): string {
+  return "public:policies.cleanroom-" + key;
+}
+
+function getCleanRoomPolicyProps(mapName: string): ICleanRoomPolicyProps {
   const result: ICleanRoomPolicyProps = {};
-  const cleanRoomPolicyMap = ccf.kv[getCleanRoomPolicyMapName(contractId)];
+  const cleanRoomPolicyMap = ccf.kv[mapName];
   cleanRoomPolicyMap.forEach((values: ArrayBuffer, key: ArrayBuffer) => {
     const kvKey = ccf.bufToStr(key);
     const kvValue = JSON.parse(ccf.bufToStr(values));
@@ -228,13 +524,9 @@ export function getCleanRoomPolicyProps(
     console.log(`key policy item with key: ${kvKey} and value: ${kvValue}`);
   });
   console.log(
-    `Resulting clean room policy: ${JSON.stringify(
+    `Resulting clean room policy under map (${mapName}): ${JSON.stringify(
       result
     )}, keys: ${Object.keys(result)}, keys: ${Object.keys(result).length}`
   );
   return result;
-}
-
-function getCleanRoomPolicyMapName(contractId: string): string {
-  return "public:ccf.gov.policies.cleanroom-" + contractId;
 }

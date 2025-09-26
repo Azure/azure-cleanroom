@@ -18,6 +18,7 @@ $root = git rev-parse --show-toplevel
 kubectl delete pod virtual-cleanroom --force
 kubectl apply -f $outDir/deployments/virtual-cleanroom-pod.yaml
 
+Write-Host "Waiting for pod to become ready"
 kubectl wait --for=condition=ready pod -l app=virtual-cleanroom --timeout=180s
 # https://dustinspecker.com/posts/resolving-kubernetes-services-from-host-when-using-kind/
 $podIP = kubectl get pod virtual-cleanroom -o jsonpath="{.status.podIP}"
@@ -85,6 +86,7 @@ spec:
 }
 
 kubectl apply -f $outDir/deployments/client-proxy-pod.yaml
+Write-Host "Waiting for pod to become ready"
 kubectl wait --for=condition=ready pod -l app=ccr-client-proxy --timeout=180s
 
 Get-Job -Command "*kubectl port-forward ccr-client-proxy*" | Stop-Job

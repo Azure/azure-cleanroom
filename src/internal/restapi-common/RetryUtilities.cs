@@ -37,9 +37,36 @@ public static class RetryUtilities
             return true;
         }
 
-        if (e is HttpRequestException re && IsRetryableHttpStatusCode(re.StatusCode))
+        if (e is HttpRequestException re)
         {
-            return true;
+            if (IsRetryableHttpStatusCode(re.StatusCode))
+            {
+                return true;
+            }
+
+            // Retry for below issue:
+            // System.Net.Http.HttpRequestException: The SSL connection could not be established,
+            // see inner exception.  --->System.IO.IOException: Received an unexpected EOF or 0
+            // bytes from the transport stream.at
+            // System.Net.Security.SslStream.ReceiveHandshakeFrameAsync[TIOAdapter](CancellationToken
+            // cancellationToken)    at System.Net.Security.SslStream.ForceAuthenticationAsync
+            // [TIOAdapter](Boolean receiveFirst, Byte[] reAuthenticationData, CancellationToken
+            // cancellationToken)    at
+            // System.Net.Http.ConnectHelper.EstablishSslConnectionAsync(
+            // SslClientAuthenticationOptions sslOptions, HttpRequestMessage request,
+            // Boolean async, Stream stream, CancellationToken cancellationToken)-- -
+            // End of inner exception stack trace-- -
+            // at System.Net.Http.ConnectHelper.EstablishSslConnectionAsync(
+            // SslClientAuthenticationOptions sslOptions, HttpRequestMessage request,
+            // Boolean async, Stream stream, CancellationToken cancellationToken)
+            // at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request,
+            // Boolean async, CancellationToken cancellationToken)
+            if (re.InnerException is IOException ioe &&
+                ioe.Message.Contains("Received an unexpected EOF or 0 bytes from the " +
+                "transport stream"))
+            {
+                return true;
+            }
         }
 
         if (e is HttpOperationException he && he.Response != null)

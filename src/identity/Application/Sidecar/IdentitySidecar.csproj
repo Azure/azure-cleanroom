@@ -20,10 +20,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\internal\restapi-common\restapi-common.csproj" />
     <ProjectReference Include="..\..\Common\Configuration\Configuration.csproj" />
     <ProjectReference Include="..\..\Common\Constants\Constants.csproj" />
     <ProjectReference Include="..\..\Common\Utilities\Utilities.csproj" />
-    <ProjectReference Include="..\..\Contracts\Errors\Errors.csproj" />
     <ProjectReference Include="..\..\Managers\CredentialManager\CredentialManager.csproj" />
     <ProjectReference Include="..\..\Telemetry\MetricEmitter\MetricEmitter.csproj" />
   </ItemGroup>

@@ -1,0 +1,103 @@
+name: Release helm chart
+description: Release helm chart
+inputs:
+  name:
+    description: Name of the helm chart
+    required: true
+  tag:
+    description: The tag
+    required: true
+  environment:
+    description: The environment being released to
+    required: true
+  artefact-name:
+    description: The name of the artefact associated with the helm chart
+    required: true
+  registry-name:
+    description: The registry to which the images need to be pushed
+    required: true
+  client-id:
+    description: The client ID to connect to the registry
+    required: true
+  tenant-id:
+    description: The tenant ID of the registry
+    required: true
+  subscription-id:
+    description: The subscription ID of the registry
+    required: true
+  needs-attestation:
+    description: Whether the helm chart needs attestation
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: released-containers-${{ inputs.environment }}
+
+    - shell: pwsh
+      id: check-released-containers
+      run: |
+        $releasedContainers = Get-Content released-containers-${{ inputs.environment }}.txt
+        if ($releasedContainers -contains '${{ inputs.name }}') {
+          Write-Host "Helm chart ${{ inputs.name }} already released. Skipping."
+          echo "container_released=true" >> $env:GITHUB_OUTPUT
+        }
+        else {
+          echo "container_released=false" >> $env:GITHUB_OUTPUT
+        }
+
+    - uses: azure/login@v2
+      if: ${{ steps.check-released-containers.outputs.container_released != 'true' }}
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+
+    - uses: azure/setup-helm@v4.3.0
+      id: install-helm
+
+    # The azure/docker-login action currently does not support authentication using
+    # federated credentials - https://github.com/Azure/docker-login/issues/56. Hence,
+    # resorting to a manual login.
+    - shell: bash
+      if: ${{ steps.check-released-containers.outputs.container_released != 'true' }}
+      run: az acr login --name ${{ inputs.registry-name }}
+
+    - uses: actions/download-artifact@v4
+      if: ${{ steps.check-released-containers.outputs.container_released != 'true' }}
+      id: download-artefact
+      with:
+        name: ${{ inputs.artefact-name }}
+
+    - shell: bash
+      if: ${{ steps.check-released-containers.outputs.container_released != 'true' }}
+      run: |
+        helm push ${{ inputs.artefact-name }}.tgz "oci://${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom/workloads/helm"
+
+    - shell: pwsh
+      id: get-helm-version
+      if: ${{ inputs.needs-attestation == 'true' && steps.check-released-containers.outputs.container_released != 'true' }}
+      run: |
+        $helmVersion = $(pwsh ./.github/scripts/get-helm-version.ps1 -tag ${{ inputs.tag }})
+        echo "helm_version=$helmVersion" >> $env:GITHUB_OUTPUT
+
+    - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' && steps.check-released-containers.outputs.container_released != 'true' }}
+      with:
+        name: ${{ inputs.name }}
+        tag: ${{ steps.get-helm-version.outputs.helm_version }}
+        environment: ${{ inputs.environment }}
+        registry-name: ${{ inputs.registry-name }}
+
+    - shell: bash
+      if: ${{ steps.check-released-containers.outputs.container_released != 'true' }}
+      run: echo "${{ inputs.name }}" >> released-containers-${{ inputs.environment }}.txt
+
+    - uses: actions/upload-artifact@v4
+      if: ${{ steps.check-released-containers.outputs.container_released != 'true' }}
+      with:
+        name: released-containers-${{ inputs.environment }}
+        path: released-containers-${{ inputs.environment }}.txt
+        overwrite: true

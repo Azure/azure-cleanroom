@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Controllers;
 using CoseUtils;
+using LoadBalancerProvider;
 using Microsoft.Extensions.Logging;
 
 namespace CcfProvider;
@@ -17,15 +18,18 @@ public class CcfNetworkRecoveryAgentProvider
 {
     private ILogger logger;
     private ICcfNodeProvider nodeProvider;
+    private ICcfLoadBalancerProvider lbProvider;
     private RecoveryAgentClientManager agentClientManager;
 
     public CcfNetworkRecoveryAgentProvider(
         ILogger logger,
         ICcfNodeProvider nodeProvider,
+        ICcfLoadBalancerProvider lbProvider,
         RecoveryAgentClientManager agentClientManager)
     {
         this.logger = logger;
         this.nodeProvider = nodeProvider;
+        this.lbProvider = lbProvider;
         this.agentClientManager = agentClientManager;
     }
 
@@ -161,28 +165,36 @@ public class CcfNetworkRecoveryAgentProvider
         await response.ValidateStatusCodeAsync(this.logger);
     }
 
-    public async Task<CcfNetworkRecoveryAgents> GetNetworkRecoveryAgent(
+    public async Task<CcfNetworkRecoveryAgents?> GetNetworkRecoveryAgent(
         string networkName,
         JsonObject? providerConfig)
     {
-        List<RecoveryAgentEndpoint> agentEndpoints =
-            await this.nodeProvider.GetRecoveryAgents(networkName, providerConfig);
-        List<CcfRecoveryAgent> agents = new();
-        foreach (var agent in agentEndpoints)
+        var lbEndpoint =
+            await this.lbProvider.TryGetLoadBalancerEndpoint(networkName, providerConfig);
+        if (lbEndpoint != null)
         {
-            var serviceCert = await this.GetSelfSignedCert(networkName, agent.Endpoint);
-            agents.Add(new()
+            List<RecoveryAgentEndpoint> agentEndpoints =
+                await this.nodeProvider.GetRecoveryAgents(networkName, providerConfig);
+            List<CcfRecoveryAgent> agents = new();
+            foreach (var agent in agentEndpoints)
             {
-                Name = agent.Name,
-                Endpoint = agent.Endpoint,
-                ServiceCert = serviceCert
-            });
+                var serviceCert = await this.GetSelfSignedCert(networkName, agent.Endpoint);
+                agents.Add(new()
+                {
+                    Name = agent.Name,
+                    Endpoint = agent.Endpoint,
+                    ServiceCert = serviceCert
+                });
+            }
+
+            return new CcfNetworkRecoveryAgents
+            {
+                Endpoint = lbEndpoint.AgentEndpoint,
+                Agents = agents
+            };
         }
 
-        return new CcfNetworkRecoveryAgents
-        {
-            Agents = agents
-        };
+        return null;
     }
 
     public async Task<CcfNetworkRecoveryAgentsReport> GetReport(
@@ -209,9 +221,37 @@ public class CcfNetworkRecoveryAgentProvider
         };
     }
 
+    public async Task<CcfNetworkRecoveryAgentsReport> GetNetworkReport(
+        string networkName,
+        JsonObject? providerConfig)
+    {
+        List<RecoveryAgentEndpoint> agentEndpoints =
+            await this.nodeProvider.GetRecoveryAgents(networkName, providerConfig);
+        List<CcfRecoveryAgentReport> reports = new();
+        foreach (var agent in agentEndpoints)
+        {
+            var report = await this.GetNetworkReport(networkName, agent.Endpoint);
+            reports.Add(new()
+            {
+                Name = agent.Name,
+                Endpoint = agent.Endpoint,
+                Report = report
+            });
+        }
+
+        return new CcfNetworkRecoveryAgentsReport
+        {
+            Reports = reports
+        };
+    }
+
     private async Task<string> GetSelfSignedCert(string networkName, string endpoint)
     {
-        using var client = HttpClientManager.NewInsecureClient(endpoint, this.logger);
+        // No retry policy is specified as retries are handled in the loop below.
+        using var client = HttpClientManager.NewInsecureClient(
+            endpoint,
+            this.logger,
+            HttpRetries.Policies.NoRetries);
 
         // Use a shorter timeout than the default (100s) so that we retry faster to connect to the
         // endpoint that is warming up.
@@ -261,8 +301,20 @@ public class CcfNetworkRecoveryAgentProvider
 
     private async Task<JsonObject> GetReport(string networkName, string endpoint)
     {
-        using var client = HttpClientManager.NewInsecureClient(endpoint, this.logger);
+        using var client = HttpClientManager.NewInsecureClient(
+            endpoint,
+            this.logger,
+            HttpRetries.Policies.DefaultRetryPolicy(this.logger));
         return (await client.GetFromJsonAsync<JsonObject>("/report"))!;
+    }
+
+    private async Task<JsonObject> GetNetworkReport(string networkName, string endpoint)
+    {
+        using var client = HttpClientManager.NewInsecureClient(
+            endpoint,
+            this.logger,
+            HttpRetries.Policies.DefaultRetryPolicy(this.logger));
+        return (await client.GetFromJsonAsync<JsonObject>("/network/report"))!;
     }
 
     private async Task<HttpClient> GetAgentClient(
@@ -270,7 +322,7 @@ public class CcfNetworkRecoveryAgentProvider
         JsonObject? providerConfig)
     {
         var agents = await this.GetNetworkRecoveryAgent(networkName, providerConfig);
-        if (!agents.Agents.Any())
+        if (agents == null || !agents.Agents.Any())
         {
             throw new Exception($"No recovery agent present for network {networkName}");
         }

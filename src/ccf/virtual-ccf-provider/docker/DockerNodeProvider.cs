@@ -9,7 +9,7 @@ using Docker.DotNet;
 using Docker.DotNet.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using static VirtualCcfProvider.DockerRecoveryServiceInstanceProvider;
+using static VirtualCcfProvider.DockerClientEx;
 using NodeStatus = CcfProvider.NodeStatus;
 
 namespace VirtualCcfProvider;
@@ -135,7 +135,8 @@ public class DockerNodeProvider : ICcfNodeProvider
             Image = $"{ImageUtils.CcfRunJsAppVirtualImage()}:{ImageUtils.CcfRunJsAppVirtualTag()}",
             Env =
             [
-                $"CONFIG_DATA_TGZ={tgzConfigData}"
+                $"CONFIG_DATA_TGZ={tgzConfigData}",
+                $"CCF_LOG_LEVEL={nodeLogLevel?.ToLower() ?? "info"}"
             ],
             ExposedPorts = new Dictionary<string, EmptyStruct>
             {
@@ -162,7 +163,7 @@ public class DockerNodeProvider : ICcfNodeProvider
                         {
                             new()
                             {
-                                    // Dynamic assignment.
+                                // Dynamic assignment.
                                 HostPort = null
                             }
                         }
@@ -172,7 +173,7 @@ public class DockerNodeProvider : ICcfNodeProvider
                         {
                             new()
                             {
-                                    // Dynamic assignment.
+                                // Dynamic assignment.
                                 HostPort = null
                             }
                         }
@@ -314,7 +315,8 @@ public class DockerNodeProvider : ICcfNodeProvider
             Image = $"{ImageUtils.CcfRunJsAppVirtualImage()}:{ImageUtils.CcfRunJsAppVirtualTag()}",
             Env =
             [
-                $"CONFIG_DATA_TGZ={tgzConfigData}"
+                $"CONFIG_DATA_TGZ={tgzConfigData}",
+                $"CCF_LOG_LEVEL={nodeLogLevel?.ToLower() ?? "info"}"
             ],
             ExposedPorts = new Dictionary<string, EmptyStruct>
             {
@@ -341,7 +343,7 @@ public class DockerNodeProvider : ICcfNodeProvider
                         {
                             new()
                             {
-                                    // Dynamic assignment.
+                                // Dynamic assignment.
                                 HostPort = null
                             }
                         }
@@ -351,7 +353,7 @@ public class DockerNodeProvider : ICcfNodeProvider
                         {
                             new()
                             {
-                                    // Dynamic assignment.
+                                // Dynamic assignment.
                                 HostPort = null
                             }
                         }
@@ -506,7 +508,8 @@ public class DockerNodeProvider : ICcfNodeProvider
             Image = $"{ImageUtils.CcfRunJsAppVirtualImage()}:{ImageUtils.CcfRunJsAppVirtualTag()}",
             Env =
             [
-                $"CONFIG_DATA_TGZ={tgzConfigData}"
+                $"CONFIG_DATA_TGZ={tgzConfigData}",
+                $"CCF_LOG_LEVEL={nodeLogLevel?.ToLower() ?? "info"}"
             ],
             ExposedPorts = new Dictionary<string, EmptyStruct>
             {
@@ -533,7 +536,7 @@ public class DockerNodeProvider : ICcfNodeProvider
                         {
                             new()
                             {
-                                    // Dynamic assignment.
+                                // Dynamic assignment.
                                 HostPort = null
                             }
                         }
@@ -543,7 +546,7 @@ public class DockerNodeProvider : ICcfNodeProvider
                         {
                             new()
                             {
-                                    // Dynamic assignment.
+                                // Dynamic assignment.
                                 HostPort = null
                             }
                         }
@@ -939,7 +942,7 @@ public class DockerNodeProvider : ICcfNodeProvider
                 $"CCF_ENDPOINT={nodeEndpoint.ClientRpcAddress}",
                 $"CCF_ENDPOINT_SKIP_TLS_VERIFY=true",
                 $"ASPNETCORE_URLS=http://+:{Ports.RecoveryAgentPort}",
-                $"SERVICE_CERT_LOCATION={DockerConstants.ServiceCertPemFilePath}",
+                $"SERVICE_CERT_LOCATION={MountPaths.RecoveryAgentServiceCertPemFile}",
                 $"INSECURE_VIRTUAL_ENVIRONMENT=true"
             ],
             ExposedPorts = new Dictionary<string, EmptyStruct>
@@ -955,7 +958,7 @@ public class DockerNodeProvider : ICcfNodeProvider
                 CapAdd = new List<string>(),
                 Binds = new List<string>
                 {
-                    $"{hostServiceCertDir}:{DockerConstants.ServiceFolderMountPath}:ro",
+                    $"{hostServiceCertDir}:{MountPaths.CertsFolderMountPath}:ro",
                     $"{hostInsecureVirtualDir}:/app/insecure-virtual:ro"
                 },
 
@@ -992,14 +995,10 @@ public class DockerNodeProvider : ICcfNodeProvider
         NodeEndpoint nodeEndpoint)
     {
         string containerName = "envoy-nw-" + nodeEndpoint.NodeName;
-        string serviceCertDir = DockerClientEx.GetServiceCertDirectory("ra", nodeEndpoint.NodeName);
+
+        this.CreateHostServiceCertsDir(nodeEndpoint.NodeName);
         string hostServiceCertDir =
             DockerClientEx.GetHostServiceCertDirectory("ra", nodeEndpoint.NodeName);
-
-        // Create the scratch directory that gets mounted into the envoy container which then
-        // writes out the service cert pem file in this location. The recovery agent container
-        // reads this file and serves it out via the /report endpoint.
-        Directory.CreateDirectory(serviceCertDir);
 
         return this.client.CreateEnvoyProxyContainer(
             this.logger,
@@ -1008,6 +1007,7 @@ public class DockerNodeProvider : ICcfNodeProvider
             containerName,
             networkName,
             hostServiceCertDir,
+            MountPaths.RecoveryAgentServiceCertPemFile,
             DockerConstants.CcfNetworkResourceNameTag,
             new Dictionary<string, string>
             {
@@ -1024,5 +1024,15 @@ public class DockerNodeProvider : ICcfNodeProvider
                     nodeEndpoint.NodeName
                 }
             });
+    }
+
+    private void CreateHostServiceCertsDir(string nodeName)
+    {
+        // Create the scratch directory that gets mounted into the envoy and cchost containers
+        // which then writes out the service cert pem files in this location. The recovery agent
+        // container reads these files and serves it out via the /report or /network/report
+        // endpoints.
+        string serviceCertDir = DockerClientEx.GetServiceCertDirectory("ra", nodeName);
+        Directory.CreateDirectory(serviceCertDir);
     }
 }

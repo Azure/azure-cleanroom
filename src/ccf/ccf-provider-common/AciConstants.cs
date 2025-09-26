@@ -14,6 +14,11 @@ public class AciConstants
     public const string CcfRecoveryServiceTypeTag = "ccf-recovery-service:type";
     public const string CcfRecoveryServiceNameTag = "ccf-recovery-service:recovery-service-name";
 
+    public const string CcfConsortiumManagerResourceNameTag = "ccf-consortium-manager:resource-name";
+    public const string CcfConsortiumManagerTypeTag = "ccf-consortium-manager:type";
+    public const string CcfConsortiumManagerNameTag =
+        "ccf-consortium-manager:consortium-manager-name";
+
     public const string AllowAllRegoBase64 =
         "cGFja2FnZSBwb2xpY3kKCmFwaV9zdm4gOj0gIjAuMTAuMCIKCm1vdW50X2RldmljZSA"
         + "6PSB7ImFsbG93ZWQiOiB0cnVlfQptb3VudF9vdmVybGF5IDo9IHsiYWxsb3dlZCI6I"
@@ -38,6 +43,7 @@ public class AciConstants
         public const string CcrAttestation = "ccr-attestation";
         public const string CcrProxy = "ccr-proxy";
         public const string CcfRecoveryService = "ccf-recovery-service";
+        public const string CcfConsortiumManager = "ccf-consortium-manager";
         public const string Skr = "skr";
     }
 }

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using AttestationClient;
 using CcfProvider;
+using CcfProviderClient;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Controllers;
@@ -19,8 +20,9 @@ public class RecoverServicesApiController : CCfClientController
     public RecoverServicesApiController(
         ILogger logger,
         IConfiguration configuration,
-        RecoveryServiceClientManager serviceClientManager)
-        : base(logger, configuration)
+        RecoveryServiceClientManager serviceClientManager,
+        ProvidersRegistry providers)
+        : base(logger, configuration, providers)
     {
         this.logger = logger;
         this.configuration = configuration;

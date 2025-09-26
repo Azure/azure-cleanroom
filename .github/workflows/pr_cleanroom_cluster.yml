@@ -1,0 +1,233 @@
+name: "PR Validation: Cluster Provider"
+
+on:
+  workflow_call:
+
+permissions:
+  id-token: write
+  contents: read  # This is required for actions/checkout
+  checks: write   # This is required to generate the test report
+
+
+# When a new revision is pushed to a PR, cancel all in-progress CI runs for that
+# PR. See https://docs.github.com/en/actions/using-jobs/using-concurrency
+# concurrency:
+#   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+#   cancel-in-progress: true
+
+jobs:
+  caci-cleanroom-cluster:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    env:
+        AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+        AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        RUN_ID: ${{ github.run_id }}
+        JOB_ID: ${{ github.job }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - shell: pwsh
+        run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
+
+      - name: Install confcom extension
+        shell: pwsh
+        run: |
+          az extension add --name confcom -y --allow-preview true
+          az version
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy CACI/VN2 backed cluster
+        run: >
+          pwsh ./samples/spark/azcli/deploy-cluster.ps1
+          -infraType caci
+          -securityPolicyCreationOption cached-debug
+          -registry acr
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
+
+      - name: Test Spark application run
+        run: pwsh ./samples/spark/azcli/test-cluster.ps1
+
+      - name: Dump cleanroom-cluster-provider logs
+        shell: pwsh
+        if: ${{ !cancelled() }}
+        run: docker compose -p cleanroom-cluster-provider logs
+
+      - name: Dump cleanroom-cluster logs
+        shell: pwsh
+        if: ${{ !cancelled() }}
+        run: pwsh ./samples/spark/azcli/dump-cleanroom-cluster-logs.ps1
+
+      - name: Delete resource groups
+        if: success()
+        shell: pwsh
+        run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=cleanroom-cluster-${{ github.job }}-${{ github.run_id }}"
+
+  virtual-cleanroom-cluster:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    env:
+        AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+        AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        RUN_ID: ${{ github.run_id }}
+        JOB_ID: ${{ github.job }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy virtual cluster
+        run: >
+          pwsh ./samples/spark/azcli/deploy-cluster.ps1
+          -infraType virtual
+          -registry acr
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
+
+      - name: Test Spark application run
+        run: pwsh ./samples/spark/azcli/test-cluster.ps1
+
+      - name: Dump cleanroom-cluster-provider logs
+        shell: pwsh
+        if: ${{ !cancelled() }}
+        run: docker compose -p cleanroom-cluster-provider logs
+
+      - name: Dump cleanroom-cluster logs
+        shell: pwsh
+        if: ${{ !cancelled() }}
+        run: pwsh ./samples/spark/azcli/dump-cleanroom-cluster-logs.ps1
+
+  caci-cleanroom-cluster-update:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    env:
+        AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+        AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        RUN_ID: ${{ github.run_id }}
+        JOB_ID: ${{ github.job }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - shell: pwsh
+        run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
+
+      - name: Install confcom extension
+        shell: pwsh
+        run: |
+          az extension add --name confcom -y --allow-preview true
+          az version
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy CACI/VN2 backed cluster
+        run: >
+          pwsh ./samples/spark/azcli/deploy-cluster.ps1
+          -infraType caci
+          -donotEnableAnalytics
+          -registry acr
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
+
+      - name: Enable analytics workload
+        run: >
+          pwsh ./samples/spark/azcli/enable-analytics-workload.ps1
+          -securityPolicyCreationOption cached-debug
+
+      - name: Test Spark application run
+        run: pwsh ./samples/spark/azcli/test-cluster.ps1
+
+      - name: Dump cleanroom-cluster-provider logs
+        shell: pwsh
+        if: ${{ !cancelled() }}
+        run: docker compose -p cleanroom-cluster-provider logs
+
+      - name: Dump cleanroom-cluster logs
+        shell: pwsh
+        if: ${{ !cancelled() }}
+        run: pwsh ./samples/spark/azcli/dump-cleanroom-cluster-logs.ps1
+        
+      - name: Delete resource groups
+        if: success()
+        shell: pwsh
+        run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=cleanroom-cluster-${{ github.job }}-${{ github.run_id }}"
+
+  virtual-cleanroom-cluster-update:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    environment: pr
+    env:
+        AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+        AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        RUN_ID: ${{ github.run_id }}
+        JOB_ID: ${{ github.job }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy virtual cluster
+        run: >
+          pwsh ./samples/spark/azcli/deploy-cluster.ps1
+          -infraType virtual
+          -donotEnableAnalytics
+          -registry acr
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
+
+      - name: Enable analytics workload
+        run: >
+          pwsh ./samples/spark/azcli/enable-analytics-workload.ps1
+
+      - name: Test Spark application run
+        run: pwsh ./samples/spark/azcli/test-cluster.ps1
+
+      - name: Dump cleanroom-cluster-provider logs
+        shell: pwsh
+        if: ${{ !cancelled() }}
+        run: docker compose -p cleanroom-cluster-provider logs
+
+      - name: Dump cleanroom-cluster logs
+        shell: pwsh
+        if: ${{ !cancelled() }}
+        run: pwsh ./samples/spark/azcli/dump-cleanroom-cluster-logs.ps1

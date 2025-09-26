@@ -1,0 +1,55 @@
+name: "Blobfuse CSE Mount"
+description: "Mount Blobfuse with plain and encrypted configurations"
+
+inputs:
+  mount_dir_plain:
+    description: "Mount directory for plain mount"
+    required: true
+  temp_dir_plain:
+    description: "Temporary directory for plain mount"
+    required: true
+  config_file_plain:
+    description: "Configuration file for plain mount"
+    required: true
+  mount_dir_encrypted:
+    description: "Mount directory for encrypted mount"
+    required: true
+  temp_dir_encrypted:
+    description: "Temporary directory for encrypted mount"
+    required: true
+  config_file_encrypted:
+    description: "Configuration file for encrypted mount"
+    required: true
+  ro_mount:
+    description: 'Read-only mount'
+    required: false
+    default: 'false'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Plain mount
+      uses: ./.github/actions/blobfuse-mount
+      with:
+        mount_dir: ${{ inputs.mount_dir_plain }}
+        temp_dir: ${{ inputs.temp_dir_plain }}
+        mountStep: |
+          blobfuse2 mount \
+            ${{ inputs.mount_dir_plain }} \
+            --config-file=${{ inputs.config_file_plain }} \
+            --default-working-dir=${{ github.workspace }} \
+            ${{ inputs.ro_mount == 'true' && '-o ro' || '' }}
+        ro_mount: ${{ inputs.ro_mount }}
+
+    - name: Encrypted mount
+      uses: ./.github/actions/blobfuse-mount
+      with:
+        mount_dir: ${{ inputs.mount_dir_encrypted }}
+        temp_dir: ${{ inputs.temp_dir_encrypted }}
+        mountStep: |
+          blobfuse2 mount \
+            ${{ inputs.mount_dir_encrypted }} \
+            --config-file=${{ inputs.config_file_encrypted }} \
+            --default-working-dir=${{ github.workspace }}
+      env:
+        BLOBFUSE_PLUGIN_PATH: ${{ github.workspace }}/external/azure-storage-fuse/encryptor/encryptor.so

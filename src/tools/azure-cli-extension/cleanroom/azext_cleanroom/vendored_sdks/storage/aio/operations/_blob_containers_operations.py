@@ -9,7 +9,13 @@
 from typing import Any, AsyncIterable, Callable, Dict, Optional, TypeVar, Union
 
 from azure.core.async_paging import AsyncItemPaged, AsyncList
-from azure.core.exceptions import ClientAuthenticationError, HttpResponseError, ResourceExistsError, ResourceNotFoundError, map_error
+from azure.core.exceptions import (
+    ClientAuthenticationError,
+    HttpResponseError,
+    ResourceExistsError,
+    ResourceNotFoundError,
+    map_error,
+)
 from azure.core.pipeline import PipelineResponse
 from azure.core.pipeline.transport import AsyncHttpResponse
 from azure.core.polling import AsyncLROPoller, AsyncNoPolling, AsyncPollingMethod
@@ -21,7 +27,23 @@ from azure.mgmt.core.polling.async_arm_polling import AsyncARMPolling
 
 from ... import models as _models
 from ..._vendor import _convert_request
-from ...operations._blob_containers_operations import build_clear_legal_hold_request, build_create_or_update_immutability_policy_request, build_create_request, build_delete_immutability_policy_request, build_delete_request, build_extend_immutability_policy_request, build_get_immutability_policy_request, build_get_request, build_lease_request, build_list_request, build_lock_immutability_policy_request, build_object_level_worm_request_initial, build_set_legal_hold_request, build_update_request
+from ...operations._blob_containers_operations import (
+    build_clear_legal_hold_request,
+    build_create_or_update_immutability_policy_request,
+    build_create_request,
+    build_delete_immutability_policy_request,
+    build_delete_request,
+    build_extend_immutability_policy_request,
+    build_get_immutability_policy_request,
+    build_get_request,
+    build_lease_request,
+    build_list_request,
+    build_lock_immutability_policy_request,
+    build_object_level_worm_request_initial,
+    build_set_legal_hold_request,
+    build_update_request,
+)
+
 T = TypeVar('T')
 ClsType = Optional[Callable[[PipelineResponse[HttpRequest, AsyncHttpResponse], T, Dict[str, Any]], Any]]
 

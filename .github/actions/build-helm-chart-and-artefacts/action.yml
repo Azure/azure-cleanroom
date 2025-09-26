@@ -1,0 +1,72 @@
+name: Build helm chart and related artefacts
+description: Build helm chart and related artefacts
+inputs:
+  name:
+    description: Name of the container being built
+    required: true
+  tag:
+    description: The tag for the built image
+    required: true
+  path:
+    description: The path to the helm chart
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: built-containers
+
+    - uses: azure/setup-helm@v4.3.0
+      id: install-helm
+
+    - shell: pwsh
+      id: check-built-containers
+      run: |
+        $builtContainers = Get-Content built-containers.txt
+        if ($builtContainers -contains '${{ inputs.name }}-helm') {
+          Write-Host "Helm chart ${{ inputs.name }}-helm already built. Skipping."
+          echo "container_built=true" >> $env:GITHUB_OUTPUT
+        }
+        else {
+          echo "container_built=false" >> $env:GITHUB_OUTPUT
+        }
+
+    - shell: pwsh
+      id: get-helm-version
+      if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
+      run: |
+        $helmVersion = $(pwsh ./.github/scripts/get-helm-version.ps1 -tag ${{ inputs.tag }})
+        echo "helm_version=$helmVersion" >> $env:GITHUB_OUTPUT
+
+    - shell: pwsh
+      id: package-helm-chart
+      if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
+      run: |
+        Push-Location ${{ inputs.path }}
+        helm package . --version ${{ steps.get-helm-version.outputs.helm_version }} --app-version ${{ inputs.tag }}
+        $helmfile = Get-ChildItem -Path . -Filter "*.tgz" | Select-Object -First 1
+        $helmfileName = $helmfile.FullName
+        Move-Item -Path $helmfileName -Destination "./${{ inputs.name }}-helm.tgz" -Force
+        echo "helm_file=${{ inputs.path }}/${{ inputs.name }}-helm.tgz" >> $env:GITHUB_OUTPUT
+        Pop-Location
+
+    - uses: actions/upload-artifact@v4
+      if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
+      with:
+        name: ${{ inputs.name }}-helm
+        path: |
+          ${{ steps.package-helm-chart.outputs.helm_file }}
+        overwrite: true
+
+    - shell: bash
+      if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
+      run: echo "${{ inputs.name }}-helm" >> built-containers.txt
+
+    - uses: actions/upload-artifact@v4
+      if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
+      with:
+        name: built-containers
+        path: built-containers.txt
+        overwrite: true

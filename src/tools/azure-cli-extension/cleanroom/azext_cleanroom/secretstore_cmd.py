@@ -1,40 +1,43 @@
+import base64
+import json
+
 from cleanroom_common.azure_cleanroom_core.models.secretstore import (
     SecretStoreEntry,
     SecretStoreSpecification,
 )
 
+from .utilities._secretstore_helpers import SecretStoreConfiguration
+
 
 def secretstore_add_cmd(
     cmd,
     secretstore_name: str,
-    secretstore_config_file: str,
     backingstore_type: SecretStoreEntry.SecretStoreType,
+    secretstore_config_file: str = SecretStoreConfiguration.default_secretstore_config_file(),
     backingstore_id: str = "",
     backingstore_path: str = "",
     attestation_endpoint: str = "",
 ):
     import os
-    from .utilities._azcli_helpers import logger, az_cli
-    from .utilities._configuration_helpers import (
-        read_secretstore_config_internal,
-        write_secretstore_config_internal,
+
+    from .utilities._azcli_helpers import az_cli, logger
+
+    secretstore_config = SecretStoreConfiguration.load(
+        secretstore_config_file, create_if_not_existing=True
     )
 
-    if os.path.exists(secretstore_config_file):
-        secretstore_config = read_secretstore_config_internal(secretstore_config_file)
-    else:
-        secretstore_config = SecretStoreSpecification(secretstores=[])
-
-    for index, x in enumerate(secretstore_config.secretstores):
-        if x.name == secretstore_name:
-            logger.error(
-                f"Secret store '{secretstore_name}' already exists ({index}):\\n{x}"
-            )
-            return
+    exists, index, secretstore_entry = secretstore_config.check_secretstore_entry(
+        secretstore_name
+    )
+    if exists:
+        logger.warning(
+            f"Secret store '{secretstore_name}' already exists ({index}):\\n{secretstore_entry}"
+        )
+        return
 
     if backingstore_type == SecretStoreEntry.SecretStoreType.Local_File:
         assert (
-            backingstore_path is not ""
+            backingstore_path != ""
         ), "backingstore_path is required for Local_File secret store."
         storeProviderUrl = backingstore_path
         configuration = ""
@@ -44,7 +47,7 @@ def secretstore_add_cmd(
         if not os.path.exists(backingstore_path):
             os.makedirs(backingstore_path)
     else:
-        assert backingstore_id is not "", "backingstore_id is required for KeyVault."
+        assert backingstore_id != "", "backingstore_id is required for KeyVault."
         kv_details = az_cli(f"resource show --id {backingstore_id}")
         match backingstore_type:
             case SecretStoreEntry.SecretStoreType.Azure_KeyVault_Managed_HSM:
@@ -59,10 +62,10 @@ def secretstore_add_cmd(
                     ), f"Unsupported SKU for Managed HSM: {kv_details['properties']['sku']['name']}"
                     storeProviderUrl = kv_details["properties"]["vaultUri"]
 
-                assert (
-                    attestation_endpoint is not ""
-                ), "attestation_endpoint is required."
-                configuration = str({"authority": attestation_endpoint})
+                assert attestation_endpoint != "", "attestation_endpoint is required."
+                configuration = base64.b64encode(
+                    json.dumps({"authority": attestation_endpoint}).encode()
+                ).decode()
                 supported_secret_types = [
                     SecretStoreEntry.SupportedSecretTypes.Key,
                 ]
@@ -84,7 +87,7 @@ def secretstore_add_cmd(
         supportedSecretTypes=supported_secret_types,
     )
 
-    secretstore_config.secretstores.append(secretstore_entry)
+    secretstore_config.add_secretstore_entry(secretstore_entry)
 
-    write_secretstore_config_internal(secretstore_config_file, secretstore_config)
+    SecretStoreConfiguration.store(secretstore_config_file, secretstore_config)
     logger.warning(f"Secret store '{secretstore_name}' added to configuration.")

@@ -1,0 +1,12 @@
+FROM mcr.microsoft.com/mirror/docker/library/python:3.11
+
+RUN apt-get update -y && \
+    apt-get -y --no-install-recommends install \
+    default-jdk
+
+WORKDIR /app
+RUN chmod -R 777 /app
+COPY *.py .
+COPY requirements.txt .
+
+RUN pip install -r requirements.txt

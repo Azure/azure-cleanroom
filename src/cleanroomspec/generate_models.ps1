@@ -1,6 +1,7 @@
 $uid = id -u ${env:USER}
 $gid = id -g ${env:USER}
 
+# Python model generation
 mkdir -p $PSScriptRoot/models/python
 docker run `
     -u ${uid}:${gid} `
@@ -8,7 +9,9 @@ docker run `
     -v $PSScriptRoot/models/python:/output `
     --name datamodel-codegen `
     --rm koxudaxi/datamodel-code-generator `
-    --input /input/cleanroomspec-openapi.yaml --output /output/model.py
+    --input /input/cleanroomspec-openapi.yaml `
+    --output /output/model.py `
+    --disable-timestamp
 
 
 $header = @"

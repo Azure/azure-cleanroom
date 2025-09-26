@@ -1,0 +1,21 @@
+# The cbl-mariner image is stuck at python 3.9. Pulling the image from the  docker mirror till
+# mariner bumps up the python version.
+# FROM mcr.microsoft.com/cbl-mariner/base/python:3 as openapi-image
+FROM mcr.microsoft.com/mirror/docker/library/python:3.11 AS openapi-image
+WORKDIR /code
+COPY ./requirements.txt /code/requirements.txt
+RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+
+COPY ./app /code/app
+RUN python3 /code/app/extract-openapi.py main:app
+
+FROM scratch AS openapi-dist
+COPY --from=openapi-image /code/openapi.yaml ./
+
+FROM mcr.microsoft.com/mirror/docker/library/python:3.11
+WORKDIR /code
+COPY ./requirements.txt /code/requirements.txt
+RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+
+COPY ./app /code/app
+CMD ["uvicorn", "main:app", "--app-dir", "/code/app", "--log-config", "/code/app/log_conf.yaml", "--port", "8399", "--host", "0.0.0.0"]

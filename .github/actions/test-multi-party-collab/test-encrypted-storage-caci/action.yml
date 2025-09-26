@@ -33,10 +33,10 @@ runs:
       shell: pwsh
       run: pwsh ./test/onebox/multi-party-collab/encrypted-storage/run-collab-aci.ps1 -registry mcr -repo ${{ inputs.repo }} -tag ${{ inputs.tag }} -NoBuild
 
-    - name: Dump ccf-provider-client logs
+    - name: Dump ccf-provider logs
       shell: pwsh
       if: ${{ !cancelled() }}
-      run: docker logs ccf-provider-client-1
+      run: docker compose -p ob-encrypted-storage-ccf-provider logs
 
     - name: Dump ob-consumer-client logs
       if: ${{ !cancelled() }}
@@ -48,31 +48,11 @@ runs:
       shell: pwsh
       run: docker logs ob-publisher-client-cgs-client-1
 
-    - uses: actions/upload-artifact@v4
+    - name: Upload generated
+      uses: actions/upload-artifact@v4
       with:
-          name: results-encrypted-storage-caci
-          path: ./test/onebox/multi-party-collab/encrypted-storage/generated/results-decrypted
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - uses: actions/upload-artifact@v4
-      with:
-          name: configurations-encrypted-storage-caci
-          path: ./test/onebox/multi-party-collab/encrypted-storage/generated/configurations
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - uses: actions/upload-artifact@v4
-      with:
-          name: deployments-encrypted-storage-caci
-          path: ./test/onebox/multi-party-collab/encrypted-storage/generated/deployments
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - uses: actions/upload-artifact@v4
-      with:
-          name: ccf-encrypted-storage-caci
-          path: ./test/onebox/multi-party-collab/encrypted-storage/generated/ccf
+          name: generated-encrypted-storage-caci
+          path: ./test/onebox/multi-party-collab/encrypted-storage/generated
           overwrite: true
       if: ${{ !cancelled() }}
 

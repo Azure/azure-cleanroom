@@ -3,6 +3,7 @@ import base64
 import json
 import os
 from urllib.parse import urlunparse, urlunsplit
+
 import yaml
 
 
@@ -184,8 +185,8 @@ for item in pod_containers:
     if item["name"] == "ccr-governance":
         item["image"] = f"{args.repo}/ccr-governance-virtual:{args.tag}"
     elif "ccr-proxy-ext-processor" in item["name"]:
-        from urllib.parse import urlparse, urlunparse
         import re
+        from urllib.parse import urlparse, urlunparse
 
         bundleResourcePath = [
             x for x in item["env"] if x["name"] == "BUNDLE_RESOURCE_PATH"
@@ -201,8 +202,8 @@ for item in pod_containers:
                     "value"
                 ] = bundleResourcePath
     elif "code-launcher" in item["name"]:
-        from urllib.parse import urlparse, urlunparse
         import re
+        from urllib.parse import urlparse, urlunparse
 
         application_details_index = [
             i for i, e in enumerate(item["command"]) if e == "--application-base-64"

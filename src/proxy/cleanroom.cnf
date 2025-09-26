@@ -21,11 +21,4 @@ subjectKeyIdentifier = hash
 basicConstraints = critical, CA:false
 keyUsage = digitalSignature, nonRepudiation, keyEncipherment
 extendedKeyUsage = serverAuth
-subjectAltName = @alt_names
-
-[alt_names]
-IP.1 = 0.0.0.0
-IP.1 = 127.0.0.1
-IP.2 = ::1
-DNS.1 = *.cleanroom.local
-DNS.2 = localhost
+subjectAltName = $san

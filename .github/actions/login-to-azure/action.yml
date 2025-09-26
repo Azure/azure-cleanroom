@@ -32,8 +32,3 @@ runs:
       shell: bash
       run: |
         az account show | jq ".user"
-    
-    - name: Check if token is present in .azure directory
-      shell: pwsh
-      run: |
-        ls -l /home/${env:USER}/.azure/

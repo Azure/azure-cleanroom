@@ -4,11 +4,11 @@ import unittest
 import unittest.mock as mock
 
 from ..connectors.httpconnectors import (
+    ACROAuthHttpConnector,
     GovernanceHttpConnector,
     HttpConnector,
     IdentityHttpConnector,
     SkrHttpConnector,
-    ACROAuthHttpConnector,
 )
 from ..exceptions.custom_exceptions import ServiceNotAvailableFailure
 

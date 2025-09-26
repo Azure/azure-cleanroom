@@ -3,7 +3,7 @@ param
 (
     [string]
     [Parameter(Mandatory)]
-    [ValidateSet('virtual', 'virtualaci', 'caci')]
+    [ValidateSet('virtual', 'caci')]
     $infraType,
 
     [string]
@@ -39,13 +39,13 @@ param
     $location = "westeurope",
 
     [string]
-    [ValidateSet("default", "azurefiles", "dockerhostfs", "localfs")]
+    [ValidateSet("default", "azurefiles", "dockerhostfs")]
     $nodeStorageType = "default",
 
     [ValidateSet('mcr', 'local', 'acr')]
     [string]$registry = "local",
 
-    [string]$repo = "",
+    [string]$repo = "localhost:5000",
 
     [string]$tag = "latest",
 
@@ -63,6 +63,12 @@ param
 
     [switch]
     $oneStepConfigureConfidentialRecovery,
+
+    [switch]
+    $useConsortiumManager,
+
+    [switch]
+    $useServiceCertDiscovery,
 
     [switch]
     $noDelete,
@@ -135,9 +141,6 @@ if ($nodeStorageType -eq "default") {
     elseif ($infraType -eq "virtual") {
         $nodeStorageType = "dockerhostfs"
     }
-    elseif ($infraType -eq "virtualaci") {
-        $nodeStorageType = "localfs"
-    }
     else {
         throw "infraType: $infraType not handled for nodeStorageType: $nodeStorageType value. Update script."
     }
@@ -172,34 +175,32 @@ if ($registry -ne "mcr") {
 
         $localTag = "100.$(Get-Date -UFormat %s)"
         $localTag | Out-File $sandbox_common/local-registry-tag.txt
-        $server = "localhost:$reg_port"
 
         if (!$NoBuild) {
-            pwsh $build/ccf/build-ccf-infra-containers.ps1 -repo $server -tag latest
+            pwsh $build/ccf/build-ccf-infra-containers.ps1 -repo $repo -tag latest
         }
 
-        docker tag $server/ccr-proxy:latest $server/ccr-proxy:$localTag
-        docker push $server/ccr-proxy:$localTag
-        docker tag $server/ccf/ccf-nginx:latest $server/ccf/ccf-nginx:$localTag
-        docker push $server/ccf/ccf-nginx:$localTag
-        docker tag $server/ccf/ccf-provider-client:latest $server/ccf/ccf-provider-client:$localTag
-        docker push $server/ccf/ccf-provider-client:$localTag
-        docker tag $server/ccf/app/run-js/virtual:latest $server/ccf/app/run-js/virtual:$localTag
-        docker push $server/ccf/app/run-js/virtual:$localTag
-        docker tag $server/ccf/app/run-js/snp:latest $server/ccf/app/run-js/snp:$localTag
-        docker push $server/ccf/app/run-js/snp:$localTag
-        docker tag $server/ccf/ccf-recovery-agent:latest $server/ccf/ccf-recovery-agent:$localTag
-        docker push $server/ccf/ccf-recovery-agent:$localTag
-        docker tag $server/ccf/ccf-recovery-service:latest $server/ccf/ccf-recovery-service:$localTag
-        docker push $server/ccf/ccf-recovery-service:$localTag
+        docker tag $repo/ccr-proxy:latest $repo/ccr-proxy:$localTag
+        docker push $repo/ccr-proxy:$localTag
+        docker tag $repo/ccf/ccf-provider-client:latest $repo/ccf/ccf-provider-client:$localTag
+        docker push $repo/ccf/ccf-provider-client:$localTag
+        docker tag $repo/ccf/app/run-js/virtual:latest $repo/ccf/app/run-js/virtual:$localTag
+        docker push $repo/ccf/app/run-js/virtual:$localTag
+        docker tag $repo/ccf/app/run-js/snp:latest $repo/ccf/app/run-js/snp:$localTag
+        docker push $repo/ccf/app/run-js/snp:$localTag
+        docker tag $repo/ccf/ccf-recovery-agent:latest $repo/ccf/ccf-recovery-agent:$localTag
+        docker push $repo/ccf/ccf-recovery-agent:$localTag
+        docker tag $repo/ccf/ccf-recovery-service:latest $repo/ccf/ccf-recovery-service:$localTag
+        docker push $repo/ccf/ccf-recovery-service:$localTag
+        docker tag $repo/ccf/ccf-consortium-manager:latest $repo/ccf/ccf-consortium-manager:$localTag
+        docker push $repo/ccf/ccf-consortium-manager:$localTag
 
-        docker tag $server/cgs-client:latest $server/cgs-client:$localTag
-        docker push $server/cgs-client:$localTag
-        docker tag $server/cgs-ui:latest $server/cgs-ui:$localTag
-        docker push $server/cgs-ui:$localTag
+        docker tag $repo/cgs-client:latest $repo/cgs-client:$localTag
+        docker push $repo/cgs-client:$localTag
+        docker tag $repo/cgs-ui:latest $repo/cgs-ui:$localTag
+        docker push $repo/cgs-ui:$localTag
     }
     else {
-        $server = $repo
         $localTag = $tag
     }
 }
@@ -283,23 +284,25 @@ else {
 }
 
 $recoveryServiceName = $networkName
+$consortiumManagerName = "$networkName-cm"
 
 if ($registry -ne "mcr") {
-    $env:AZCLI_CCF_PROVIDER_CLIENT_IMAGE = "$server/ccf/ccf-provider-client:$localTag"
-    $env:AZCLI_CCF_PROVIDER_PROXY_IMAGE = "$server/ccr-proxy:$localTag"
-    $env:AZCLI_CCF_PROVIDER_ATTESTATION_IMAGE = "$server/ccr-attestation:$localTag"
-    $env:AZCLI_CCF_PROVIDER_SKR_IMAGE = "$server/skr:$localTag"
-    $env:AZCLI_CCF_PROVIDER_NGINX_IMAGE = "$server/ccf/ccf-nginx:$localTag"
-    $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_VIRTUAL_IMAGE = "$server/ccf/app/run-js/virtual:$localTag"
-    $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_SNP_IMAGE = "$server/ccf/app/run-js/snp:$localTag"
-    $env:AZCLI_CCF_PROVIDER_RECOVERY_AGENT_IMAGE = "$server/ccf/ccf-recovery-agent:$localTag"
-    $env:AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_IMAGE = "$server/ccf/ccf-recovery-service:$localTag"
-    $env:AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL = "$server"
-    $env:AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL = "$server/policies/ccf/ccf-network-security-policy:$localTag"
-    $env:AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_SECURITY_POLICY_DOCUMENT_URL = "$server/policies/ccf/ccf-recovery-service-security-policy:$localTag"
+    $env:AZCLI_CCF_PROVIDER_CLIENT_IMAGE = "$repo/ccf/ccf-provider-client:$localTag"
+    $env:AZCLI_CCF_PROVIDER_PROXY_IMAGE = "$repo/ccr-proxy:$localTag"
+    $env:AZCLI_CCF_PROVIDER_ATTESTATION_IMAGE = "$repo/ccr-attestation:$localTag"
+    $env:AZCLI_CCF_PROVIDER_SKR_IMAGE = "$repo/skr:$localTag"
+    $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_VIRTUAL_IMAGE = "$repo/ccf/app/run-js/virtual:$localTag"
+    $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_SNP_IMAGE = "$repo/ccf/app/run-js/snp:$localTag"
+    $env:AZCLI_CCF_PROVIDER_RECOVERY_AGENT_IMAGE = "$repo/ccf/ccf-recovery-agent:$localTag"
+    $env:AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_IMAGE = "$repo/ccf/ccf-recovery-service:$localTag"
+    $env:AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_IMAGE = "$repo/ccf/ccf-consortium-manager:$localTag"
+    $env:AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL = "$repo"
+    $env:AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL = "$repo/policies/ccf/ccf-network-security-policy:$localTag"
+    $env:AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_SECURITY_POLICY_DOCUMENT_URL = "$repo/policies/ccf/ccf-recovery-service-security-policy:$localTag"
+    $env:AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_SECURITY_POLICY_DOCUMENT_URL = "$repo/policies/ccf/ccf-consortium-manager-security-policy:$localTag"
 
-    $env:AZCLI_CGS_CLIENT_IMAGE = "$server/cgs-client:$localTag"
-    $env:AZCLI_CGS_UI_IMAGE = "$server/cgs-ui:$localTag"
+    $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$localTag"
+    $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$localTag"
 }
 else {
     # Unset these so that default azurecr.io paths baked in the AZCLI_CCF_PROVIDER_CLIENT_IMAGE get used.
@@ -307,14 +310,15 @@ else {
     $env:AZCLI_CCF_PROVIDER_PROXY_IMAGE = ""
     $env:AZCLI_CCF_PROVIDER_ATTESTATION_IMAGE = ""
     $env:AZCLI_CCF_PROVIDER_SKR_IMAGE = ""
-    $env:AZCLI_CCF_PROVIDER_NGINX_IMAGE = ""
     $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_VIRTUAL_IMAGE = ""
     $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_SNP_IMAGE = ""
     $env:AZCLI_CCF_PROVIDER_RECOVERY_AGENT_IMAGE = ""
     $env:AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_IMAGE = ""
+    $env:AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_IMAGE = ""
     $env:AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL = ""
     $env:AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL = ""
     $env:AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_SECURITY_POLICY_DOCUMENT_URL = ""
+    $env:AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_SECURITY_POLICY_DOCUMENT_URL = ""
 
     $env:AZCLI_CGS_CLIENT_IMAGE = ""
     $env:AZCLI_CGS_UI_IMAGE = ""
@@ -322,7 +326,7 @@ else {
 az cleanroom ccf provider deploy --name $ccfProviderProjectName
 
 $providerConfig = @{}
-if ($infraType -eq "virtualaci" -or $infraType -eq "caci") {
+if ($infraType -eq "caci") {
     $providerConfig.location = $CCF_RESOURCE_GROUP_LOCATION
     $providerConfig.subscriptionId = $subscriptionId
     $providerConfig.resourceGroupName = $CCF_RESOURCE_GROUP
@@ -353,13 +357,11 @@ if (!$noDelete) {
         --infra-type $infraType `
         --provider-config $sandbox_common/providerConfig.json
 
-    if ($infraType -ne "virtualaci") {
-        Write-Output "Deleting any existing $infraType recovery service $networkName."
-        az cleanroom ccf recovery-service delete `
-            --name $recoveryServiceName `
-            --infra-type $infraType `
-            --provider-config $sandbox_common/providerConfig.json
-    }
+    Write-Output "Deleting any existing $infraType recovery service $networkName."
+    az cleanroom ccf recovery-service delete `
+        --name $recoveryServiceName `
+        --infra-type $infraType `
+        --provider-config $sandbox_common/providerConfig.json
 
     # Creating the operator identity certificate to add into the consortium.
     if ($keyStoreType -eq "localfs") {
@@ -443,8 +445,30 @@ $response = az cleanroom ccf network show `
     --provider-config $sandbox_common/providerConfig.json
 $response | Out-File $sandbox_common/ccf.json
 
+$agentEndpoint = (az cleanroom ccf network recovery-agent show `
+        --name $networkName `
+        --infra-type $infraType `
+        --provider-config $sandbox_common/providerConfig.json | ConvertFrom-Json).endpoint
+if ($infraType -eq "virtual") {
+    # allow-all value.
+    $hostData = "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20"
+}
+else {
+    $networkReport = (az cleanroom ccf network show-report `
+            --name $networkName `
+            --infra-type $infraType `
+            --provider-config $sandbox_common/providerConfig.json | ConvertFrom-Json)
+    $hostData = $networkReport.reports[0].hostData
+}
+
+@"
+{
+  "endpoint": "$agentEndpoint",
+  "snpHostData": "$hostData"
+}
+"@ | Out-File $sandbox_common/ccf.recovery-agent.json
+
 $ccfEndpoint = ($response | ConvertFrom-Json).endpoint
-Write-Output $ccfEndpoint
 $response = (curl "$ccfEndpoint/node/network" -k --silent | ConvertFrom-Json)
 # Trimming an extra new-line character added to the cert.
 $serviceCertStr = $response.service_certificate.TrimEnd("`n")
@@ -459,12 +483,52 @@ if (Test-Path $sandbox_common/${operatorName}_cert.id) {
         --name $cgsProjectName
 }
 else {
-    az cleanroom governance client deploy `
-        --ccf-endpoint $ccfEndpoint `
-        --signing-key $sandbox_common/${operatorName}_privk.pem `
-        --signing-cert $sandbox_common/${operatorName}_cert.pem `
-        --service-cert $sandbox_common/service_cert.pem `
-        --name $cgsProjectName
+    if ($useServiceCertDiscovery) {
+        $discoveryEndpoint = $agentEndpoint + "/network/report"
+        $agentNetworkReport = (az cleanroom ccf network recovery-agent show-network-report `
+                --name $networkName `
+                --infra-type $infraType `
+                --provider-config $sandbox_common/providerConfig.json | ConvertFrom-Json)
+        $reportDataContent = $agentNetworkReport.reports[0].report.reportDataPayload | base64 -d | ConvertFrom-Json
+
+        Write-Output "Deploying cgs-client with service cert discovery endpoint $discoveryEndpoint with expected host data: $hostData, constitution digest: $($reportDataContent.constitutionDigest) jsapp bundle digest: $($reportDataContent.jsappBundleDigest)."
+        az cleanroom governance client deploy `
+            --ccf-endpoint $ccfEndpoint `
+            --signing-key $sandbox_common/${operatorName}_privk.pem `
+            --signing-cert $sandbox_common/${operatorName}_cert.pem `
+            --service-cert-discovery-endpoint $discoveryEndpoint `
+            --service-cert-discovery-snp-host-data $hostData `
+            --service-cert-discovery-constitution-digest $reportDataContent.constitutionDigest `
+            --service-cert-discovery-jsapp-bundle-digest $reportDataContent.jsappBundleDigest `
+            --name $cgsProjectName
+        $settings = (az cleanroom governance client show --name $cgsProjectName | ConvertFrom-Json)
+        $discoveredCert = $settings.serviceCert.TrimEnd("`n")
+        if ($discoveredCert -ne $serviceCertStr) {
+            Write-Output "Service cert from discovery endpoint:`n$discoveredCert"
+            Write-Output "Service cert from /node/network:`n$serviceCertStr"
+            throw "Service cert mismatch between discovery endpoint and /node/network."
+        }
+
+        $versions = (az cleanroom governance service version --governance-client $cgsProjectName) | ConvertFrom-Json
+        if ($versions.constitution.digest -cne $reportDataContent.constitutionDigest) {
+            Write-Output "Constitution digest from governance service cli: $($versions.constitution.digest)"
+            Write-Output "Constitution digest agent network report: $($reportDataContent.constitutionDigest)"
+            throw "Constitution digest mismatch between governance service cli and agent network report."
+        }
+        if ($versions.jsapp.digest -cne $reportDataContent.jsappBundleDigest) {
+            Write-Output "jsapp bundle digest from governance service cli: $($versions.jsappBundle.digest)"
+            Write-Output "jsapp bundle digest from agent network report: $($reportDataContent.jsappBundleDigest)"
+            throw "jsapp bundle digest mismatch between governance service cli and agent network report."
+        }
+    }
+    else {
+        az cleanroom governance client deploy `
+            --ccf-endpoint $ccfEndpoint `
+            --signing-key $sandbox_common/${operatorName}_privk.pem `
+            --signing-cert $sandbox_common/${operatorName}_cert.pem `
+            --service-cert $sandbox_common/service_cert.pem `
+            --name $cgsProjectName
+    }
 }
 
 # Activate the operator membership by default in the cluster that just got created.
@@ -696,6 +760,21 @@ az cleanroom ccf network transition-to-open `
     --infra-type $infraType `
     --provider-config $sandbox_common/providerConfig.json
 
+# Create a consortium manager if requested.
+if ($useConsortiumManager) {
+    az cleanroom ccf consortium-manager create `
+        --name $consortiumManagerName `
+        --infra-type $infraType `
+        --provider-config $sandbox_common/providerConfig.json
+
+    Write-Output "Consortium manager deployed."
+    $response = az cleanroom ccf consortium-manager show `
+        --name $consortiumManagerName `
+        --infra-type $infraType `
+        --provider-config $sandbox_common/providerConfig.json
+    $response | Out-File $sandbox_common/consortiumManager.json
+}
+
 if (!$NoTest) {
     az cleanroom ccf network show `
         --name $networkName `
@@ -726,22 +805,20 @@ if (!$NoTest) {
         throw "Expecting $newNodeCount but $($network.nodeCount) is reported."
     }
 
-    if ($nodeStorageType -ne "localfs") {
-        $expectedFromSnapshot = $scaleUpBy
-        Write-Output "Checking that $expectedFromSnapshot node(s) started from a snapshot."
-        $startedFromSnapshot = 0
-        foreach ($node in $network.nodes) {
-            $nodeState = curl -s -k https://$node/node/state | ConvertFrom-Json
-            $startup_seqno = $nodeState.startup_seqno
-            if ($startup_seqno -gt 0) {
-                Write-Output "Node $node started from startup_seqno $startup_seqno."
-                $startedFromSnapshot++
-            }
+    $expectedFromSnapshot = $scaleUpBy
+    Write-Output "Checking that $expectedFromSnapshot node(s) started from a snapshot."
+    $startedFromSnapshot = 0
+    foreach ($node in $network.nodes) {
+        $nodeState = curl -s -k https://$node/node/state | ConvertFrom-Json
+        $startup_seqno = $nodeState.startup_seqno
+        if ($startup_seqno -gt 0) {
+            Write-Output "Node $node started from startup_seqno $startup_seqno."
+            $startedFromSnapshot++
         }
+    }
 
-        if ($startedFromSnapshot -ne $expectedFromSnapshot) {
-            throw "Expecting $expectedFromSnapshot node(s) to have started from a snapshot but only found $startedFromSnapshot."
-        }
+    if ($startedFromSnapshot -ne $expectedFromSnapshot) {
+        throw "Expecting $expectedFromSnapshot node(s) to have started from a snapshot but only found $startedFromSnapshot."
     }
 
     Write-Output "Scaling down the cluster from $newNodeCount to $nodeCount."
@@ -780,3 +857,9 @@ az cleanroom ccf network show `
     --name $networkName `
     --infra-type $infraType `
     --provider-config $sandbox_common/providerConfig.json
+
+@{
+    repo                    = $repo
+    tag                     = $tag
+    useServiceCertDiscovery = $useServiceCertDiscovery.IsPresent
+} | ConvertTo-Json -Depth 100 | Out-File $sandbox_common/setup.json
