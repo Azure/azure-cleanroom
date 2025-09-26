@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   blobfuse-e2e-data-integrity-cse:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     steps:
       - name: Delete huge unnecessary tools folder # https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
@@ -71,7 +71,7 @@ jobs:
           az group delete --name ${{ env.RESOURCE_GROUP }} --yes --no-wait
 
   blobfuse-e2e-data-integrity-cpk:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     steps:
       - name: Delete huge unnecessary tools folder # https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
@@ -123,7 +123,7 @@ jobs:
           az group delete --name ${{ env.RESOURCE_GROUP }} --yes --no-wait
 
   blobfuse-perf:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     timeout-minutes: 120
     environment: pr
     steps:

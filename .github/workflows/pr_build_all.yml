@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build-ccf-containers:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     strategy:
       matrix:
@@ -57,7 +57,7 @@ jobs:
         run: pwsh ./build/ccf/build-ccf-infra-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -containers ${{ matrix.container }}
 
   build-ccr-containers:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     strategy:
       matrix:
@@ -98,7 +98,7 @@ jobs:
         run: pwsh ./build/onebox/build-local-cleanroom-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -containers ${{ matrix.container }}
 
   build-ccf-container-policies:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     strategy:
       matrix:
@@ -145,7 +145,7 @@ jobs:
         run: pwsh ./build/ccf/build-ccf-infra-containers-policy.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -containers ${{ matrix.container }}
 
   build-ccr-container-policies:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     needs: [build-ccr-containers]
     env:
@@ -187,7 +187,7 @@ jobs:
         run: pwsh ./build/build-ccr-digests.ps1 -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }} -push
 
   build-cleanroom-cluster-containers:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     strategy:
       matrix:
@@ -227,7 +227,7 @@ jobs:
         run: pwsh ./build/cleanroom-cluster/build-cleanroom-cluster-infra-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -containers ${{ matrix.container }}
 
   build-workload-containers:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     strategy:
       matrix:
@@ -271,7 +271,7 @@ jobs:
         run: pwsh ./build/workloads/build-workload-infra-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -containers ${{ matrix.container }}
 
   build-workload-container-policies:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     strategy:
       matrix:
@@ -318,7 +318,7 @@ jobs:
         run: pwsh ./build/workloads/build-workload-infra-containers-policy.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -containers ${{ matrix.container }}
 
   build-azcliext-cleanroom:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}

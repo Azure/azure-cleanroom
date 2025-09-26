@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   cgs-test:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     steps:
       - uses: actions/checkout@v4

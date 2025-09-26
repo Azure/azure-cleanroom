@@ -14,7 +14,24 @@ on:
         default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client"
 
 jobs:
+  pre-release-validation:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    permissions:
+      contents: read  # This is required for reading tags
+    env:
+      GH_TOKEN: ${{ github.token }} # Needed for gh api calls
+    steps:
+      - name: Validate tag points to the current commit
+        shell: pwsh
+        run: |
+          $commitSha = $(gh api repos/${{ github.repository }}/git/refs/tags/${{ inputs.tag }} | ConvertFrom-Json).object.sha
+          Write-Host "Commit SHA for tag '${{ inputs.tag }}': $commitSha"
+          if ($commitSha -ne "${{ github.workflow_sha }}") {
+            throw "The input tag '${{ inputs.tag }}' and the current commit SHA '${{ github.workflow_sha }}' do not match. Are both pointing to the same commit?"
+          }
+
   build-test-msint:
+    needs: pre-release-validation
     uses: ./.github/workflows/release-and-test.yml
     permissions:
       id-token: write  # needed for release-to-test
@@ -30,14 +47,14 @@ jobs:
 
   # Add release specific tests here
   release-tests:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     needs: ["build-test-msint"]
     steps:
       - name: Run release test
         run: echo 'No release tests configured!'
 
   release-to-prod:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: production
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
@@ -358,7 +375,7 @@ jobs:
     uses: ./.github/workflows/release_verification_nightly.yml
 
   create-github-release:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     needs: ["release-to-prod", "post-release-validation"]
     # Permission and environment variables below are needed to create a GitHub release
     permissions:
@@ -597,6 +614,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: cleanroom-cluster-provider-client
+
+      - name: Download AZ CLI whl
+        id: download-az-cli-artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: cleanroom-cli.whl
 
       # https://cli.github.com/manual/gh_release_create
       - name: Create GitHub release
@@ -846,4 +869,5 @@ jobs:
           cleanroom-cluster-provider-client-sbom.spdx.json
 
       - name: Upload AZ CLI extension
-        run: gh release upload ${{ inputs.tag }} cleanroom-cli.whl
+        run: gh release upload ${{ inputs.tag }} \
+          ${{ steps.download-az-cli-artefact.outputs.download-path }}/cleanroom-${{ inputs.tag }}-py2.py3-none-any.whl

@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   encrypted-storage:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -40,7 +40,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   encrypted-storage-cleanroom-client:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -64,7 +64,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   db-access:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -88,7 +88,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   mongo-db-access:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -112,7 +112,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   quote-of-the-day:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -136,7 +136,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   encrypted-storage-caci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -160,7 +160,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   encrypted-storage-cleanroom-client-caci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -184,7 +184,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   ml-training-caci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     strategy:
       matrix:
@@ -198,10 +198,10 @@ jobs:
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
       RUN_ATTEMPT: ${{ github.run_attempt }}
-      TDP_HSM_RESOURCE_GROUP: 'azcleanroom-emu-pr-rg'
-      TDP_MHSM_NAME: 'azcleanroomemuhsm2'
-      TDC_HSM_RESOURCE_GROUP: 'azcleanroom-emu-pr-rg'
-      TDC_MHSM_NAME: 'azcleanroomemuhsm2'
+      TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-pr-rg'
+      TDP_MHSM_NAME: 'azcleanroompublichsm'
+      TDC_HSM_RESOURCE_GROUP: 'azcleanroom-public-pr-rg'
+      TDC_MHSM_NAME: 'azcleanroompublichsm'
       USE_PREPROVISIONED_OIDC: "true"
     steps:
       - uses: actions/checkout@v4
@@ -218,7 +218,7 @@ jobs:
           kvType: ${{ matrix.key-store }}
 
   nginx-hello:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -242,7 +242,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   nginx-hello-caci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -266,7 +266,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   query-analytics-caci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -290,7 +290,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   big-data-query-analytics:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -314,7 +314,7 @@ jobs:
           tag: ${{ github.run_id }}
 
   big-data-query-analytics-caci:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}

@@ -15,7 +15,7 @@ jobs:
     permissions:
       id-token: write
       contents: read  # This is required for actions/checkout
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: test
     env:
       TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
@@ -63,7 +63,7 @@ jobs:
           kvType: ${{ matrix.key-store }}
 
   encrypted-storage-nightly:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: test
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -105,7 +105,7 @@ jobs:
           tag: 4.0.0
 
   nginx-hello-nightly:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: test
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -148,7 +148,7 @@ jobs:
 
   # TODO (HPrabh): Enable this after the workload containers are released.
   # big-data-query-analytics-nightly:
-  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
   #   environment: test
   #   env:
   #     AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}

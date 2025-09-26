@@ -20,7 +20,7 @@ if ($environment -eq "pr") {
 else {
     $mhsms = @(
         "bvthsm2sea",
-        "azcleanroomemubvthsm"
+        "azcleanroombvthsm2"
     )
 }
 
@@ -86,12 +86,14 @@ foreach ($a in $assignments) {
                 if ($($currentDate - $createdDate).Days -gt $retentionDays) {
                     $rasToDelete += $a
                 }
-            } catch {
+            }
+            catch {
                 # If date parsing fails, default to safety behavior
                 Write-Host "Warning: Invalid creation date format for role assignment $($a.id): $($a.createdOn), skipping deletion for safety"
                 $skippedRoleAssignments += $a.id
             }
-        } else {
+        }
+        else {
             # If no creation date available, default to the existing behavior for safety
             Write-Host "Warning: No creation date found for role assignment $($a.id), skipping deletion for safety"
             $skippedRoleAssignments += $a.id

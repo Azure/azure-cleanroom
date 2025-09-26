@@ -8,6 +8,7 @@ on:
     branches:
     - develop
     - release
+    - main
 
 # When a new revision is pushed to a PR, cancel all in-progress CI runs for that
 # PR. See https://docs.github.com/en/actions/using-jobs/using-concurrency
@@ -17,7 +18,7 @@ concurrency:
 
 jobs:
   lint:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-docker-on-data-disk

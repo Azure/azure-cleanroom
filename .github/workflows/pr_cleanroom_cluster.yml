@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   caci-cleanroom-cluster:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -76,7 +76,7 @@ jobs:
         run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=cleanroom-cluster-${{ github.job }}-${{ github.run_id }}"
 
   virtual-cleanroom-cluster:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -120,7 +120,7 @@ jobs:
         run: pwsh ./samples/spark/azcli/dump-cleanroom-cluster-logs.ps1
 
   caci-cleanroom-cluster-update:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -184,7 +184,7 @@ jobs:
         run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=cleanroom-cluster-${{ github.job }}-${{ github.run_id }}"
 
   virtual-cleanroom-cluster-update:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
