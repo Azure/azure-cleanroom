@@ -49,7 +49,7 @@ jobs:
 
       - name: Install az cleanroom CLI
         run: |
-          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:4.0.0
+          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:5.0.0
           az extension add --source ./cleanroom-*-py2.py3-none-any.whl -y --allow-preview true
 
       - name: Enabling az cli telemetry collection
@@ -59,7 +59,7 @@ jobs:
         uses: ./.github/actions/test-multi-party-collab/test-ml-training-caci
         with:
           repo: mcr.microsoft.com/azurecleanroom
-          tag: 4.0.0
+          tag: 5.0.0
           kvType: ${{ matrix.key-store }}
 
   encrypted-storage-nightly:
@@ -92,7 +92,7 @@ jobs:
 
       - name: Install az cleanroom CLI
         run: |
-          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:4.0.0
+          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:5.0.0
           az extension add --source ./cleanroom-*-py2.py3-none-any.whl -y --allow-preview true
 
       - name: Enabling az cli telemetry collection
@@ -102,7 +102,7 @@ jobs:
         uses: ./.github/actions/test-multi-party-collab/test-encrypted-storage-caci
         with:
           repo: mcr.microsoft.com/azurecleanroom
-          tag: 4.0.0
+          tag: 5.0.0
 
   nginx-hello-nightly:
     runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
@@ -134,7 +134,7 @@ jobs:
 
       - name: Install az cleanroom CLI
         run: |
-          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:4.0.0
+          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:5.0.0
           az extension add --source ./cleanroom-*-py2.py3-none-any.whl -y --allow-preview true
 
       - name: Enabling az cli telemetry collection
@@ -144,7 +144,7 @@ jobs:
         uses: ./.github/actions/test-multi-party-collab/test-nginx-hello-caci
         with:
           repo: mcr.microsoft.com/azurecleanroom
-          tag: 4.0.0
+          tag: 5.0.0
 
   # TODO (HPrabh): Enable this after the workload containers are released.
   # big-data-query-analytics-nightly:
@@ -175,7 +175,7 @@ jobs:
 
   #     - name: Install az cleanroom CLI
   #       run: |
-  #         oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:4.0.0
+  #         oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:5.0.0
   #         az extension add --source ./cleanroom-*-py2.py3-none-any.whl -y --allow-preview true
 
   #     - name: Enabling az cli telemetry collection
@@ -185,4 +185,4 @@ jobs:
   #       uses: ./.github/actions/test-multi-party-collab/test-big-data-query-analytics-caci
   #       with:
   #         repo: mcr.microsoft.com/azurecleanroom
-  #         tag: 4.0.0
+  #         tag: 5.0.0

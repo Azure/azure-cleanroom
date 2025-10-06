@@ -11,7 +11,7 @@ namespace CleanRoomProvider;
 public static class ImageUtils
 {
     private const string McrRegistryUrl = "mcr.microsoft.com/azurecleanroom";
-    private const string McrTag = "4.0.0";
+    private const string McrTag = "5.0.0";
 
     private static SemaphoreSlim semaphore = new(1, 1);
 
