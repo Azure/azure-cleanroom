@@ -31,35 +31,11 @@ runs:
       shell: pwsh
       run: ./test/onebox/multi-party-collab/triton-inference-server/run-collab-aci.ps1 -registry acr -repo ${{ inputs.repo}} -tag ${{ inputs.tag }}
 
-    - name: Upload results
+    - name: Upload generated
       uses: actions/upload-artifact@v4
       with:
-          name: results-triton-inference-caci
-          path: ./test/onebox/multi-party-collab/triton-inference-server/generated/results
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - name: Upload configurations
-      uses: actions/upload-artifact@v4
-      with:
-          name: configurations-triton-inference-caci
-          path: ./test/onebox/multi-party-collab/triton-inference-server/generated/configurations
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - name: Upload deployments
-      uses: actions/upload-artifact@v4
-      with:
-          name: deployments-triton-inference-caci
-          path: ./test/onebox/multi-party-collab/triton-inference-server/generated/deployments
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - name: Upload ccf
-      uses: actions/upload-artifact@v4
-      with:
-          name: ccf-triton-inference-caci
-          path: ./test/onebox/multi-party-collab/triton-inference-server/generated/ccf
+          name: generated-triton-inference-caci
+          path: ./test/onebox/multi-party-collab/triton-inference-server/generated
           overwrite: true
       if: ${{ !cancelled() }}
 

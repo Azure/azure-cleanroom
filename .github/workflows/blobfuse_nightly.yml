@@ -1,0 +1,235 @@
+name: "Blobfuse Nightly DI Test"
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  schedule:
+    - cron: '0 3 * * *'
+
+permissions:
+  id-token: write
+  contents: read  # This is required for actions/checkout
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  blobfuse-e2e-data-integrity-cse:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    environment: pr
+    steps:
+      - name: Delete huge unnecessary tools folder # https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
+        run: sudo rm -rf /opt/hostedtoolcache
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+ 
+      - name: Generate hashed run ID
+        run: |
+          HASHED_RUN_ID=$(echo -n "${{ github.run_id }}" | sha256sum | cut -c1-10)
+          echo "HASHED_RUN_ID=$HASHED_RUN_ID" >> $GITHUB_ENV
+
+      - name: Setup Blobfuse
+        uses: ./.github/actions/blobfuse-setup
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          RESOURCE_GROUP: blobfusecse-rg-${{ env.HASHED_RUN_ID }}
+          ACCOUNT_NAME: blobfusecse${{ env.HASHED_RUN_ID }}
+
+      - name: Data Integrity Test CSE
+        uses: ./.github/actions/blobfuse-data-integrity-cse
+        with:
+          account_type: "block"
+          mount_dir_plain: "${{ github.workspace }}/blobfuse-plain"
+          mount_dir_encrypted: "${{ github.workspace }}/blobfuse-encrypted"
+          temp_dir_plain: "/tmp/blobfuse-plain-temp"
+          temp_dir_encrypted: "/tmp/blobfuse-encrypted-temp"
+          config_file_plain: "./config-plain-mount.yaml"
+          config_file_encrypted: "./config-encrypted-mount.yaml"
+          mount_dir_source: "${{ github.workspace }}/blobfuse-source"
+          temp_dir_source: "/tmp/blobfuse-source-temp"
+          config_file_source: "./config-source-mount.yaml"
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+
+      - name: Cleanup
+        if: success()
+        run: |
+          az group delete --name ${{ env.RESOURCE_GROUP }} --yes --no-wait
+
+  blobfuse-e2e-data-integrity-cpk:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    environment: pr
+    steps:
+      - name: Delete huge unnecessary tools folder # https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
+        run: sudo rm -rf /opt/hostedtoolcache
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Generate hashed run ID
+        run: |
+          HASHED_RUN_ID=$(echo -n "${{ github.run_id }}" | sha256sum | cut -c1-10)
+          echo "HASHED_RUN_ID=$HASHED_RUN_ID" >> $GITHUB_ENV
+
+      - name: Setup Blobfuse
+        uses: ./.github/actions/blobfuse-setup
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          RESOURCE_GROUP: blobfusecpk-rg${{ env.HASHED_RUN_ID }}
+          ACCOUNT_NAME: blobfusecpk${{ env.HASHED_RUN_ID }}
+
+      - name: Data Integrity Test CPK
+        uses: ./.github/actions/blobfuse-data-integrity-cpk
+        with:
+          account_type: "block"
+          mount_dir: "${{ github.workspace }}/blobfuse-mount"
+          temp_dir: "/tmp/blobfuse-temp"
+          config_file: "./config-cpk-mount.yaml"
+          mount_dir_source: "${{ github.workspace }}/blobfuse-source"
+          temp_dir_source: "/tmp/blobfuse-source-temp"
+          config_file_source: "./config-source-mount.yaml"
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+
+      - name: Cleanup
+        if: success()
+        run: |
+          az group delete --name ${{ env.RESOURCE_GROUP }} --yes --no-wait
+
+  blobfuse-perf:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    timeout-minutes: 120
+    environment: pr
+    steps:
+      - name: Delete huge unnecessary tools folder # https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
+        run: |
+          sudo rm -rf /opt/hostedtoolcache
+          docker system prune -a --volumes -f
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Create Storage resources
+        run: |
+          HASHED_RUN_ID=$(echo -n "${{ github.run_id }}" | sha256sum | cut -c1-10)
+          RESOURCE_GROUP=blobfuseperf-rg-${HASHED_RUN_ID}
+          LOCATION=westus
+          STORAGE_ACCOUNT=blobfuseperf${HASHED_RUN_ID}
+          CONTAINER_NAME=perf-test
+          CONTAINER_NAME_PERF=perf-result-logs
+          echo "RESOURCE_GROUP=$RESOURCE_GROUP" >> $GITHUB_ENV
+          echo "STORAGE_ACCOUNT=$STORAGE_ACCOUNT" >> $GITHUB_ENV
+          echo "CONTAINER_NAME=$CONTAINER_NAME" >> $GITHUB_ENV
+          echo "CONTAINER_NAME_PERF=$CONTAINER_NAME_PERF" >> $GITHUB_ENV
+
+          az group create --name $RESOURCE_GROUP --location $LOCATION
+
+          az storage account create --name $STORAGE_ACCOUNT --resource-group $RESOURCE_GROUP
+          az storage container create --resource-group $RESOURCE_GROUP --account-name $STORAGE_ACCOUNT \
+            --name $CONTAINER_NAME --auth-mode login
+          az storage container create --resource-group $RESOURCE_GROUP --account-name $STORAGE_ACCOUNT \
+            --name $CONTAINER_NAME_PERF --auth-mode login
+          az role assignment create --assignee ${{ vars.AZURE_CLIENT_ID }} \
+            --role "Storage Blob Data Contributor" \
+            --scope /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT
+          sleep 120s
+
+      - name: Give permissions to the managed identity for ACR
+        run: |
+          az role assignment create \
+            --role AcrPull \
+            --assignee ${{ vars.AZURE_CLIENT_ID }} \
+            --scope /subscriptions/fccb68eb-8ccf-49a6-a69a-7ea3c2867e9c/resourcegroups/cleanroomdev-rg/providers/Microsoft.ContainerRegistry/registries/cleanroomperf
+          az role assignment create \
+            --role AcrPush \
+            --assignee ${{ vars.AZURE_CLIENT_ID }} \
+            --scope /subscriptions/fccb68eb-8ccf-49a6-a69a-7ea3c2867e9c/resourcegroups/cleanroomdev-rg/providers/Microsoft.ContainerRegistry/registries/cleanroomperf
+
+      - name: Log in to Azure Container Registry
+        shell: bash
+        run: az acr login -n cleanroomperf.azurecr.io
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          file: ./build/docker/Dockerfile.blobfuse-perf
+          context: ${{ github.workspace }}
+          push: true
+          tags: cleanroomperf.azurecr.io/blobfuse-perf:latest
+
+      - name: Create Azure Container Instance
+        run: |
+          az container create \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name blobfuse-perf-aci \
+            --image cleanroomperf.azurecr.io/blobfuse-perf \
+            --cpu 8 \
+            --memory 16 \
+            --sku Confidential \
+            --os-type Linux \
+            --assign-identity /subscriptions/3b9ce031-3a87-4e70-a8bb-75ec1d90ad22/resourceGroups/cleanroom-emu-actions-rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/cleanroom-emu-pr-mi \
+            --acr-identity /subscriptions/3b9ce031-3a87-4e70-a8bb-75ec1d90ad22/resourceGroups/cleanroom-emu-actions-rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/cleanroom-emu-pr-mi\
+            --command-line "./perf_test.sh ${{ env.CONTAINER_NAME }} /mnt/perf /tmp/cache config-encrypted.yaml log.txt /tmp/plain /mnt/perf-plain ${{ env.STORAGE_ACCOUNT }} ${{ vars.AZURE_CLIENT_ID }} config-plain.yaml log_plain.txt ${{ env.CONTAINER_NAME_PERF }}" \
+            --privileged \
+            --restart-policy Never
+
+      - name: Get container logs
+        run: |
+          state=Running
+
+          while [ "$state" = "Running" ]; do
+            echo "waiting for container instance to finish..."
+            sleep 300
+            state=$(az container show --resource-group ${{ env.RESOURCE_GROUP }} --name blobfuse-perf-aci --query "instanceView.state" -o tsv)
+          done
+
+          echo "Container instance finished with state: $state"
+
+          echo "Container logs:"
+          az container logs --resource-group ${{ env.RESOURCE_GROUP }} --name blobfuse-perf-aci
+          if [ "$state" != "Succeeded" ]; then
+            echo "Container instance failed with state: $state"
+            exit 1
+          fi
+          echo "Container instance succeeded with state: $state"
+
+      - name: Cleanup
+        if: success()
+        run: |
+          az container delete --name blobfuse-perf-aci --resource-group ${{ env.RESOURCE_GROUP }} --yes

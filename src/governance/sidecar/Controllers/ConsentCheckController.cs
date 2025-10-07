@@ -46,6 +46,24 @@ public class ConsentCheckController : ControllerBase
         return await this.ConsentCheck(this.routes.ConsentCheckTelemetry(this.WebContext));
     }
 
+    [HttpPost("/userdocuments/{documentId}/consentcheck/execution")]
+    public async Task<JsonObject> UserDocumentExecutionConsentCheck(
+        [FromRoute] string documentId)
+    {
+        return await this.ConsentCheck(this.routes.ConsentCheckUserDocumentExecution(
+            documentId,
+            this.WebContext));
+    }
+
+    [HttpPost("/userdocuments/{documentId}/consentcheck/telemetry")]
+    public async Task<JsonObject> UserDocumentTelemetryConsentCheck(
+        [FromRoute] string documentId)
+    {
+        return await this.ConsentCheck(this.routes.ConsentCheckUserDocumentTelemetry(
+            documentId,
+            this.WebContext));
+    }
+
     private async Task<JsonObject> ConsentCheck(string url)
     {
         var appClient = await this.ccfClientManager.GetAppClient();

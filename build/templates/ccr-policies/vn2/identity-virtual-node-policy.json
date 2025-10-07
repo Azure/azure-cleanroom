@@ -1,0 +1,26 @@
+{
+  "name": "identity-sidecar",
+  "properties": {
+    "image": "$containerRegistryUrl/identity@$digest",
+    "command": [
+      "dotnet",
+      "Microsoft.Azure.CleanRoomSidecar.Identity.IdentitySidecar.dll"
+    ],
+    "environmentVariables": [
+      {
+        "name": "IdentitySideCarArgs",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "OTEL_METRIC_EXPORT_INTERVAL",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "TELEMETRY_MOUNT_PATH",
+        "value": "$telemetryMountPath"
+      }
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-name: governance-ccf
+name: samples-governance-ccf
 services:
   ccf:
     image: ${ccfImage:-ccf/app/run-js/sandbox:latest}
@@ -7,3 +7,14 @@ services:
     volumes:
       - ${cgs_sandbox_common}/${initialMemberName}_cert.pem:/app/member0_cert.pem
       - ${cgs_sandbox_common}/${initialMemberName}_enc_pubk.pem:/app/member0_enc_pubk.pem
+  recovery-agent:
+    image: ${recoveryAgentImage:-ccf/ccf-recovery-agent:latest}
+    ports:
+      - "0:9080"
+    environment:
+      - CCF_ENDPOINT=https://ccf:8080
+      - CCF_ENDPOINT_SKIP_TLS_VERIFY=true
+      - ASPNETCORE_URLS=http://+:9080
+      - INSECURE_VIRTUAL_ENVIRONMENT=true
+    volumes:
+      - ${root_dir}/src/ccf/virtual-ccf-provider/insecure-virtual/recovery-agent:/app/insecure-virtual:ro

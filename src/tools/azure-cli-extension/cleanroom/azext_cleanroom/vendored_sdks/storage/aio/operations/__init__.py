@@ -6,30 +6,38 @@
 # Changes may cause incorrect behavior and will be lost if the code is regenerated.
 # --------------------------------------------------------------------------
 
-from ._blob_services_operations import BlobServicesOperations
 from ._blob_containers_operations import BlobContainersOperations
+from ._blob_inventory_policies_operations import BlobInventoryPoliciesOperations
+from ._blob_services_operations import BlobServicesOperations
+from ._deleted_accounts_operations import DeletedAccountsOperations
+from ._encryption_scopes_operations import EncryptionScopesOperations
 from ._file_services_operations import FileServicesOperations
 from ._file_shares_operations import FileSharesOperations
-from ._queue_services_operations import QueueServicesOperations
-from ._queue_operations import QueueOperations
+from ._local_users_operations import LocalUsersOperations
+from ._management_policies_operations import ManagementPoliciesOperations
+from ._network_security_perimeter_configurations_operations import (
+    NetworkSecurityPerimeterConfigurationsOperations,
+)
+from ._object_replication_policies_operations import ObjectReplicationPoliciesOperations
 from ._operations import Operations
+from ._private_endpoint_connections_operations import (
+    PrivateEndpointConnectionsOperations,
+)
+from ._private_link_resources_operations import PrivateLinkResourcesOperations
+from ._queue_operations import QueueOperations
+from ._queue_services_operations import QueueServicesOperations
 from ._skus_operations import SkusOperations
 from ._storage_accounts_operations import StorageAccountsOperations
-from ._deleted_accounts_operations import DeletedAccountsOperations
-from ._usages_operations import UsagesOperations
-from ._management_policies_operations import ManagementPoliciesOperations
-from ._blob_inventory_policies_operations import BlobInventoryPoliciesOperations
-from ._private_endpoint_connections_operations import PrivateEndpointConnectionsOperations
-from ._private_link_resources_operations import PrivateLinkResourcesOperations
-from ._object_replication_policies_operations import ObjectReplicationPoliciesOperations
-from ._local_users_operations import LocalUsersOperations
-from ._encryption_scopes_operations import EncryptionScopesOperations
-from ._table_services_operations import TableServicesOperations
-from ._table_operations import TableOperations
-from ._network_security_perimeter_configurations_operations import NetworkSecurityPerimeterConfigurationsOperations
+from ._storage_task_assignment_instances_report_operations import (
+    StorageTaskAssignmentInstancesReportOperations,
+)
+from ._storage_task_assignments_instances_report_operations import (
+    StorageTaskAssignmentsInstancesReportOperations,
+)
 from ._storage_task_assignments_operations import StorageTaskAssignmentsOperations
-from ._storage_task_assignments_instances_report_operations import StorageTaskAssignmentsInstancesReportOperations
-from ._storage_task_assignment_instances_report_operations import StorageTaskAssignmentInstancesReportOperations
+from ._table_operations import TableOperations
+from ._table_services_operations import TableServicesOperations
+from ._usages_operations import UsagesOperations
 
 __all__ = [
     'BlobServicesOperations',

@@ -1,0 +1,32 @@
+name: Setup docker on data disk
+description: Setup docker to use a data disk for its storage
+
+runs:
+  using: composite
+  steps:
+    - name: Docker footprint
+      shell: bash
+      run: |
+        docker info | grep "Docker Root Dir"
+        docker system df
+        docker image ls
+        docker ps -a
+
+    - name: Assign permissions for the docker directory on the data disk
+      shell: bash
+      run: |
+        # TODO(anrdesai): While the steps below can be done in the pre-provisioning script itself,
+        # the permissions are lost when the runner picks up a job. If we can find a way to retain
+        # the permissions across jobs, we can remove this action altogether.
+
+        # Remove ACLs
+        sudo setfacl -b -R /mnt/storage/docker
+
+        # Set ownership to root:root
+        sudo chown -R root:root /mnt/storage/docker
+
+        # Set permissions to 0711 - full for owner, traverse for group and others
+        sudo chmod 0711 /mnt/storage/docker
+
+        # Verify permissions
+        ls -ld /mnt/storage/docker

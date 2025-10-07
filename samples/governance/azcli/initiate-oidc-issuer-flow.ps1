@@ -8,6 +8,8 @@ param
     [string] $projectName = "governance-sample-azcli"
 )
 
+$ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $true
 $root = git rev-parse --show-toplevel
 
 . $root/build/helpers.ps1

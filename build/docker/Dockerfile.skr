@@ -1,0 +1,1 @@
+FROM mcr.microsoft.com/aci/skr:2.10

@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: ccr-init
+    image: $containerRegistryUrl/ccr-init@$digest
+    command:
+    - python
+    - setup-iptables.py
+    - --clear-mount-paths
+    - $volumeStatusMountPath
+    - --create-directories
+    - $telemetryMountPath/infrastructure
+    - $telemetryMountPath/application
+    env:
+    - name: TELEMETRY_MOUNT_PATH
+      value: $telemetryMountPath
+    volumeMounts:
+    - name: volumestatusmounts
+      mountPath: $volumeStatusMountPath
+      readOnly: false
+    - name: telemetrymounts
+      mountPath: $telemetryMountPath
+      readOnly: false
+

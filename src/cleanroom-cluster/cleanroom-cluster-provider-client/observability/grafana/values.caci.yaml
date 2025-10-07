@@ -1,0 +1,5 @@
+persistence:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: azureblob-nfs-premium
+  size: 10Pi

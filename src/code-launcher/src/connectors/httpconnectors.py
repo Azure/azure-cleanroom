@@ -1,7 +1,7 @@
-import os
-import requests
 import logging
+import os
 
+import requests
 from opentelemetry import trace
 from src.utilities import utilities
 

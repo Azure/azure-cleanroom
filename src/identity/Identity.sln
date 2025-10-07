@@ -32,13 +32,13 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Constants", "Common\Constan
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Utilities", "Common\Utilities\Utilities.csproj", "{D465289A-5A82-4B42-AC5A-0CD2FCDEED23}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Errors", "Contracts\Errors\Errors.csproj", "{B1D63D97-8E01-4B5A-AAB3-BE0E5AB6D7BB}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Telemetry.Metrics", "Telemetry\Telemetry.Metrics\Telemetry.Metrics.csproj", "{294B645D-22D6-4518-9C45-02C04C0B9C5F}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CredentialManager", "Managers\CredentialManager\CredentialManager.csproj", "{B2D37C4E-7591-4622-9FF7-C545E2CDCDE3}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CredentialStore", "Common\CredentialStore\CredentialStore.csproj", "{22A3DAC8-5014-4493-8892-2175B42063A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "restapi-common", "..\internal\restapi-common\restapi-common.csproj", "{8888463D-F004-2537-F586-373CE15FE350}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -66,10 +66,6 @@ Global
 		{D465289A-5A82-4B42-AC5A-0CD2FCDEED23}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D465289A-5A82-4B42-AC5A-0CD2FCDEED23}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D465289A-5A82-4B42-AC5A-0CD2FCDEED23}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B1D63D97-8E01-4B5A-AAB3-BE0E5AB6D7BB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B1D63D97-8E01-4B5A-AAB3-BE0E5AB6D7BB}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B1D63D97-8E01-4B5A-AAB3-BE0E5AB6D7BB}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B1D63D97-8E01-4B5A-AAB3-BE0E5AB6D7BB}.Release|Any CPU.Build.0 = Release|Any CPU
 		{294B645D-22D6-4518-9C45-02C04C0B9C5F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{294B645D-22D6-4518-9C45-02C04C0B9C5F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{294B645D-22D6-4518-9C45-02C04C0B9C5F}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -82,6 +78,10 @@ Global
 		{22A3DAC8-5014-4493-8892-2175B42063A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{22A3DAC8-5014-4493-8892-2175B42063A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{22A3DAC8-5014-4493-8892-2175B42063A0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8888463D-F004-2537-F586-373CE15FE350}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8888463D-F004-2537-F586-373CE15FE350}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8888463D-F004-2537-F586-373CE15FE350}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8888463D-F004-2537-F586-373CE15FE350}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -92,17 +92,16 @@ Global
 		{FC6EFEAD-D28C-4C99-B8C1-686C2FC63F63} = {E6772DA1-C93E-4FDF-B2BB-DD9CC2CE60F2}
 		{34884CAE-2122-498F-B596-89FED0661B9A} = {E6772DA1-C93E-4FDF-B2BB-DD9CC2CE60F2}
 		{D465289A-5A82-4B42-AC5A-0CD2FCDEED23} = {E6772DA1-C93E-4FDF-B2BB-DD9CC2CE60F2}
-		{B1D63D97-8E01-4B5A-AAB3-BE0E5AB6D7BB} = {08F69451-58C6-48C7-9D19-CA196D39344C}
 		{294B645D-22D6-4518-9C45-02C04C0B9C5F} = {CBC1F08C-B11C-4809-A36D-7316CB2FED55}
 		{B2D37C4E-7591-4622-9FF7-C545E2CDCDE3} = {141CA0D5-D300-4425-AA6A-50BB3C52585A}
 		{22A3DAC8-5014-4493-8892-2175B42063A0} = {E6772DA1-C93E-4FDF-B2BB-DD9CC2CE60F2}
+		{8888463D-F004-2537-F586-373CE15FE350} = {E6772DA1-C93E-4FDF-B2BB-DD9CC2CE60F2}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {6E5C7AFC-D4DA-4DDF-A84C-E354BE075014}
 	EndGlobalSection
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
 		Tools\CodeGenerators\T4\T4.projitems*{294b645d-22d6-4518-9c45-02c04c0b9c5f}*SharedItemsImports = 5
-		Tools\CodeGenerators\T4\T4.projitems*{b1d63d97-8e01-4b5a-aab3-be0e5ab6d7bb}*SharedItemsImports = 5
 		Tools\CodeGenerators\T4\T4.projitems*{ed39428d-4ec0-4f77-8b2c-ba8454a09db3}*SharedItemsImports = 13
 	EndGlobalSection
 EndGlobal

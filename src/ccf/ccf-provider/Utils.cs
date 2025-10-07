@@ -56,20 +56,17 @@ public static class Utils
 
     public static string GetUniqueString(string id, int length = 13)
     {
-        using (var hash = SHA512.Create())
+        var bytes = System.Text.Encoding.UTF8.GetBytes(id);
+        var hashedInputBytes = SHA512.HashData(bytes);
+        List<char> a = new();
+        for (int i = 1; i <= length; i++)
         {
-            var bytes = System.Text.Encoding.UTF8.GetBytes(id);
-            var hashedInputBytes = hash.ComputeHash(bytes);
-            List<char> a = new();
-            for (int i = 1; i <= length; i++)
-            {
-                var b = hashedInputBytes[i];
-                var x = (char)((b % 26) + (byte)'a');
-                a.Add(x);
-            }
-
-            return new string(a.ToArray());
+            var b = hashedInputBytes[i];
+            var x = (char)((b % 26) + (byte)'a');
+            a.Add(x);
         }
+
+        return new string(a.ToArray());
     }
 
     public static string PadForNaturalNumberOrdering(this string input)

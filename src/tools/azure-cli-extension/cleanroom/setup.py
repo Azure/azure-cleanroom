@@ -2,7 +2,8 @@
 
 import os
 from codecs import open
-from setuptools import setup, find_packages
+
+from setuptools import find_packages, setup
 
 try:
     from azure_bdist_wheel import cmdclass
@@ -79,10 +80,11 @@ setup(
     package_data={
         "azext_cleanroom": [
             "azext_metadata.json",
-            "data/docker-compose.yaml",
+            "data/cgs-client/docker-compose.yaml",
             "data/aspire-dashboard/docker-compose.yaml",
             "data/aspire-dashboard/otel-collector-config.yaml",
             "data/ccf-provider/docker-compose.yaml",
+            "data/cluster-provider/docker-compose.yaml",
             "data/keygenerator.sh",
             "data/azstore.yaml",
             "data/application.yaml",

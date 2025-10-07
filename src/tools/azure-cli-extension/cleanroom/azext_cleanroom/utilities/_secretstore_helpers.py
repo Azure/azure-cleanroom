@@ -1,19 +1,28 @@
-import os
+import base64
 import json
+import os
 import tempfile
+import uuid
+from abc import ABC, ABCMeta, abstractmethod
 from typing import Callable
 from urllib.parse import urlparse
-from abc import ABC, ABCMeta, abstractmethod
-import uuid
-from cleanroom_common.azure_cleanroom_core.models.secretstore import SecretStoreEntry
 
+from azure.cli.core.util import CLIError
 from cleanroom_common.azure_cleanroom_core.exceptions.exception import (
     CleanroomSpecificationError,
     ErrorCode,
 )
+from cleanroom_common.azure_cleanroom_core.models.secretstore import (
+    SecretStoreEntry,
+    SecretStoreSpecification,
+)
+
+from ..utilities._azcli_helpers import logger
 
 
 class ISecretStore(ABC):
+    entry: SecretStoreEntry
+
     @abstractmethod
     def add_secret(
         self,
@@ -74,9 +83,10 @@ class AzureSecureSecretStore(ISecretStore):
         generate_secret: Callable,
         security_policy: str | None = None,
     ) -> bytes:
-        from ._azcli_helpers import az_cli, logger
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric import rsa
+
+        from ._azcli_helpers import az_cli, logger
 
         assert (
             security_policy is not None
@@ -104,9 +114,9 @@ class AzureSecureSecretStore(ISecretStore):
             with open(pem_file_path, "w") as private_key_file:
                 private_key_file.write(private_key_bytes.decode())
 
-            import ast
-
-            maa_url = ast.literal_eval(self._entry.configuration)["authority"]
+            maa_url = json.loads(base64.b64decode(self._entry.configuration).decode())[
+                "authority"
+            ]
             skr_policy = {
                 "anyOf": [
                     {
@@ -239,35 +249,82 @@ class AzureSecretStore(ISecretStore):
             os.remove(secret_file_path)
 
 
-def get_secretstore_entry_internal(
-    secretstore_name, secretstore_config_file
-) -> SecretStoreEntry:
-    from azure.cli.core.util import CLIError
-    from cleanroom_common.azure_cleanroom_core.utilities.secretstore_helpers import (
-        get_secretstore_entry,
-    )
-    from ..utilities._azcli_helpers import logger
+class SecretStoreConfiguration:
+    """
+    This class is used to read and write the secret store configuration file.
+    """
 
-    try:
-        return get_secretstore_entry(secretstore_name, secretstore_config_file, logger)
-    except CleanroomSpecificationError as e:
-        if e.code == ErrorCode.SecretStoreNotFound:
+    @staticmethod
+    def default_secretstore_config_file() -> str:
+        """
+        Returns the default secret store configuration file path.
+        If the CLEANROOM_SECRETSTORE_CONFIG_FILE environment variable is set, it returns its value.
+        If the environment variable is not set, it returns the default path for config files.
+        """
 
-            raise CLIError(
-                f"Secret store {secretstore_name} not found. Run az cleanroom secret-store add first."
-            )
-        raise CLIError(f"Get secret store failed: {e}")
+        import os
 
+        from ._configuration_helpers import get_default_config_file
 
-def get_secretstore(secretstore_entry: SecretStoreEntry) -> ISecretStore:
-    from azure.cli.core.util import CLIError
+        return os.environ.get(
+            "CLEANROOM_SECRETSTORE_CONFIG_FILE"
+        ) or get_default_config_file("secretstores.yaml")
 
-    match secretstore_entry.secretStoreType:
-        case SecretStoreEntry.SecretStoreType.Local_File:
-            return LocalSecretStore(secretstore_entry)
-        case SecretStoreEntry.SecretStoreType.Azure_KeyVault_Managed_HSM:
-            return AzureSecureSecretStore(secretstore_entry)
-        case SecretStoreEntry.SecretStoreType.Azure_KeyVault:
-            return AzureSecretStore(secretstore_entry)
-        case _:
-            raise CLIError(f"Invalid type of secret store found.")
+    @staticmethod
+    def load(
+        config_file: str, create_if_not_existing: bool = False
+    ) -> SecretStoreSpecification:
+        import os
+
+        from cleanroom_common.azure_cleanroom_core.utilities.configuration_helpers import (
+            read_secretstore_config,
+        )
+
+        try:
+            spec = read_secretstore_config(config_file, logger)
+        except FileNotFoundError:
+            if (not os.path.exists(config_file)) and create_if_not_existing:
+                spec = SecretStoreSpecification(secretstores=[])
+            else:
+                raise CLIError(
+                    f"Cannot find file {config_file}. Check the --*-config parameter value."
+                )
+
+        return spec
+
+    @staticmethod
+    def store(config_file: str, config: SecretStoreSpecification):
+        from cleanroom_common.azure_cleanroom_core.utilities.configuration_helpers import (
+            write_secretstore_config,
+        )
+
+        write_secretstore_config(config_file, config, logger)
+
+    @staticmethod
+    def get_secretstore(name, config_file) -> ISecretStore:
+        try:
+            secretstore_config = SecretStoreConfiguration.load(config_file)
+            secretstore_entry = secretstore_config.get_secretstore_entry(name)
+            secretstore = SecretStoreConfiguration._get_secretstore(secretstore_entry)
+            secretstore.entry = secretstore_entry
+        except CleanroomSpecificationError as e:
+            if e.code == ErrorCode.SecretStoreNotFound:
+                raise CLIError(
+                    f"Secret store {name} not found. Run az cleanroom secretstore add first."
+                )
+
+        return secretstore
+
+    @staticmethod
+    def _get_secretstore(secretstore_entry: SecretStoreEntry) -> ISecretStore:
+        from azure.cli.core.util import CLIError
+
+        match secretstore_entry.secretStoreType:
+            case SecretStoreEntry.SecretStoreType.Local_File:
+                return LocalSecretStore(secretstore_entry)
+            case SecretStoreEntry.SecretStoreType.Azure_KeyVault_Managed_HSM:
+                return AzureSecureSecretStore(secretstore_entry)
+            case SecretStoreEntry.SecretStoreType.Azure_KeyVault:
+                return AzureSecretStore(secretstore_entry)
+            case _:
+                raise CLIError(f"Invalid type of secret store found.")

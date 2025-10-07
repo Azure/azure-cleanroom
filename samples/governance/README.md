@@ -14,7 +14,7 @@
   - [Controlling Telemetry collection](#controlling-telemetry-collection)
   - [Events management](#events-management)
   - [Roles management](#roles-management)
-  - [Document management](#document-management)
+  - [Member Document management](#member-document-management)
   - [Roles management](#roles-management-1)
 - [CGS UI](#cgs-ui)
 
@@ -344,25 +344,25 @@ Get-Member
 }
 ```
 
-### Document management
+### Member Document management
 ```powershell
 # Create a new document under a contract.
 $contractId="<AnExistingContractId>"
 $documentId="1221"
 $data = '{"hello": "world"}'
-Create-Document -data $data -id $documentId -contractId $contractId
+Create-MemberDocument -data $data -id $documentId -contractId $contractId
 
 # Update an existing document.
-$version=(Get-Document -id $documentId | jq -r ".version")
+$version=(Get-MemberDocument -id $documentId | jq -r ".version")
 $data = '{"hello": "world", "foo": "bar"}'
-Create-Document -data $data -id $documentId -contractId $contractId -version $version
+Create-MemberDocument -data $data -id $documentId -contractId $contractId -version $version
 
 # Submitting a document proposal.
-$version=(Get-Document -id $documentId | jq -r ".version")
-$proposalId=(Propose-Document -version $version -id $documentId | jq -r '.proposalId')
+$version=(Get-MemberDocument -id $documentId | jq -r ".version")
+$proposalId=(Propose-MemberDocument -version $version -id $documentId | jq -r '.proposalId')
 
 # Vote on a document. If there are multiple members then each member needs to vote before the document gets accepted.
-Vote-Document -id $documentId -proposalId $proposalId -vote accept | jq
+Vote-MemberDocument -id $documentId -proposalId $proposalId -vote accept | jq
 ```
 
 ### Roles management

@@ -2,7 +2,7 @@
 import unittest
 import unittest.mock as mock
 
-from ..code_launcher import parse_args, main
+from ..code_launcher import main, parse_args
 
 # TODO (HPrabh): Fix the tests.
 

@@ -58,5 +58,23 @@ services:
       - ccrgovEndpoint=https://test-ccf:8080
       - ccrgovApiPathPrefix=app/contracts/placeholder
       - serviceCertPath=/app/sandbox_common/service_cert.pem
+      - INSECURE_VIRTUAL_DIR=/app/insecure-virtual/
     volumes:
       - ./sandbox_common:/app/sandbox_common:ro
+  ccr-governance-2:
+    image: ccr-governance-virtual:latest
+    container_name: test-ccr-governance-2
+    ports:
+      - "8991:8300"
+    environment:
+      - ccrgovEndpoint=https://test-ccf:8080
+      - ccrgovApiPathPrefix=app/contracts/placeholder
+      - serviceCertPath=/app/sandbox_common/service_cert.pem
+      - INSECURE_VIRTUAL_DIR=/app/insecure-virtual-2/
+    volumes:
+      - ./sandbox_common:/app/sandbox_common:ro
+  local-idp:
+    image: local-idp:latest
+    container_name: test-local-idp
+    ports:
+      - "8319:8399"

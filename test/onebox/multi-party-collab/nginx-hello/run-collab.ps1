@@ -35,10 +35,6 @@ $ccfEndpoint = $(Get-Content $outDir/ccf/ccf.json | ConvertFrom-Json).endpoint
 
 $contractId = "collab1"
 pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 -registry $registry -repo $repo -tag $tag -outDir $outDir -ccfEndpoint $ccfEndpoint -datastoreOutDir $datastoreOutdir -contractId $contractId
-if ($LASTEXITCODE -gt 0) {
-    Write-Host -ForegroundColor Red "run-scenario-generate-template-policy returned non-zero exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
 
 $registry_local_endpoint = ""
 if ($registry -eq "local") {
@@ -185,16 +181,16 @@ az cleanroom logs download `
 
 # Check that expected output files got created.
 $expectedFiles = @(
-    "$PSScriptRoot/generated/results/application-telemetry*/**/nginx-hello.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/nginx-hello*-code-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/nginx-hello*-code-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/nginx-hello*-code-launcher.metrics",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.traces"
+    "$PSScriptRoot/generated/results/application-telemetry*/nginx-hello.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/nginx-hello*-code-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/nginx-hello*-code-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/nginx-hello*-code-launcher.metrics",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse-launcher.traces"
 )
 
 $missingFiles = @()

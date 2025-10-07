@@ -4,6 +4,11 @@ import os
 import socket
 import time
 
+# TODO these are also defined in blobfuse_launcher.py, consider moving them to a common place
+# Updates if any should be done at both places
+BLOBFUSE_LAUNCHER_RETRIES = 5
+BLOBFUSE_LAUNCHER_RETRY_DELAY = 10
+
 from opentelemetry import trace
 
 volumestatus_mountpath = os.environ.get("VOLUMESTATUS_MOUNT_PATH", "/mnt/volumestatus")
@@ -25,8 +30,8 @@ def wait_for_mount_point(access_name) -> str:
     logger = logging.getLogger("utilities")
     tracer = trace.get_tracer("utilities")
     volume_ready = False
-    max_retries = 12
-    delay = 5
+    max_retries = BLOBFUSE_LAUNCHER_RETRIES + 2
+    delay = BLOBFUSE_LAUNCHER_RETRY_DELAY
     attempt = 0
 
     with tracer.start_as_current_span(f"wait_for_mount_point-{access_name}") as span:
@@ -35,6 +40,9 @@ def wait_for_mount_point(access_name) -> str:
             span.set_attribute("attempt", attempt)
             if is_volume_ready(access_name):
                 volume_ready = True
+                break
+            if is_volume_error(access_name):
+                volume_ready = False
                 break
             attempt += 1
             time.sleep(delay)
@@ -97,6 +105,12 @@ def get_mount_path(access_name) -> str:
 def is_volume_ready(access_name) -> bool:
     return os.path.exists(
         os.path.join(volumestatus_mountpath, f"{access_name}.volume.ready")
+    )
+
+
+def is_volume_error(access_name) -> bool:
+    return os.path.exists(
+        os.path.join(volumestatus_mountpath, f"{access_name}.volume.error")
     )
 
 

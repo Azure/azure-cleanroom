@@ -1,9 +1,17 @@
-import json
 import enum
+import json
+
+# StrEnum compatibility for Python < 3.11
+try:
+    from enum import StrEnum
+except ImportError:
+    # Fallback for Python < 3.11
+    class StrEnum(str, enum.Enum):
+        pass
 
 
-class ErrorCode(enum.StrEnum):
-    DatastoreNotFound = "DatastoreNotFound"
+class ErrorCode(StrEnum):
+    DataStoreNotFound = "DataStoreNotFound"
     SecretStoreNotFound = "SecretStoreNotFound"
     IdentityConfigurationNotFound = "IdentityConfigurationNotFound"
     UnsupportedDekSecretStore = "UnsupportedDekSecretStore"
@@ -13,6 +21,8 @@ class ErrorCode(enum.StrEnum):
     )
     DatasinkNotFound = "DatasinkNotFound"
     DuplicatePort = "DuplicatePort"
+    DataStoreAlreadyExists = "DataStoreAlreadyExists"
+    SecretStoreAlreadyExists = "SecretStoreAlreadyExists"
 
 
 class CleanroomSpecificationError(Exception):

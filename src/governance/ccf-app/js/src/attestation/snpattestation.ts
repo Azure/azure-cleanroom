@@ -1,7 +1,12 @@
 // From https://github.com/microsoft/CCF/blob/a4666e003e6cf2142db0d413082839501b4cca6f/tests/npm-app/src/endpoints/snp_attestation.ts
 import { Base64 } from "js-base64";
 import * as ccfapp from "@microsoft/ccf-app";
-import { getCleanRoomPolicyProps, hex } from "../utils/utils";
+import {
+  getCustomCleanRoomPolicyProps,
+  getContractCleanRoomPolicyProps,
+  hex,
+  isEmpty
+} from "../utils/utils";
 import { SnpAttestationClaims } from "./SnpAttestationClaims";
 import * as ccfsnp from "@microsoft/ccf-app/snp_attestation";
 
@@ -78,6 +83,21 @@ export function verifySnpAttestation(
   contractId: string,
   attestation: SnpEvidence
 ): SnpAttestationResult {
+  return verifySnpAttestationInternal(contractId, attestation, true);
+}
+
+export function verifySnpAttestationViaCustomPolicy(
+  key: string,
+  attestation: SnpEvidence
+): SnpAttestationResult {
+  return verifySnpAttestationInternal(key, attestation, false);
+}
+
+function verifySnpAttestationInternal(
+  policyKey: string,
+  attestation: SnpEvidence,
+  isContract: boolean
+): SnpAttestationResult {
   const evidence = ccfapp
     .typedArray(Uint8Array)
     .encode(Base64.toUint8Array(attestation.evidence));
@@ -102,14 +122,17 @@ export function verifySnpAttestation(
   const attestationClaims = claimsProvider.getClaims();
 
   // Get the clean room policy.
-  const cleanroomPolicy = getCleanRoomPolicyProps(contractId);
+  const cleanroomPolicy = isContract
+    ? getContractCleanRoomPolicyProps(policyKey)
+    : getCustomCleanRoomPolicyProps(policyKey);
+
   console.log(
     `Clean room policy: ${JSON.stringify(cleanroomPolicy)}, keys: ${Object.keys(
       cleanroomPolicy
     )}, keys: ${Object.keys(cleanroomPolicy).length}`
   );
 
-  if (Object.keys(cleanroomPolicy).length === 0) {
+  if (isEmpty(cleanroomPolicy)) {
     throw Error(
       "The clean room policy is missing. Please propose a new clean room policy."
     );

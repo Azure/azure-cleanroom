@@ -26,6 +26,8 @@ public class TelemetryOptionViewModel
     public string[] ProposalIds { get; set; } = default!;
 
     public string Status { get; set; } = default!;
+
+    public ReasonModel Reason { get; set; } = default!;
 }
 
 public class ExecutionOptionViewModel

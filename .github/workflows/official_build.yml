@@ -10,7 +10,7 @@ on:
       build-type:
         description: The build type
         type: string
-        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers"
+        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client"
   workflow_call:
     inputs:
       tag:
@@ -20,7 +20,7 @@ on:
       build-type:
         description: The build type
         type: string
-        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers"
+        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client"
 
 permissions:
   contents: read  # This is required for actions/checkout
@@ -64,6 +64,8 @@ jobs:
           submodules: recursive
           fetch-tags: true
           ref: ${{ inputs.tag }}
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
 
       - name: Generate short commit hash
         if: ${{ inputs.tag == ''}}
@@ -157,6 +159,24 @@ jobs:
       - name: Build CCF recovery service containers
         if: ${{ contains(inputs.build-type, 'ccf-recovery-service-containers') }}
         uses: ./.github/actions/build-ccf-recovery-service-containers
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+
+      - name: Build CCF consortium manager containers
+        if: ${{ contains(inputs.build-type, 'ccf-consortium-manager-containers') }}
+        uses: ./.github/actions/build-ccf-consortium-manager-containers
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+
+      - name: Build cleanroom workload infrastructure containers
+        if: ${{ contains(inputs.build-type, 'cleanroom-workload-infra-containers') }}
+        uses: ./.github/actions/build-cleanroom-workload-infra-containers
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+
+      - name: Build cleanroom cluster provider client
+        if: ${{ contains(inputs.build-type, 'cleanroom-cluster-provider-client') }}
+        uses: ./.github/actions/build-cleanroom-cluster-provider-client
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
 

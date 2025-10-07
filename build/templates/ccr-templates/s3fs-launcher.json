@@ -1,0 +1,74 @@
+{
+  "name": "$datasetName-s3fs-container",
+  "properties": {
+    "command": [
+      "python3.10",
+      "./s3fs-launcher.py",
+      "$readOnly",
+      "--mount-path",
+      "$mountPath/$datasetName"
+    ],
+    "image": "$containerRegistryUrl/s3fs-launcher@$digest",
+    "resources": {
+      "requests": {
+        "cpu": 0.2,
+        "memoryInGB": 0.5
+      }
+    },
+    "environmentVariables": [
+      {
+        "name": "AWS_BUCKET_NAME",
+        "value": "$awsBucketName"
+      },
+      {
+        "name": "ACCESS_NAME",
+        "value": "$datasetName"
+      },
+      {
+        "name": "AWS_URL",
+        "value": "$awsUrl"
+      },
+      {
+        "name": "CGS_AWS_S3_CONFIG_SECRET",
+        "value": "$cgsAwsS3ConfigSecret"
+      },
+      {
+        "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "value": "http://localhost:4317"
+      },
+      {
+        "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
+        "value": "grpc"
+      },
+        {
+        "name": "OTEL_TRACE_CONTEXT_BASE64",
+        "value": "$traceContextJsonBase64"
+      },
+      {
+        "name": "TELEMETRY_MOUNT_PATH",
+        "value": "$telemetryMountPath"
+      },
+      {
+        "name": "VOLUMESTATUS_MOUNT_PATH",
+        "value": "$volumeStatusMountPath"
+      }
+    ],
+    "volumeMounts": [
+      {
+        "name": "remotemounts",
+        "mountPath": "$mountPath"
+      },
+      {
+        "name": "telemetrymounts",
+        "mountPath": "$telemetryMountPath"
+      },
+      {
+        "name": "volumestatusmounts",
+        "mountPath": "$volumeStatusMountPath"
+      }
+    ],
+    "securityContext": {
+      "privileged": "true"
+    }
+  }
+}

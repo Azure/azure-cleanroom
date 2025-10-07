@@ -1,0 +1,85 @@
+name: Test big data query analytics CACI
+description: Test big data query analytics CACI
+inputs:
+  repo:
+    description: The registry URL
+    required: true
+  tag:
+    description: The tag for the built image
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Login to Azure and refresh token
+      uses: ./.github/actions/login-to-azure
+      env:
+        CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
+        TENANT_ID: ${{ env.AZURE_TENANT_ID }}
+        SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+    - shell: pwsh
+      run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
+
+    - name: Install confcom extension
+      shell: pwsh
+      run: |
+        az extension add --name confcom -y --allow-preview true
+        az version
+
+    - name: Install az cleanroom extension
+      shell: bash
+      run: |
+        oras pull ${{ inputs.repo }}/cli/cleanroom-whl:${{ inputs.tag }}
+        az extension add --allow-preview true --source ./cleanroom-*-py2.py3-none-any.whl -y
+
+    - name: Run collab scenario on caci
+      if: ${{ !contains(inputs.repo, 'mcr.microsoft.com/azurecleanroom') }}
+      shell: pwsh
+      run: ./test/onebox/multi-party-collab/big-data-query-analytics/run-collab-aci.ps1 -registry acr -repo ${{ inputs.repo }} -tag ${{ inputs.tag }}
+
+    - name: Run collab scenario on caci
+      if: ${{ contains(inputs.repo, 'mcr.microsoft.com/azurecleanroom') }}
+      shell: pwsh
+      run: ./test/onebox/multi-party-collab/big-data-query-analytics/run-collab-aci.ps1 -registry mcr -repo ${{ inputs.repo }} -tag ${{ inputs.tag }} -NoBuild
+
+    - name: Dump clearnoom-cluster-provider logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: docker compose -p ob-big-data-analytics-cluster-provider logs
+
+    - name: Dump ccf-provider logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: docker compose -p ob-big-data-analytics-ccf-provider logs
+
+    - name: Dump ob-cr-owner-client logs
+      if: ${{ !cancelled() }}
+      shell: pwsh
+      run: docker logs ob-cr-owner-client-cgs-client-1
+
+    - name: Dump cleanroom-cluster logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: ./test/onebox/multi-party-collab/dump-cleanroom-cluster-logs.ps1 `
+          -kubeConfig "./test/onebox/multi-party-collab/big-data-query-analytics/generated/cl-cluster/k8s-credentials.yaml" `
+          -jobConfig "./test/onebox/multi-party-collab/big-data-query-analytics/generated/jobConfig.json"
+
+    - name: Upload generated
+      uses: actions/upload-artifact@v4
+      with:
+          name: generated-big-data-query-analytics-caci
+          path: ./test/onebox/multi-party-collab/big-data-query-analytics/generated
+          overwrite: true
+      if: ${{ !cancelled() }}
+
+    - name: Delete AWS buckets
+      if: success()
+      shell: pwsh
+      run: |
+        pwsh ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-input-${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+        pwsh ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-output-${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+
+    - name: Delete resource groups
+      if: success()
+      shell: pwsh
+      run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-${{ env.JOB_ID }}-${{ env.RUN_ID }}"

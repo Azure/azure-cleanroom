@@ -1,0 +1,14 @@
+# This job performs random writes to 10MB file.
+[global]
+name=blobfuse_benchmark
+bs=256k
+filename=rand_write_fio.data
+group_reporting
+
+[random_write]
+size=100M
+rw=randwrite
+ioengine=sync
+fallocate=none
+create_on_open=1
+unlink=0

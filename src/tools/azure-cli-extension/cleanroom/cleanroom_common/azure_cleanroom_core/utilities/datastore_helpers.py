@@ -1,7 +1,10 @@
+import base64
+import json
+
+from ..exceptions import *
 from ..exceptions.exception import CleanroomSpecificationError, ErrorCode
 from ..models.datastore import *
 from ..models.model import *
-from ..exceptions import *
 
 
 class Encryptor:
@@ -24,108 +27,81 @@ class Encryptor:
         Decrypt = "Decrypt"
 
 
-def get_datastore(datastore_name, datastore_config_file, logger) -> DatastoreEntry:
-    from .configuration_helpers import read_datastore_config
-
-    datastore_config = read_datastore_config(datastore_config_file, logger)
-    for index, x in enumerate(datastore_config.datastores):
-        if x.name == datastore_name:
-            datastore = datastore_config.datastores[index]
-            break
-    else:
-        raise CleanroomSpecificationError(
-            ErrorCode.DatastoreNotFound, (f"Datastore {datastore_name} not found.")
-        )
-
-    return datastore
-
-
 def config_add_datastore(
     cleanroom_config_file,
     datastore_name,
     datastore_config_file,
     identity,
-    secretstore_config_file,
-    dek_secret_store,
-    kek_secret_store,
-    kek_name,
     access_mode,
     logger,
+    secretstore_config_file="",
+    dek_secret_store="",
+    kek_secret_store="",
+    kek_name="",
     access_name="",
 ):
     from .configuration_helpers import (
         read_cleanroom_spec,
+        read_datastore_config,
+        read_secretstore_config,
         write_cleanroom_spec,
     )
-    from .secretstore_helpers import get_secretstore_entry
 
     access_name = access_name or datastore_name
     cleanroom_spec = read_cleanroom_spec(cleanroom_config_file, logger)
 
-    access_identity = [x for x in cleanroom_spec.identities if x.name == identity]
-    if len(access_identity) == 0:
-        raise CleanroomSpecificationError(
-            ErrorCode.IdentityConfigurationNotFound, "Identity configuration not found."
-        )
+    datastore_config = read_datastore_config(datastore_config_file, logger)
+    datastore_entry = datastore_config.get_datastore_entry(datastore_name)
+
+    if access_mode == DataStoreEntry.AccessMode.Source:
+        node = "datasources"
+        candidate_list = cleanroom_spec.datasources
+        access_point_type = AccessPointType.Volume_ReadOnly
+    else:
+        assert (
+            access_mode == DataStoreEntry.AccessMode.Sink
+        ), f"Unknown access mode {access_mode} for datastore {access_name}."
+        node = "datasinks"
+        candidate_list = cleanroom_spec.datasinks
+        access_point_type = AccessPointType.Volume_ReadWrite
+
     import uuid
 
-    datastore_entry = get_datastore(datastore_name, datastore_config_file, logger)
-
-    kek_name = kek_name or (
-        str(uuid.uuid3(uuid.NAMESPACE_X500, cleanroom_config_file))[:8] + "-kek"
-    )
-    wrapped_dek_name = f"wrapped-{datastore_name}-dek-{kek_name}"
-    if datastore_entry.storeType == DatastoreEntry.StoreType.Azure_BlobStorage:
-        proxy_type = (
-            ProxyType.SecureVolume__ReadOnly__Azure__BlobStorage
-            if access_mode == DatastoreEntry.AccessMode.Source
-            else ProxyType.SecureVolume__ReadWrite__Azure__BlobStorage
+    encryption_mode = datastore_entry.encryptionMode
+    encryption_secrets = None
+    proxy_config = {"EncryptionMode": str(encryption_mode)}
+    if encryption_mode in [
+        DataStoreEntry.EncryptionMode.CSE,
+        DataStoreEntry.EncryptionMode.SSE_CPK,
+    ]:
+        proxy_config["KeyType"] = "KEK"
+        kek_name = kek_name or (
+            str(uuid.uuid3(uuid.NAMESPACE_X500, cleanroom_config_file))[:8] + "-kek"
         )
-        provider_protocol = ProtocolType.Azure_BlobStorage
-    elif datastore_entry.storeType == DatastoreEntry.StoreType.Azure_OneLake:
-        proxy_type = (
-            ProxyType.SecureVolume__ReadOnly__Azure__OneLake
-            if access_mode == DatastoreEntry.AccessMode.Source
-            else ProxyType.SecureVolume__ReadWrite__Azure__OneLake
+        wrapped_dek_name = f"wrapped-{datastore_name}-dek-{kek_name}"
+
+        secretstore_config = read_secretstore_config(secretstore_config_file, logger)
+        dek_secret_store_entry = secretstore_config.get_secretstore_entry(
+            dek_secret_store
         )
-        provider_protocol = ProtocolType.Azure_OneLake
-
-    dek_secret_store_entry = get_secretstore_entry(
-        dek_secret_store, secretstore_config_file, logger
-    )
-    kek_secret_store_entry = get_secretstore_entry(
-        kek_secret_store, secretstore_config_file, logger
-    )
-
-    # TODO (HPrabh): Remove this check when key release is supported directly on the DEK.
-    if not dek_secret_store_entry.is_secret_supported():
-        raise CleanroomSpecificationError(
-            ErrorCode.UnsupportedDekSecretStore,
-            f"Unsupported DEK secret store {dek_secret_store_entry.name}. Please use Standard or Premium Key Vault",
+        kek_secret_store_entry = secretstore_config.get_secretstore_entry(
+            kek_secret_store
         )
 
-    if not kek_secret_store_entry.is_key_release_supported():
-        raise CleanroomSpecificationError(
-            ErrorCode.UnsupportedKekSecretStore,
-            f"Unsupported KEK secret store {kek_secret_store_entry.name}. Please use MHSM or Premium Key Vault",
-        )
+        # TODO (HPrabh): Remove this check when key release is supported directly on the DEK.
+        if not dek_secret_store_entry.is_secret_supported():
+            raise CleanroomSpecificationError(
+                ErrorCode.UnsupportedDekSecretStore,
+                f"Unsupported DEK secret store {dek_secret_store_entry.name}. Please use Standard or Premium Key Vault",
+            )
 
-    encryption_mode = str(datastore_entry.encryptionMode)
+        if not kek_secret_store_entry.is_key_release_supported():
+            raise CleanroomSpecificationError(
+                ErrorCode.UnsupportedKekSecretStore,
+                f"Unsupported KEK secret store {kek_secret_store_entry.name}. Please use MHSM or Premium Key Vault",
+            )
 
-    store = Resource(
-        name=datastore_entry.storeName,
-        type=ResourceType(str(datastore_entry.storeType)),
-        id=datastore_name,
-        provider=ServiceEndpoint(
-            protocol=provider_protocol, url=datastore_entry.storeProviderUrl
-        ),
-    )
-
-    privacyProxySettings = PrivacyProxySettings(
-        proxyType=proxy_type,
-        proxyMode=ProxyMode.Secure,
-        configuration=str({"KeyType": "KEK", "EncryptionMode": encryption_mode}),
-        encryptionSecrets=EncryptionSecrets(
+        encryption_secrets = EncryptionSecrets(
             # TODO (HPrabh): Add support for DEK to be key released without having a wrapping KEK.
             dek=EncryptionSecret(
                 name=wrapped_dek_name,
@@ -158,28 +134,67 @@ def config_add_datastore(
                     ),
                 ),
             ),
-        ),
-        encryptionSecretAccessIdentity=access_identity[0],
+        )
+    if datastore_entry.storeType == DataStoreEntry.StoreType.Azure_BlobStorage:
+        proxy_type = (
+            ProxyType.SecureVolume__ReadOnly__Azure__BlobStorage
+            if access_mode == DataStoreEntry.AccessMode.Source
+            else ProxyType.SecureVolume__ReadWrite__Azure__BlobStorage
+        )
+        access_identity = [x for x in cleanroom_spec.identities if x.name == identity]
+        if len(access_identity) == 0:
+            raise CleanroomSpecificationError(
+                ErrorCode.IdentityConfigurationNotFound,
+                "Identity configuration not found.",
+            )
+        protection_identity = access_identity[0]
+        provider_protocol = ProtocolType.Azure_BlobStorage
+    elif datastore_entry.storeType == DataStoreEntry.StoreType.Azure_OneLake:
+        proxy_type = (
+            ProxyType.SecureVolume__ReadOnly__Azure__OneLake
+            if access_mode == DataStoreEntry.AccessMode.Source
+            else ProxyType.SecureVolume__ReadWrite__Azure__OneLake
+        )
+        access_identity = [x for x in cleanroom_spec.identities if x.name == identity]
+        if len(access_identity) == 0:
+            raise CleanroomSpecificationError(
+                ErrorCode.IdentityConfigurationNotFound,
+                "Identity configuration not found.",
+            )
+        protection_identity = access_identity[0]
+        provider_protocol = ProtocolType.Azure_OneLake
+    elif datastore_entry.storeType == DataStoreEntry.StoreType.Aws_S3:
+        proxy_type = (
+            ProxyType.SecureVolume__ReadOnly__Aws__S3
+            if access_mode == DataStoreEntry.AccessMode.Source
+            else ProxyType.SecureVolume__ReadWrite__Aws__S3
+        )
+        protection_identity = None
+        provider_protocol = ProtocolType.Aws_S3
+    privacyProxySettings = PrivacyProxySettings(
+        proxyType=proxy_type,
+        proxyMode=ProxyMode.Secure,
+        configuration=base64.b64encode(json.dumps(proxy_config).encode()).decode(),
+        encryptionSecrets=encryption_secrets,
+        encryptionSecretAccessIdentity=protection_identity,
     )
-
-    if access_mode == DatastoreEntry.AccessMode.Source:
-        node = "datasources"
-        candidate_list = cleanroom_spec.datasources
-        access_point_type = AccessPointType.Volume_ReadOnly
-    else:
-        assert (
-            access_mode == DatastoreEntry.AccessMode.Sink
-        ), f"Unknown access mode {access_mode} for datastore {access_name}."
-        node = "datasinks"
-        candidate_list = cleanroom_spec.datasinks
-        access_point_type = AccessPointType.Volume_ReadWrite
+    store = Resource(
+        name=datastore_entry.storeName,
+        type=ResourceType(str(datastore_entry.storeType)),
+        id=datastore_name,
+        provider=ServiceEndpoint(
+            protocol=provider_protocol,
+            url=datastore_entry.storeProviderUrl,
+            configuration=datastore_entry.storeProviderConfiguration,
+        ),
+    )
 
     access_point = AccessPoint(
         name=access_name,
         type=access_point_type,
         path="",
         store=store,
-        identity=access_identity[0],
+        identity=protection_identity,
         protection=privacyProxySettings,
     )
 
@@ -204,13 +219,13 @@ def config_get_datastore_name(cleanroom_config, access_name, access_mode, logger
     spec = read_cleanroom_spec(cleanroom_config, logger)
     eligible_candidates = (
         spec.datasources
-        if access_mode == DatastoreEntry.AccessMode.Source
+        if access_mode == DataStoreEntry.AccessMode.Source
         else spec.datasinks
     )
     candidates = [x for x in eligible_candidates if x.name == access_name]
     if len(candidates) == 0:
         raise CleanroomSpecificationError(
-            ErrorCode.DatastoreNotFound, f"Datastore {access_name} not found."
+            ErrorCode.DataStoreNotFound, f"Datastore {access_name} not found."
         )
 
     datastore_name = candidates[0].store.id
@@ -230,7 +245,9 @@ def generate_safe_datastore_name(prefix, unique_name, friendly_name):
 
 
 def encrypt_file(plaintextPath, key, blockSize, ciphertextPath, logger):
-    import ctypes, base64, json
+    import base64
+    import ctypes
+    import json
 
     with open(ciphertextPath, "wb") as ciphertextFile:
         paddingLength = 0
@@ -275,7 +292,10 @@ def encrypt_file(plaintextPath, key, blockSize, ciphertextPath, logger):
 
 
 def decrypt_file(ciphertextPath, key, blockSize, plaintextPath, logger):
-    import os, ctypes, base64, json
+    import base64
+    import ctypes
+    import json
+    import os
 
     with open(ciphertextPath, "rb") as ciphertextFile:
         with open(plaintextPath, "wb") as plaintextFile:

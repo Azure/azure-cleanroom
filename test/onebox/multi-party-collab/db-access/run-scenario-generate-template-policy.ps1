@@ -67,8 +67,9 @@ if ($env:GITHUB_ACTIONS -eq "true") {
     $resourceGroupTags = "github_actions=multi-party-collab-${env:JOB_ID}-${env:RUN_ID}"
 }
 else {
-    $publisherResourceGroup = "cl-ob-publisher-${env:USER}"
-    $consumerResourceGroup = "cl-ob-consumer-${env:USER}"
+    $user = $env:CODESPACES -eq "true" ? $env:GITHUB_USER : $env:USER
+    $publisherResourceGroup = "cl-ob-publisher-${user}"
+    $consumerResourceGroup = "cl-ob-consumer-${user}"
 }
 
 # Set tenant Id as a part of the consumer's member data.
@@ -199,7 +200,7 @@ $memberId = (az cleanroom governance client show `
         --query "memberId" `
         --output tsv)
 $DB_CONFIG_CGS_SECRET_NAME = "dbconfig"
-$DB_CONFIG_CGS_SECRET_ID = "${memberId}:$DB_CONFIG_CGS_SECRET_NAME"
+$DB_CONFIG_CGS_SECRET_ID = "${memberId}_$DB_CONFIG_CGS_SECRET_NAME"
 
 Write-Host "DB_CONFIG_CGS_SECRET_ID: $DB_CONFIG_CGS_SECRET_ID"
 $identity = $(az resource show --ids $pubResult.mi.id --query "properties") | ConvertFrom-Json
@@ -614,9 +615,16 @@ az cleanroom config wrap-deks `
     --governance-client "ob-publisher-client"
 
 # Setup OIDC issuer and managed identity access to storage/KV in publisher tenant.
+pwsh $PSScriptRoot/../setup-oidc-issuer.ps1 `
+    -resourceGroup $publisherResourceGroup `
+    -outDir $outDir `
+    -governanceClient "ob-publisher-client"
+$issuerUrl = Get-Content $outDir/$publisherResourceGroup/issuer-url.txt
+
 pwsh $collabSamplePath/setup-access.ps1 `
     -resourceGroup $publisherResourceGroup `
-    -contractId $contractId  `
+    -subject $contractId `
+    -issuerUrl $issuerUrl `
     -outDir $outDir `
     -kvType akvpremium `
     -governanceClient "ob-publisher-client"
@@ -630,9 +638,16 @@ az cleanroom config wrap-deks `
     --governance-client "ob-consumer-client"
 
 # Setup OIDC issuer endpoint and managed identity access to storage/KV in consumer tenant.
+pwsh $PSScriptRoot/../setup-oidc-issuer.ps1 `
+    -resourceGroup $consumerResourceGroup `
+    -outDir $outDir `
+    -governanceClient "ob-consumer-client"
+$issuerUrl = Get-Content $outDir/$consumerResourceGroup/issuer-url.txt
+
 pwsh $collabSamplePath/setup-access.ps1 `
     -resourceGroup $consumerResourceGroup `
-    -contractId $contractId `
+    -subject $contractId `
+    -issuerUrl $issuerUrl `
     -outDir $outDir `
     -kvType akvpremium `
     -governanceClient "ob-consumer-client"

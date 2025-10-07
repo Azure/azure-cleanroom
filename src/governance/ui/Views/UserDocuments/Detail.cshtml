@@ -1,0 +1,120 @@
+﻿@model UserDocumentViewWithMembersUsersModel
+@{
+    ViewData["Title"] = "User Documents Details";
+}
+
+<h2>Document Details</h2>
+@{
+    if (@Model.Document.State == "Draft")
+    {
+        <p><a asp-controller="UserDocuments" asp-action="Propose" asp-route-id="@Model.Document.Id" asp-route-version="@Model.Document.Version">Propose Document</a></p>
+    }
+    else if (Model.Document.State == "Proposed")
+    {
+        <p>
+            <a asp-controller="UserDocuments" asp-action="VoteAccept" asp-route-id="@Model.Document.Id" asp-route-proposalId="@Model.Document.ProposalId">Accept Proposal</a>
+            <a asp-controller="UserDocuments" asp-action="VoteReject" asp-route-id="@Model.Document.Id" asp-route-proposalId="@Model.Document.ProposalId">Reject Proposal</a>
+        </p>
+    }
+    {
+        <p>
+            <a asp-controller="UserDocuments" asp-action="RuntimeOptionsDetail" asp-route-id="@Model.Document.Id">Runtime Options</a>
+        </p>
+    }
+}
+<table class="table">
+<thead>
+    <tr>
+        <th scope="col">Property</th>
+        <th scope="col">Value</th>
+    </tr>
+</thead>
+<tbody>
+    <tr>
+        <th scope="row">id</th>
+            <td>@Model.Document.Id</td>
+    </tr>
+        <tr>
+            <th scope="row">contractId</th>
+            <td>@Model.Document.ContractId</td>
+        </tr>
+        <tr>
+        <th scope="row">state</th>
+            <td>
+                @Model.Document.State @{
+                if (Model.Document.State == "Proposed")
+                    {
+                    <pre>(proposalId: <a asp-controller="Proposals" asp-action="Detail" asp-route-proposalId="@Model.Document.ProposalId" asp-route-version="@Model.Document.Version">@Model.Document.ProposalId</a>)</pre>
+                    }
+                }
+            </td>
+    </tr>
+    <tr>
+        <th scope="row">version</th>
+            <td>@Model.Document.Version</td>
+    </tr>
+        <tr>
+        <th scope="row">content</th>
+            <td><pre>@Model.Document.Data</pre></td>
+    </tr>
+</tbody>
+</table>
+
+@if (Model.Document.Approvers != null && Model.Document.Approvers.Any())
+{
+    <h3>Approvers</h3>
+    <table class="table table-hover w-auto">
+        <thead>
+            <tr>
+                <th>ApproverId</th>
+                <th>Username</th>
+                <th>Type</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var approver in @Model.Document.Approvers)
+            {
+                <tr>
+                    <td>
+                        <pre>@approver.ApproverId</pre>
+                    </td>
+                    @{string? name = approver.ApproverIdType == "user" ? 
+                    @Model.Users.Value.Find(u => u.Id == approver.ApproverId)?.Data.Identifier : 
+                    @Model.Members.Value.Find(u => u.MemberId == approver.ApproverId)?.MemberData.Identifier;}
+                    <td>
+                        <pre>@name</pre>
+                    </td>
+                    <td>
+                        <pre>@approver.ApproverIdType</pre>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (Model.Document.FinalVotes != null && Model.Document.FinalVotes.Any())
+{
+    <h3>Final Votes</h3>
+    <table class="table table-hover w-auto">
+        <thead>
+            <tr>
+                <th>ApproverId</th>
+                <th>Vote</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var vote in @Model.Document.FinalVotes)
+            {
+                <tr>
+                    <td>
+                        <pre>@vote.ApproverId</pre>
+                    </td>
+                    <td>
+                        <pre>@vote.Ballot</pre>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}

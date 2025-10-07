@@ -57,7 +57,8 @@ public class OidcTests : TestBase
                 var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
                 Assert.AreEqual("IssuerUrlNotSet", error.Code);
                 Assert.AreEqual(
-                    $"Issuer url has not been configured for tenant {MsTenantId}. Propose " +
+                    $"Issuer url has not been supplied nor configured for tenant {MsTenantId}. " +
+                    $"Either pass in the 'iss' value or propose " +
                     $"set_oidc_issuer_url or set the issuer at the tenant level.",
                     error.Message);
             }
@@ -89,6 +90,32 @@ public class OidcTests : TestBase
             Assert.AreEqual(sub, claims["sub"]!.ToString());
             Assert.AreEqual(issuerUrl, claims["iss"]!.ToString());
         }
+
+        // Try a custom iss value and not what is set for the member above.
+        string customIssuerUrl = "https://some.endpoint.com";
+        query += $"&iss={customIssuerUrl}";
+        using (HttpRequestMessage request = new(HttpMethod.Post, $"oauth/token{query}"))
+        {
+            using HttpResponseMessage response = await this.GovSidecarClient.SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+
+            string clientAssertion = responseBody["value"]!.ToString();
+            Assert.IsTrue(!string.IsNullOrEmpty(clientAssertion));
+            var parts = clientAssertion.Split('.');
+            Assert.AreEqual(3, parts.Length);
+
+            var header = JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[0]))!;
+            var expectedAlgHeader = "PS256";
+            Assert.AreEqual(expectedAlgHeader, header["alg"]!.ToString());
+            Assert.AreEqual("JWT", header["typ"]!.ToString());
+            Assert.AreEqual(kid, header["kid"]!.ToString());
+
+            var claims = JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[1]))!;
+            Assert.AreEqual("api://AzureADTokenExchange", claims["aud"]!.ToString());
+            Assert.AreEqual(sub, claims["sub"]!.ToString());
+            Assert.AreEqual(customIssuerUrl, claims["iss"]!.ToString());
+        }
     }
 
     [TestMethod]
@@ -98,7 +125,8 @@ public class OidcTests : TestBase
 
         // Getting a token directly using the CCF client without presenting any
         // attestation report should fail.
-        string tokenUrl = $"app/contracts/{contractId}/oauth/token";
+        string query = $"?&sub=foo&tid=foo&aud=foo&nbf=foo&exp=foo&iat=foo&jti=foo";
+        string tokenUrl = $"app/contracts/{contractId}/oauth/token" + query;
         using (HttpRequestMessage request = new(HttpMethod.Post, tokenUrl))
         {
             request.Content = new StringContent(
@@ -237,6 +265,172 @@ public class OidcTests : TestBase
             var cert = req.CreateSelfSigned(DateTimeOffset.Now, DateTimeOffset.Now.AddYears(1));
             return new X509Certificate2(
                 cert.Export(X509ContentType.Pfx, string.Empty), string.Empty);
+        }
+    }
+
+    [TestMethod]
+    public async Task GetIdpTokenWithSubjectPolicy()
+    {
+        string contractId = this.ContractId;
+
+        await this.ProposeContractAndAcceptCleanRoomPolicy(contractId, this.GovSidecarHostData);
+        await this.ProposeAndAcceptEnableOidcIssuer();
+        string kid = await this.GenerateOidcIssuerSigningKey();
+        string issuerUrl = "https://foo.bar";
+        await this.MemberSetIssuerUrl(Members.Member1, issuerUrl);
+        string sub = "cleanroom-azure-analytics";
+        string policyUrl =
+            $"contracts/{contractId}/oauth/federation/subjects/{sub}/cleanroompolicy";
+
+        // Setup a subject level policy (hostData2) using ccr-governance running with the
+        // contract level clean room policy (hostData1). Then request token using hostData2.
+        using (HttpRequestMessage request =
+            new(HttpMethod.Post, $"oauth/federation/subjects/{sub}/cleanroompolicy"))
+        {
+            var addPolicy = new JsonObject
+            {
+                ["type"] = "add",
+                ["claims"] = new JsonObject
+                {
+                    ["x-ms-sevsnpvm-is-debuggable"] = false,
+                    ["x-ms-sevsnpvm-hostdata"] = this.GovSidecar2HostData
+                }
+            };
+            request.Content = new StringContent(
+                addPolicy.ToJsonString(),
+                Encoding.UTF8,
+                "application/json");
+
+            using HttpResponseMessage response = await this.GovSidecarClient.SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+
+            // Check the get response matches with the policy that was set.
+            using HttpRequestMessage request2 = new(HttpMethod.Get, policyUrl);
+            using HttpResponseMessage response2 = await this.CgsClient_Member0.SendAsync(request2);
+            Assert.AreEqual(HttpStatusCode.OK, response2.StatusCode);
+            var responseBody = (await response2.Content.ReadFromJsonAsync<JsonObject>())!;
+            JsonObject expectedClaims =
+                this.ConvertClaimsToArrayFormat(addPolicy["claims"]!.AsObject());
+            Assert.IsTrue(
+                JsonNode.DeepEquals(expectedClaims, responseBody["claims"]),
+                $"Expected: {expectedClaims.ToJsonString()}, " +
+                $"actual: {responseBody["claims"]?.ToJsonString()}");
+        }
+
+        string query = $"?&sub={sub}&tenantId={MsTenantId}&aud=api://AzureADTokenExchange";
+
+        // Get the client assertion (jwt) using hostData2 client and validate its structure.
+        using (HttpRequestMessage request = new(HttpMethod.Post, $"oauth/token{query}"))
+        {
+            using HttpResponseMessage response = await this.GovSidecar2Client.SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+
+            string clientAssertion = responseBody["value"]!.ToString();
+            Assert.IsTrue(!string.IsNullOrEmpty(clientAssertion));
+            var parts = clientAssertion.Split('.');
+            Assert.AreEqual(3, parts.Length);
+
+            var header = JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[0]))!;
+            var expectedAlgHeader = "PS256";
+            Assert.AreEqual(expectedAlgHeader, header["alg"]!.ToString());
+            Assert.AreEqual("JWT", header["typ"]!.ToString());
+            Assert.AreEqual(kid, header["kid"]!.ToString());
+
+            var claims = JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[1]))!;
+            Assert.AreEqual("api://AzureADTokenExchange", claims["aud"]!.ToString());
+            Assert.AreEqual(sub, claims["sub"]!.ToString());
+            Assert.AreEqual(issuerUrl, claims["iss"]!.ToString());
+        }
+
+        // Getting the client assertion (jwt) via gov sidecar using contract level
+        // policy (ie hostData1) should fail.
+        using (HttpRequestMessage request = new(HttpMethod.Post, $"oauth/token{query}"))
+        {
+            using HttpResponseMessage response = await this.GovSidecarClient.SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+            var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
+            Assert.AreEqual("VerifySnpAttestationFailed", error.Code);
+            Assert.AreEqual(
+                $"Attestation claim x-ms-sevsnpvm-hostdata, value {this.GovSidecarHostData} " +
+                $"does not match policy values: {this.GovSidecar2HostData}",
+                error.Message);
+        }
+
+        // Removing policy should allow getting the client assertion (jwt) contract
+        // level policy (ie hostData1).
+        using (HttpRequestMessage request =
+            new(HttpMethod.Post, $"oauth/federation/subjects/{sub}/cleanroompolicy"))
+        {
+            request.Content = new StringContent(
+                new JsonObject
+                {
+                    ["type"] = "remove",
+                    ["claims"] = new JsonObject
+                    {
+                        ["x-ms-sevsnpvm-is-debuggable"] = false,
+                        ["x-ms-sevsnpvm-hostdata"] = this.GovSidecar2HostData
+                    }
+                }.ToJsonString(),
+                Encoding.UTF8,
+                "application/json");
+
+            using HttpResponseMessage response = await this.GovSidecarClient.SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+
+            // After removing the policy above check the get response by the user matches with the
+            // contract level policy now.
+            using HttpRequestMessage request2 = new(HttpMethod.Get, policyUrl);
+            using HttpResponseMessage response2 = await this.CgsClient_Member0.SendAsync(request2);
+            Assert.AreEqual(HttpStatusCode.OK, response2.StatusCode);
+            var responseBody = (await response2.Content.ReadFromJsonAsync<JsonObject>())!;
+            JsonObject expectedClaims = this.ConvertClaimsToArrayFormat(new()
+            {
+                ["x-ms-sevsnpvm-is-debuggable"] = false,
+                ["x-ms-sevsnpvm-hostdata"] = this.GovSidecarHostData
+            });
+            Assert.IsTrue(
+                JsonNode.DeepEquals(expectedClaims, responseBody["claims"]),
+                $"Expected: {expectedClaims.ToJsonString()}, " +
+                $"actual: {responseBody["claims"]?.ToJsonString()}");
+        }
+
+        // Getting the client assertion (jwt) via gov sidecar using custom policy (ie hostData2)
+        // should now fail as its access was removed.
+        using (HttpRequestMessage request = new(HttpMethod.Post, $"oauth/token{query}"))
+        {
+            using HttpResponseMessage response = await this.GovSidecar2Client.SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+            var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
+            Assert.AreEqual("VerifySnpAttestationFailed", error.Code);
+            Assert.AreEqual(
+                $"Attestation claim x-ms-sevsnpvm-hostdata, value {this.GovSidecar2HostData} " +
+                $"does not match policy values: {this.GovSidecarHostData}",
+                error.Message);
+        }
+
+        // Since no subject level policy is now set, access via hostData1 should be possible.
+        using (HttpRequestMessage request = new(HttpMethod.Post, $"oauth/token{query}"))
+        {
+            using HttpResponseMessage response = await this.GovSidecarClient.SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+
+            string clientAssertion = responseBody["value"]!.ToString();
+            Assert.IsTrue(!string.IsNullOrEmpty(clientAssertion));
+            var parts = clientAssertion.Split('.');
+            Assert.AreEqual(3, parts.Length);
+
+            var header = JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[0]))!;
+            var expectedAlgHeader = "PS256";
+            Assert.AreEqual(expectedAlgHeader, header["alg"]!.ToString());
+            Assert.AreEqual("JWT", header["typ"]!.ToString());
+            Assert.AreEqual(kid, header["kid"]!.ToString());
+
+            var claims = JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[1]))!;
+            Assert.AreEqual("api://AzureADTokenExchange", claims["aud"]!.ToString());
+            Assert.AreEqual(sub, claims["sub"]!.ToString());
+            Assert.AreEqual(issuerUrl, claims["iss"]!.ToString());
         }
     }
 }

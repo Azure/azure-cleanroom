@@ -70,6 +70,34 @@ public static class ImageUtils
         }
     }
 
+    public static async Task<SecurityPolicyDocument> GetConsortiumManagerSecurityPolicyDocument(
+        ILogger logger)
+    {
+        var oras = new OrasClient(logger);
+        string outDir = Path.GetTempPath();
+        string documentUrl = CcfConsortiumManagerSecurityPolicyDocumentUrl();
+        string document = Path.Combine(outDir, "ccf-consortium-manager-security-policy.yaml");
+
+        try
+        {
+            // Avoid simultaneous downloads to the same location to avoid races in reading the
+            // file.
+            await semaphore.WaitAsync();
+            await oras.Pull(documentUrl, outDir);
+            var deserializer = new DeserializerBuilder()
+                .WithNamingConvention(UnderscoredNamingConvention.Instance)
+                .IgnoreUnmatchedProperties()
+                .Build();
+            var yml = await File.ReadAllTextAsync(document);
+            var policyDocument = deserializer.Deserialize<SecurityPolicyDocument>(yml);
+            return policyDocument;
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
     public static string RegistryUrl()
     {
         var url = Environment.GetEnvironmentVariable("CCF_PROVIDER_CONTAINER_REGISTRY_URL");
@@ -93,6 +121,15 @@ public static class ImageUtils
 
         return !string.IsNullOrEmpty(url) ? url :
             $"{McrRegistryUrl}/policies/ccf/ccf-recovery-service-security-policy:{McrTag}";
+    }
+
+    public static string CcfConsortiumManagerSecurityPolicyDocumentUrl()
+    {
+        var url = Environment.GetEnvironmentVariable(
+            "CCF_PROVIDER_CONSORTIUM_MANAGER_SECURITY_POLICY_DOCUMENT_URL");
+
+        return !string.IsNullOrEmpty(url) ? url :
+            $"{McrRegistryUrl}/policies/ccf/ccf-consortium-manager-security-policy:{McrTag}";
     }
 
     public static string CcfRunJsAppVirtualImage()
@@ -139,6 +176,17 @@ public static class ImageUtils
         return GetTag("CCF_PROVIDER_RECOVERY_SERVICE_IMAGE") ?? $"{McrTag}";
     }
 
+    public static string CcfConsortiumManagerImage()
+    {
+        return GetImage("CCF_PROVIDER_CONSORTIUM_MANAGER_IMAGE") ??
+        $"{McrRegistryUrl}/ccf/ccf-consortium-manager";
+    }
+
+    public static string CcfConsortiumManagerTag()
+    {
+        return GetTag("CCF_PROVIDER_CONSORTIUM_MANAGER_IMAGE") ?? $"{McrTag}";
+    }
+
     public static string CcrProxyImage()
     {
         return GetImage("CCF_PROVIDER_PROXY_IMAGE") ??
@@ -148,16 +196,6 @@ public static class ImageUtils
     public static string CcrProxyTag()
     {
         return GetTag("CCF_PROVIDER_PROXY_IMAGE") ?? $"{McrTag}";
-    }
-
-    public static string CcfNginxImage()
-    {
-        return GetImage("CCF_PROVIDER_NGINX_IMAGE") ?? $"{McrRegistryUrl}/ccf/ccf-nginx";
-    }
-
-    public static string CcfNginxTag()
-    {
-        return GetTag("CCF_PROVIDER_NGINX_IMAGE") ?? McrTag;
     }
 
     public static string CcrAttestationImage()

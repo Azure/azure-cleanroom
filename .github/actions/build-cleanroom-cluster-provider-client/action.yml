@@ -1,0 +1,17 @@
+name: Build cleanroom cluster provider client
+description: Build cleanroom cluster provider client
+
+inputs:
+  tag:
+    required: true
+    description: The tag
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: cleanroom-cluster-provider-client
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.cleanroom-cluster-provider-client
+        context: ${{ github.workspace }}

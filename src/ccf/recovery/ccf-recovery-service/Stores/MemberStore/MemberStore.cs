@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using AttestationClient;
 using CcfCommon;
 
 namespace Controllers;
@@ -58,7 +59,7 @@ public class MemberStore : IMemberStore
         var keys = await this.keyStore.ListEncryptionKeys(KeyTypeTagValue);
         if (keys.Any())
         {
-            var hostData = await CcfUtils.GetHostData();
+            var hostData = await Attestation.GetHostData();
             foreach (var item in keys)
             {
                 var kid = item.Item1;
@@ -93,7 +94,7 @@ public class MemberStore : IMemberStore
 
     private static async Task<string> ToMemberKeyName(string memberName)
     {
-        var hostData = await CcfUtils.GetHostData();
+        var hostData = await Attestation.GetHostData();
         return string.Format(MemberKeyNameFormat, memberName, hostData);
     }
 

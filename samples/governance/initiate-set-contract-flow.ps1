@@ -38,7 +38,7 @@ Write-Output "Accepting the contract proposal"
 Vote-Contract -id $contractId -proposalId $proposalId -vote accept -port $port | jq
 verifyContractState("Accepted")
 
-pwsh $PSScriptRoot/initiate-set-document-flow.ps1 -contractId $contractId -port $port
+pwsh $PSScriptRoot/initiate-set-member-document-flow.ps1 -contractId $contractId -port $port
 pwsh $PSScriptRoot/initiate-set-deployment-spec-flow.ps1 -contractId $contractId -port $port
 pwsh $PSScriptRoot/initiate-set-cleanroom-policy-flow.ps1 -contractId $contractId -port $port
 pwsh $PSScriptRoot/initiate-oidc-issuer-flow.ps1 -issuerUrl $issuerUrl -port $port

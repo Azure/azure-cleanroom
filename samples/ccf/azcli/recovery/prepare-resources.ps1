@@ -25,9 +25,11 @@ function Assign-Permission-KeyVault {
 
     $keyVaultResult = (az keyvault show --name $KEYVAULT_NAME --resource-group $resourceGroup) | ConvertFrom-Json
     $roleAssignment = (az role assignment list `
-            --assignee $objectId `
+            --assignee-object-id $objectId `
             --scope $keyVaultResult.id `
-            --role $role) | ConvertFrom-Json
+            --role $role `
+            --fill-principal-name false `
+            --fill-role-definition-name false) | ConvertFrom-Json
 
     if ($roleAssignment.Length -eq 1) {
         Write-Host "$role permission on the key vault already exists, skipping assignment."
@@ -74,11 +76,22 @@ $kvId = $kv.id
 $miId = "none"
 if ($infraType -eq "caci") {
     Write-Host "Creating managed identity $MANAGED_IDENTITY_NAME in resource group $resourceGroup."
-    $mi = (az identity create `
-            --name $MANAGED_IDENTITY_NAME `
-            --resource-group $resourceGroup `
-            --location westus) | ConvertFrom-Json
-    $miId = $mi.id
+    $script:mi = $null;
+    & {
+        # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
+        $PSNativeCommandUseErrorActionPreference = $false
+        # Add retry as at times the managed identity creation fails with a 499 error.
+        foreach ($value in 1..5) {
+            $script:mi = az identity create -n $MANAGED_IDENTITY_NAME -g $resourceGroup --location westeurope | ConvertFrom-Json;
+            if ($script:mi) { break } else { Write-Host "Managed identity creation failed. Will retry after 5s..."; Start-Sleep 5 }
+        }
+    }
+
+    if ($null -eq $script:mi) {
+        throw "Managed identity creation failed after multiple retries."
+    }
+
+    $miId = $script:mi.id
     $appId = (az identity show `
             --name  $MANAGED_IDENTITY_NAME `
             --resource-group $resourceGroup | ConvertFrom-Json).principalId

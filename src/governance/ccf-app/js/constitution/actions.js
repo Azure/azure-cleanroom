@@ -168,7 +168,7 @@ actions.set(
 
       if (args.type !== "add" && args.type !== "remove") {
         throw new Error(
-          `Clean Room Policy with type '${type}' is not supported`
+          `Clean Room Policy with type '${args.type}' is not supported`
         );
       }
 
@@ -196,31 +196,35 @@ actions.set(
           `Add claims to clean room policy: ${JSON.stringify(claims)}`
         );
         Object.keys(claims).forEach((key) => {
-          let item = claims[key];
-          // Make sure item is always an array
-          if (!Array.isArray(item)) {
-            item = [item];
+          let itemToAdd = claims[key];
+          // Make sure itemToAdd is always an array
+          if (!Array.isArray(itemToAdd)) {
+            itemToAdd = [itemToAdd];
           }
 
           let keyBuf = ccf.strToBuf(key);
           if (ccf.kv[cleanRoomPolicyMapName].has(keyBuf)) {
             // Key is already available
             const itemsBuf = ccf.kv[cleanRoomPolicyMapName].get(keyBuf);
-            items = ccf.bufToStr(itemsBuf);
-            console.log(`key: ${key} already exist: ${items}`);
-            items = JSON.parse(items);
-            if (typeof item[0] === "boolean") {
-              //booleans are single value arrays
-              items = item;
+            const existingItemStr = ccf.bufToStr(itemsBuf);
+            console.log(`key: ${key} already exist: ${existingItemStr}`);
+            items = JSON.parse(existingItemStr);
+            if (typeof itemToAdd[0] === "boolean") {
+              // booleans are single value arrays
+              items = itemToAdd;
             } else {
               // loop through the input and add it to the existing set
-              item.forEach((i) => {
-                items.push(i);
+              itemToAdd.forEach((i) => {
+                if (items.filter((ii) => ii === i).length === 0) {
+                  // Element does not exist in items, add it.
+                  items.push(i);
+                }
               });
             }
           } else {
             // set single value
-            items = item;
+            // Make sure that the itemToAdd doesn't have duplicates.
+            items = Array.from(new Set(itemToAdd));
           }
 
           // prepare and store items
@@ -240,25 +244,25 @@ actions.set(
           `Remove claims to clean room policy: ${JSON.stringify(claims)}`
         );
         Object.keys(claims).forEach((key) => {
-          let item = claims[key];
-          // Make sure item is always an array
-          if (!Array.isArray(item)) {
-            item = [item];
+          let itemToRemove = claims[key];
+          // Make sure itemToRemove is always an array
+          if (!Array.isArray(itemToRemove)) {
+            itemToRemove = [itemToRemove];
           }
 
           let keyBuf = ccf.strToBuf(key);
           if (ccf.kv[cleanRoomPolicyMapName].has(keyBuf)) {
             // Key must be available
             const itemsBuf = ccf.kv[cleanRoomPolicyMapName].get(keyBuf);
-            items = ccf.bufToStr(itemsBuf);
-            console.log(`key: ${key} exist: ${items}`);
-            items = JSON.parse(items);
-            if (typeof item[0] === "boolean") {
-              //booleans are single value arrays, removing will remove the whole key
+            const existingItemStr = ccf.bufToStr(itemsBuf);
+            console.log(`key: ${key} exist: ${existingItemStr}`);
+            items = JSON.parse(existingItemStr);
+            if (typeof itemToRemove[0] === "boolean") {
+              // booleans are single value arrays, removing will remove the whole key
               ccf.kv[cleanRoomPolicyMapName].delete(keyBuf);
             } else {
               // loop through the input and delete it from the existing set
-              item.forEach((i) => {
+              itemToRemove.forEach((i) => {
                 if (items.filter((ii) => ii === i).length === 0) {
                   throw new Error(
                     `Trying to remove value '${i}' from ${items} and it does not exist`
@@ -508,9 +512,10 @@ actions.set(
   )
 );
 
-const accepted_documents_table = "public:ccf.gov.accepted_documents";
+const accepted_member_documents_table =
+  "public:ccf.gov.accepted_member_documents";
 actions.set(
-  "set_document",
+  "set_member_document",
   new Action(
     function (args) {
       checkType(args.documentId, "string", "documentId");
@@ -532,10 +537,247 @@ actions.set(
       document_item.proposalId = proposalId;
       document_item.finalVotes = proposalInfo.final_votes;
 
-      ccf.kv[accepted_documents_table].set(
+      ccf.kv[accepted_member_documents_table].set(
         ccf.strToBuf(args.documentId),
         ccf.jsonCompatibleToBuf(document_item)
       );
+    }
+  )
+);
+
+actions.set(
+  "set_user_identity",
+  new Action(
+    function (args) {
+      checkType(args.id, "string", "id");
+      checkType(args.accountType, "string", "accountType");
+      checkType(args.invitationId, "string?", "invitationId");
+      checkType(args.data, "object", "data");
+      checkType(args.data.tenantId, "string", "data.tenantId");
+      checkType(args.data.identifier, "string?", "data.identifier");
+
+      if (args.accountType !== "microsoft") {
+        throw new Error(
+          `User identity with account type '${args.accountType}' is not supported`
+        );
+      }
+    },
+    function (args) {
+      let userInfo = {};
+      userInfo.accountType = args.accountType;
+      userInfo.invitationId = args.invitationId;
+      userInfo.data = args.data;
+      if (args.invitationId) {
+        let data = {};
+        ccf.kv[accepted_user_invitations_table].set(
+          ccf.strToBuf(args.invitationId),
+          ccf.jsonCompatibleToBuf(data)
+        );
+      }
+
+      ccf.kv["public:ccf.gov.user_identities"].set(
+        ccf.strToBuf(args.id),
+        ccf.jsonCompatibleToBuf(userInfo)
+      );
+    }
+  )
+);
+
+actions.set(
+  "remove_user_identity",
+  new Action(
+    function (args) {
+      checkType(args.id, "string", "id");
+    },
+    function (args) {
+      ccf.kv["public:ccf.gov.user_identities"].delete(ccf.strToBuf(args.id));
+    }
+  )
+);
+
+const USER_CLAIMS = {
+  preferred_username: "string",
+  email: "string",
+  appid: "string",
+  tid: "string",
+  sub: "string",
+  upn: "string"
+};
+
+const accepted_user_invitations_table =
+  "public:ccf.gov.accepted_user_invitations";
+actions.set(
+  "set_user_invitation_by_jwt_claims",
+  new Action(
+    function (args) {
+      checkType(args.invitationId, "string", "invitationId");
+      checkType(args.type, "string", "type");
+      checkType(args.accountType, "string", "accountType");
+      checkType(args.claims, "object", "claims");
+
+      if (args.type !== "add" && args.type !== "remove") {
+        throw new Error(`Invitation with type '${args.type}' is not supported`);
+      }
+
+      if (args.accountType !== "microsoft") {
+        throw new Error(
+          `Invitation with account type '${args.accountType}' is not supported`
+        );
+      }
+
+      Object.keys(args.claims).forEach((key) => {
+        if (USER_CLAIMS[key] === undefined) {
+          throw new Error(`The claim '${key}' is not an allowed claim`);
+        }
+      });
+
+      if (
+        ccf.kv[accepted_user_invitations_table].has(
+          ccf.strToBuf(args.invitationId)
+        )
+      ) {
+        throw new Error(
+          `Invitation with Id '${args.invitationId}' has already been accepted.`
+        );
+      }
+    },
+    function (args) {
+      const userInvitationMap = "public:ccf.gov.user_invitations";
+      const userInvitationClaimsMap =
+        "public:ccf.gov.user_invitations-" + args.invitationId;
+
+      // Function to add claims
+      const add = (claims) => {
+        let items = [];
+        console.log(`Add claims to invitation: ${JSON.stringify(claims)}`);
+        Object.keys(claims).forEach((key) => {
+          let itemToAdd = claims[key];
+          // Make sure itemToAdd is always an array
+          if (!Array.isArray(itemToAdd)) {
+            itemToAdd = [itemToAdd];
+          }
+
+          let keyBuf = ccf.strToBuf(key);
+          if (ccf.kv[userInvitationClaimsMap].has(keyBuf)) {
+            // Key is already available
+            const itemsBuf = ccf.kv[userInvitationClaimsMap].get(keyBuf);
+            const existingItemStr = ccf.bufToStr(itemsBuf);
+            console.log(`key: ${key} already exist: ${existingItemStr}`);
+            items = JSON.parse(existingItemStr);
+            if (typeof itemToAdd[0] === "boolean") {
+              // booleans are single value arrays
+              items = itemToAdd;
+            } else {
+              // loop through the input and add it to the existing set
+              itemToAdd.forEach((i) => {
+                if (items.filter((ii) => ii === i).length === 0) {
+                  // Element does not exist in items, add it.
+                  items.push(i);
+                }
+              });
+            }
+          } else {
+            // set single value
+            // Make sure that the itemToAdd doesn't have duplicates.
+            items = Array.from(new Set(itemToAdd));
+          }
+
+          // prepare and store items
+          let jsonItems = JSON.stringify(items);
+          let jsonItemsBuf = ccf.strToBuf(jsonItems);
+          console.log(
+            `Voted invitation item. Key: ${key}, value: ${jsonItems}`
+          );
+          ccf.kv[userInvitationClaimsMap].set(keyBuf, jsonItemsBuf);
+        });
+
+        let invitationItem = {};
+        invitationItem.accountType = args.accountType;
+        ccf.kv[userInvitationMap].set(
+          ccf.strToBuf(args.invitationId),
+          ccf.jsonCompatibleToBuf(invitationItem)
+        );
+      };
+
+      // Function to remove claims
+      const remove = (claims) => {
+        let items = [];
+        console.log(`Remove claims from invitation: ${JSON.stringify(claims)}`);
+        Object.keys(claims).forEach((key) => {
+          let itemToRemove = claims[key];
+          // Make sure item is always an array
+          if (!Array.isArray(itemToRemove)) {
+            itemToRemove = [itemToRemove];
+          }
+
+          let keyBuf = ccf.strToBuf(key);
+          if (ccf.kv[userInvitationClaimsMap].has(keyBuf)) {
+            // Key must be available
+            const itemsBuf = ccf.kv[userInvitationClaimsMap].get(keyBuf);
+            const existingItemStr = ccf.bufToStr(itemsBuf);
+            console.log(`key: ${key} exist: ${existingItemStr}`);
+            items = JSON.parse(existingItemStr);
+            if (typeof itemToRemove[0] === "boolean") {
+              // booleans are single value arrays, removing will remove the whole key
+              ccf.kv[userInvitationClaimsMap].delete(keyBuf);
+            } else {
+              // loop through the input and delete it from the existing set
+              itemToRemove.forEach((i) => {
+                if (items.filter((ii) => ii === i).length === 0) {
+                  throw new Error(
+                    `Trying to remove value '${i}' from ${items} and it does not exist`
+                  );
+                }
+                // Remove value from list
+                const index = items.indexOf(i);
+                if (index > -1) {
+                  items.splice(index, 1);
+                }
+              });
+              // update items
+              if (items.length === 0) {
+                ccf.kv[userInvitationClaimsMap].delete(keyBuf);
+              } else {
+                let jsonItems = JSON.stringify(items);
+                let jsonItemsBuf = ccf.strToBuf(jsonItems);
+                ccf.kv[userInvitationClaimsMap].set(keyBuf, jsonItemsBuf);
+              }
+            }
+          } else {
+            throw new Error(
+              `Cannot remove values of ${key} because the key does not exist in the invitation claims`
+            );
+          }
+        });
+      };
+
+      const type = args.type;
+      switch (type) {
+        case "add":
+          add(args.claims);
+          break;
+        case "remove":
+          remove(args.claims);
+          break;
+        default:
+          throw new Error(`Invitation with type '${type}' is not supported`);
+      }
+    }
+  )
+);
+
+actions.set(
+  "remove_user_invitation_by_jwt_claims",
+  new Action(
+    function (args) {
+      checkType(args.invitationId, "string", "invitationId");
+    },
+    function (args) {
+      const userInvitationMap = "public:ccf.gov.user_invitations";
+      const userInvitationClaimsMap =
+        "public:ccf.gov.user_invitations-" + args.invitationId;
+      ccf.kv[userInvitationMap].delete(ccf.strToBuf(args.invitationId));
+      ccf.kv[userInvitationClaimsMap].clear();
     }
   )
 );

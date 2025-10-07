@@ -385,7 +385,7 @@ public static class AzFileShare
 
         async Task DeleteFileWithRetries(ShareDirectoryClient dir, string fileName)
         {
-            TimeSpan retryTimeout = TimeSpan.FromSeconds(90);
+            TimeSpan retryTimeout = TimeSpan.FromSeconds(120);
             var stopwatch = Stopwatch.StartNew();
             int attempt = 1;
             while (true)

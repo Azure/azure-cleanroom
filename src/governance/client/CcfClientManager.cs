@@ -1,10 +1,11 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Collections.Concurrent;
-using System.Net.Security;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.Json.Nodes;
+using Azure.Core;
 using CoseUtils;
 using Microsoft.Extensions.Http;
 
@@ -12,179 +13,277 @@ namespace Controllers;
 
 public class CcfClientManager
 {
-    private static CcfConfiguration ccfConfiguration = new();
-    private static SigningConfiguration signingConfiguration = default!;
-    private static X509Certificate2 httpsClientCert = default!;
-    private static ConcurrentDictionary<string, string> secretIdToSecretMap = new();
+    private const string Version = "2024-07-01";
+    private static readonly CcfClientManagerDefaults Defaults = new();
+    private readonly CcfConfiguration? ccfConfig;
     private readonly ILogger logger;
-    private readonly string ccfEndpoint;
-    private readonly string serviceCertPem;
-    private string version = default!;
 
     public CcfClientManager(
         ILogger logger,
         string? ccfEndpoint,
-        string? serviceCertPem)
+        string? serviceCertPem,
+        CcfServiceCertLocator? serviceCertDoc)
     {
         this.logger = logger;
-        this.ccfEndpoint = ccfEndpoint ?? ccfConfiguration.CcfEndpoint;
-        this.serviceCertPem = serviceCertPem ?? ccfConfiguration.ServiceCert;
+        this.ccfConfig = string.IsNullOrEmpty(ccfEndpoint) ?
+            Defaults.CcfConfiguration :
+            new CcfConfiguration(ccfEndpoint, serviceCertPem, serviceCertDoc);
     }
 
-    public static void SetGovAuthDefaults(
-        CoseSignKey coseSignKey)
+    private enum EndpointAuthType
+    {
+        Gov,
+        App,
+        NoAuth
+    }
+
+    public static void SetGovAuthDefaults(CoseSignKey coseSignKey)
     {
         using var cert = X509Certificate2.CreateFromPem(coseSignKey.Certificate);
-        signingConfiguration = new SigningConfiguration()
-        {
-            SignKey = coseSignKey,
-            MemberId = cert.GetCertHashString(HashAlgorithmName.SHA256).ToLower()
-        };
+        Defaults.SigningConfiguration = new SigningConfiguration(
+            coseSignKey,
+            cert.GetCertHashString(HashAlgorithmName.SHA256).ToLower());
     }
 
     public static void SetAppAuthDefaults(X509Certificate2 httpsClientCert)
     {
-        CcfClientManager.httpsClientCert = httpsClientCert;
+        Defaults.HttpsClientCert = httpsClientCert;
     }
 
-    public static void SetCcfDefaults(string ccfEndpoint, string serviceCertPem)
+    public static void SetAppAuthDefaults(
+        CcfTokenCredential userTokenCredential,
+        string scope,
+        JsonObject userTokenClaimsCopy,
+        string authMode)
     {
-        ccfConfiguration = new CcfConfiguration()
+        Defaults.UserTokenConfiguration =
+            new UserTokenConfiguration(scope, userTokenCredential, userTokenClaimsCopy, authMode);
+    }
+
+    public static void SetCcfDefaults(
+        string ccfEndpoint,
+        string? serviceCertPem,
+        CcfServiceCertLocator? certLocator)
+    {
+        if (certLocator != null && string.IsNullOrEmpty(serviceCertPem))
         {
-            CcfEndpoint = ccfEndpoint,
-            ServiceCert = serviceCertPem
-        };
+            // One expects an initial service cert to be supplied to kick off communication with
+            // CCF until the need arises to redownload the cert.
+            throw new Exception("serviceCertPem must be supplied along with serviceCertDoc");
+        }
+
+        Defaults.CcfConfiguration =
+            new CcfConfiguration(ccfEndpoint, serviceCertPem, certLocator);
     }
 
     public WorkspaceConfiguration GetWsConfig()
     {
-        return new WorkspaceConfiguration()
+        var ws = new WorkspaceConfiguration()
         {
-            CcfEndpoint = this.ccfEndpoint,
-            ServiceCert = this.serviceCertPem,
-            SigningCert = signingConfiguration.SignKey.Certificate,
-            SigningKey = signingConfiguration.SignKey.PrivateKey,
-            SigningCertId = signingConfiguration.SignKey.KvCertificate?.Id.ToString(),
-            MemberId = signingConfiguration.MemberId,
+            CcfEndpoint = this.ccfConfig?.CcfEndpoint,
+            ServiceCert = this.ccfConfig?.ServiceCert,
+            ServiceCertDiscovery = this.ccfConfig?.CertLocator?.Model
         };
+
+        if (Defaults.SigningConfiguration != null)
+        {
+            ws.SigningCert = Defaults.SigningConfiguration.SignKey.Certificate;
+            ws.SigningKey = Defaults.SigningConfiguration.SignKey.PrivateKey;
+            ws.SigningCertId = Defaults.SigningConfiguration.SignKey.SigningCertId?.ToString();
+            ws.MemberId = Defaults.SigningConfiguration.MemberId;
+        }
+
+        if (Defaults.UserTokenConfiguration != null)
+        {
+            ws.IsUser = true;
+            ws.UserTokenClaims = Defaults.UserTokenConfiguration.UserTokenClaims;
+            ws.AuthMode = Defaults.UserTokenConfiguration.AuthMode;
+        }
+
+        return ws;
     }
 
     public string GetMemberId()
     {
-        return signingConfiguration.MemberId;
+        return Defaults.SigningConfiguration?.MemberId ??
+            throw new Exception("signing configuration not set");
     }
 
     public CoseSignKey GetCoseSignKey()
     {
-        return signingConfiguration.SignKey;
+        return Defaults.SigningConfiguration?.SignKey ??
+            throw new Exception("signing configuration not set");
     }
 
     public Task<HttpClient> GetGovClient()
     {
-        var client = this.InitializeClient(configureClientCert: false);
-        this.version = "2024-07-01";
+        if (Defaults.SigningConfiguration == null)
+        {
+            throw new Exception("Invoke /configure first to setup signing configuration.");
+        }
+
+        var client = this.InitializeClient(EndpointAuthType.Gov);
         return Task.FromResult(client);
     }
 
     public HttpClient GetAppClient()
     {
-        var client = this.InitializeClient(configureClientCert: true);
+        if (Defaults.HttpsClientCert == null && Defaults.UserTokenConfiguration == null)
+        {
+            throw new Exception("Client cert or user token credential is mandatory. Invoke " +
+                "/configure to setup the user authentication configuration.");
+        }
+
+        var client = this.InitializeClient(EndpointAuthType.App);
+        return client;
+    }
+
+    public HttpClient GetNoAuthClient()
+    {
+        var client = this.InitializeClient(EndpointAuthType.NoAuth);
         return client;
     }
 
     public string GetGovApiVersion()
     {
-        return this.version;
+        return Version;
     }
 
-    private HttpClient InitializeClient(bool configureClientCert)
+    private HttpClient InitializeClient(EndpointAuthType epType)
     {
-        if (signingConfiguration == null)
+        if (this.ccfConfig == null)
         {
-            throw new Exception("Invoke /configure first to setup signing configuration.");
+            throw new Exception("CCF endpoint is mandatory.");
         }
 
-        if (string.IsNullOrEmpty(this.ccfEndpoint) || string.IsNullOrEmpty(this.serviceCertPem))
+        ServerCertValidationHandler GetServerCertValidationHandler(string? serviceCertPem)
         {
-            throw new Exception("CCF endpoint and Service Certificate are mandatory");
-        }
-
-        var handler = new HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = (request, cert, chain, errors) =>
+            X509Certificate2? clientCert = null;
+            if (epType == EndpointAuthType.App && Defaults.HttpsClientCert != null)
             {
-                if (errors == SslPolicyErrors.None)
-                {
-                    return true;
-                }
-
-                if (cert == null || chain == null)
-                {
-                    return false;
-                }
-
-                if (string.IsNullOrEmpty(this.serviceCertPem))
-                {
-                    this.logger.LogError(
-                        "Failing SSL cert validation callback as no ServiceCert specified.");
-                    return false;
-                }
-
-                foreach (X509ChainElement element in chain.ChainElements)
-                {
-                    chain.ChainPolicy.ExtraStore.Add(element.Certificate);
-                }
-
-                X509Certificate2Collection roots;
-                try
-                {
-                    roots = new X509Certificate2Collection(
-                        X509Certificate2.CreateFromPem(this.serviceCertPem));
-                }
-                catch (Exception e)
-                {
-                    this.logger.LogError(
-                        e,
-                        "Unexpected failure in loading service cert PEM.");
-                    throw;
-                }
-
-                chain.ChainPolicy.CustomTrustStore.Clear();
-                chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-                chain.ChainPolicy.CustomTrustStore.AddRange(roots);
-                var result = chain.Build(cert);
-                if (!result)
-                {
-                    this.logger.LogError(
-                        "Failing SSL cert validation callback as chain.Build() " +
-                        "returned false.");
-                    for (int index = 0; index < chain.ChainStatus.Length; index++)
-                    {
-                        this.logger.LogError($"chainStatus[{index}]: " +
-                            $"{chain.ChainStatus[0].Status}, " +
-                            $"{chain.ChainStatus[0].StatusInformation}");
-                    }
-
-                    this.logger.LogError($"Incoming cert PEM: " +
-                        $"{cert.ExportCertificatePem()}");
-                    this.logger.LogError($"Expected cert PEMs are: " +
-                        $"{this.serviceCertPem}");
-                }
-
-                return result;
+                // client cert based auth.
+                clientCert = Defaults.HttpsClientCert;
             }
-        };
 
-        if (configureClientCert)
-        {
-            handler.ClientCertificates.Add(httpsClientCert);
+            var serverCertValidationHandler =
+                new ServerCertValidationHandler(
+                    this.logger,
+                    serviceCertPem,
+                    clientCert: clientCert,
+                    endpointName: "cgs-client");
+
+            return serverCertValidationHandler;
         }
 
-        var policyHandler = new PolicyHttpMessageHandler(
-            HttpRetries.Policies.GetDefaultRetryPolicy(this.logger));
-        policyHandler.InnerHandler = handler;
-        var client = new HttpClient(policyHandler);
-        client.BaseAddress = new Uri(this.ccfEndpoint);
+        HttpMessageHandler certValidationHandler;
+        if (this.ccfConfig.CertLocator != null && this.ccfConfig.ServiceCert != null)
+        {
+            certValidationHandler = new AutoRenewingCertHandler(
+                this.logger,
+                this.ccfConfig.CertLocator,
+                GetServerCertValidationHandler(this.ccfConfig.ServiceCert),
+                onRenewal: (serviceCertPem) =>
+                    Defaults.CcfConfiguration!.ServiceCert = serviceCertPem);
+        }
+        else
+        {
+            certValidationHandler = GetServerCertValidationHandler(this.ccfConfig.ServiceCert);
+        }
+
+        // The chain is:
+        // retryPolicyHandler ->
+        //   [AuthenticationDelegatingHandler] ->
+        //     certValidationHandler: [AutoRenewingCertHandler] -> ServerCertValidationHandler.
+        var retryPolicyHandler = new PolicyHttpMessageHandler(
+            HttpRetries.Policies.DefaultRetryPolicy(this.logger));
+        if (epType == EndpointAuthType.App && Defaults.UserTokenConfiguration != null)
+        {
+            // jwt based auth.
+            var authenticationHandler = new AuthenticationDelegatingHandler(
+                Defaults.UserTokenConfiguration.UserTokenCredential,
+                Defaults.UserTokenConfiguration.UserTokenCredentialScope);
+            authenticationHandler.InnerHandler = certValidationHandler;
+            retryPolicyHandler.InnerHandler = authenticationHandler;
+        }
+        else
+        {
+            retryPolicyHandler.InnerHandler = certValidationHandler;
+        }
+
+        var client = new HttpClient(retryPolicyHandler)
+        {
+            BaseAddress = new Uri(this.ccfConfig.CcfEndpoint)
+        };
         return client;
     }
+
+    internal class AuthenticationDelegatingHandler
+    : DelegatingHandler
+    {
+        private CcfTokenCredential tokenCredential;
+        private string scope;
+
+        public AuthenticationDelegatingHandler(CcfTokenCredential tokenCredential, string scope)
+        {
+            this.tokenCredential = tokenCredential;
+            this.scope = scope;
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var ctx = new TokenRequestContext(new string[] { this.scope });
+            string token = await this.tokenCredential.GetTokenAsync(
+                ctx,
+                cancellationToken);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            return await base.SendAsync(request, cancellationToken);
+        }
+    }
+}
+
+public class CcfClientManagerDefaults
+{
+    public CcfConfiguration? CcfConfiguration { get; set; }
+
+    public SigningConfiguration? SigningConfiguration { get; set; }
+
+    public UserTokenConfiguration? UserTokenConfiguration { get; set; }
+
+    public X509Certificate2? HttpsClientCert { get; set; }
+}
+
+public class SigningConfiguration(CoseSignKey signKey, string memberId)
+{
+    public CoseSignKey SignKey { get; set; } = signKey;
+
+    public string MemberId { get; set; } = memberId;
+}
+
+public class CcfConfiguration(
+    string ccfEndpoint,
+    string? serviceCert,
+    CcfServiceCertLocator? certLocator)
+{
+    public string CcfEndpoint { get; set; } = ccfEndpoint;
+
+    public string? ServiceCert { get; set; } = serviceCert;
+
+    public CcfServiceCertLocator? CertLocator { get; set; } = certLocator;
+}
+
+public class UserTokenConfiguration(
+    string userTokenCredentialScope,
+    CcfTokenCredential userTokenCredential,
+    JsonObject userTokenClaims,
+    string authMode)
+{
+    public string UserTokenCredentialScope { get; set; } = userTokenCredentialScope;
+
+    public CcfTokenCredential UserTokenCredential { get; set; } = userTokenCredential;
+
+    public JsonObject? UserTokenClaims { get; set; } = userTokenClaims;
+
+    public string AuthMode { get; set; } = authMode;
 }

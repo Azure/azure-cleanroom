@@ -15,6 +15,7 @@ param(
 
 $ccrContainers = @(
     "blobfuse-launcher",
+    "s3fs-launcher",
     "ccr-attestation",
     "ccr-governance",
     "ccr-init",

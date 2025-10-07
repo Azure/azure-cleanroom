@@ -2,11 +2,8 @@
 // Licensed under the MIT License.
 
 using System.Collections.Concurrent;
-using System.Net.Security;
-using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using Polly;
 
 namespace Controllers;
@@ -25,7 +22,7 @@ public class HttpClientManager
     public static HttpClient NewInsecureClient(
         string endpoint,
         ILogger logger,
-        IAsyncPolicy<HttpResponseMessage>? retryPolicy = null)
+        IAsyncPolicy<HttpResponseMessage> retryPolicy)
     {
         if (!endpoint.StartsWith("http"))
         {
@@ -40,15 +37,11 @@ public class HttpClientManager
             }
         };
 
-        HttpMessageHandler handler = sslVerifyHandler;
-        if (retryPolicy != null)
+        var policyHandler = new PolicyHttpMessageHandler(retryPolicy)
         {
-            var policyHandler = new PolicyHttpMessageHandler(retryPolicy);
-            policyHandler.InnerHandler = handler;
-            handler = policyHandler;
-        }
-
-        return new HttpClient(handler)
+            InnerHandler = sslVerifyHandler
+        };
+        return new HttpClient(policyHandler)
         {
             BaseAddress = new Uri(endpoint)
         };
@@ -56,10 +49,10 @@ public class HttpClientManager
 
     public HttpClient GetOrAddClient(
         string endpoint,
+        IAsyncPolicy<HttpResponseMessage> retryPolicy,
         string? endpointCert = null,
         string? endpointName = null,
-        bool skipTlsVerify = false,
-        IAsyncPolicy<HttpResponseMessage>? retryPolicy = null)
+        bool skipTlsVerify = false)
     {
         var endpointCerts = new List<string>();
         if (!string.IsNullOrEmpty(endpointCert))
@@ -70,27 +63,31 @@ public class HttpClientManager
         return this.GetOrAddClient(
             endpoint,
             endpointCerts,
+            retryPolicy,
             endpointName,
-            skipTlsVerify,
-            retryPolicy);
+            skipTlsVerify);
     }
 
     public HttpClient GetOrAddClient(
         string endpoint,
         List<string> endpointCerts,
+        IAsyncPolicy<HttpResponseMessage> retryPolicy,
         string? endpointName = null,
-        bool skipTlsVerify = false,
-        IAsyncPolicy<HttpResponseMessage>? retryPolicy = null)
+        bool skipTlsVerify = false)
     {
-        string key = ToKey(endpoint, endpointCerts);
+        string key = ToKey(endpoint, endpointCerts, retryPolicy.PolicyKey);
 
         if (this.clients.TryGetValue(key, out var client))
         {
             return client;
         }
 
-        client =
-            this.InitializeClient(endpoint, endpointCerts, endpointName, skipTlsVerify, retryPolicy);
+        client = this.InitializeClient(
+            endpoint,
+            endpointCerts,
+            endpointName,
+            skipTlsVerify,
+            retryPolicy);
         if (!this.clients.TryAdd(key, client))
         {
             client.Dispose();
@@ -99,14 +96,54 @@ public class HttpClientManager
         return this.clients[key];
     }
 
-    private static string ToKey(string endpoint, List<string> endpointCerts)
+    public async Task<HttpClient> GetOrAddClient(
+        string endpoint,
+        ServiceCertLocator endpointCertLocator,
+        IAsyncPolicy<HttpResponseMessage> retryPolicy,
+        string? endpointName = null)
+    {
+        string key = ToKey(endpoint, endpointCertLocator, retryPolicy.PolicyKey);
+
+        if (this.clients.TryGetValue(key, out var client))
+        {
+            return client;
+        }
+
+        // Before initializing the client invoke the cert locator to check that an acceptable
+        // cert is available to start with. Later on if the cert changes then the cert locator
+        // will get invoked again.
+        var initialServiceCertPem = await endpointCertLocator.DownloadServiceCertificatePem();
+
+        client = this.InitializeClient(
+            endpoint,
+            initialServiceCertPem,
+            endpointCertLocator,
+            endpointName,
+            retryPolicy);
+        if (!this.clients.TryAdd(key, client))
+        {
+            client.Dispose();
+        }
+
+        return this.clients[key];
+    }
+
+    private static string ToKey(string endpoint, List<string> endpointCerts, string retryPolicyKey)
     {
         if (!endpointCerts.Any())
         {
-            return endpoint;
+            return endpoint + "_" + retryPolicyKey;
         }
 
-        return endpoint + "_" + string.Join("_", endpointCerts);
+        return endpoint + "_" + string.Join("_", endpointCerts) + "_" + retryPolicyKey;
+    }
+
+    private static string ToKey(
+        string endpoint,
+        ServiceCertLocator certLocator,
+        string retryPolicyKey)
+    {
+        return endpoint + "_" + certLocator.CertificateDiscoveryEndpoint + "_" + retryPolicyKey;
     }
 
     private HttpClient InitializeClient(
@@ -114,100 +151,67 @@ public class HttpClientManager
         List<string> endpointCerts,
         string? endpointName,
         bool skipTlsVerify,
-        IAsyncPolicy<HttpResponseMessage>? retryPolicy)
+        IAsyncPolicy<HttpResponseMessage> retryPolicy)
     {
-        X509Certificate2Collection? roots = null;
-        if (endpointCerts.Any())
-        {
-            try
-            {
-                roots = new X509Certificate2Collection();
-                foreach (var certPem in endpointCerts)
-                {
-                    roots.Add(X509Certificate2.CreateFromPem(certPem));
-                }
-            }
-            catch (Exception e)
-            {
-                this.logger.LogError(e, "Unexpected failure in loading cert PEM.");
-                throw;
-            }
-        }
-
-        var sslVerifyHandler = new HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = (request, cert, chain, errors) =>
-            {
-                if (errors == SslPolicyErrors.None)
-                {
-                    return true;
-                }
-
-                if (cert == null || chain == null)
-                {
-                    return false;
-                }
-
-                if (roots == null)
-                {
-                    if (skipTlsVerify)
-                    {
-                        return true;
-                    }
-
-                    this.logger.LogError(
-                        "Failing SSL cert validation callback as no SSL cert to use for " +
-                        $"verification of endpoint '{endpoint}' was specified.");
-                    return false;
-                }
-
-                foreach (X509ChainElement element in chain.ChainElements)
-                {
-                    chain.ChainPolicy.ExtraStore.Add(element.Certificate);
-                }
-
-                chain.ChainPolicy.CustomTrustStore.Clear();
-                chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-                chain.ChainPolicy.CustomTrustStore.AddRange(roots);
-                var result = chain.Build(cert);
-                if (!result)
-                {
-                    this.logger.LogError(
-                        $"{endpointName}: Failing SSL cert validation callback for " +
-                        $"{endpoint} as " +
-                        $"chain.Build() returned false.");
-                    for (int index = 0; index < chain.ChainStatus.Length; index++)
-                    {
-                        this.logger.LogError($"{endpointName}: chainStatus[{index}]: " +
-                            $"{chain.ChainStatus[0].Status}, " +
-                            $"{chain.ChainStatus[0].StatusInformation}");
-                    }
-
-                    this.logger.LogError($"{endpointName}: Incoming cert PEM: " +
-                        $"{cert.ExportCertificatePem()}");
-                    this.logger.LogError($"{endpointName}: Expected cert PEMs are: " +
-                        $"{JsonConvert.SerializeObject(endpointCerts)}");
-                }
-
-                return result;
-            }
-        };
+        var sslVerifyHandler =
+            new ServerCertValidationHandler(
+                this.logger,
+                endpointCerts,
+                skipTlsVerify,
+                endpointName: endpointName);
 
         if (!endpoint.StartsWith("http"))
         {
             endpoint = "https://" + endpoint;
         }
 
-        HttpMessageHandler handler = sslVerifyHandler;
-        if (retryPolicy != null)
+        var policyHandler = new PolicyHttpMessageHandler(retryPolicy)
         {
-            var policyHandler = new PolicyHttpMessageHandler(retryPolicy);
-            policyHandler.InnerHandler = handler;
-            handler = policyHandler;
+            InnerHandler = sslVerifyHandler
+        };
+        var client = new HttpClient(policyHandler)
+        {
+            BaseAddress = new Uri(endpoint)
+        };
+        return client;
+    }
+
+    private HttpClient InitializeClient(
+        string endpoint,
+        string initialServiceCertPem,
+        ServiceCertLocator certLocator,
+        string? endpointName,
+        IAsyncPolicy<HttpResponseMessage> retryPolicy)
+    {
+        var sslVerifyHandler = new ServerCertValidationHandler(
+            this.logger,
+            serviceCertPem: initialServiceCertPem,
+            skipTlsVerify: false,
+            endpointName: endpointName);
+        var autoRenewingCertHandler = new AutoRenewingCertHandler(
+            this.logger,
+            certLocator,
+            sslVerifyHandler,
+            onRenewal: (serviceCertPem) => { });
+
+        if (!endpoint.StartsWith("http"))
+        {
+            endpoint = "https://" + endpoint;
         }
 
-        var client = new HttpClient(handler);
-        client.BaseAddress = new Uri(endpoint);
+        // The chain is:
+        // retryPolicyHandler ->
+        //   AutoRenewingCertHandler ->
+        //     ServerCertValidationHandler
+        var policyHandler = new PolicyHttpMessageHandler(retryPolicy)
+        {
+            InnerHandler = autoRenewingCertHandler
+        };
+        var client = new HttpClient(policyHandler)
+        {
+            BaseAddress = new Uri(endpoint)
+        };
+
         return client;
     }
 }

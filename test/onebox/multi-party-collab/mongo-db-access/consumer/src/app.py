@@ -1,11 +1,11 @@
 import logging
 import sys
+
+import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
-
-import uvicorn
 from utilities import *
 
 app = FastAPI()
@@ -86,8 +86,9 @@ def run_query(runQueryRequest: RunQueryRequest):
         logger.error(f"Failed to connect to MongoDB: {e}")
         raise HTTPException(status_code=500, detail="Failed to connect to MongoDB")
     except Exception as e:
-        logger.error(f"Error executing query: {e}")
-        raise HTTPException(status_code=500, detail="Error executing query")
+        message = f"Error executing query: {e}"
+        logger.error(message)
+        raise HTTPException(status_code=500, detail=message)
 
 
 def main():

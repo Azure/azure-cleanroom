@@ -6,6 +6,8 @@ param
     [string] $version = "1.0.8"
 )
 
+$ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $true
 $root = git rev-parse --show-toplevel
 
 . $root/build/helpers.ps1

@@ -29,7 +29,15 @@ runs:
 
     - name: Log in to Azure Container Registry
       shell: pwsh
-      run: az acr login -n ${{ inputs.repo }}
+      run: |
+        $pattern = '(.*?)(\.azurecr\.io.*)'
+        if ("${{ inputs.repo }}" -match $pattern) {
+            $acrName = $matches[1]
+        } else {
+            $acrName =  "${{ inputs.repo }}"
+        }
+
+        az acr login -n $acrName
 
     - name: Run collab scenario on Kind
       shell: pwsh
@@ -55,31 +63,11 @@ runs:
       if: ${{ !cancelled() }}
       run: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
 
-    - uses: actions/upload-artifact@v4
+    - name: Upload generated
+      uses: actions/upload-artifact@v4
       with:
-          name: results-db-access
-          path: ./test/onebox/multi-party-collab/db-access/generated/results
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - uses: actions/upload-artifact@v4
-      with:
-          name: configurations-db-access
-          path: ./test/onebox/multi-party-collab/db-access/generated/configurations
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - uses: actions/upload-artifact@v4
-      with:
-          name: deployments-db-access
-          path: ./test/onebox/multi-party-collab/db-access/generated/deployments
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - uses: actions/upload-artifact@v4
-      with:
-          name: ccf-db-access
-          path: ./test/onebox/multi-party-collab/db-access/generated/ccf
+          name: generated-db-access
+          path: ./test/onebox/multi-party-collab/db-access/generated
           overwrite: true
       if: ${{ !cancelled() }}
 

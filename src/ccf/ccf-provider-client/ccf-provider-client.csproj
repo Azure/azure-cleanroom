@@ -18,6 +18,7 @@
     <ProjectReference Include="..\..\internal\restapi-common\restapi-common.csproj" />
     <ProjectReference Include="..\caci-ccf-provider\caci-ccf-provider.csproj" />
     <ProjectReference Include="..\ccf-provider\ccf-provider.csproj" />
+    <ProjectReference Include="..\consortium-manager\ccf-consortium-manager-provider\ccf-consortium-manager-provider.csproj" />
     <ProjectReference Include="..\virtual-ccf-provider\virtual-ccf-provider.csproj" />
   </ItemGroup>
 

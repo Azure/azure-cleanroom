@@ -52,8 +52,21 @@ function Create-KeyVault {
         $keyVaultResult = (az keyvault show --name $keyVaultName --resource-group $resourceGroup) | ConvertFrom-Json
     }
 
-    Write-Host "Assigning 'Key Vault Administrator' permissions to $adminObjectId on Key Vault $($keyVaultResult.id)"
-    $role = az role assignment create --role "Key Vault Administrator" --scope $keyVaultResult.id --assignee-object-id $adminObjectId --assignee-principal-type $(Get-Assignee-Principal-Type)
+    $role = "Key Vault Administrator"
+    $roleAssignment = (az role assignment list `
+            --assignee-object-id $adminObjectId `
+            --scope $keyVaultResult.id `
+            --role $role `
+            --fill-principal-name false `
+            --fill-role-definition-name false) | ConvertFrom-Json
+
+    if ($roleAssignment.Length -eq 1) {
+        Write-Host "$role permission on the key vault already exists, skipping assignment"
+    }
+    else {
+        Write-Host "Assigning '$role' permissions to $adminObjectId on Key Vault $($keyVaultResult.id)"
+        az role assignment create --role $role --scope $keyVaultResult.id --assignee-object-id $adminObjectId --assignee-principal-type $(Get-Assignee-Principal-Type)
+    }
 
     return $keyVaultResult
 }

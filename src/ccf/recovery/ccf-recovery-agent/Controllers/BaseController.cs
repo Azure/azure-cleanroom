@@ -40,9 +40,10 @@ public abstract class BaseController : ControllerBase
     {
         string body = string.Empty;
         var ccfClient = await this.clientManager.GetCcfClient();
-        var members = (await ccfClient.GetFromJsonAsync<Dictionary<string, Ccf.MemberInfo>>(
-            "gov/members"))!;
-        if (!members.TryGetValue(memberId, out var member))
+        var members = (await ccfClient.GetFromJsonAsync<Ccf.MemberInfoList>(
+            $"gov/service/members?api-version={this.clientManager.GetGovApiVersion()}"))!;
+        var member = members.Value.Find(m => m.MemberId == memberId);
+        if (member == null)
         {
             return (
                 new ODataError("MemberIdNotFound", $"Member with ID '{memberId}' was not found."),
@@ -57,7 +58,7 @@ public abstract class BaseController : ControllerBase
         }
 
         CoseSign1Message sign1Message = CoseMessage.DecodeSign1(content);
-        if (!Cose.Verify(sign1Message, member.Cert))
+        if (!Cose.Verify(sign1Message, member.Certificate))
         {
             return (
                 new ODataError("SignatureVerificationFailed", "Payload verification failed."),

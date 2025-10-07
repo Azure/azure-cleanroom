@@ -28,10 +28,10 @@
   },
   "command": {
     "type": "Recover",
-    "service_certificate_file": "/app/service_cert.pem",
+    "service_certificate_file": "/app/certs/ccf/service_cert.pem",
     "recover": {
       "initial_service_certificate_validity_days": 30,
-      "previous_service_identity_file": "/app/previous_service_cert.pem"
+      "previous_service_identity_file": "/app/certs/ccf/previous_service_cert.pem"
     }
   }
 }

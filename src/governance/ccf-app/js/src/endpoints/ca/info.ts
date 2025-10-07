@@ -24,36 +24,3 @@ export function getCAInfo(request: ccfapp.Request): ccfapp.Response<CAInfo> {
 
   return { statusCode: 200, body: info };
 }
-
-export function isCAEnabled(
-  request: ccfapp.Request<isCAEnabledRequest>
-): ccfapp.Response<isCAEnabledResponse> | ccfapp.Response<ErrorResponse> {
-  const contractId = request.params.contractId;
-  const body = request.body.json();
-  if (!body.attestation) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse(
-        "AttestationMissing",
-        "Attestation payload must be supplied."
-      )
-    };
-  }
-
-  // Validate attestation report.
-  try {
-    verifySnpAttestation(contractId, body.attestation);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("VerifySnpAttestationFailed", e.message)
-    };
-  }
-
-  const info = {
-    enabled: isCAEnabledInternal(contractId)
-  }
-
-  return { statusCode: 200, body: info };
-
-}

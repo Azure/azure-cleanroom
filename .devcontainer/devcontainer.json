@@ -1,5 +1,5 @@
 {
-  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "build": { "dockerfile": "Dockerfile" },
   "features": {
     "ghcr.io/devcontainers/features/powershell:1": {
       "modules": "powershell-yaml"
@@ -23,10 +23,11 @@
         "ms-python.black-formatter",
         "github.vscode-github-actions",
         "bierner.markdown-mermaid",
-        "vscode-icons-team.vscode-icons"
+        "vscode-icons-team.vscode-icons",
+        "golang.go",
+        "ms-kubernetes-tools.vscode-kubernetes-tools"
       ]
     }
   },
-  "containerEnv": { "DEVCONTAINER": "true" },
-  "postCreateCommand": "pwsh -c 'wget -O azcopy_v10.tar.gz https://aka.ms/downloadazcopy-v10-linux && tar -xf azcopy_v10.tar.gz --strip-components=1 && rm azcopy_v10.tar.gz'; pwsh -c 'sudo mv azcopy /usr/bin'"
+  "containerEnv": { "DEVCONTAINER": "true" }
 }

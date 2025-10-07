@@ -9,6 +9,8 @@ param
     [string] $projectName = "governance-sample-azcli"
 )
 
+$ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $true
 $root = git rev-parse --show-toplevel
 
 . $root/build/helpers.ps1
@@ -37,7 +39,8 @@ Write-Output "Accepting the contract proposal"
 az cleanroom governance contract vote --id $contractId --proposal-id $proposalId --action accept --governance-client $projectName | jq
 verifyContractState("Accepted")
 
-pwsh $PSScriptRoot/initiate-set-document-flow.ps1 -contractId $contractId -projectName $projectName
+pwsh $PSScriptRoot/initiate-set-member-document-flow.ps1 -contractId $contractId -projectName $projectName
 pwsh $PSScriptRoot/initiate-set-deployment-spec-flow.ps1 -contractId $contractId -projectName $projectName
 pwsh $PSScriptRoot/initiate-set-cleanroom-policy-flow.ps1 -contractId $contractId -projectName $projectName
+pwsh $PSScriptRoot/initiate-set-user-document-flow.ps1 -contractId $contractId -projectName $projectName
 pwsh $PSScriptRoot/initiate-oidc-issuer-flow.ps1 -issuerUrl $issuerUrl -projectName $projectName

@@ -274,13 +274,13 @@ public class AkvPolicyStore : IPolicyStore
 
     private async Task<string> PolicySignerKeyName()
     {
-        var hostData = await CcfUtils.GetHostData();
+        var hostData = await Attestation.GetHostData();
         return string.Format(PolicySignerNameFormat, hostData);
     }
 
     private async Task<string> SignedPolicySecretName()
     {
-        var hostData = await CcfUtils.GetHostData();
+        var hostData = await Attestation.GetHostData();
         return string.Format(SignedPolicySecretNameFormat, hostData);
     }
 }

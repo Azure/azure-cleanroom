@@ -67,7 +67,7 @@ static_resources:
   clusters:
   - name: service1
     type: $CCR_ENVOY_CLUSTER_TYPE
-    connect_timeout: 0.25s
+    connect_timeout: 5s
     load_assignment:
       cluster_name: service1
       endpoints:

@@ -198,19 +198,14 @@ public class ContractTests : TestBase
         Assert.AreEqual(contractContent["data"]!.ToString(), contract["data"]!.ToString());
 
         var finalVotes = contract["finalVotes"]?.AsArray();
-
-        // Remove the null check once CCF v4.0 support is removed.
-        if (finalVotes != null && finalVotes.Any())
+        var fv = JsonSerializer.Deserialize<List<FinalVote>>(finalVotes)!;
+        foreach (var client in this.CgsClients)
         {
-            var fv = JsonSerializer.Deserialize<List<FinalVote>>(finalVotes)!;
-            foreach (var client in this.CgsClients)
-            {
-                var info = await client.GetFromJsonAsync<JsonObject>("/show");
-                string memberId = info!["memberId"]!.ToString();
-                var vote = fv.Find(v => v.MemberId == memberId);
-                Assert.IsNotNull(vote);
-                Assert.IsTrue(vote.Vote);
-            }
+            var info = await client.GetFromJsonAsync<JsonObject>("/show");
+            string memberId = info!["memberId"]!.ToString();
+            var vote = fv.Find(v => v.MemberId == memberId);
+            Assert.IsNotNull(vote);
+            Assert.IsTrue(vote.Vote);
         }
 
         using (HttpRequestMessage request = new(HttpMethod.Post, checkStatusUrl))
@@ -828,7 +823,8 @@ public class ContractTests : TestBase
             }
         }
 
-        var contracts = (await this.CgsClient_Member0.GetFromJsonAsync<JsonArray>("contracts"))!;
+        var contractList = (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>("contracts"))!;
+        var contracts = contractList["value"]!.AsArray();
         foreach (var contractId in contractsId)
         {
             Assert.IsTrue(
@@ -1568,6 +1564,90 @@ public class ContractTests : TestBase
                 (await response.Content.ReadFromJsonAsync<StatusWithReasonResponse>())!;
             Assert.AreEqual("disabled", statusResponse.Status);
             Assert.IsNull(statusResponse.Reason);
+        }
+    }
+
+    [TestMethod]
+    public async Task ListContractsWithQueryParameter()
+    {
+        List<string> draftContractsId = new();
+        List<string> proposedContractsId = new();
+        List<string> acceptedContractsId = new();
+
+        // Add draft contracts
+        for (int i = 0; i < 3; i++)
+        {
+            string contractId = Guid.NewGuid().ToString().Substring(0, 8);
+            draftContractsId.Add(contractId);
+
+            string contractUrl = $"contracts/{contractId}";
+            var contractContent = new JsonObject
+            {
+                ["data"] = "draft contract data"
+            };
+
+            using (HttpRequestMessage request = new(HttpMethod.Put, contractUrl))
+            {
+                request.Content = new StringContent(
+                    contractContent.ToJsonString(),
+                    Encoding.UTF8,
+                    "application/json");
+
+                using HttpResponseMessage response = await this.CgsClient_Member0.SendAsync(request);
+                Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            }
+        }
+
+        // Add and accept contracts
+        for (int i = 0; i < 2; i++)
+        {
+            string contractId = Guid.NewGuid().ToString().Substring(0, 8);
+            acceptedContractsId.Add(contractId);
+
+            await this.ProposeAndAcceptContract(contractId);
+        }
+
+        // Add and propose a few contracts
+        for (int i = 0; i < 2; i++)
+        {
+            string contractId = Guid.NewGuid().ToString().Substring(0, 8);
+            proposedContractsId.Add(contractId);
+            await this.ProposeContract(contractId);
+        }
+
+        await VerifyState(ContractState.Draft);
+        await VerifyState(ContractState.Accepted);
+        await VerifyState(ContractState.Proposed);
+
+        // Query with an invalid state
+        using (HttpRequestMessage request = new(HttpMethod.Get, "contracts?state=InvalidState"))
+        {
+            using HttpResponseMessage response = await this.CgsClient_Member0.SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+            var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
+            Assert.AreEqual("InvalidParameter", error.Code);
+        }
+
+        async Task VerifyState(ContractState contractState)
+        {
+            var contracts = (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
+                $"contracts?state={contractState}"))!;
+
+            foreach (var contract in contracts["value"]!.AsArray())
+            {
+                string contractUrl = $"contracts/{contract!["id"]}";
+                using (HttpRequestMessage request = new(HttpMethod.Get, contractUrl))
+                {
+                    using HttpResponseMessage response =
+                        await this.CgsClient_Member0.SendAsync(request);
+                    Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+
+                    var contractResponse = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+                    Assert.AreEqual(
+                        contractState.ToString(),
+                        contractResponse[StateKey]!.ToString());
+                }
+            }
         }
     }
 

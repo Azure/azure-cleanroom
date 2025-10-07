@@ -10,7 +10,8 @@ import {
   findOpenProposals,
   fromJson,
   getCallerId,
-  toJson
+  toJson,
+  validateCallerAuthorized
 } from "../utils/utils";
 import {
   ConsentCheckRequest,
@@ -52,6 +53,16 @@ export function disableContract(
 }
 
 export function checkContractExecutionStatus(
+  request: ccfapp.Request
+): ccfapp.Response | ccfapp.Response<ErrorResponse> {
+  const error = validateCallerAuthorized(request);
+  if (error !== undefined) {
+    return error;
+  }
+  return checkContractExecutionStatusInternal(request);
+}
+
+function checkContractExecutionStatusInternal(
   request: ccfapp.Request
 ): ccfapp.Response | ccfapp.Response<ErrorResponse> {
   const contractId = request.params.contractId;
@@ -112,6 +123,16 @@ export function checkContractExecutionStatus(
 export function checkContractLoggingStatus(
   request: ccfapp.Request
 ): ccfapp.Response<GetRuntimeOptionResponse> | ccfapp.Response<ErrorResponse> {
+  const error = validateCallerAuthorized(request);
+  if (error !== undefined) {
+    return error;
+  }
+  return checkContractLoggingStatusInternal(request);
+}
+
+export function checkContractLoggingStatusInternal(
+  request: ccfapp.Request
+): ccfapp.Response<GetRuntimeOptionResponse> | ccfapp.Response<ErrorResponse> {
   const contractId = request.params.contractId;
 
   if (!acceptedContractsStore.has(contractId)) {
@@ -152,6 +173,16 @@ export function checkContractLoggingStatus(
 }
 
 export function checkContractTelemetryStatus(
+  request: ccfapp.Request
+): ccfapp.Response<GetRuntimeOptionResponse> | ccfapp.Response<ErrorResponse> {
+  const error = validateCallerAuthorized(request);
+  if (error !== undefined) {
+    return error;
+  }
+  return checkContractTelemetryStatusInternal(request);
+}
+
+function checkContractTelemetryStatusInternal(
   request: ccfapp.Request
 ): ccfapp.Response<GetRuntimeOptionResponse> | ccfapp.Response<ErrorResponse> {
   const contractId = request.params.contractId;
@@ -220,7 +251,7 @@ export function consentCheckExecution(
 
   // A valid attestation report is sufficient to return consent status. Not seeing a requirement
   // to encrypt the response so only a clean room could decrypt it.
-  return checkContractExecutionStatus(request);
+  return checkContractExecutionStatusInternal(request);
 }
 
 export function consentCheckLogging(
@@ -250,7 +281,7 @@ export function consentCheckLogging(
 
   // A valid attestation report is sufficient to return consent status. Not seeing a requirement
   // to encrypt the response so only a clean room could decrypt it.
-  return checkContractLoggingStatus(request);
+  return checkContractLoggingStatusInternal(request);
 }
 
 export function consentCheckTelemetry(
@@ -280,7 +311,7 @@ export function consentCheckTelemetry(
 
   // A valid attestation report is sufficient to return consent status. Not seeing a requirement
   // to encrypt the response so only a clean room could decrypt it.
-  return checkContractTelemetryStatus(request);
+  return checkContractTelemetryStatusInternal(request);
 }
 
 function setContractExecutionStatus(

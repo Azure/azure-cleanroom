@@ -1,0 +1,39 @@
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:22.04 AS build-image
+
+# Install prerequisities.
+RUN apt-get update -y && \
+    DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install \
+    software-properties-common build-essential ca-certificates wget
+RUN \
+    DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install \
+    libfuse3-dev gcc
+
+RUN wget -O azcopy_v10.tar.gz https://aka.ms/downloadazcopy-v10-linux && tar -xf azcopy_v10.tar.gz --strip-components=1
+
+# Build the blobfuse2 binary.
+COPY external/azure-storage-fuse azure-storage-fuse
+COPY build/go_installer.sh .
+RUN chmod +x go_installer.sh
+RUN chmod +x azure-storage-fuse/build.sh
+RUN ./go_installer.sh .
+RUN cd azure-storage-fuse && ./build.sh
+
+# Build encryptor plugin.
+COPY src/blobfuse-launcher/encryptor azure-storage-fuse/encryptor
+RUN cd azure-storage-fuse/encryptor && go test -v ./...
+RUN cd azure-storage-fuse/encryptor && go build -buildmode=plugin -o encryptor.so
+
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:22.04
+
+# Install blobfuse dependencies.
+RUN apt-get update -y && \
+    apt-get -y --no-install-recommends install \
+    software-properties-common fuse3 curl fio jq
+
+COPY --from=build-image /azcopy /usr/local/bin
+
+COPY --from=build-image /azure-storage-fuse/blobfuse2 /usr/local/bin/
+COPY --from=build-image /azure-storage-fuse/encryptor/encryptor.so .
+
+COPY test/blobfuse .
+RUN ldconfig /usr/local/lib64/

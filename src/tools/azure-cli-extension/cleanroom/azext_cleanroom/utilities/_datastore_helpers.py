@@ -1,26 +1,80 @@
-from cleanroom_common.azure_cleanroom_core.exceptions.exception import *
-from ..utilities._azcli_helpers import logger
+from pathlib import Path
+from typing import Optional
+
 from azure.cli.core.util import CLIError
-from cleanroom_common.azure_cleanroom_core.models.datastore import DatastoreEntry
-from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
-    Encryptor,
+from cleanroom_common.azure_cleanroom_core.exceptions.exception import *
+from cleanroom_common.azure_cleanroom_core.models.datastore import (
+    DataStoreEntry,
+    DataStoreSpecification,
 )
+from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import Encryptor
+
+from ..utilities._azcli_helpers import logger
 
 
-def get_datastore_internal(datastore_name, datastore_config_file) -> DatastoreEntry:
-    from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
-        get_datastore,
-    )
+class DataStoreConfiguration:
+    """
+    This class is used to read and write the data store configuration file.
+    """
 
-    try:
-        datastore = get_datastore(datastore_name, datastore_config_file, logger)
-    except CleanroomSpecificationError as e:
-        if e.code == ErrorCode.DatastoreNotFound:
-            raise CLIError(
-                f"Datastore {datastore_name} not found. Run az cleanroom datastore add first."
-            )
+    @staticmethod
+    def default_datastore_config_file() -> str:
+        """
+        Returns the default data store configuration file path.
+        If the CLEANROOM_DATASTORE_CONFIG_FILE environment variable is set, it returns its value.
+        If the environment variable is not set, it returns the default path for config files.
+        """
 
-    return datastore
+        import os
+
+        from ._configuration_helpers import get_default_config_file
+
+        return os.environ.get(
+            "CLEANROOM_DATASTORE_CONFIG_FILE"
+        ) or get_default_config_file("datastores.yaml")
+
+    @staticmethod
+    def load(
+        config_file: str, create_if_not_existing: bool = False
+    ) -> DataStoreSpecification:
+        import os
+
+        from cleanroom_common.azure_cleanroom_core.utilities.configuration_helpers import (
+            read_datastore_config,
+        )
+
+        try:
+            spec = read_datastore_config(config_file, logger)
+        except FileNotFoundError:
+            if (not os.path.exists(config_file)) and create_if_not_existing:
+                spec = DataStoreSpecification(datastores=[])
+            else:
+                raise CLIError(
+                    f"Cannot find file {config_file}. Check the --*-config parameter value."
+                )
+
+        return spec
+
+    @staticmethod
+    def store(config_file: str, config: DataStoreSpecification):
+        from cleanroom_common.azure_cleanroom_core.utilities.configuration_helpers import (
+            write_datastore_config,
+        )
+
+        write_datastore_config(config_file, config, logger)
+
+    @staticmethod
+    def get_datastore(name, config_file) -> DataStoreEntry:
+        try:
+            datastore_config = DataStoreConfiguration.load(config_file)
+            datastore = datastore_config.get_datastore_entry(name)
+        except CleanroomSpecificationError as e:
+            if e.code == ErrorCode.DataStoreNotFound:
+                raise CLIError(
+                    f"Datastore {name} not found. Run az cleanroom datastore add first."
+                )
+
+        return datastore
 
 
 def config_add_datastore_internal(
@@ -28,12 +82,12 @@ def config_add_datastore_internal(
     datastore_name,
     datastore_config_file,
     identity,
-    secretstore_config_file,
-    dek_secret_store,
-    kek_secret_store,
-    kek_name,
     access_mode,
     logger,
+    secretstore_config_file="",
+    dek_secret_store="",
+    kek_secret_store="",
+    kek_name="",
     access_name="",
 ):
     from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
@@ -46,12 +100,12 @@ def config_add_datastore_internal(
             datastore_name,
             datastore_config_file,
             identity,
+            access_mode,
+            logger,
             secretstore_config_file,
             dek_secret_store,
             kek_secret_store,
             kek_name,
-            access_mode,
-            logger,
             access_name,
         )
     except CleanroomSpecificationError as e:
@@ -74,11 +128,13 @@ def azcopy(
     source_location: str,
     target_location: str,
     use_cpk: bool,
-    encryption_key: bytes,
+    encryption_key: Optional[bytes],
 ):
-    import os, hashlib, base64
-    from azure.cli.core.util import CLIError
-    from ._azcli_helpers import logger, az_cli
+    import base64
+    import hashlib
+    import os
+
+    from ._azcli_helpers import az_cli, logger
 
     # Get the tenant Id of the logged in user and indicate azcopy to use the tenant Id.
     # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-configuration-settings
@@ -107,6 +163,9 @@ def azcopy(
     if use_cpk:
         # azcopy with CPK needs the values below for encryption
         # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-copy
+        assert (
+            encryption_key is not None
+        ), "Encryption key must not be None when encryption mode is CPK"
         encryption_key_base_64 = base64.b64encode(encryption_key).decode("utf-8")
         encryption_key_sha256 = hashlib.sha256(encryption_key).digest()
         encryption_key_sha256_base_64 = base64.b64encode(encryption_key_sha256).decode(
@@ -119,35 +178,60 @@ def azcopy(
 
     import subprocess
 
-    result: subprocess.CompletedProcess
-    try:
-        logger.warning(f"Copying dataset from {source_location} to {target_location}")
+    max_retries = 5
+    delay = 10
+    attempt = 0
+    while True:
+        result: subprocess.CompletedProcess
+        try:
+            logger.warning(
+                f"Copying dataset from {source_location} to {target_location}. Attempt {attempt + 1} of {max_retries}."
+            )
 
-        result = subprocess.run(
-            azcopy_cmd,
-            capture_output=True,
-        )
-    except FileNotFoundError:
-        raise CLIError(
-            "azcopy not installed. Install from https://github.com/Azure/azure-storage-azcopy?tab=readme-ov-file#download-azcopy and try again."
-        )
+            result = subprocess.run(
+                azcopy_cmd,
+                capture_output=True,
+            )
+        except FileNotFoundError:
+            raise CLIError(
+                "azcopy not installed. Install from https://github.com/Azure/azure-storage-azcopy?tab=readme-ov-file#download-azcopy and try again."
+            )
 
-    try:
-        for line in str.splitlines(result.stdout.decode()):
-            logger.warning(line)
-        for line in str.splitlines(result.stderr.decode()):
-            logger.warning(line)
-        result.check_returncode()
-    except subprocess.CalledProcessError:
-        for line in str.splitlines(result.stdout.decode()):
-            logger.error(line)
-        for line in str.splitlines(result.stderr.decode()):
-            logger.error(line)
-        raise CLIError("Failed to copy data. See error details above.")
+        isRetryable = False
+        try:
+            for line in str.splitlines(result.stdout.decode()):
+                logger.warning(line)
+            for line in str.splitlines(result.stderr.decode()):
+                logger.warning(line)
+            result.check_returncode()
+            break
+        except subprocess.CalledProcessError:
+            for line in str.splitlines(result.stdout.decode()):
+                logger.error(line)
+                # Have seen AuthorizationPermissionMismatch if permission was recently given and its not percolated yet. So we retry.
+                if "ERROR CODE: AuthorizationPermissionMismatch" in line:
+                    isRetryable = True
+            for line in str.splitlines(result.stderr.decode()):
+                if "ERROR CODE: AuthorizationPermissionMismatch" in line:
+                    isRetryable = True
+                logger.error(line)
+
+            if isRetryable and attempt < max_retries:
+                import time
+
+                logger.warning(
+                    f"Hit retryable issue while copying dataset from {source_location} to {target_location}. Will try again in {delay}s."
+                )
+
+                attempt += 1
+                time.sleep(delay)
+            else:
+                raise CLIError(
+                    f"Failed to copy data. Total attempts: {attempt + 1}. See error details above."
+                )
 
 
 def config_get_datastore_name_internal(cleanroom_config, access_name, access_mode):
-    from azure.cli.core.util import CLIError
     from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
         config_get_datastore_name,
     )
@@ -157,16 +241,16 @@ def config_get_datastore_name_internal(cleanroom_config, access_name, access_mod
             cleanroom_config, access_name, access_mode, logger
         )
     except CleanroomSpecificationError as e:
-        if e.code == ErrorCode.DatastoreNotFound:
+        if e.code == ErrorCode.DataStoreNotFound:
             raise CLIError(f"{access_name} not found in cleanroom configuration.")
 
 
 def encrypt_file_internal(plaintextPath, key, blockSize, ciphertextPath):
-    from azure.cli.core.util import CLIError
-    from ._azcli_helpers import logger
     from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
         encrypt_file,
     )
+
+    from ._azcli_helpers import logger
 
     try:
         encrypt_file(plaintextPath, key, blockSize, ciphertextPath, logger)
@@ -175,11 +259,11 @@ def encrypt_file_internal(plaintextPath, key, blockSize, ciphertextPath):
 
 
 def decrypt_file_internal(ciphertextPath, key, blockSize, plaintextPath):
-    from azure.cli.core.util import CLIError
-    from ._azcli_helpers import logger
     from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
         decrypt_file,
     )
+
+    from ._azcli_helpers import logger
 
     try:
         decrypt_file(ciphertextPath, key, blockSize, plaintextPath, logger)
@@ -196,39 +280,37 @@ def cryptocopy(
     blockSize,
     logger,
 ):
-    import os, glob, base64
+    import base64
+    import glob
+    import os
+
     from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
-        get_datastore,
-    )
-    from ._secretstore_helpers import get_secretstore
-    from cleanroom_common.azure_cleanroom_core.utilities.secretstore_helpers import (
-        get_secretstore_entry,
-    )
-    from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
-        encrypt_file,
         decrypt_file,
+        encrypt_file,
     )
 
-    datastore = get_datastore(datastore_name, datastore_config_file, logger)
+    from ._secretstore_helpers import SecretStoreConfiguration
+
+    datastore = DataStoreConfiguration.get_datastore(
+        datastore_name, datastore_config_file
+    )
     if operation == Encryptor.Operation.Decrypt:
-        source_path = os.path.join(source_path, datastore.name, datastore.storeName)
         destination_path = os.path.join(
             destination_path, datastore.name, datastore.storeName
         )
 
     os.makedirs(destination_path, mode=0o755, exist_ok=True)
     # Get the key path.
-    secret_store = get_secretstore(
-        get_secretstore_entry(
-            datastore.secretstore_name, datastore.secretstore_config, logger
-        )
+    secret_store = SecretStoreConfiguration.get_secretstore(
+        datastore.secretstore_name, datastore.secretstore_config
     )
+
     encryption_key = secret_store.get_secret(datastore_name)
     blockSize = int(blockSize)
     blockSize *= 1024 * 1024
 
-    # Recursively encypt/decrypt files in the source path.
-    for source_file in glob.glob(os.path.join(source_path, "**/*"), recursive=True):
+    for source_file_path in Path(source_path).glob("*"):
+        source_file = str(source_file_path)
         if os.path.isfile(source_file):
             source_rel_path = os.path.relpath(source_file, start=source_path)
             destination_file = os.path.join(destination_path, source_rel_path)
@@ -248,21 +330,17 @@ def cryptocopy(
 
 def generate_wrapped_dek(datastore_name, datastore_config_file, public_key, logger):
     import base64
-    from cryptography.hazmat.primitives.asymmetric import padding
-    from cryptography.hazmat.primitives import hashes
-    from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
-        get_datastore,
-    )
-    from ._secretstore_helpers import get_secretstore
-    from cleanroom_common.azure_cleanroom_core.utilities.secretstore_helpers import (
-        get_secretstore_entry,
-    )
 
-    datastore = get_datastore(datastore_name, datastore_config_file, logger)
-    secret_store = get_secretstore(
-        get_secretstore_entry(
-            datastore.secretstore_name, datastore.secretstore_config, logger
-        )
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import padding
+
+    from ._secretstore_helpers import SecretStoreConfiguration
+
+    datastore = DataStoreConfiguration.get_datastore(
+        datastore_name, datastore_config_file
+    )
+    secret_store = SecretStoreConfiguration.get_secretstore(
+        datastore.secretstore_name, datastore.secretstore_config
     )
     dek_bytes = secret_store.get_secret(datastore_name)
     return base64.b64encode(

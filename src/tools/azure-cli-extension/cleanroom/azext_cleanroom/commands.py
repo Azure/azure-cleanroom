@@ -11,6 +11,7 @@ def load_command_table(self, _):
         g.custom_command("show-deployment", "governance_client_show_deployment_cmd")
         g.custom_command("get-upgrades", "governance_client_get_upgrades_cmd")
         g.custom_command("version", "governance_client_version_cmd")
+        g.custom_command("get-access-token", "governance_client_get_access_token_cmd")
 
     with self.command_group("cleanroom governance service") as g:
         g.custom_command("deploy", "governance_service_deploy_cmd")
@@ -31,11 +32,22 @@ def load_command_table(self, _):
         g.custom_command("show", "governance_contract_show_cmd")
 
     with self.command_group("cleanroom governance proposal") as g:
+        g.custom_command("create", "governance_proposal_create_cmd")
         g.custom_command("vote", "governance_proposal_vote_cmd")
         g.custom_command("withdraw", "governance_proposal_withdraw_cmd")
         g.custom_command("list", "governance_proposal_list_cmd")
         g.custom_command("show", "governance_proposal_show_cmd")
         g.custom_command("show-actions", "governance_proposal_show_actions_cmd")
+
+    with self.command_group("cleanroom governance user-identity") as g:
+        g.custom_command("add", "governance_user_identity_add_cmd")
+        g.custom_command("remove", "governance_user_identity_remove_cmd")
+        g.custom_command("show", "governance_user_identity_show_cmd")
+
+    with self.command_group("cleanroom governance user-identity invitation") as g:
+        g.custom_command("create", "governance_user_identity_invitation_create_cmd")
+        g.custom_command("show", "governance_user_identity_invitation_show_cmd")
+        g.custom_command("accept", "governance_user_identity_invitation_accept_cmd")
 
     with self.command_group("cleanroom governance ca") as g:
         g.custom_command("propose-enable", "governance_ca_propose_enable_cmd")
@@ -77,15 +89,30 @@ def load_command_table(self, _):
 
     with self.command_group("cleanroom governance contract secret") as g:
         g.custom_command("set", "governance_contract_secret_set_cmd")
+        g.custom_command("list", "governance_contract_secret_list_cmd")
+        g.custom_command(
+            "get-cleanroom-policy",
+            "governance_contract_secret_get_cleanroom_policy_cmd",
+        )
 
     with self.command_group("cleanroom governance contract event") as g:
         g.custom_command("list", "governance_contract_event_list_cmd")
 
-    with self.command_group("cleanroom governance document") as g:
-        g.custom_command("create", "governance_document_create_cmd")
-        g.custom_command("propose", "governance_document_propose_cmd")
-        g.custom_command("vote", "governance_document_vote_cmd")
-        g.custom_command("show", "governance_document_show_cmd")
+    with self.command_group("cleanroom governance member-document") as g:
+        g.custom_command("create", "governance_member_document_create_cmd")
+        g.custom_command("propose", "governance_member_document_propose_cmd")
+        g.custom_command("vote", "governance_member_document_vote_cmd")
+        g.custom_command("show", "governance_member_document_show_cmd")
+
+    with self.command_group("cleanroom governance user-document") as g:
+        g.custom_command("create", "governance_user_document_create_cmd")
+        g.custom_command("propose", "governance_user_document_propose_cmd")
+        g.custom_command("vote", "governance_user_document_vote_cmd")
+        g.custom_command("show", "governance_user_document_show_cmd")
+
+    with self.command_group("cleanroom governance user-document runtime-option") as g:
+        g.custom_command("get", "governance_user_document_runtime_option_get_cmd")
+        g.custom_command("set", "governance_user_document_runtime_option_set_cmd")
 
     with self.command_group("cleanroom governance network") as g:
         g.custom_command("show", "governance_network_show_cmd")
@@ -145,6 +172,23 @@ def load_command_table(self, _):
         g.custom_command("download", "logs_download_cmd")
         g.custom_command("decrypt", "logs_decrypt_cmd")
 
+    with self.command_group("cleanroom cluster provider") as g:
+        g.custom_command("deploy", "cluster_provider_deploy_cmd")
+        g.custom_command("remove", "cluster_provider_remove_cmd")
+
+    with self.command_group("cleanroom cluster") as g:
+        g.custom_command("create", "cluster_create_cmd")
+        g.custom_command("update", "cluster_update_cmd")
+        g.custom_command("show", "cluster_show_cmd")
+        g.custom_command("get-kubeconfig", "cluster_get_kubeconfig_cmd")
+        g.custom_command("delete", "cluster_delete_cmd")
+        g.custom_command("up", "cluster_up_cmd")
+
+    with self.command_group("cleanroom cluster analytics-workload deployment") as g:
+        g.custom_command(
+            "generate", "cluster_analytics_workload_deployment_generate_cmd"
+        )
+
     with self.command_group("cleanroom ccf provider") as g:
         g.custom_command("deploy", "ccf_provider_deploy_cmd")
         g.custom_command("configure", "ccf_provider_configure_cmd")
@@ -199,6 +243,9 @@ def load_command_table(self, _):
         g.custom_command("show", "ccf_network_recovery_agent_show_cmd")
         g.custom_command("show-report", "ccf_network_recovery_agent_show_report_cmd")
         g.custom_command(
+            "show-network-report", "ccf_network_recovery_agent_show_network_report_cmd"
+        )
+        g.custom_command(
             "generate-member", "ccf_network_recovery_agent_generate_member_cmd"
         )
         g.custom_command(
@@ -236,6 +283,10 @@ def load_command_table(self, _):
         g.custom_command(
             "show-join-policy", "ccf_recovery_service_api_network_show_join_policy_cmd"
         )
+
+    with self.command_group("cleanroom ccf consortium-manager") as g:
+        g.custom_command("create", "ccf_consortium_manager_create_cmd")
+        g.custom_command("show", "ccf_consortium_manager_show_cmd")
 
     with self.command_group("cleanroom datastore") as g:
         g.custom_command("add", "datastore_add_cmd")

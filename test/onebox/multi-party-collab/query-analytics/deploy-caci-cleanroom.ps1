@@ -5,7 +5,7 @@ param
     [string]$resourceGroup,
 
     [string]
-    $location = "westus",
+    $location = "westeurope",
 
     [string]
     $outDir = "$PSScriptRoot/generated",
@@ -45,7 +45,7 @@ if (!$nowait) {
     }
     
     # wait for pyspark endpoint to be up.
-    $timeout = New-TimeSpan -Minutes 10
+    $timeout = New-TimeSpan -Minutes 20
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     while ((curl -o /dev/null -w "%{http_code}" -s -k https://${ccrIP}:8310/app/run_query/12) -ne "200") {
         Write-Host "Waiting for pyspark endpoint to be up at https://${ccrIP}:8310"
@@ -58,21 +58,26 @@ if (!$nowait) {
     Write-Host "Successfully connected to the pyspark endpoint at https://${ccrIP}:8310"
 }
 
+curl -v -X POST -s -k https://${ccrIP}:8200/gov/exportLogs
+curl -v -X POST -s -k https://${ccrIP}:8200/gov/exportTelemetry
+
 if (!$skiplogs) {
     mkdir -p $outDir/results
-    az cleanroom datasink download `
-        --cleanroom-config $outDir/configurations/consumer-config `
+    az cleanroom datastore download `
+        --config $outDir/configurations/consumer-config `
         --name consumer-output `
-        --target-folder $outDir/results
+        --dst $outDir/results
 
     az cleanroom telemetry download `
         --cleanroom-config $outDir/configurations/publisher-config `
+        --datastore-config $outDir/datastores/analytics-publisher-datastore-config `
         --target-folder $outDir/results
 
     az cleanroom logs download `
         --cleanroom-config $outDir/configurations/publisher-config `
+        --datastore-config $outDir/datastores/analytics-publisher-datastore-config `
         --target-folder $outDir/results
 
     Write-Host "Application logs:"
-    cat $outDir/results/application-telemetry/demo-app.log
+    cat $outDir/results/application-telemetry*/**/*.log
 }

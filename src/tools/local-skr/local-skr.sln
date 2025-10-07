@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "local-skr", "local-skr.cspr
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "restapi-common", "..\..\internal\restapi-common\restapi-common.csproj", "{2370CD9C-C343-4C3E-8078-595B084FAE58}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Attestation", "..\..\internal\Attestation\Attestation.csproj", "{5A93C71E-B788-CA1D-705C-59C90E30B162}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{2370CD9C-C343-4C3E-8078-595B084FAE58}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2370CD9C-C343-4C3E-8078-595B084FAE58}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2370CD9C-C343-4C3E-8078-595B084FAE58}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5A93C71E-B788-CA1D-705C-59C90E30B162}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A93C71E-B788-CA1D-705C-59C90E30B162}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A93C71E-B788-CA1D-705C-59C90E30B162}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5A93C71E-B788-CA1D-705C-59C90E30B162}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -22,5 +22,9 @@
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Azure.Identity" />
   </ItemGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="..\Attestation\Attestation.csproj" />
+  </ItemGroup>
 
 </Project>

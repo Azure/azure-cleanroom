@@ -46,45 +46,21 @@ runs:
         $env:TDC_MHSM_NAME='${{ env.TDC_MHSM_NAME }}'
         ./test/onebox/multi-party-collab/ml-training/run-collab-aci.ps1 -registry mcr -repo ${{ inputs.repo }} -tag ${{ inputs.tag }} -kvType "${{ inputs.kvType }}" -NoBuild
 
-    - name: Dump ccf-provider-client logs
+    - name: Dump ccf-provider logs
       shell: pwsh
       if: ${{ !cancelled() }}
-      run: docker logs ccf-provider-client-1
+      run: docker compose -p ob-ml-training-ccf-provider logs
 
     - name: Dump ob-isv-client logs
       if: ${{ !cancelled() }}
       shell: pwsh
       run: docker logs ob-isv-client-cgs-client-1
 
-    - name: Upload results
+    - name: Upload generated
       uses: actions/upload-artifact@v4
       with:
-          name: results-ml-training-caci
-          path: ./test/onebox/multi-party-collab/ml-training/generated/results
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - name: Upload configurations
-      uses: actions/upload-artifact@v4
-      with:
-          name: configurations-ml-training-caci
-          path: ./test/onebox/multi-party-collab/ml-training/generated/configurations
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - name: Upload deployments
-      uses: actions/upload-artifact@v4
-      with:
-          name: deployments-ml-training-caci
-          path: ./test/onebox/multi-party-collab/ml-training/generated/deployments
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - name: Upload ccf
-      uses: actions/upload-artifact@v4
-      with:
-          name: ccf-ml-training-caci
-          path: ./test/onebox/multi-party-collab/ml-training/generated/ccf
+          name: generated-ml-training-caci-${{ inputs.kvType }}
+          path: ./test/onebox/multi-party-collab/ml-training/generated
           overwrite: true
       if: ${{ !cancelled() }}
 

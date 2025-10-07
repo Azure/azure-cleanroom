@@ -416,5 +416,4 @@ src/tools/aes_encryptor/aes_encryptor.so
 
 .venv*
 sidecar-digests.yaml
-.ccf-network-security-policy
-.ccf-recovery-service-security-policy
+.policies

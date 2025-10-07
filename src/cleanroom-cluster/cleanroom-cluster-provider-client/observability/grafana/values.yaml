@@ -1,0 +1,62 @@
+service:
+  type: ClusterIP
+
+persistence:
+  enabled: true
+  storageClassName:
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+
+sidecar:
+  dashboards:
+    enabled: true
+    label: grafana_dashboard
+
+initChownData:
+  enabled: false
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://cleanroom-spark-prometheus-server.telemetry.svc.cluster.local:9090
+        uid: prometheus_uid
+        access: proxy
+        isDefault: true
+      - name: Loki
+        type: loki
+        url: http://cleanroom-spark-loki.telemetry.svc.cluster.local:3100
+        uid: loki_uid
+        access: proxy
+        jsonData:
+          maxLines: 1000
+          derivedFields:
+            - matcherRegex: "\"traceID\":\"([^\"]+)\""
+              name: TraceID
+              datasourceUid: tempo_uid
+              url: /explore?left=traces%7BtraceID%3D~%22$1%22%7D
+              urlDisplayLabel: 'View Trace'
+      - name: Tempo
+        type: tempo
+        url: http://cleanroom-spark-tempo.telemetry.svc.cluster.local:3200
+        uid: tempo_uid
+        access: proxy
+        jsonData:
+          tracesToLogsV2:
+            datasourceUid: loki_uid
+            spanStartTimeShift: '-1h'
+            spanEndTimeShift: '1h'
+            filterByTraceID: true
+            filterBySpanID: true
+            customQuery: false
+          serviceMap:
+            datasourceUid: 'prometheus_uid'
+          nodeGraph:
+            enabled: true
+          traceQuery:
+            timeShiftEnabled: true
+            spanStartTimeShift: '-1h'
+            spanEndTimeShift: '1h'

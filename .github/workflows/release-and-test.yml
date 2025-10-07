@@ -11,7 +11,7 @@ on:
       release-type:
         description: The release type
         type: string
-        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers"
+        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client"
   workflow_call:
     inputs:
       tag:
@@ -21,7 +21,7 @@ on:
       release-type:
         description: The build type
         type: string
-        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers"
+        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client"
       needs-attestation:
         description: Whether to attest released artefacts
         required: false
@@ -62,6 +62,8 @@ jobs:
           submodules: recursive
           fetch-tags: true
           ref: ${{ inputs.tag }}
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
 
       - name: Generate short commit hash
         if: ${{ inputs.tag == ''}}
@@ -241,6 +243,54 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           needs-attestation: ${{ inputs.needs-attestation }}
 
+      - name: Release CCF consortium manager containers
+        if: ${{ contains(inputs.release-type, 'ccf-consortium-manager-containers') }}
+        uses: ./.github/actions/release-ccf-consortium-manager-containers
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+          environment: internal
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          needs-attestation: ${{ inputs.needs-attestation }}
+
+      - name: Release cleanroom workload infrastructure containers
+        if: ${{ contains(inputs.release-type, 'cleanroom-workload-infra-containers') }}
+        uses: ./.github/actions/release-cleanroom-workload-infra-containers
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+          environment: internal
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          needs-attestation: ${{ inputs.needs-attestation }}
+
+      - name: Release cleanroom cluster provider client
+        if: ${{ contains(inputs.release-type, 'cleanroom-cluster-provider-client') }}
+        uses: ./.github/actions/release-cleanroom-cluster-provider-client
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+          environment: internal
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          needs-attestation: ${{ inputs.needs-attestation }}
+
+      - name: Release version documents for cleanroom cluster provider client
+        if: ${{ contains(inputs.release-type, 'cleanroom-cluster-provider-client') }}
+        uses: ./.github/actions/release-cleanroom-cluster-provider-client-version-documents
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+          environment: internal
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          needs-attestation: ${{ inputs.needs-attestation }}
+
       - name: Release CCF network security policy
         if: ${{ contains(inputs.release-type, 'ccf-network-containers') }}
         uses: ./.github/actions/release-ccf-network-security-policy
@@ -256,6 +306,30 @@ jobs:
       - name: Release CCF recovery service security policy
         if: ${{ contains(inputs.release-type, 'ccf-recovery-service-containers') }}
         uses: ./.github/actions/release-ccf-recovery-service-security-policy
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+          environment: internal
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          needs-attestation: ${{ inputs.needs-attestation }}
+
+      - name: Release CCF consortium manager security policy
+        if: ${{ contains(inputs.release-type, 'ccf-consortium-manager-containers') }}
+        uses: ./.github/actions/release-ccf-consortium-manager-security-policy
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+          environment: internal
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          needs-attestation: ${{ inputs.needs-attestation }}
+
+      - name: Release cleanroom workload infrastructure containers policy
+        if: ${{ contains(inputs.release-type, 'cleanroom-workload-infra-containers') }}
+        uses: ./.github/actions/release-cleanroom-workload-infra-containers-policy
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
           environment: internal
@@ -321,6 +395,8 @@ jobs:
           fetch-tags: true
           ref: ${{ inputs.tag }}
 
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
       - name: Generate short commit hash
         if: ${{ inputs.tag == ''}}
         id: get-short-commit-hash
@@ -357,6 +433,8 @@ jobs:
           fetch-tags: true
           ref: ${{ inputs.tag }}
 
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
       - name: Generate short commit hash
         if: ${{ inputs.tag == ''}}
         id: get-short-commit-hash
@@ -392,6 +470,8 @@ jobs:
           fetch-tags: true
           ref: ${{ inputs.tag }}
 
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
       - name: Generate short commit hash
         if: ${{ inputs.tag == ''}}
         id: get-short-commit-hash
@@ -403,37 +483,38 @@ jobs:
           repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
 
-  # bvt-triton-inference:
-  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
-  #   needs: [build, release-to-test]
-  #   environment: test
-  #   env:
-  #     RELEASE_ACR_NAME: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
-  #     AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-  #     AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-  #     AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-  #     RUN_ID: ${{ github.run_id }}
-  #     JOB_ID: ${{ github.job }}
-  #     USE_PREPROVISIONED_OIDC: "true"
-  #   # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
-  #   permissions:
-  #     id-token: write
-  #     contents: read  # This is required for actions/checkout
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
-  #       with:
-  #         submodules: recursive
-  #         fetch-tags: true
-  #         ref: ${{ inputs.tag }}
+  bvt-big-data-query-analytics:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    needs: [build, release-to-test]
+    environment: test
+    env:
+      RELEASE_ACR_NAME: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      USE_PREPROVISIONED_OIDC: "true"
+    # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
+    permissions:
+      id-token: write
+      contents: read  # This is required for actions/checkout
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-tags: true
+          ref: ${{ inputs.tag }}
+      - uses: ./.github/actions/setup-docker-on-data-disk
 
-  #     - name: Generate short commit hash
-  #       if: ${{ inputs.tag == ''}}
-  #       id: get-short-commit-hash
-  #       run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      - name: Generate short commit hash
+        if: ${{ inputs.tag == ''}}
+        id: get-short-commit-hash
+        run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-  #     - name: Run triton-inference test
-  #       uses: ./.github/actions/test-multi-party-collab/test-triton-inference-caci
-  #       with:
-  #         repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
-  #         tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+      - name: Run big-data-query-analytics test
+        uses: ./.github/actions/test-multi-party-collab/test-big-data-query-analytics-caci
+        with:
+          repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}

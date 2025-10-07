@@ -57,6 +57,7 @@ $ccrContainers = @(
     "ccr-init",
     "identity"
     "blobfuse-launcher",
+    "s3fs-launcher"
     "code-launcher",
     "otel-collector",
     "ccr-attestation",
@@ -82,6 +83,7 @@ $ccrPolicyDocuments = @(
     "policies/identity-policy",
     "policies/otel-collector-policy",
     "policies/blobfuse-launcher-policy",
+    "policies/s3fs-launcher-policy",
     "policies/skr-policy"
 )
 
@@ -103,8 +105,6 @@ $cgsJsAppVersionDocument = "versions/cgs-js-app"
 
 $ccfProviderClient = "ccf/ccf-provider-client"
 
-$ccfNginx = "ccf/ccf-nginx"
-
 $ccfProviders = @(
     "ccf/app/run-js/snp",
     "ccf/app/run-js/virtual"
@@ -112,6 +112,8 @@ $ccfProviders = @(
 
 $ccfRecoveryService = "ccf/ccf-recovery-service"
 $ccfRecoveryAgent = "ccf/ccf-recovery-agent"
+
+$ccfConsortiumManager = "ccf/ccf-consortium-manager"
 
 if ($releaseType.Contains("cleanroom-containers")) {
     foreach ($container in $ccrContainers) {
@@ -150,10 +152,6 @@ if ($releaseType.Contains(("ccf-provider-client"))) {
     Verify-Attestation -tag $tag -container $ccfProviderClient -environment $environment
 }
 
-if ($releaseType.Contains(("ccf-nginx"))) {
-    Verify-Attestation -tag $tag -container $ccfNginx -environment $environment
-}
-
 if ($releaseType.Contains(("ccf-providers"))) {
     foreach ($container in $ccfProviders) {
         Verify-Attestation -tag $tag -container $container -environment $environment
@@ -166,6 +164,10 @@ if ($releaseType.Contains(("ccf-recovery-service"))) {
 
 if ($releaseType.Contains(("ccf-recovery-agent"))) {
     Verify-Attestation -tag $tag -container $ccfRecoveryAgent -environment $environment
+}
+
+if ($releaseType.Contains(("ccf-consortium-manager"))) {
+    Verify-Attestation -tag $tag -container $ccfConsortiumManager -environment $environment
 }
 
 Verify-Attestation -tag $tag -container cli/cleanroom-whl -environment $environment

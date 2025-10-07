@@ -1,23 +1,19 @@
-import ast
 import base64
 import json
 import logging
+import os
+from doctest import debug
 from string import Template
 from urllib.parse import urlparse
-import os
 
 import oras.client
 import yaml
 
-from ..exceptions.exception import (
-    ErrorCode,
-    CleanroomSpecificationError,
-)
-
+from ..exceptions.exception import CleanroomSpecificationError, ErrorCode
 from ..models.model import *
 
 DEFAULT_CLEANROOM_CONTAINER_REGISTRY_URL = "mcr.microsoft.com/azurecleanroom"
-DEFAULT_CLEANROOM_CONTAINER_VERSION = "5.0.0"
+DEFAULT_CLEANROOM_CONTAINER_VERSION = "4.0.0"
 DEFAULT_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = (
     "mcr.microsoft.com/azurecleanroom/sidecar-digests:"
     + DEFAULT_CLEANROOM_CONTAINER_VERSION
@@ -83,7 +79,12 @@ sidecar_replacement_vars = {
         "telemetryMountPath": telemetry_mount_path,
     },
     "otel-collector": lambda telemetry_mount_path: {
-        "telemetryMountPath": telemetry_mount_path
+        "telemetryMountPath": telemetry_mount_path,
+        "telemetryPath": telemetry_mount_path,
+        "telemetryCollectionEnabled": "true",
+        "prometheusEndpoint": "",
+        "lokiEndpoint": "",
+        "tempoEndpoint": "",
     },
     "ccr-governance": lambda ccf_endpoint, contract_id, service_cert_base64, telemetry_mount_path: {
         "cgsEndpoint": ccf_endpoint,
@@ -253,6 +254,13 @@ def get_containers_registry_url():
     )
 
 
+def get_sidecars_policy_document_registry_url():
+    return os.environ.get(
+        "AZCLI_CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL",
+        get_containers_registry_url(),
+    )
+
+
 def get_scratch_dir():
     return os.environ.get(
         "SCRATCH_DIR",
@@ -294,16 +302,10 @@ def get_sidecars_version(logger: logging.Logger):
                 os.path.join(dir_path, CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_NAME)
             ):
                 os.makedirs(dir_path, exist_ok=True)
-                insecure = False
-                if urlparse("https://" + versions_registry_url).hostname == "localhost":
-                    insecure = True
-
-                client = oras.client.OrasClient(
-                    hostname="https://" + versions_registry_url,
-                    insecure=insecure,
-                )
+                insecure = use_insecure_http(versions_registry_url)
+                client = oras.client.OrasClient(insecure=insecure)
                 client.pull(
-                    target="https://" + versions_registry_url,
+                    target=versions_registry_url,
                     outdir=dir_path,
                 )
 
@@ -319,12 +321,10 @@ def get_sidecar_policy_document(imageName: str, logger: logging.Logger):
     if not os.path.exists(bin_folder):
         os.makedirs(bin_folder)
 
-    policy_registry_url = get_containers_registry_url()
+    policy_registry_url = get_sidecars_policy_document_registry_url()
 
     sidecar = [x for x in get_sidecars_version(logger) if x["image"] == imageName][0]
-    insecure = False
-    if urlparse("https://" + policy_registry_url).hostname == "localhost":
-        insecure = True
+    insecure = use_insecure_http(policy_registry_url)
     policy_document_url = (
         f"{policy_registry_url}/policies/"
         + f"{sidecar['policyDocument']}@{sidecar['policyDocumentDigest']}"
@@ -342,10 +342,7 @@ def get_sidecar_policy_document(imageName: str, logger: logging.Logger):
                 os.path.join(dir_path, sidecar["policyDocument"] + ".yaml")
             ):
                 os.makedirs(dir_path, exist_ok=True)
-                client = oras.client.OrasClient(
-                    hostname="https://" + policy_registry_url,
-                    insecure=insecure,
-                )
+                client = oras.client.OrasClient(insecure=insecure)
                 client.pull(
                     target=policy_document_url,
                     outdir=dir_path,
@@ -462,21 +459,32 @@ def get_blobfuse_sidecar(
     debug_mode: bool,
     logger: logging.Logger,
 ):
-    assert (
-        access_point.protection.encryptionSecrets
-    ), f"Encryption secrets is null for {access_name}."
-    kek_entry = access_point.protection.encryptionSecrets.kek
-    dek_entry = access_point.protection.encryptionSecrets.dek
+    kek_kv_url = ""
+    maa_url = ""
+    kek_kid = ""
+    dek_secret_name = ""
+    dek_vault_url = ""
+    if encryption_mode in ["CPK", "CSE"]:
+        assert (
+            access_point.protection.encryptionSecrets
+        ), f"Encryption secrets is null for {access_name}."
+        kek_entry = access_point.protection.encryptionSecrets.kek
+        dek_entry = access_point.protection.encryptionSecrets.dek
 
-    kek_kv_url = urlparse(kek_entry.secret.backingResource.provider.url).hostname
-    assert (
-        kek_entry.secret.backingResource.provider.configuration
-    ), f"KEK configuration is null for {access_name}."
-    maa_url = urlparse(
-        ast.literal_eval(kek_entry.secret.backingResource.provider.configuration)[
-            "authority"
-        ]
-    ).hostname
+        kek_kv_url = urlparse(kek_entry.secret.backingResource.provider.url).hostname
+        assert (
+            kek_entry.secret.backingResource.provider.configuration
+        ), f"KEK configuration is null for {access_name}."
+        maa_url = urlparse(
+            json.loads(
+                base64.b64decode(
+                    kek_entry.secret.backingResource.provider.configuration
+                ).decode()
+            )["authority"]
+        ).hostname
+        kek_kid = kek_entry.secret.backingResource.name
+        dek_secret_name = dek_entry.secret.backingResource.name
+        dek_vault_url = dek_entry.secret.backingResource.provider.url
     storage_account_name = urlparse(access_point.store.provider.url).hostname.split(
         "."
     )[0]
@@ -494,9 +502,7 @@ def get_blobfuse_sidecar(
 
     # TODO (HPrabh): Change the plain volume access name to "access_name" and cipher one to "access_name-cipher".
     blobfuse_sidecar_replacement_vars = {
-        "datasetName": (
-            (access_name + "-plain") if encryption_mode == "None" else access_name
-        ),
+        "datasetName": access_name,
         "storageContainerName": storageContainerName,
         "mountPath": mount_path,
         "maaUrl": maa_url,
@@ -508,15 +514,17 @@ def get_blobfuse_sidecar(
             else "--no-read-only"
         ),
         "kekVaultUrl": kek_kv_url,
-        "kekKid": kek_entry.secret.backingResource.name,
-        "dekSecretName": dek_entry.secret.backingResource.name,
-        "dekVaultUrl": dek_entry.secret.backingResource.provider.url,
+        "kekKid": kek_kid,
+        "dekSecretName": dek_secret_name,
+        "dekVaultUrl": dek_vault_url,
+        "cgsDekSecretId": "",
         "clientId": access_point.identity.clientId,
         "tenantId": access_point.identity.tenantId,
         "encryptionMode": encryption_mode,
         "useAdls": ("--use-adls" if is_onelake else "--no-use-adls"),
         "telemetryMountPath": TELEMETRY_MOUNT_PATH,
         "volumeStatusMountPath": VOLUMESTATUS_MOUNT_PATH,
+        "traceContextJsonBase64": "",
     }
 
     blobfuse_sidecar = get_sidecar(
@@ -556,9 +564,11 @@ def get_deployment_template(
     contract_id: str,
     ccf_endpoint: str,
     sslServerCertBase64: str,
-    debug_mode: bool,
+    generate_mode: str,
     logger: logging.Logger,
 ):
+    debug_mode = generate_mode == "cached-debug"
+    allow_all = generate_mode == "allow-all"
     sidecars: list[Sidecar] = []
     if get_containers_registry_url() != DEFAULT_CLEANROOM_CONTAINER_REGISTRY_URL:
         logger.warning(
@@ -639,26 +649,26 @@ def get_deployment_template(
         )
 
     for access_point in cleanroom_spec.datasources + cleanroom_spec.datasinks:
-        import ast
-
         assert (
             access_point.protection.configuration
         ), f"Protection configuration is null for {access_point.name}."
 
-        encryption_config = ast.literal_eval(access_point.protection.configuration)
+        encryption_config = json.loads(
+            base64.b64decode(access_point.protection.configuration).decode()
+        )
         encryption_mode = encryption_config["EncryptionMode"]
-
         if encryption_mode == "CSE":
             sidecars.append(
                 get_blobfuse_sidecar(
                     access_point,
                     "/mnt/remote",
-                    "None",
-                    access_point.name,
+                    "SSE",
+                    access_point.name + "-plain",
                     debug_mode,
                     logger,
                 )
             )
+
         sidecars.append(
             get_blobfuse_sidecar(
                 access_point,
@@ -738,9 +748,27 @@ def get_deployment_template(
     policy_template["containers"].append(ccr_init.policy_json)
     container_rego_policies.append(ccr_init.policy_rego)
 
-    rego_policy = get_rego_policy(container_rego_policies)
-
-    rego_policy = get_rego_policy(container_rego_policies)
+    if allow_all:
+        allow_all_base64 = (
+            "cGFja2FnZSBwb2xpY3kKCmFwaV9zdm4gOj0gIjAuMTAuMCIKCm1vdW50X2RldmljZSA"
+            + "6PSB7ImFsbG93ZWQiOiB0cnVlfQptb3VudF9vdmVybGF5IDo9IHsiYWxsb3dlZCI6I"
+            + "HRydWV9CmNyZWF0ZV9jb250YWluZXIgOj0geyJhbGxvd2VkIjogdHJ1ZSwgImVudl9"
+            + "saXN0IjogbnVsbCwgImFsbG93X3N0ZGlvX2FjY2VzcyI6IHRydWV9CnVubW91bnRfZGV"
+            + "2aWNlIDo9IHsiYWxsb3dlZCI6IHRydWV9IAp1bm1vdW50X292ZXJsYXkgOj0geyJhbGx"
+            + "vd2VkIjogdHJ1ZX0KZXhlY19pbl9jb250YWluZXIgOj0geyJhbGxvd2VkIjogdHJ1ZSw"
+            + "gImVudl9saXN0IjogbnVsbH0KZXhlY19leHRlcm5hbCA6PSB7ImFsbG93ZWQiOiB0cnV"
+            + "lLCAiZW52X2xpc3QiOiBudWxsLCAiYWxsb3dfc3RkaW9fYWNjZXNzIjogdHJ1ZX0Kc2h"
+            + "1dGRvd25fY29udGFpbmVyIDo9IHsiYWxsb3dlZCI6IHRydWV9CnNpZ25hbF9jb250YWl"
+            + "uZXJfcHJvY2VzcyA6PSB7ImFsbG93ZWQiOiB0cnVlfQpwbGFuOV9tb3VudCA6PSB7ImF"
+            + "sbG93ZWQiOiB0cnVlfQpwbGFuOV91bm1vdW50IDo9IHsiYWxsb3dlZCI6IHRydWV9Cmd"
+            + "ldF9wcm9wZXJ0aWVzIDo9IHsiYWxsb3dlZCI6IHRydWV9CmR1bXBfc3RhY2tzIDo9IHs"
+            + "iYWxsb3dlZCI6IHRydWV9CnJ1bnRpbWVfbG9nZ2luZyA6PSB7ImFsbG93ZWQiOiB0cnV"
+            + "lfQpsb2FkX2ZyYWdtZW50IDo9IHsiYWxsb3dlZCI6IHRydWV9CnNjcmF0Y2hfbW91bnQ"
+            + "gOj0geyJhbGxvd2VkIjogdHJ1ZX0Kc2NyYXRjaF91bm1vdW50IDo9IHsiYWxsb3dlZCI6IHRydWV9Cg=="
+        )
+        rego_policy = base64.b64decode(allow_all_base64).decode()
+    else:
+        rego_policy = get_rego_policy(container_rego_policies)
     return arm_template, policy_template, rego_policy
 
 
@@ -764,7 +792,7 @@ def validate_config(spec: CleanRoomSpecification, logger: logging.Logger):
                     )
                     issues.append(
                         CleanroomSpecificationError(
-                            ErrorCode.DatastoreNotFound,
+                            ErrorCode.DataStoreNotFound,
                             f"Datasource {datasource} not found in the cleanroom specification.",
                         )
                     )
@@ -834,3 +862,11 @@ def validate_config(spec: CleanRoomSpecification, logger: logging.Logger):
         )
 
     return issues, warnings
+
+
+def use_insecure_http(registry_url: str) -> bool:
+    return (
+        os.environ.get("AZCLI_CLEANROOM_CONTAINER_REGISTRY_USE_HTTP", "false").lower()
+        == "true"
+        or urlparse("https://" + registry_url).hostname == "localhost"
+    )

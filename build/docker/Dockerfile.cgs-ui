@@ -19,10 +19,11 @@ COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
 RUN dotnet restore /app/src/governance/governance.sln
 
 # copy everything else and build app
-COPY src /app/src
 COPY stylecop.json /app
 COPY Menees.Analyzers.Settings.xml /app
 COPY .editorconfig /app
+COPY src/governance /app/src/governance
+COPY src/internal /app/src/internal
 
 # Publish the application
 RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/governance/ui/cgs-ui.csproj

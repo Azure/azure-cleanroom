@@ -22,6 +22,7 @@ if ($outDir -eq "") {
 
 $ccrContainers = @(
     "blobfuse-launcher",
+    "s3fs-launcher",
     "ccr-attestation",
     "ccr-governance",
     "ccr-init",
@@ -32,6 +33,16 @@ $ccrContainers = @(
     "identity",
     "otel-collector",
     "skr"
+)
+
+$ccrVN2Containers = @(
+    "blobfuse-launcher",
+    "s3fs-launcher",
+    "ccr-attestation",
+    "ccr-governance",
+    "ccr-proxy",
+    "identity",
+    "otel-collector"
 )
 
 $ccrArtefacts = @(
@@ -54,21 +65,37 @@ foreach ($container in $ccrContainers) {
     }
 
     if (!$skipRegoPolicy) {
-        $containerRegoPolicy = Get-Container-Rego-Policy -repo $repo -containerName $container -digest $digest -outDir $outDir
-        $containerDebugRegoPolicy = Get-Container-Rego-Policy -repo $repo -containerName $container -digest $digest -outDir $outDir -debugMode
+        $containerRegoPolicy = Get-Container-Rego-Policy-Json -repo $repo -containerName $container -digest $digest -outDir $outDir
+        $containerDebugRegoPolicy = Get-Container-Rego-Policy-Json -repo $repo -containerName $container -digest $digest -outDir $outDir -debugMode
+
+        if ($ccrVN2Containers.Contains($container)) {
+            $containerVirtualNodePolicy = Get-VN2-Container-Rego-Policy-Json -repo $repo -containerName $container -digest $digest -outDir $outDir
+            $containerVirtualNodePolicyDebug = Get-VN2-Container-Rego-Policy-Json -repo $repo -containerName $container -digest $digest -outDir $outDir -debugMode
+        }
+        else {
+            $containerVirtualNodePolicy = "{}"
+            $containerVirtualNodePolicyDebug = "{}"
+        }
     }
     else {
         $containerRegoPolicy = "{}"
+        $containerDebugRegoPolicy = "{}"
+        $containerVirtualNodePolicy = "{}"
+        $containerVirtualNodePolicyDebug = "{}"
     }
-    $templateJson = Get-Content -Path "$PSScriptRoot/templates/$container.json" | ConvertFrom-Json
-    $policyJson = Get-Content -Path "$PSScriptRoot/templates/$container-policy.json" | ConvertFrom-Json
+    $templateJson = Get-Content -Path "$PSScriptRoot/templates/ccr-templates/$container.json" | ConvertFrom-Json
+    $policyJson = Get-Content -Path "$PSScriptRoot/templates/ccr-policies/$container-policy.json" | ConvertFrom-Json
+    $virtualNodeYaml = Get-Content -Path "$PSScriptRoot/templates/ccr-templates/$container-virtual-node.yaml" | ConvertFrom-Yaml
     $containerPolicies += [ordered]@{
-        image        = $container
-        templateJson = $templateJson
-        policy       = @{
-            json       = $policyJson
-            rego       = $containerRegoPolicy
-            rego_debug = $containerDebugRegoPolicy
+        image           = $container
+        templateJson    = $templateJson
+        virtualNodeYaml = $virtualNodeYaml
+        policy          = @{
+            json                    = $policyJson
+            rego                    = $containerRegoPolicy
+            rego_debug              = $containerDebugRegoPolicy
+            virtual_node_rego       = $containerVirtualNodePolicy
+            virtual_node_rego_debug = $containerVirtualNodePolicyDebug
         }
     }
 }

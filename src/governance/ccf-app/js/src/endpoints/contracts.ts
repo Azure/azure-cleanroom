@@ -6,11 +6,15 @@ import {
   PutContractRequest,
   GetContractResponse,
   ListContractResponse,
+  ListContractsResponse,
   ProposalStoreItem,
   ProposalInfoItem,
   SetContractArgs,
   AcceptedContractStoreItem
 } from "../models";
+import { validateCallerAuthorized } from "../utils/utils";
+
+import { parseRequestQuery } from "../utils/utils";
 
 const contractsStore = ccfapp.typedKv(
   "public:contracts",
@@ -108,6 +112,10 @@ export function putContract(request: ccfapp.Request<PutContractRequest>) {
 export function getContract(
   request: ccfapp.Request
 ): ccfapp.Response<GetContractResponse> | ccfapp.Response<ErrorResponse> {
+  const error = validateCallerAuthorized(request);
+  if (error !== undefined) {
+    return error;
+  }
   const id = request.params.contractId;
 
   // Check if the contract is already accepted.
@@ -225,17 +233,91 @@ export function getContract(
   };
 }
 
-export function listContracts():
-  | ccfapp.Response<ListContractResponse[]>
-  | ccfapp.Response<ErrorResponse> {
-  const contractSet = new Set<string>();
-  contractsStore.forEach((v, k) => {
-    contractSet.add(k);
-  });
+export function listContracts(
+  request: ccfapp.Request
+): ccfapp.Response<ListContractsResponse> | ccfapp.Response<ErrorResponse> {
+  const error = validateCallerAuthorized(request);
+  if (error !== undefined) {
+    return error;
+  }
 
-  acceptedContractsStore.forEach((v, k) => {
-    contractSet.add(k);
-  });
+
+  const parsedQuery = parseRequestQuery(request);
+  const stateParam = parsedQuery.state;
+
+  if (
+    stateParam &&
+    stateParam !== "Draft" &&
+    stateParam !== "Proposed" &&
+    stateParam !== "Accepted"
+  ) {
+    return {
+      statusCode: 400,
+      body: new ErrorResponse(
+        "InvalidParameter",
+        "The state query parameter must be either 'Draft', 'Accepted' or 'Proposed'."
+      )
+    };
+  }
+
+  let contractSet = new Set<string>();
+  if (!stateParam) {
+    // If no state parameter is provided, return all contracts.
+    contractsStore.forEach((v, k) => {
+      contractSet.add(k);
+    });
+
+    acceptedContractsStore.forEach((v, k) => {
+      contractSet.add(k);
+    });
+  } else if (stateParam === "Accepted") {
+    acceptedContractsStore.forEach((v, k) => {
+      contractSet.add(k);
+    });
+  } else if (stateParam === "Proposed" || stateParam === "Draft") {
+    const candidateContracts = new Set<string>();
+    contractsStore.forEach((v, k) => {
+      if (!acceptedContractsStore.has(k)) {
+        candidateContracts.add(k);
+      }
+    });
+
+    if (candidateContracts.size !== 0) {
+      const proposedContracts = new Set<string>();
+      proposalsStore.forEach((v, k) => {
+        const proposal = ccf.bufToJsonCompatible(v) as ProposalStoreItem;
+        proposal.actions.forEach((value) => {
+          if (value.name === "set_contract") {
+            const args = value.args as SetContractArgs;
+            if (!candidateContracts.has(args.contractId)) {
+              return;
+            }
+            const proposalInfo = ccf.bufToJsonCompatible(
+              proposalsInfoStore.get(k)
+            ) as ProposalInfoItem;
+            if (proposalInfo.state == "Open") {
+              proposedContracts.add(args.contractId);
+            }
+          }
+        });
+      });
+
+      if (stateParam === "Proposed") {
+        contractSet = proposedContracts;
+      } else {
+        if (stateParam !== "Draft") {
+          throw new Error(
+            `Unexpected  state parameter: ${stateParam}. Expected 'Draft'.`
+          );
+        }
+        contractSet = new Set(
+          [...candidateContracts].filter((k) => !proposedContracts.has(k))
+        );
+      }
+    }
+  } else {
+    throw new Error(`Unhandled state parameter value: ${stateParam}.`);
+  }
 
   const contracts: ListContractResponse[] = [];
   contractSet.forEach((v) => {
@@ -245,5 +327,9 @@ export function listContracts():
     contracts.push(item);
   });
 
-  return { body: contracts };
+  return {
+    body: {
+      value: contracts,
+    }
+  };
 }

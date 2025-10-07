@@ -16,6 +16,7 @@
     <ProjectReference Include="..\ccf-common\ccf-common.csproj" />
     <ProjectReference Include="..\ccf-provider-common\ccf-provider-common.csproj" />
     <ProjectReference Include="..\ccf-provider\ccf-provider.csproj" />
+    <ProjectReference Include="..\consortium-manager\ccf-consortium-manager-provider\ccf-consortium-manager-provider.csproj" />
     <ProjectReference Include="..\recovery\ccf-recovery-service-provider\ccf-recovery-service-provider.csproj" />
   </ItemGroup>
 

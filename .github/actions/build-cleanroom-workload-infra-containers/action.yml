@@ -1,0 +1,43 @@
+name: Build cleanroom workload infrastructure containers
+description: Build cleanroom workload infrastructure containers
+
+inputs:
+  tag:
+    required: true
+    description: The tag
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: cleanroom-spark-analytics-agent
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.cleanroom-spark-analytics-agent
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: cleanroom-spark-frontend
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.cleanroom-spark-frontend
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: cleanroom-spark-analytics-app
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.cleanroom-spark-analytics-app
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-helm-chart-and-artefacts
+      with:
+        name: cleanroom-spark-analytics-agent
+        tag: ${{ inputs.tag }}
+        path: ${{ github.workspace }}/src/workloads/cleanroom-spark-analytics-agent/helm/chart
+
+    - uses: ./.github/actions/build-helm-chart-and-artefacts
+      with:
+        name: cleanroom-spark-frontend
+        tag: ${{ inputs.tag }}
+        path: ${{ github.workspace }}/src/workloads/cleanroom-spark-frontend/helm/chart

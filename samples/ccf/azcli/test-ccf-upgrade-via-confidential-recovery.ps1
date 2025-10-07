@@ -1,9 +1,6 @@
 [CmdletBinding()]
 param
 (
-    [string]$repo = "",
-
-    [string]$tag = "latest"
 )
 
 #https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
@@ -16,7 +13,7 @@ $networkName = $ccf.name
 $securityPolicyFile = "$sandbox_common/updatedNetworkRego.rego"
 
 # Add new hostData value in the network and the conf. recovery service.
-pwsh $PSScriptRoot/setup-ccf-upgrade.ps1 -numChangesToMake 1 -confidentialRecovery -repo $repo -tag $tag
+pwsh $PSScriptRoot/setup-ccf-upgrade.ps1 -numChangesToMake 1 -confidentialRecovery
 
 $updatedHostData = cat $securityPolicyFile | sha256sum | cut -d ' ' -f 1
 $nodeCount = 1
@@ -25,9 +22,7 @@ pwsh $PSScriptRoot/recover-ccf.ps1 `
     -nodeCount $nodeCount `
     -confidentialRecovery `
     -securityPolicyCreationOption user-supplied `
-    -securityPolicy $securityPolicyFile `
-    -repo $repo `
-    -tag $tag
+    -securityPolicy $securityPolicyFile
 
 Write-Output "Join policy on the network after recovery"
 az cleanroom ccf network join-policy show `

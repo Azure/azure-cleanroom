@@ -8,31 +8,24 @@
 # pylint: disable=missing-function-docstring
 # pylint: disable=missing-module-docstring
 
+import base64
+
 # Note (gsinha): Various imports are also mentioned inline in the code at the point of usage.
 # This is done to speed up command execution as having all the imports listed at top level is making
 # execution slow for every command even if the top level imported packaged will not be used by that
 # command.
 import hashlib
 import json
-from multiprocessing import Value
 import os
 import tempfile
-from time import sleep
-import base64
 import time
-from urllib.parse import urlparse
 import uuid
-import shlex
-from venv import create
-import jsonschema_specifications
-from knack import CLI
-from knack.log import get_logger
-from azure.cli.core.util import CLIError
-import oras.oci
+from time import sleep
+
 import requests
-import yaml
-from azure.cli.core import get_default_cli
-from azure.cli.core.util import get_file_json, shell_safe_json_parse, is_guid
+from azure.cli.core.util import CLIError, get_file_json, shell_safe_json_parse
+from knack.log import get_logger
+
 from .custom import response_error_message
 from .utilities._azcli_helpers import az_cli
 
@@ -300,7 +293,9 @@ def ccf_network_up(
             + f"--provider-config {provider_config_file}"
         )
 
-    logger.warning(f"Creating ccf network {network_name}.")
+    logger.warning(
+        f"Creating ccf network {network_name}... this might take 5 to 7 minutes."
+    )
     ccf_endpoint = az_cli(
         f"cleanroom ccf network create "
         + f"--name {network_name} "
@@ -423,11 +418,12 @@ def ccf_network_create(
         f"Run `docker compose -p {provider_client_name} logs -f` to monitor network creation progress."
     )
     r = requests.post(
-        f"{provider_endpoint}/networks/{network_name}/create", json=content
+        f"{provider_endpoint}/networks/{network_name}/create?async=true", json=content
     )
-    if r.status_code != 200:
+    if r.status_code != 202:
         raise CLIError(response_error_message(r))
-    return r.json()
+
+    return track_operation(provider_endpoint, r)
 
 
 def ccf_network_delete(
@@ -669,12 +665,12 @@ def ccf_network_recover(
         f"Run `docker compose -p {provider_client_name} logs -f` to monitor network recovery progress."
     )
     r = requests.post(
-        f"{provider_endpoint}/networks/{network_name}/recover",
-        json=content,
+        f"{provider_endpoint}/networks/{network_name}/recover?async=true", json=content
     )
-    if r.status_code != 200:
+    if r.status_code != 202:
         raise CLIError(response_error_message(r))
-    return r.json()
+
+    return track_operation(provider_endpoint, r)
 
 
 def ccf_network_show(
@@ -721,6 +717,24 @@ def ccf_network_recovery_agent_show_report(
     }
     r = requests.post(
         f"{provider_endpoint}/networks/{network_name}/recoveryagents/report",
+        json=content,
+    )
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def ccf_network_recovery_agent_show_network_report(
+    cmd, network_name, infra_type, provider_config, provider_client_name
+):
+    provider_endpoint = get_provider_client_endpoint(cmd, provider_client_name)
+    provider_config = parse_provider_config(provider_config, infra_type)
+    content = {
+        "infraType": infra_type,
+        "providerConfig": provider_config,
+    }
+    r = requests.post(
+        f"{provider_endpoint}/networks/{network_name}/recoveryagents/network/report",
         json=content,
     )
     if r.status_code != 200:
@@ -1124,10 +1138,10 @@ def get_provider_client_port(cmd, provider_client_name: str):
     # method gets invoked frequently to determin the client port. using the docker package instead.
     # from python_on_whales import DockerClient, exceptions
 
-    try:
-        import docker
+    import docker
 
-        client = docker.from_env()
+    client = docker.from_env()
+    try:
         container_name = f"{provider_client_name}-client-1"
         container = client.containers.get(container_name)
         port = container.ports["8080/tcp"][0]["HostPort"]
@@ -1138,10 +1152,18 @@ def get_provider_client_port(cmd, provider_client_name: str):
         return port
     # except exceptions.DockerException as e:
     except Exception as e:
-        raise CLIError(
-            f"Not finding a client instance running with name '{provider_client_name}'. Check "
-            + "the --provider-client parameter value."
-        ) from e
+        # Perhaps the client was started without docker compose and if so the container name might
+        # be directly supplied as input.
+        try:
+            container_name = f"{provider_client_name}"
+            container = client.containers.get(container_name)
+            port = container.ports["8080/tcp"][0]["HostPort"]
+            return port
+        except Exception as e:
+            raise CLIError(
+                f"Not finding a client instance running with name '{provider_client_name}'. Check "
+                + "the --provider-client parameter value."
+            ) from e
 
 
 def get_provider_client_name(cli_ctx, provider_client_name):
@@ -1173,6 +1195,8 @@ def set_docker_compose_env_params():
     # WARN[0000] The "GITHUB_ACTIONS" variable is not set. Defaulting to a blank string.
     if "GITHUB_ACTIONS" not in os.environ:
         os.environ["GITHUB_ACTIONS"] = "false"
+    if "CODESPACES" not in os.environ:
+        os.environ["CODESPACES"] = "false"
     if "AZCLI_CCF_PROVIDER_RUN_JS_APP_VIRTUAL_IMAGE" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_RUN_JS_APP_VIRTUAL_IMAGE"] = ""
     if "AZCLI_CCF_PROVIDER_RUN_JS_APP_SNP_IMAGE" not in os.environ:
@@ -1181,14 +1205,14 @@ def set_docker_compose_env_params():
         os.environ["AZCLI_CCF_PROVIDER_RECOVERY_AGENT_IMAGE"] = ""
     if "AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_IMAGE" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_IMAGE"] = ""
+    if "AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_IMAGE" not in os.environ:
+        os.environ["AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_IMAGE"] = ""
     if "AZCLI_CCF_PROVIDER_PROXY_IMAGE" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_PROXY_IMAGE"] = ""
     if "AZCLI_CCF_PROVIDER_ATTESTATION_IMAGE" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_ATTESTATION_IMAGE"] = ""
     if "AZCLI_CCF_PROVIDER_SKR_IMAGE" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_SKR_IMAGE"] = ""
-    if "AZCLI_CCF_PROVIDER_NGINX_IMAGE" not in os.environ:
-        os.environ["AZCLI_CCF_PROVIDER_NGINX_IMAGE"] = ""
     if "AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL"] = ""
     if (
@@ -1198,12 +1222,19 @@ def set_docker_compose_env_params():
         os.environ[
             "AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_SECURITY_POLICY_DOCUMENT_URL"
         ] = ""
+    if (
+        "AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_SECURITY_POLICY_DOCUMENT_URL"
+        not in os.environ
+    ):
+        os.environ[
+            "AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_SECURITY_POLICY_DOCUMENT_URL"
+        ] = ""
     if "AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL"] = ""
 
 
 def requires_provider_config(infra_type):
-    return infra_type == "virtualaci" or infra_type == "caci"
+    return infra_type == "caci"
 
 
 def parse_provider_config(provider_config, infra_type):
@@ -1352,3 +1383,39 @@ def prepare_confidential_recovery_resources(unique_string, resource_group, ws_fo
     prepare_recovery_resources_file = os.path.join(ws_folder, "recoveryResources.json")
     with open(prepare_recovery_resources_file, "w") as f:
         f.write(json.dumps(resources, indent=2))
+
+
+def track_operation(provider_endpoint, response: requests.Response):
+    progress_till_now = []
+    request_url = response.request.url
+    request_method = response.request.method
+    while True:
+        operation_location = response.headers["Operation-Location"]
+        if not operation_location:
+            raise CLIError(
+                f"Operation-Location header not found in response for {request_method} {request_url}."
+            )
+        response = requests.get(f"{provider_endpoint}{operation_location}")
+        if response.status_code != 200:
+            raise CLIError(response_error_message(response))
+        operation = response.json()
+        progress_till_now = display_progress(progress_till_now, operation)
+        if operation["status"] == "Succeeded":
+            return operation["resource"]
+        if operation["status"] == "Failed":
+            status_code = operation["statusCode"]
+            raise CLIError(
+                f"{request_method} {request_url} failed with status: {status_code} response: {json.dumps(operation, indent=2)}"
+            )
+        time.sleep(2)
+
+
+def display_progress(progress_till_now, operation):
+    if operation["progress"] is not None:
+        to_display = [
+            item for item in operation["progress"] if item not in progress_till_now
+        ]
+        progress_till_now = operation["progress"]
+    for item in to_display:
+        logger.warning(item)
+    return progress_till_now

@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"encoding/base64"
-	"encoding/binary"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -16,14 +16,23 @@ import (
 	"github.com/Azure/azure-storage-fuse/v2/exported"
 )
 
+const (
+	compName          = "encryptor"
+	AuthTagSize       = 16
+	NonceSize         = 12
+	MetaSize          = AuthTagSize + NonceSize // MetaSize = AuthTagSize + NonceSize.
+	PaddingLengthSize = 8
+	EnvEncryptionKey  = "ENCRYPTION_KEY"
+)
+
 // Implements two mount approach with only one file for data and metadata.
 type Encryptor struct {
 	exported.BaseComponent
-	handle           *os.File
+	handleMap        sync.Map
 	blockSize        uint64
 	mountPointCipher string
 	encryptionKey    []byte
-	lastChunkMeta    *LastChunkMeta
+	lastChunkMetaMap sync.Map
 }
 
 type LastChunkMeta struct {
@@ -37,14 +46,6 @@ type encryptorOptions struct {
 	EncryptedMountPath string `config:"encrypted-mount-path" yaml:"encrypted-mount-path,omitempty"`
 	EncryptionKey      string `config:"encryption-key" yaml:"encryption-key,omitempty"`
 }
-
-const (
-	compName         = "encryptor"
-	AuthTagSize      = 16
-	NonceSize        = 12
-	MetaSize         = 28 // MetaSize = AuthTagSize + NonceSize.
-	EnvEncryptionKey = "ENCRYPTION_KEY"
-)
 
 var _ exported.Component = &Encryptor{}
 
@@ -61,10 +62,6 @@ func (e *Encryptor) SetName(name string) {
 func (e *Encryptor) SetNextComponent(nc exported.Component) {
 	e.BaseComponent.SetNextComponent(nc)
 }
-
-// func (e *Encryptor) Priority() exported.ComponentPriority {
-// 	return exported.EComponentPriority.LevelMid()
-// }
 
 // Configure : Pipeline will call this method after constructor so that you can read config and initialize yourself.
 //
@@ -89,7 +86,7 @@ func (e *Encryptor) Configure(isParent bool) error {
 		return fmt.Errorf("error decoding encryption key: %w", err)
 	}
 
-	e.blockSize = 1024 * 1024 // default block size is 1MB
+	e.blockSize = 16 * 1024 * 1024 // default block size is 16MB
 	if config.IsSet(e.Name()+".block-size-mb") && conf.BlockSize > 0 {
 		e.blockSize = conf.BlockSize * 1024 * 1024
 	}
@@ -97,11 +94,6 @@ func (e *Encryptor) Configure(isParent bool) error {
 	e.mountPointCipher = "/mnt/cipher/"
 	if config.IsSet(e.Name() + ".encrypted-mount-path") {
 		e.mountPointCipher = conf.EncryptedMountPath
-	}
-
-	e.lastChunkMeta = &LastChunkMeta{
-		farthestBlockSeen: -1,
-		paddingLength:     0,
 	}
 
 	log.Info("Encryptor::Configure : block size %d, encrypted mount path %s", e.blockSize, e.mountPointCipher)
@@ -115,29 +107,31 @@ func (e *Encryptor) Start(ctx context.Context) error {
 // ------------------------- File Operations -------------------------------------------
 
 func (e *Encryptor) CommitData(opt exported.CommitDataOptions) error {
+	log.Trace("Encryptor::CommitData : %s", opt.Name)
+	fileHandle, lastChunkMeta, err := getFileHandleAndLastChunkMeta(&e.handleMap, &e.lastChunkMetaMap, opt.Name, e.blockSize, e.mountPointCipher)
+	if err != nil {
+		return err
+	}
+	defer fileHandle.Close()
+	lastChunkMeta.Lock()
+	defer lastChunkMeta.Unlock()
 
-	defer e.handle.Close()
-	e.lastChunkMeta.Lock()
-	defer e.lastChunkMeta.Unlock()
-
-	if e.lastChunkMeta.farthestBlockSeen != -1 {
-		paddingLengthByte := make([]byte, 8)
-		binary.BigEndian.PutUint64(paddingLengthByte, uint64(e.lastChunkMeta.paddingLength))
-		endoffset := (e.lastChunkMeta.farthestBlockSeen + 1) * (int64(e.blockSize) + MetaSize)
-		n, err := e.handle.WriteAt(paddingLengthByte, endoffset)
-		log.Info("Encryptor::CommitData : writing %d bytes, padding length %d at offset %d", n, e.lastChunkMeta.paddingLength, endoffset)
+	if lastChunkMeta.farthestBlockSeen != -1 {
+		err = writePaddingLength(fileHandle, lastChunkMeta, e.blockSize)
 		if err != nil {
-			log.Err("Encryptor: Error writing padding length to file: %s", err.Error())
 			return err
 		}
-		e.lastChunkMeta.farthestBlockSeen = -1
-		e.lastChunkMeta.paddingLength = 0
+		lastChunkMeta.farthestBlockSeen = -1
+		lastChunkMeta.paddingLength = 0
 	}
+
+	e.handleMap.Delete(opt.Name)
+	e.lastChunkMetaMap.Delete(opt.Name)
 	return nil
 }
 
 func (e *Encryptor) CreateFile(options exported.CreateFileOptions) (*exported.Handle, error) {
-	log.Info("Encryptor::createFile : %s", e.mountPointCipher+options.Name)
+	log.Info("Encryptor::createFile : %s", options.Name)
 
 	handle := exported.NewHandle(options.Name)
 	if handle == nil {
@@ -146,20 +140,34 @@ func (e *Encryptor) CreateFile(options exported.CreateFileOptions) (*exported.Ha
 	}
 	handle.Mtime = time.Now()
 
-	fileHandle, err := os.OpenFile(e.mountPointCipher+options.Name, os.O_RDWR|os.O_CREATE, options.Mode)
+	fileHandle, err := os.OpenFile(filepath.Join(e.mountPointCipher, options.Name), os.O_RDWR|os.O_CREATE, options.Mode)
 	if err != nil {
 		log.Trace("Encryptor::createFile : Error creating file: %s", err.Error())
 		return nil, err
 	}
 
-	e.handle = fileHandle
+	e.handleMap.Store(options.Name, fileHandle)
+	e.lastChunkMetaMap.Store(options.Name, &LastChunkMeta{
+		farthestBlockSeen: -1,
+		paddingLength:     0,
+	})
 	return handle, nil
+}
+
+func (e *Encryptor) DeleteFile(options exported.DeleteFileOptions) error {
+	log.Trace("Encryptor::DeleteFile : %s", options.Name)
+	err := os.Remove(filepath.Join(e.mountPointCipher, options.Name))
+	if err != nil {
+		log.Trace("Encryptor::DeleteFile : Error deleting file: %s", err.Error())
+		return err
+	}
+	return nil
 }
 
 func (e *Encryptor) GetAttr(options exported.GetAttrOptions) (attr *exported.ObjAttr, err error) {
 	// Open the file from the mount point and get the attributes.
 	log.Info("Encryptor::GetAttr for %s", options.Name)
-	fileAttr, err := os.Stat(e.mountPointCipher + options.Name)
+	fileAttr, err := os.Stat(filepath.Join(e.mountPointCipher, options.Name))
 	if err != nil {
 		if os.IsNotExist(err) {
 			log.Trace("Encryptor::GetAttr : File not found: %s", options.Name)
@@ -179,23 +187,47 @@ func (e *Encryptor) GetAttr(options exported.GetAttrOptions) (attr *exported.Obj
 		Path:   options.Name,       // File path
 		Name:   fileAttr.Name(),    // Base name of the path
 	}
-	fileHandle, err := os.OpenFile(e.mountPointCipher+options.Name, os.O_RDONLY, 0666)
-	if err != nil {
-		log.Trace("Encryptor::GetAttr : Error opening file: %s", err.Error())
-		return nil, err
-	}
-	defer fileHandle.Close()
 
 	if fileAttr.IsDir() {
 		attr.Size = fileAttr.Size()
 		attr.Flags.Set(exported.PropFlagIsDir)
 	} else {
-		actualFileSize, err := checkForActualFileSize(fileHandle, fileAttr.Size(), int64(e.blockSize))
-		if err != nil {
-			log.Err("Encryptor: Error checking for actual file size: %s", err.Error())
-			return nil, err
+		_, fileHandleExist := e.handleMap.Load(options.Name)
+		if !fileHandleExist {
+			fileHandle, err := os.OpenFile(filepath.Join(e.mountPointCipher, options.Name), os.O_RDONLY, 0666)
+			if err != nil {
+				log.Err("Encryptor::GetAttr : Error opening file: %s", err.Error())
+				return nil, err
+			}
+			defer fileHandle.Close()
+
+			actualFileSize, err := checkForActualFileSize(fileHandle, fileAttr.Size(), int64(e.blockSize))
+			if err != nil {
+				log.Err("Encryptor: Error checking for actual file size: %s", err.Error())
+				return nil, err
+			}
+
+			attr.Size = actualFileSize
+		} else {
+			// Write handle exists, get the last chunk meta to calculate the size.
+			metaValue, metaExist := e.lastChunkMetaMap.Load(options.Name)
+			if !metaExist {
+				return nil, fmt.Errorf("last chunk meta not found for %s", options.Name)
+			}
+
+			lastChunkMeta, ok := metaValue.(*LastChunkMeta)
+			if !ok {
+				return nil, fmt.Errorf("unexpected type for last chunk meta of %s", options.Name)
+			}
+			lastChunkMeta.Lock()
+			defer lastChunkMeta.Unlock()
+			if lastChunkMeta.farthestBlockSeen == -1 {
+				attr.Size = 0
+			} else {
+				attr.Size = (lastChunkMeta.farthestBlockSeen+1)*int64(e.blockSize) - lastChunkMeta.paddingLength
+				log.Debug("Encryptor::GetAttr : farthestBlockSeen %d, paddingLength %d, size %d", lastChunkMeta.farthestBlockSeen, lastChunkMeta.paddingLength, attr.Size)
+			}
 		}
-		attr.Size = actualFileSize
 	}
 	return attr, nil
 }
@@ -203,7 +235,11 @@ func (e *Encryptor) GetAttr(options exported.GetAttrOptions) (attr *exported.Obj
 // Encrypt the incoming block of data using the encryption key and writing it
 // to the cipher mount point.
 func (e *Encryptor) StageData(opt exported.StageDataOptions) error {
-	log.Info("Encryptor::StageData : %s, offset %d, data %d", opt.Name, opt.Offset, len(opt.Data))
+	log.Info("Encryptor::StageData : %s, offset %d, data %d", opt.Name, opt.Offset/e.blockSize, len(opt.Data))
+	fileHandle, lastChunkMeta, err := getFileHandleAndLastChunkMeta(&e.handleMap, &e.lastChunkMetaMap, opt.Name, e.blockSize, e.mountPointCipher)
+	if err != nil {
+		return err
+	}
 
 	paddingLength := int64(0)
 	dataLen := int64(len(opt.Data))
@@ -221,20 +257,20 @@ func (e *Encryptor) StageData(opt exported.StageDataOptions) error {
 	encryptedChunkOffset := (opt.Offset / e.blockSize) * (e.blockSize + MetaSize)
 	log.Debug("Encryptor::StageData : writing %d bytes to encrypted file: %s at offset %d", len(encryptedChunk)+NonceSize, opt.Name, encryptedChunkOffset)
 	// Write the combined nonce and encrypted chunk.
-	n, err := e.handle.WriteAt(append(nonce, encryptedChunk...), int64(encryptedChunkOffset))
+	n, err := fileHandle.WriteAt(append(nonce, encryptedChunk...), int64(encryptedChunkOffset))
 	if err != nil {
 		log.Err("Encryptor: Error writing encrypted chunk to encrypted file: %s at offset %d : size of data %d", err.Error(), encryptedChunkOffset, n)
 		return err
 	}
 
-	e.lastChunkMeta.Lock()
-	defer e.lastChunkMeta.Unlock()
-	if int64(opt.Offset/e.blockSize) > e.lastChunkMeta.farthestBlockSeen {
-		e.lastChunkMeta.farthestBlockSeen = int64(opt.Offset / e.blockSize)
+	lastChunkMeta.Lock()
+	defer lastChunkMeta.Unlock()
+	if int64(opt.Offset/e.blockSize) > lastChunkMeta.farthestBlockSeen {
+		lastChunkMeta.farthestBlockSeen = int64(opt.Offset / e.blockSize)
+		lastChunkMeta.paddingLength = paddingLength
 	}
 
-	e.lastChunkMeta.paddingLength = paddingLength
-	log.Debug("Encryptor:: encryptWriteBlock: endBlockIndex %d, paddingLength %d", e.lastChunkMeta.farthestBlockSeen, e.lastChunkMeta.paddingLength)
+	log.Debug("Encryptor:: encryptWriteBlock: endBlockIndex %d, paddingLength %d", lastChunkMeta.farthestBlockSeen, lastChunkMeta.paddingLength)
 	return nil
 }
 
@@ -246,8 +282,8 @@ func (e *Encryptor) ReadInBuffer(options exported.ReadInBufferOptions) (length i
 		return 0, syscall.ERANGE
 	}
 
-	var dataLen int64 = int64(len(options.Data))
-	if atomic.LoadInt64(&options.Handle.Size) < (options.Offset + int64(len(options.Data))) {
+	dataLen := int64(len(options.Data))
+	if atomic.LoadInt64(&options.Handle.Size) < (options.Offset + dataLen) {
 		dataLen = options.Handle.Size - options.Offset
 	}
 
@@ -258,7 +294,7 @@ func (e *Encryptor) ReadInBuffer(options exported.ReadInBufferOptions) (length i
 	name := options.Handle.Path
 	log.Debug("Encryptor::ReadInBuffer : Read %s from %d offset for data size %d", name, options.Offset, len(options.Data))
 
-	fileHandle, err := os.OpenFile(e.mountPointCipher+name, os.O_RDONLY, 0666)
+	fileHandle, err := os.OpenFile(filepath.Join(e.mountPointCipher, name), os.O_RDONLY, 0666)
 	if err != nil {
 		log.Err("Encryptor::ReadAndDecryptBlock : Error opening encrypted file: %s", err.Error())
 		return 0, err
@@ -290,8 +326,9 @@ func (e *Encryptor) ReadInBuffer(options exported.ReadInBufferOptions) (length i
 // ------------------------- Directory Operations -------------------------------------------
 
 func (e *Encryptor) CreateDir(options exported.CreateDirOptions) error {
-	log.Info("Encryptor::CreateDir : %s", e.mountPointCipher+options.Name)
-	err := os.Mkdir(e.mountPointCipher+options.Name, 0777)
+	dirPath := filepath.Join(e.mountPointCipher, options.Name)
+	log.Info("Encryptor::CreateDir : %s", dirPath)
+	err := os.Mkdir(dirPath, 0777)
 	if err != nil {
 		log.Trace("Encryptor::CreateDir : Error creating directory: %s", err.Error())
 		return err
@@ -303,7 +340,7 @@ func (e *Encryptor) StreamDir(options exported.StreamDirOptions) ([]*exported.Ob
 	var objAttrs []*exported.ObjAttr
 	path := formatListDirName(options.Name)
 	log.Info("Encryptor::StreamDir : %s", path)
-	files, err := os.ReadDir(e.mountPointCipher + path)
+	files, err := os.ReadDir(filepath.Join(e.mountPointCipher, path))
 	if err != nil {
 		log.Trace("Encryptor::StreamDir : Error reading directory %s : %s", path, err.Error())
 		return nil, "", err
@@ -334,6 +371,7 @@ func NewexternalComponent() exported.Component {
 	comp.SetName(compName)
 	return comp
 }
+
 func GetExternalComponent() (string, func() exported.Component) {
 	return compName, NewexternalComponent
 }

@@ -24,6 +24,11 @@ param
     [string]$outDir
 
 )
+
+#https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
+
 $root = git rev-parse --show-toplevel
 
 $outDir = "$outDir/ccf"

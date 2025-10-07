@@ -1,0 +1,215 @@
+[
+  {
+    "name": "cleanroom-spark-analytics-agent",
+    "properties": {
+      "image": "$containerRegistryUrl/workloads/cleanroom-spark-analytics-agent@$digest",
+      "command": [],
+      "environmentVariables": [
+        {
+          "name": "ASPNETCORE_URLS",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "SERVICE_CERT_LOCATION",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "SKR_PORT",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "SPARK_FRONTEND_ENDPOINT",
+          "value": "$sparkFrontendEndpoint"
+        },
+        {
+          "name": "SPARK_FRONTEND_SNP_HOST_DATA",
+          "value": "$sparkFrontendSnpHostData"
+        },
+        {
+          "name": "CCF_NETWORK_RECOVERY_MEMBERS",
+          "value": "$ccfNetworkRecoveryMembers"
+        }
+      ],
+      "volumeMounts": [
+        {
+          "name": "shared",
+          "mountPath": "/app/service",
+          "mountType": "emptyDir",
+          "readOnly": false
+        },
+        {
+          "name": "uds",
+          "mountPath": "/mnt/uds",
+          "mountType": "emptyDir",
+          "readOnly": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "otel-collector",
+    "properties": {
+      "image": "$containerRegistryUrl/otel-collector@$digest",
+      "environmentVariables": [
+        {
+          "name": "TELEMETRY_COLLECTION_ENABLED",
+          "value": "$telemetryCollectionEnabled"
+        },
+        {
+          "name": "PROMETHEUS_ENDPOINT",
+          "value": "$prometheusEndpoint"
+        },
+        {
+          "name": "LOKI_ENDPOINT",
+          "value": "$lokiEndpoint"
+        },
+        {
+          "name": "TEMPO_ENDPOINT",
+          "value": "$tempoEndpoint"
+        }
+      ]
+    }
+  },
+  {
+    "name": "ccr-proxy",
+    "properties": {
+      "image": "$containerRegistryUrl/ccr-proxy@$digest",
+      "environmentVariables": [
+        {
+          "name": "CCR_ENVOY_DESTINATION_PORT",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CCR_ENVOY_SERVICE_CERT_OUTPUT_FILE",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CCR_FQDN",
+          "value": ".*",
+          "regex": true
+        }
+      ],
+      "volumeMounts": [
+        {
+          "name": "shared",
+          "mountPath": "/app/service",
+          "mountType": "emptyDir",
+          "readOnly": false
+        }
+      ],
+      "command": [
+        "/bin/bash",
+        "https-http/bootstrap.sh",
+        "--ca-type",
+        "$caType"
+      ]
+    }
+  },
+  {
+    "name": "ccr-attestation",
+    "properties": {
+      "image": "$containerRegistryUrl/ccr-attestation@$digest",
+      "command": [
+        "app",
+        "-socket-address",
+        "/mnt/uds/sock"
+      ],
+      "environmentVariables": [],
+      "volumeMounts": [
+        {
+          "name": "uds",
+          "mountPath": "/mnt/uds",
+          "mountType": "emptyDir",
+          "readOnly": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "ccr-governance",
+    "properties": {
+      "image": "$containerRegistryUrl/ccr-governance@$digest",
+      "command": [],
+      "environmentVariables": [
+        {
+          "name": "ccrgovEndpoint",
+          "value": "$cgsEndpoint"
+        },
+        {
+          "name": "ccrgovApiPathPrefix",
+          "value": "$ccrgovApiPathPrefix"
+        },
+        {
+          "name": "serviceCert",
+          "value": "$serviceCertBase64"
+        },
+        {
+          "name": "serviceCertDiscoveryEndpoint",
+          "value": "$serviceCertDiscoveryEndpoint"
+        },
+        {
+          "name": "serviceCertDiscoverySnpHostData",
+          "value": "$serviceCertDiscoverySnpHostData"
+        },
+        {
+          "name": "serviceCertDiscoverySkipDigestCheck",
+          "value": "$serviceCertDiscoverySkipDigestCheck"
+        },
+        {
+          "name": "serviceCertDiscoveryConstitutionDigest",
+          "value": "$serviceCertDiscoveryConstitutionDigest"
+        },
+        {
+          "name": "serviceCertDiscoveryJsappBundleDigest",
+          "value": "$serviceCertDiscoveryJsappBundleDigest"
+        }
+      ],
+      "volumeMounts": [
+        {
+          "name": "uds",
+          "mountPath": "/mnt/uds",
+          "mountType": "emptyDir",
+          "readOnly": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "skr-sidecar",
+    "properties": {
+      "image": "$containerRegistryUrl/skr@$digest",
+      "command": [
+        "/skr.sh"
+      ],
+      "environmentVariables": [
+        {
+          "name": "SkrSideCarArgs",
+          "value": "ewogICAiY2VydGNhY2hlIjogewogICAgICAiZW5kcG9pbnQiOiAiYW1lcmljYXMuYWNjY2FjaGUuYXp1cmUubmV0IiwKICAgICAgInRlZV90eXBlIjogIlNldlNucFZNIiwKICAgICAgImFwaV92ZXJzaW9uIjogImFwaS12ZXJzaW9uPTIwMjAtMTAtMTUtcHJldmlldyIKICAgfQp9"
+        },
+        {
+          "name": "Port",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "LogFile",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "LogLevel",
+          "value": "Info"
+        },
+        {
+          "name": "TELEMETRY_MOUNT_PATH",
+          "value": "$telemetryMountPath"
+        }
+      ]
+    }
+  }
+]

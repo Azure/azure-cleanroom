@@ -17,10 +17,11 @@ COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
 RUN dotnet restore /app/src/governance/governance.sln
 
 # copy everything else and build app
-COPY src /app/src
 COPY stylecop.json /app
 COPY Menees.Analyzers.Settings.xml /app
 COPY .editorconfig /app
+COPY src/governance /app/src/governance
+COPY src/internal /app/src/internal
 
 RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/governance/sidecar/ccr-governance.csproj
 
@@ -34,6 +35,7 @@ WORKDIR /app
 COPY --from=build /app/publish .
 COPY src/governance/sidecar/bootstrap-virtual.sh bootstrap-virtual.sh
 COPY samples/governance/insecure-virtual/ insecure-virtual/
+COPY samples/governance/insecure-virtual-2/ insecure-virtual-2/
 RUN chmod +x ./bootstrap-virtual.sh
 
 # Listen on 8300 within the container.

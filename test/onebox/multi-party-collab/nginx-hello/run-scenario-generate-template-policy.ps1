@@ -65,7 +65,8 @@ if ($env:GITHUB_ACTIONS -eq "true") {
     $resourceGroupTags = "github_actions=multi-party-collab-${env:JOB_ID}-${env:RUN_ID}"
 }
 else {
-    $nginxResourceGroup = "cl-ob-nginx-${env:USER}"
+    $user = $env:CODESPACES -eq "true" ? $env:GITHUB_USER : $env:USER
+    $nginxResourceGroup = "cl-ob-nginx-${user}"
 }
 
 # Set tenant Id as a part of the nginx's member data.
@@ -344,9 +345,16 @@ az cleanroom config wrap-deks `
     --governance-client "ob-nginx-client"
 
 # Setup OIDC issuer endpoint and managed identity access to storage/KV.
+pwsh $PSScriptRoot/../setup-oidc-issuer.ps1 `
+    -resourceGroup $nginxResourceGroup `
+    -outDir $outDir `
+    -governanceClient "ob-nginx-client"
+$issuerUrl = Get-Content $outDir/$nginxResourceGroup/issuer-url.txt
+
 pwsh $PSScriptRoot/../setup-access.ps1 `
     -resourceGroup $nginxResourceGroup `
-    -contractId $contractId `
+    -subject $contractId `
+    -issuerUrl $issuerUrl `
     -outDir $outDir `
     -kvType akvpremium `
     -governanceClient "ob-nginx-client"

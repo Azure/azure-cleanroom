@@ -13,7 +13,7 @@ $root = git rev-parse --show-toplevel
 $policyFilesPath = "$root/src/proxy/policies"
 
 if ($outputPath -eq "") {
-    $outputPath = [IO.Path]::GetTempPath() + "ccr-governance-opa-policy"
+    $outputPath = "."
 }
 
 function cleanup() {

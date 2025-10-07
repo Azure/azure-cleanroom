@@ -1,0 +1,21 @@
+replicas: 1
+
+tempo:
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+      wal:
+        path: /var/tempo/wal
+
+persistence:
+  enabled: true
+  accessModes:
+    - ReadWriteOnce
+  size: 20Gi
+  storageClass:
+  mountPath: /var/tempo
+
+service:
+  clusterIP: None

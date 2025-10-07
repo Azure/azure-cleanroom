@@ -1,0 +1,20 @@
+uvicorn==0.35.0
+fastapi==0.116.1
+pydantic==2.11.7
+pydantic_settings==2.10.1
+kubernetes==33.1.0
+oras==0.1.29
+grpcio==1.72.1
+grpcio-tools==1.72.1
+
+# OpenTelemetry dependencies
+opentelemetry-api==1.35.0
+opentelemetry-sdk==1.35.0
+opentelemetry-instrumentation==0.56b0
+opentelemetry-instrumentation-fastapi==0.56b0
+opentelemetry-instrumentation-requests==0.56b0
+opentelemetry-instrumentation-logging==0.56b0
+opentelemetry-exporter-otlp==1.35.0
+opentelemetry-propagator-b3==1.35.0
+opentelemetry-propagator-jaeger==1.35.0
+opentelemetry-semantic-conventions==0.56b0

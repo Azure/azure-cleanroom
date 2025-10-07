@@ -8,7 +8,10 @@ namespace Controllers;
 
 public static class ApiMain
 {
-    public static void Main(string[] args, Func<WebApplicationBuilder, ApiStartup> startupFunc)
+    public static void Main(
+        string[] args,
+        Func<WebApplicationBuilder, ApiStartup> startupFunc,
+        Action<IConfigurationBuilder>? configure = null)
     {
         var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +24,8 @@ public static class ApiMain
                 $"appsettings.{context.HostingEnvironment.EnvironmentName}.json",
                 optional: true,
                 reloadOnChange: true);
+
+            configure?.Invoke(configBuilder);
 
             configBuilder.AddEnvironmentVariables();
             configBuilder.AddCommandLine(args);

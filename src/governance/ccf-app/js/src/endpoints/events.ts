@@ -8,6 +8,7 @@ import { ErrorResponse } from "../models/errorresponse";
 import {
   b64ToBuf,
   parseRequestQuery,
+  validateCallerAuthorized,
   verifyReportData,
   verifySignature
 } from "../utils/utils";
@@ -34,7 +35,12 @@ function getEventsMapName(contractId: string, scope: string): string {
 
 export function getEvent(
   request: ccfapp.Request
-): ccfapp.Response<GetEventsResponse> {
+): ccfapp.Response<GetEventsResponse> | ccfapp.Response<ErrorResponse> {
+  const error = validateCallerAuthorized(request);
+  if (error !== undefined) {
+    return error;
+  }
+
   const contractId = request.params.contractId;
   const parsedQuery = parseRequestQuery(request);
   const id = getIdFromQuery(parsedQuery, contractId);

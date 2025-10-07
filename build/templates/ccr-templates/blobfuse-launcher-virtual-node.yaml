@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: $datasetName-blobfuse-container
+    image: $containerRegistryUrl/blobfuse-launcher@$digest
+    command:
+    - python3.10
+    - ./blobfuse-launcher.py
+    - --governance-port
+    - "8300"
+    - --skr-port
+    - "8284"
+    - --secrets-port
+    - "9300"
+    - --imds-port
+    - "8290"
+    - $readOnly
+    - $useAdls
+    - --mount-path
+    - $mountPath/$datasetName
+    - --encryption-mode
+    - $encryptionMode
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+    env:
+    - name: AZURE_STORAGE_ACCOUNT
+      value: $storageAccountName
+    - name: ACCESS_NAME
+      value: $datasetName
+    - name: AZURE_STORAGE_ACCOUNT_CONTAINER
+      value: $storageContainerName
+    - name: AZURE_STORAGE_BLOB_ENDPOINT
+      value: $storageBlobEndpoint
+    - name: MAA_ENDPOINT
+      value: $maaUrl
+    - name: AKV_ENDPOINT
+      value: $kekVaultUrl
+    - name: KID
+      value: $kekKid
+    - name: CLIENT_ID
+      value: $clientId
+    - name: TENANT_ID
+      value: $tenantId
+    - name: CGS_DEK_SECRET
+      value: $cgsDekSecretId
+    - name: WRAPPED_DEK_SECRET
+      value: $dekSecretName
+    - name: WRAPPED_DEK_AKV_ENDPOINT
+      value: $dekVaultUrl
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: http://localhost:4317
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      value: grpc
+    - name: OTEL_TRACE_CONTEXT_BASE64
+      value: $traceContextJsonBase64
+    - name: TELEMETRY_MOUNT_PATH
+      value: $telemetryMountPath
+    - name: VOLUMESTATUS_MOUNT_PATH
+      value: $volumeStatusMountPath
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: remotemounts
+      mountPath: $mountPath
+      readOnly: false
+    - name: telemetrymounts
+      mountPath: $telemetryMountPath
+      readOnly: false
+    - name: volumestatusmounts
+      mountPath: $volumeStatusMountPath
+      readOnly: false
+

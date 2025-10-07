@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: $datasetName-s3fs-container
+    image: $containerRegistryUrl/s3fs-launcher@$digest
+    command:
+    - python3.10
+    - ./s3fs-launcher.py
+    - $readOnly
+    - --mount-path
+    - $mountPath/$datasetName
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+    env:
+    - name: AWS_BUCKET_NAME
+      value: $awsBucketName
+    - name: ACCESS_NAME
+      value: $datasetName
+    - name: AWS_URL
+      value: $awsUrl
+    - name: CGS_AWS_S3_CONFIG_SECRET
+      value: $cgsAwsS3ConfigSecret
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: http://localhost:4317
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      value: grpc
+    - name: OTEL_TRACE_CONTEXT_BASE64
+      value: $traceContextJsonBase64
+    - name: TELEMETRY_MOUNT_PATH
+      value: $telemetryMountPath
+    - name: VOLUMESTATUS_MOUNT_PATH
+      value: $volumeStatusMountPath
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: remotemounts
+      mountPath: $mountPath
+      readOnly: false
+    - name: telemetrymounts
+      mountPath: $telemetryMountPath
+      readOnly: false
+    - name: volumestatusmounts
+      mountPath: $volumeStatusMountPath
+      readOnly: false
+

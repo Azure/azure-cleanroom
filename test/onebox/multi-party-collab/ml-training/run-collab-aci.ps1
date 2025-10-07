@@ -32,10 +32,13 @@ if ($registry -eq "acr") {
     $registryArg = "acr"
 }
 
+# https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
+
 rm -rf $PSScriptRoot/generated
 
 $root = git rev-parse --show-toplevel
-. $root/test/onebox/multi-party-collab/deploy-aci-cleanroom-governance.ps1
 
 Write-Host "Using $usingRegistry registry for cleanroom container images."
 
@@ -45,7 +48,8 @@ if ($env:GITHUB_ACTIONS -eq "true") {
     $resourceGroupTags = "github_actions=multi-party-collab-$kvType-${env:JOB_ID}-${env:RUN_ID}"
 }
 else {
-    $ISV_RESOURCE_GROUP = "cl-ob-isv-${env:USER}"
+    $user = $env:CODESPACES -eq "true" ? $env:GITHUB_USER : $env:USER
+    $ISV_RESOURCE_GROUP = "cl-ob-isv-${user}"
 }
 
 function Get-UniqueString ([string]$id, $length = 13) {
@@ -60,8 +64,9 @@ $ISV_RESOURCE_GROUP_LOCATION = "westeurope"
 Write-Host "Creating resource group $ISV_RESOURCE_GROUP in $ISV_RESOURCE_GROUP_LOCATION"
 az group create --location $ISV_RESOURCE_GROUP_LOCATION --name $ISV_RESOURCE_GROUP --tags $resourceGroupTags
 
+$ccfProviderProjectName = "ob-ml-training-ccf-provider"
 $outDir = "$PSScriptRoot/generated"
-$result = Deploy-Aci-Governance `
+pwsh $root/test/onebox/multi-party-collab/deploy-caci-cleanroom-governance.ps1 `
     -resourceGroup $ISV_RESOURCE_GROUP `
     -location $ISV_RESOURCE_GROUP_LOCATION `
     -ccfName $CCF_NAME `
@@ -72,7 +77,14 @@ $result = Deploy-Aci-Governance `
     -allowAll:$allowAll `
     -projectName "ob-isv-client" `
     -initialMemberName "isv" `
-    -outDir $outDir
+    -outDir $outDir `
+    -ccfProviderProjectName $ccfProviderProjectName
+$response = (az cleanroom ccf network show `
+        --name $CCF_NAME `
+        --provider-config $outDir/ccf/providerConfig.json `
+        --provider-client $ccfProviderProjectName | ConvertFrom-Json)
+$ccfEndpoint = $response.endpoint
+
 az cleanroom governance client remove --name "ob-tdp-client"
 az cleanroom governance client remove --name "ob-tdc-client"
 
@@ -81,48 +93,43 @@ pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 `
     -registry $registryArg `
     -repo $repo `
     -tag $tag `
-    -ccfEndpoint $result.ccfEndpoint `
+    -ccfEndpoint $ccfEndpoint `
     -kvType $kvType `
     -withSecurityPolicy:$withSecurityPolicy
-
-if ($LASTEXITCODE -gt 0) {
-    Write-Host -ForegroundColor Red "run-scenario-generate-template-policy returned non-zero exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
 
 pwsh $PSScriptRoot/deploy-caci-cleanroom.ps1 -resourceGroup $ISV_RESOURCE_GROUP -location $ISV_RESOURCE_GROUP_LOCATION
 
 # Check that expected output files got created.
 $expectedFiles = @(
-    "$PSScriptRoot/generated/results/output/**/model.onnx",
-    "$PSScriptRoot/generated/results/application-telemetry*/**/depa-training.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/application-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/depa-training*-code-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/depa-training*-code-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/depa-training*-code-launcher.metrics",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/output*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/output*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/output*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/infrastructure-telemetry*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/cowin*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/cowin*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/cowin*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/icmr*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/icmr*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/icmr*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/index*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/index*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/index*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/model*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/model*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/model*-blobfuse-launcher.traces",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/config*-blobfuse.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/config*-blobfuse-launcher.log",
-    "$PSScriptRoot/generated/results/infrastructure-telemetry*/**/config*-blobfuse-launcher.traces"
+    "$PSScriptRoot/generated/results/output/model.onnx",
+    "$PSScriptRoot/generated/results/application-telemetry*/depa-training.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/application-telemetry*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/depa-training*-code-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/depa-training*-code-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/depa-training*-code-launcher.metrics",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/output*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/output*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/output*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/infrastructure-telemetry*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/cowin*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/cowin*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/cowin*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/icmr*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/icmr*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/icmr*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/index*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/index*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/index*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/model*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/model*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/model*-blobfuse-launcher.traces",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/config*-blobfuse.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/config*-blobfuse-launcher.log",
+    "$PSScriptRoot/generated/results/infrastructure-telemetry*/config*-blobfuse-launcher.traces"
 )
 
 $missingFiles = @()

@@ -8,46 +8,48 @@
 # pylint: disable=missing-function-docstring
 # pylint: disable=missing-module-docstring
 
+import base64
+import hashlib
+import json
+import os
+import shlex
+import uuid
+
 # Note (gsinha): Various imports are also mentioned inline in the code at the point of usage.
 # This is done to speed up command execution as having all the imports listed at top level is making
 # execution slow for every command even if the top level imported packaged will not be used by that
 # command.
 from enum import StrEnum
-import hashlib
-import json
-import os
+from pathlib import Path
 from time import sleep
-import base64
 from typing import Any
 from urllib.parse import urlparse
-import uuid
-import shlex
-from azure.cli.core.util import CLIError
-from azure.cli.core.util import get_file_json, shell_safe_json_parse
+
 import requests
 import yaml
-
-from .utilities._azcli_helpers import logger, az_cli
-from .datastore_cmd import *
-from .config_cmd import *
-from .secretstore_cmd import *
+from azure.cli.core.util import CLIError, get_file_json, shell_safe_json_parse
 from cleanroom_common.azure_cleanroom_core.models.network import *
 
+from .config_cmd import *
+from .datastore_cmd import *
+from .secretstore_cmd import *
+from .utilities._azcli_helpers import az_cli, logger
 
 MCR_CLEANROOM_VERSIONS_REGISTRY = "mcr.microsoft.com/azurecleanroom"
 MCR_CGS_REGISTRY = "mcr.microsoft.com/azurecleanroom"
-mcr_cgs_constitution_url = f"{MCR_CGS_REGISTRY}/cgs-constitution:5.0.0"
-mcr_cgs_jsapp_url = f"{MCR_CGS_REGISTRY}/cgs-js-app:5.0.0"
+mcr_cgs_constitution_url = f"{MCR_CGS_REGISTRY}/cgs-constitution:4.0.0"
+mcr_cgs_jsapp_url = f"{MCR_CGS_REGISTRY}/cgs-js-app:4.0.0"
 
-compose_file = (
-    f"{os.path.dirname(__file__)}{os.path.sep}data{os.path.sep}docker-compose.yaml"
-)
+cgs_client_compose_file = f"{os.path.dirname(__file__)}{os.path.sep}data{os.path.sep}cgs-client{os.path.sep}docker-compose.yaml"
 aspire_dashboard_compose_file = f"{os.path.dirname(__file__)}{os.path.sep}data{os.path.sep}aspire-dashboard{os.path.sep}docker-compose.yaml"
 keygenerator_sh = (
     f"{os.path.dirname(__file__)}{os.path.sep}data{os.path.sep}keygenerator.sh"
 )
 application_yml = (
     f"{os.path.dirname(__file__)}{os.path.sep}data{os.path.sep}application.yaml"
+)
+default_msal_token_cache_root_dir: str = os.path.join(
+    os.path.join(Path.home(), ".azcleanroom"), "token_cache"
 )
 
 
@@ -57,21 +59,49 @@ def governance_client_deploy_cmd(
     signing_cert_id,
     signing_cert,
     signing_key,
+    use_azlogin_identity,
+    use_microsoft_identity,
+    use_local_identity,
+    local_identity_endpoint,
     gov_client_name,
+    msal_token_cache_root_dir="",
+    cgs_msal_token_cache_dir="",
     service_cert="",
+    service_cert_discovery_endpoint="",
+    service_cert_discovery_snp_host_data="",
+    service_cert_discovery_constitution_digest="",
+    service_cert_discovery_jsapp_bundle_digest="",
 ):
-    if not signing_cert and not signing_key and not signing_cert_id:
+    if (
+        not signing_cert
+        and not signing_key
+        and not signing_cert_id
+        and not use_azlogin_identity
+        and not use_microsoft_identity
+        and not use_local_identity
+    ):
         raise CLIError(
-            "Either (signing-cert,signing-key) or signing-cert-id must be specified."
+            "Either (signing-cert,signing-key) or signing-cert-id/use-azlogin-identity/use-microsoft-identity/use-local-identity must be specified."
         )
     if signing_cert_id:
-        if signing_cert or signing_key:
+        if (
+            signing_cert
+            or signing_key
+            or use_azlogin_identity
+            or use_microsoft_identity
+            or use_local_identity
+        ):
             raise CLIError(
-                "signing-cert/signing-key cannot be specified along with signing-cert-id."
+                "signing-cert/signing-key/use-azlogin-identity/use-microsoft-identity/use-local-identity cannot be specified along with signing-cert-id."
             )
         if os.path.exists(signing_cert_id):
             with open(signing_cert_id, "r") as f:
                 signing_cert_id = f.read()
+    elif use_azlogin_identity or use_microsoft_identity or use_local_identity:
+        if signing_cert or signing_key or signing_cert_id:
+            raise CLIError(
+                "signing-cert/signing-key/signing_cert_id cannot be specified along with use-azlogin-identity/use-microsoft-identity/use-local-identity."
+            )
     else:
         if not signing_cert or not signing_key:
             raise CLIError("Both signing-cert and signing-key must be specified.")
@@ -82,19 +112,52 @@ def governance_client_deploy_cmd(
         if not os.path.exists(signing_key):
             raise CLIError(f"File {signing_key} does not exist.")
 
-    if not service_cert:
-        raise CLIError(
-            f"--service-cert argument must be specified for {ccf_endpoint} endpoint."
-        )
+    if use_local_identity:
+        if not local_identity_endpoint:
+            raise CLIError(
+                "local-identity-endpoint must be specified with use-local-identity."
+            )
+
+    if service_cert:
+        if service_cert_discovery_endpoint or service_cert_discovery_snp_host_data:
+            raise CLIError(
+                "service-cert-discovery-endpoint/service-cert-snp-host-data cannot be specified along with service-cert."
+            )
+    else:
+        if (
+            not service_cert_discovery_endpoint
+            or not service_cert_discovery_snp_host_data
+        ):
+            raise CLIError(
+                "service-cert or [service-cert-discovery-endpoint and service-cert-snp-host-data] must be specified."
+            )
 
     from python_on_whales import DockerClient
 
     compose_profiles = []
-    if signing_cert_id:
+    if signing_cert_id or use_azlogin_identity:
         compose_profiles = ["creds-proxy"]
 
+    if use_microsoft_identity:
+        from pathlib import Path
+
+        msal_token_cache_root_dir = (
+            msal_token_cache_root_dir or default_msal_token_cache_root_dir
+        )
+        msal_token_cache_dir = os.path.join(msal_token_cache_root_dir, gov_client_name)
+        if not os.path.exists(msal_token_cache_dir):
+            os.makedirs(msal_token_cache_dir)
+        ms_perform_device_code_flow(msal_token_cache_dir)
+        cgs_msal_token_cache_dir = cgs_msal_token_cache_dir or msal_token_cache_dir
+        os.environ["AZCLI_CGS_MSAL_TOKEN_CACHE_DIR"] = cgs_msal_token_cache_dir
+
+    if use_local_identity:
+        os.environ["AZCLI_CGS_LOCAL_IDP_ENDPOINT"] = local_identity_endpoint
+    else:
+        os.environ["AZCLI_CGS_LOCAL_IDP_ENDPOINT"] = ""
+
     docker = DockerClient(
-        compose_files=[compose_file],
+        compose_files=[cgs_client_compose_file],
         compose_project_name=gov_client_name,
         compose_profiles=compose_profiles,
     )
@@ -144,24 +207,51 @@ def governance_client_deploy_cmd(
             f"Hit timeout waiting for cgs-client endpoint to be up on localhost:{port}"
         )
 
-    data = {"CcfEndpoint": ccf_endpoint}
-    files = []
-    if signing_cert_id:
-        data["signingCertId"] = signing_cert_id
-    else:
-        files.append(
-            ("SigningCertPemFile", ("SigningCertPemFile", open(signing_cert, "rb")))
+    authMode = (
+        "AzureLogin"
+        if use_azlogin_identity
+        else (
+            "MsLogin"
+            if use_microsoft_identity
+            else "LocalIdp" if use_local_identity else None
         )
-        files.append(
-            ("SigningKeyPemFile", ("SigningKeyPemFile", open(signing_key, "rb")))
-        )
+    )
+
+    form_data = {
+        "CcfEndpoint": (None, ccf_endpoint),
+        "SigningCertId": (None, signing_cert_id),
+        "AuthMode": (None, authMode),
+        "ServiceCertDiscovery": (
+            (
+                None,
+                json.dumps(
+                    {
+                        "CertificateDiscoveryEndpoint": service_cert_discovery_endpoint,
+                        "HostData": [service_cert_discovery_snp_host_data],
+                        "ConstitutionDigest": service_cert_discovery_constitution_digest,
+                        "JsAppBundleDigest": service_cert_discovery_jsapp_bundle_digest,
+                        "SkipDigestCheck": service_cert_discovery_constitution_digest
+                        is None
+                        and service_cert_discovery_jsapp_bundle_digest is None,
+                    }
+                    if service_cert_discovery_endpoint
+                    else None
+                ),
+                "application/json",
+            )
+            if service_cert_discovery_endpoint
+            else None
+        ),
+    }
+    files = dict(form_data)
+    if signing_cert_id is None and authMode is None:
+        files["SigningCertPemFile"] = ("SigningCertPemFile", open(signing_cert, "rb"))
+        files["SigningKeyPemFile"] = ("SigningKeyPemFile", open(signing_key, "rb"))
 
     if service_cert != "":
-        files.append(
-            ("ServiceCertPemFile", ("ServiceCertPemFile", open(service_cert, "rb")))
-        )
+        files["ServiceCertPemFile"] = ("ServiceCertPemFile", open(service_cert, "rb"))
 
-    r = requests.post(f"{cgs_endpoint}/configure", data=data, files=files)
+    r = requests.post(f"{cgs_endpoint}/configure", files=files)
     if r.status_code != 200:
         raise CLIError(response_error_message(r))
 
@@ -177,7 +267,7 @@ def governance_client_remove_cmd(cmd, gov_client_name):
 
     gov_client_name = get_gov_client_name(cmd.cli_ctx, gov_client_name)
     docker = DockerClient(
-        compose_files=[compose_file], compose_project_name=gov_client_name
+        compose_files=[cgs_client_compose_file], compose_project_name=gov_client_name
     )
     docker.compose.down()
 
@@ -188,6 +278,14 @@ def governance_client_show_cmd(cmd, gov_client_name=""):
     if r.status_code == 204:
         return "{}"
 
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_client_get_access_token_cmd(cmd, gov_client_name=""):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.get(f"{cgs_endpoint}/identity/accessToken")
     if r.status_code != 200:
         raise CLIError(response_error_message(r))
     return r.json()
@@ -235,7 +333,7 @@ def governance_client_show_deployment_cmd(cmd, gov_client_name=""):
 
     gov_client_name = get_gov_client_name(cmd.cli_ctx, gov_client_name)
     docker = DockerClient(
-        compose_files=[compose_file], compose_project_name=gov_client_name
+        compose_files=[cgs_client_compose_file], compose_project_name=gov_client_name
     )
     try:
         (_, port) = docker.compose.port(service="cgs-client", private_port=8080)
@@ -588,6 +686,139 @@ def governance_contract_vote_cmd(
     return r.json()
 
 
+def governance_user_identity_add_cmd(
+    cmd,
+    object_id,
+    tenant_id,
+    identifier,
+    account_type,
+    accepted_invitation_id,
+    gov_client_name="",
+):
+    if object_id and accepted_invitation_id:
+        raise CLIError(
+            "Both object_id and accepted_invitation_id cannot be specified together."
+        )
+
+    content = {}
+    if object_id:
+        content["objectId"] = object_id
+        if not tenant_id:
+            raise CLIError("Tenant Id must be specified with object id.")
+        content["tenantId"] = tenant_id
+        if not identifier:
+            raise CLIError("Identifier must be specified with object id.")
+        content["identifier"] = identifier
+        if not account_type:
+            raise CLIError("Account type must be specified with object id.")
+        if account_type == "microsoft":
+            content["accountType"] = "microsoft"
+        else:
+            raise CLIError("--account-type value not handled.")
+    elif accepted_invitation_id:
+        if tenant_id:
+            raise CLIError("Tenant Id cannot be specified with accepted invitation id.")
+        if identifier:
+            raise CLIError(
+                "Identifier cannot be specified with accepted invitation id."
+            )
+        if account_type:
+            raise CLIError(
+                "Account type cannot be specified with accepted invitation id."
+            )
+        content["acceptedInvitationId"] = accepted_invitation_id
+    else:
+        raise CLIError("Either object_id or accepted_invitation_id must be specified.")
+
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.post(f"{cgs_endpoint}/users/identities/add", json=content)
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_user_identity_remove_cmd(cmd, object_id, gov_client_name=""):
+    content = {"actions": [{"name": "remove_user_identity", "args": {"id": object_id}}]}
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.post(f"{cgs_endpoint}/proposals/create", json=content)
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_user_identity_show_cmd(cmd, identity_id="", gov_client_name=""):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.get(f"{cgs_endpoint}/users/identities/{identity_id}")
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_user_identity_invitation_create_cmd(
+    cmd,
+    invitation_id,
+    account_type,
+    username,
+    identity_type,
+    tenant_id,
+    gov_client_name="",
+):
+    if identity_type == "service-principal" and not tenant_id:
+        raise CLIError("Tenant Id must be specified with service principal type.")
+
+    content = {
+        "invitationId": invitation_id,
+        "userName": username,
+        "identityType": (
+            "ServicePrincipal" if identity_type == "service-principal" else "User"
+        ),
+        "tenantId": tenant_id,
+    }
+
+    if account_type == "microsoft":
+        content["accountType"] = "microsoft"
+    else:
+        raise CLIError("--account-type value not handled.")
+
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.post(f"{cgs_endpoint}/users/invitations/propose", json=content)
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_user_identity_invitation_accept_cmd(
+    cmd, invitation_id, gov_client_name=""
+):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.post(f"{cgs_endpoint}/users/invitations/{invitation_id}/accept")
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+
+
+def governance_user_identity_invitation_show_cmd(
+    cmd, invitation_id="", gov_client_name=""
+):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.get(f"{cgs_endpoint}/users/invitations/{invitation_id}")
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_proposal_create_cmd(cmd, content, gov_client_name=""):
+    if os.path.exists(content):
+        content = get_file_json(content)
+    else:
+        content = shell_safe_json_parse(content)
+
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.post(f"{cgs_endpoint}/proposals/create", json=content)
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
 def governance_proposal_list_cmd(cmd, gov_client_name=""):
     cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
     r = requests.get(f"{cgs_endpoint}/proposals")
@@ -653,66 +884,41 @@ def governance_deployment_generate_cmd(
     ssl_cert = ccf_details["serviceCert"]
     ssl_cert_base64 = base64.b64encode(bytes(ssl_cert, "utf-8")).decode("utf-8")
 
-    debug_mode = False
-    if security_policy_creation_option == "cached-debug":
-        debug_mode = True
-
     arm_template, policy_json, policy_rego = get_deployment_template_internal(
         cleanroomSpec,
         contract_id,
         ccf_details["ccfEndpoint"],
         ssl_cert_base64,
-        debug_mode,
+        security_policy_creation_option,
     )
 
     with open(output_dir + f"{os.path.sep}cleanroom-policy-in.json", "w") as f:
         f.write(json.dumps(policy_json, indent=2))
 
-    if security_policy_creation_option == "allow-all":
-        cce_policy_hash = (
-            "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20"
+    if generate_security_policy_creation_option:
+        cmd = (
+            f"confcom acipolicygen -i {output_dir}{os.path.sep}cleanroom-policy-in.json "
+            + f"--outraw-pretty-print -s {output_dir}{os.path.sep}cleanroom-policy.rego"
         )
-        cce_policy_base64 = (
-            "cGFja2FnZSBwb2xpY3kKCmFwaV9zdm4gOj0gIjAuMTAuMCIKCm1vdW50X2RldmljZSA"
-            + "6PSB7ImFsbG93ZWQiOiB0cnVlfQptb3VudF9vdmVybGF5IDo9IHsiYWxsb3dlZCI6I"
-            + "HRydWV9CmNyZWF0ZV9jb250YWluZXIgOj0geyJhbGxvd2VkIjogdHJ1ZSwgImVudl9"
-            + "saXN0IjogbnVsbCwgImFsbG93X3N0ZGlvX2FjY2VzcyI6IHRydWV9CnVubW91bnRfZGV"
-            + "2aWNlIDo9IHsiYWxsb3dlZCI6IHRydWV9IAp1bm1vdW50X292ZXJsYXkgOj0geyJhbGx"
-            + "vd2VkIjogdHJ1ZX0KZXhlY19pbl9jb250YWluZXIgOj0geyJhbGxvd2VkIjogdHJ1ZSw"
-            + "gImVudl9saXN0IjogbnVsbH0KZXhlY19leHRlcm5hbCA6PSB7ImFsbG93ZWQiOiB0cnV"
-            + "lLCAiZW52X2xpc3QiOiBudWxsLCAiYWxsb3dfc3RkaW9fYWNjZXNzIjogdHJ1ZX0Kc2h"
-            + "1dGRvd25fY29udGFpbmVyIDo9IHsiYWxsb3dlZCI6IHRydWV9CnNpZ25hbF9jb250YWl"
-            + "uZXJfcHJvY2VzcyA6PSB7ImFsbG93ZWQiOiB0cnVlfQpwbGFuOV9tb3VudCA6PSB7ImF"
-            + "sbG93ZWQiOiB0cnVlfQpwbGFuOV91bm1vdW50IDo9IHsiYWxsb3dlZCI6IHRydWV9Cmd"
-            + "ldF9wcm9wZXJ0aWVzIDo9IHsiYWxsb3dlZCI6IHRydWV9CmR1bXBfc3RhY2tzIDo9IHs"
-            + "iYWxsb3dlZCI6IHRydWV9CnJ1bnRpbWVfbG9nZ2luZyA6PSB7ImFsbG93ZWQiOiB0cnV"
-            + "lfQpsb2FkX2ZyYWdtZW50IDo9IHsiYWxsb3dlZCI6IHRydWV9CnNjcmF0Y2hfbW91bnQ"
-            + "gOj0geyJhbGxvd2VkIjogdHJ1ZX0Kc2NyYXRjaF91bm1vdW50IDo9IHsiYWxsb3dlZCI6IHRydWV9Cg=="
-        )
+
+        if security_policy_creation_option == "generate-debug":
+            cmd += " --debug-mode"
+        result = az_cli(cmd)
+        print(f"Result: {result}")
     else:
-        if generate_security_policy_creation_option:
-            cmd = (
-                f"confcom acipolicygen -i {output_dir}{os.path.sep}cleanroom-policy-in.json "
-                + f"--outraw-pretty-print -s {output_dir}{os.path.sep}cleanroom-policy.rego"
-            )
+        assert (
+            security_policy_creation_option == "allow-all"
+            or security_policy_creation_option == "cached"
+            or security_policy_creation_option == "cached-debug"
+        ), f"Invalid security policy creation option passed: {security_policy_creation_option}"
+        with open(output_dir + f"{os.path.sep}cleanroom-policy.rego", "w") as f:
+            f.write(policy_rego)
 
-            if security_policy_creation_option == "generate-debug":
-                cmd += " --debug-mode"
-            result = az_cli(cmd)
-            print(f"Result: {result}")
-        else:
-            assert (
-                security_policy_creation_option == "cached"
-                or security_policy_creation_option == "cached-debug"
-            ), f"Invalid security policy creation option passed: {security_policy_creation_option}"
-            with open(output_dir + f"{os.path.sep}cleanroom-policy.rego", "w") as f:
-                f.write(policy_rego)
+    with open(f"{output_dir}{os.path.sep}cleanroom-policy.rego", "r") as f:
+        cce_policy = f.read()
 
-        with open(f"{output_dir}{os.path.sep}cleanroom-policy.rego", "r") as f:
-            cce_policy = f.read()
-
-        cce_policy_base64 = base64.b64encode(bytes(cce_policy, "utf-8")).decode("utf-8")
-        cce_policy_hash = hashlib.sha256(bytes(cce_policy, "utf-8")).hexdigest()
+    cce_policy_base64 = base64.b64encode(bytes(cce_policy, "utf-8")).decode("utf-8")
+    cce_policy_hash = hashlib.sha256(bytes(cce_policy, "utf-8")).hexdigest()
 
     arm_template["resources"][0]["properties"]["confidentialComputeProperties"][
         "ccePolicy"
@@ -721,7 +927,7 @@ def governance_deployment_generate_cmd(
     with open(output_dir + f"{os.path.sep}cleanroom-arm-template.json", "w") as f:
         f.write(json.dumps(arm_template, indent=2))
 
-    policy_json = {
+    governance_policy_json = {
         "type": "add",
         "claims": {
             "x-ms-sevsnpvm-is-debuggable": False,
@@ -730,7 +936,7 @@ def governance_deployment_generate_cmd(
     }
 
     with open(output_dir + f"{os.path.sep}cleanroom-governance-policy.json", "w") as f:
-        f.write(json.dumps(policy_json, indent=2))
+        f.write(json.dumps(governance_policy_json, indent=2))
 
 
 def governance_deployment_template_propose_cmd(
@@ -952,6 +1158,26 @@ def governance_contract_secret_set_cmd(
     return r.json()
 
 
+def governance_contract_secret_list_cmd(cmd, contract_id, gov_client_name=""):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.get(f"{cgs_endpoint}/contracts/{contract_id}/secrets")
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_contract_secret_get_cleanroom_policy_cmd(
+    cmd, contract_id, secret_name, gov_client_name=""
+):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.get(
+        f"{cgs_endpoint}/contracts/{contract_id}/secrets/{secret_name}/cleanroompolicy"
+    )
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
 def governance_contract_event_list_cmd(
     cmd, contract_id, all=None, event_id="", scope="", gov_client_name=""
 ):
@@ -974,45 +1200,135 @@ def governance_contract_event_list_cmd(
     return r.json()
 
 
-def governance_document_create_cmd(
+def governance_member_document_create_cmd(
     cmd, document_id, contract_id, data, gov_client_name="", version=""
 ):
     cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
     document = {"version": version, "contractId": contract_id, "data": data}
-    r = requests.put(f"{cgs_endpoint}/documents/{document_id}", json=document)
+    r = requests.put(f"{cgs_endpoint}/memberdocuments/{document_id}", json=document)
     if r.status_code != 200:
         raise CLIError(response_error_message(r))
 
 
-def governance_document_show_cmd(cmd, gov_client_name="", document_id=""):
+def governance_member_document_show_cmd(cmd, gov_client_name="", document_id=""):
     cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
-    r = requests.get(f"{cgs_endpoint}/documents/{document_id}")
+    r = requests.get(f"{cgs_endpoint}/memberdocuments/{document_id}")
     if r.status_code != 200:
         raise CLIError(response_error_message(r))
     return r.json()
 
 
-def governance_document_propose_cmd(cmd, document_id, version, gov_client_name=""):
+def governance_member_document_propose_cmd(
+    cmd, document_id, version, gov_client_name=""
+):
     cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
     data = {"version": version}
-    r = requests.post(f"{cgs_endpoint}/documents/{document_id}/propose", json=data)
+    r = requests.post(
+        f"{cgs_endpoint}/memberdocuments/{document_id}/propose", json=data
+    )
     if r.status_code != 200:
         raise CLIError(response_error_message(r))
     return r.json()
 
 
-def governance_document_vote_cmd(
+def governance_member_document_vote_cmd(
     cmd, document_id, proposal_id, action, gov_client_name=""
 ):
     cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
     data = {"proposalId": proposal_id}
     vote_method = "vote_accept" if action == "accept" else "vote_reject"
     r = requests.post(
-        f"{cgs_endpoint}/documents/{document_id}/{vote_method}", json=data
+        f"{cgs_endpoint}/memberdocuments/{document_id}/{vote_method}", json=data
     )
     if r.status_code != 200:
         raise CLIError(response_error_message(r))
     return r.json()
+
+
+def governance_user_document_create_cmd(
+    cmd, document_id, contract_id, data, approvers="", gov_client_name="", version=""
+):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    document = {
+        "version": version,
+        "contractId": contract_id,
+        "data": data,
+        "approvers": [],
+    }
+
+    user_document_approvers = []
+    if approvers:
+        if os.path.exists(approvers):
+            user_document_approvers = get_file_json(approvers)
+        else:
+            user_document_approvers = shell_safe_json_parse(approvers)
+    for approver in user_document_approvers:
+        approverId = approver["id"]
+        approverType = approver["type"]
+        if approverType not in ["user", "member"]:
+            raise CLIError(
+                f"Invalid approver type {approverType} for approver {approverId}. Valid types are 'user' or 'member'."
+            )
+        document["approvers"].append(
+            {"approverId": approverId, "approverIdType": approverType}
+        )
+    r = requests.put(f"{cgs_endpoint}/userdocuments/{document_id}", json=document)
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+
+
+def governance_user_document_show_cmd(cmd, gov_client_name="", document_id=""):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.get(f"{cgs_endpoint}/userdocuments/{document_id}")
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_user_document_propose_cmd(cmd, document_id, version, gov_client_name=""):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    data = {"version": version}
+    r = requests.post(f"{cgs_endpoint}/userdocuments/{document_id}/propose", json=data)
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_user_document_vote_cmd(
+    cmd, document_id, proposal_id, action, gov_client_name=""
+):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    data = {"proposalId": proposal_id}
+    vote_method = "vote_accept" if action == "accept" else "vote_reject"
+    r = requests.post(
+        f"{cgs_endpoint}/userdocuments/{document_id}/{vote_method}", json=data
+    )
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_user_document_runtime_option_get_cmd(
+    cmd, document_id, option_name, gov_client_name=""
+):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.post(
+        f"{cgs_endpoint}/userdocuments/{document_id}/checkstatus/{option_name}"
+    )
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_user_document_runtime_option_set_cmd(
+    cmd, document_id, option_name, action, gov_client_name=""
+):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.post(
+        f"{cgs_endpoint}/userdocuments/{document_id}/runtimeoptions/{option_name}/{action}"
+    )
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
 
 
 def governance_network_set_recovery_threshold_cmd(
@@ -1245,10 +1561,11 @@ def get_cgs_client_port(cmd, gov_client_name: str):
     # method gets invoked frequently to determin the client port. using the docker package instead.
     # from python_on_whales import DockerClient, exceptions
 
-    try:
-        import docker
+    import docker
 
-        client = docker.from_env()
+    client = docker.from_env()
+
+    try:
         container_name = f"{gov_client_name}-cgs-client-1"
         container = client.containers.get(container_name)
         port = container.ports["8080/tcp"][0]["HostPort"]
@@ -1259,10 +1576,18 @@ def get_cgs_client_port(cmd, gov_client_name: str):
         return port
     # except exceptions.DockerException as e:
     except Exception as e:
-        raise CLIError(
-            f"Not finding a client instance running with name '{gov_client_name}'. Check "
-            + "the --governance-client parameter value."
-        ) from e
+        # Perhaps the client was started without docker compose and if so the container name might
+        # be directly supplied as input.
+        try:
+            container_name = f"{gov_client_name}"
+            container = client.containers.get(container_name)
+            port = container.ports["8080/tcp"][0]["HostPort"]
+            return port
+        except Exception as e:
+            raise CLIError(
+                f"Not finding a client instance running with name '{gov_client_name}'. Check "
+                + "the --governance-client parameter value."
+            ) from e
 
 
 def get_gov_client_name(cli_ctx, gov_client_name):
@@ -1350,11 +1675,12 @@ def merge_specs(this: Any, that: Any):
 
 def config_view_cmd(cmd, cleanroom_config_file, configs, output_file, no_print):
 
+    from rich import print
+
     from .utilities._configuration_helpers import (
         read_cleanroom_spec_internal,
         write_cleanroom_spec_internal,
     )
-    from rich import print
 
     cleanroom_spec = read_cleanroom_spec_internal(cleanroom_config_file)
 
@@ -1371,9 +1697,9 @@ def config_view_cmd(cmd, cleanroom_config_file, configs, output_file, no_print):
 def config_create_kek_policy_cmd(
     cmd,
     cleanroom_config_file,
-    secretstore_config_file,
     contract_id,
     b64_cl_policy,
+    secretstore_config_file=SecretStoreConfiguration.default_secretstore_config_file(),
 ):
     cl_policy = json.loads(base64.b64decode(b64_cl_policy).decode("utf-8"))
     if not "policy" in cl_policy or not "x-ms-sevsnpvm-hostdata" in cl_policy["policy"]:
@@ -1392,10 +1718,10 @@ def config_create_kek_policy_cmd(
 def config_wrap_deks_cmd(
     cmd,
     cleanroom_config_file,
-    datastore_config_file,
-    secretstore_config_file,
     contract_id,
     gov_client_name="",
+    datastore_config_file=DataStoreConfiguration.default_datastore_config_file(),
+    secretstore_config_file=SecretStoreConfiguration.default_secretstore_config_file(),
 ):
     if gov_client_name != "":
         # Create the KEK first that will be used to wrap the DEKs.
@@ -1418,12 +1744,12 @@ def config_wrap_deks_cmd(
 def config_wrap_secret_cmd(
     cmd,
     cleanroom_config_file,
-    secretstore_config_file,
     kek_secretstore_name,
     contract_id,
     name: str,
     value: str,
     secret_key_vault,
+    secretstore_config_file=SecretStoreConfiguration.default_secretstore_config_file(),
     kek_name="",
     gov_client_name="",
 ):
@@ -1454,16 +1780,11 @@ def config_wrap_secret_cmd(
             cl_policy["policy"]["x-ms-sevsnpvm-hostdata"][0],
         )
 
-    from .utilities._secretstore_helpers import (
-        get_secretstore,
-        get_secretstore_entry_internal,
-    )
+    from .utilities._secretstore_helpers import SecretStoreConfiguration
 
-    kek_secret_store_entry = get_secretstore_entry_internal(
+    kek_secret_store = SecretStoreConfiguration.get_secretstore(
         kek_secretstore_name, secretstore_config_file
     )
-    kek_secret_store = get_secretstore(kek_secret_store_entry)
-
     public_key = kek_secret_store.get_secret(kek_name)
 
     if public_key is None:
@@ -1499,16 +1820,16 @@ def config_wrap_secret_cmd(
         f"keyvault secret set --name {secret_name} --vault-name {vault_name} --value {ciphertext}"
     )
 
-    import ast
-
-    maa_endpoint = ast.literal_eval(kek_secret_store_entry.configuration)["authority"]
+    maa_endpoint = json.loads(
+        base64.b64decode(kek_secret_store.entry.configuration).decode()
+    )["authority"]
 
     return {
         "kid": secret_name,
         "akvEndpoint": vault_url,
         "kek": {
             "kid": kek_name,
-            "akvEndpoint": kek_secret_store_entry.storeProviderUrl,
+            "akvEndpoint": kek_secret_store.entry.storeProviderUrl,
             "maaEndpoint": maa_endpoint,
         },
     }
@@ -1568,7 +1889,11 @@ def config_add_application_cmd(
                 ),
             ),
             enforcementPolicy=Policy(
-                policy=InlinePolicy(policyDocument=str({"trustType": "https"}))
+                policy=InlinePolicy(
+                    policyDocument=base64.b64encode(
+                        json.dumps({"trustType": "https"}).encode()
+                    ).decode()
+                )
             ),
         ),
         command=command,
@@ -1686,11 +2011,12 @@ def config_network_tcp_enable_cmd(
     cleanroom_config_file,
     allowed_ips={},
 ):
+    import ipaddress
+
     from .utilities._configuration_helpers import (
         read_cleanroom_spec_internal,
         write_cleanroom_spec_internal,
     )
-    import ipaddress
 
     spec = read_cleanroom_spec_internal(cleanroom_config_file)
 
@@ -1765,9 +2091,7 @@ def config_network_dns_disable_cmd(cmd, cleanroom_config_file):
 
 
 def config_validate_cmd(cmd, cleanroom_config_file):
-    from .utilities._configuration_helpers import (
-        read_cleanroom_spec_internal,
-    )
+    from .utilities._configuration_helpers import read_cleanroom_spec_internal
 
     spec = read_cleanroom_spec_internal(cleanroom_config_file)
     _validate_config(spec)
@@ -1795,34 +2119,27 @@ def config_wrap_deks(
     secretstore_config_file,
 ):
 
-    from .utilities._configuration_helpers import (
-        read_cleanroom_spec_internal,
-    )
+    from .utilities._configuration_helpers import read_cleanroom_spec_internal
 
     config = read_cleanroom_spec_internal(cleanroom_config_file)
 
     from .utilities._datastore_helpers import generate_wrapped_dek
-    from .utilities._secretstore_helpers import (
-        get_secretstore,
-        get_secretstore_entry_internal,
-    )
+    from .utilities._secretstore_helpers import SecretStoreConfiguration
 
     for ds_entry in config.datasources + config.datasinks:
         datastore_name = ds_entry.store.id
-
-        assert (
-            ds_entry.protection.encryptionSecrets
-        ), f"Encryption secrets not specified for datastore {datastore_name}"
-
+        if not ds_entry.protection.encryptionSecrets:
+            logger.info(
+                f"No encryption secrets to wrap for datastore '{datastore_name}'."
+            )
+            continue
         kek_name = ds_entry.protection.encryptionSecrets.kek.name
         kek_secret_store_name = (
             ds_entry.protection.encryptionSecrets.kek.secret.backingResource.id
         )
-        kek_secret_store_entry = get_secretstore_entry_internal(
+        kek_secret_store = SecretStoreConfiguration.get_secretstore(
             kek_secret_store_name, secretstore_config_file
         )
-        kek_secret_store = get_secretstore(kek_secret_store_entry)
-
         public_key = kek_secret_store.get_secret(kek_name)
 
         wrapped_dek_name = (
@@ -1831,13 +2148,12 @@ def config_wrap_deks(
         dek_secret_store_name = (
             ds_entry.protection.encryptionSecrets.dek.secret.backingResource.id
         )
-        dek_secret_store_entry = get_secretstore_entry_internal(
+        dek_secret_store = SecretStoreConfiguration.get_secretstore(
             dek_secret_store_name, secretstore_config_file
         )
-        dek_secret_store = get_secretstore(dek_secret_store_entry)
 
         logger.warning(
-            f"Creating wrapped DEK secret '{wrapped_dek_name}' for '{datastore_name}' in key vault '{dek_secret_store_entry.storeProviderUrl}'."
+            f"Creating wrapped DEK secret '{wrapped_dek_name}' for '{datastore_name}' in key vault '{dek_secret_store.entry.storeProviderUrl}'."
         )
         dek_secret_store.add_secret(
             wrapped_dek_name,
@@ -1873,17 +2189,17 @@ def config_create_kek(
     secretstore_config_file,
     key_release_policy,
 ):
-    from .utilities._configuration_helpers import (
-        read_cleanroom_spec_internal,
-    )
     from .utilities._azcli_helpers import logger
+    from .utilities._configuration_helpers import read_cleanroom_spec_internal
 
     spec = read_cleanroom_spec_internal(cleanroom_config_file)
     for ds_entry in spec.datasources + spec.datasinks:
         ds_name = ds_entry.name
-        assert (
-            ds_entry.protection.encryptionSecrets
-        ), f"Encryption secrets not specified for datastore {ds_name}"
+        if not ds_entry.protection.encryptionSecrets:
+            logger.info(
+                f"Skipping KEK creation for datastore '{ds_name}' as no encryption secrets are specified."
+            )
+            continue
 
         kek_name = ds_entry.protection.encryptionSecrets.kek.secret.backingResource.name
         kek_secret_store_name = (
@@ -1902,15 +2218,10 @@ def create_kek(
     key_release_policy,
 ):
     from .utilities._azcli_helpers import logger
-    from .utilities._secretstore_helpers import (
-        get_secretstore,
-        get_secretstore_entry_internal,
-    )
 
-    kek_secret_store_entry = get_secretstore_entry_internal(
+    kek_secret_store = SecretStoreConfiguration.get_secretstore(
         kek_secret_store_name, secretstore_config_file
     )
-    kek_secret_store = get_secretstore(kek_secret_store_entry)
 
     def create_key():
         from cryptography.hazmat.primitives.asymmetric import rsa
@@ -1923,7 +2234,7 @@ def create_kek(
         security_policy=key_release_policy,
     )
     logger.warning(
-        f"Created KEK {kek_name} in store {kek_secret_store_entry.storeProviderUrl}"
+        f"Created KEK {kek_name} in store {kek_secret_store.entry.storeProviderUrl}"
     )
 
 
@@ -1936,20 +2247,6 @@ def get_current_jsapp_bundle(cgs_endpoint: str):
     canonical_bundle = json.dumps(bundle, indent=2, sort_keys=True, ensure_ascii=False)
     canonical_bundle_hash = hashlib.sha256(bytes(canonical_bundle, "utf-8")).hexdigest()
     return bundle, bundle_hash, canonical_bundle, canonical_bundle_hash
-
-
-def to_canonical_jsapp_bundle(bundle):
-    canonical_bundle = json.loads(json.dumps(bundle))
-    for key, value in bundle["metadata"]["endpoints"].items():
-        # Update the HTTP verb to be in lower case. The case of the verbs in the document hosted
-        # in MCR and the verb values reported by CCF's /endpoint api can differ.
-        #   "/contracts/{contractId}/oauth/token": { "POST": { =>
-        #   "/contracts/{contractId}/oauth/token": { "post": { =>
-        for verb, action in value.items():
-            del canonical_bundle["metadata"]["endpoints"][key][verb]
-            canonical_bundle["metadata"]["endpoints"][key][verb.lower()] = action
-
-    return json.dumps(canonical_bundle, indent=2, sort_keys=True, ensure_ascii=False)
 
 
 def find_constitution_version_entry(tag: str) -> str | None:
@@ -2004,15 +2301,16 @@ def find_version_manifest_entry(tag: str, component: str) -> str | None:
     registry_url = get_versions_registry()
     import oras.client
     import oras.oci
+    from cleanroom_common.azure_cleanroom_core.utilities.helpers import (
+        use_insecure_http,
+    )
 
-    insecure = False
-    if urlparse("https://" + registry_url).hostname == "localhost":
-        insecure = True
+    insecure = use_insecure_http(registry_url)
 
     if tag.startswith("sha256:"):
         tag = tag[7:]
     component_url = f"{registry_url}/{component}:{tag}"
-    client = oras.client.OrasClient(hostname=registry_url, insecure=insecure)
+    client = oras.client.OrasClient(insecure=insecure)
     if not registry_url.startswith(MCR_CLEANROOM_VERSIONS_REGISTRY):
         logger.warning("Fetching the manifest from override url %s", component_url)
     try:
@@ -2031,10 +2329,11 @@ def find_version_manifest_entry(tag: str, component: str) -> str | None:
 def find_version_document_entry(tag: str, component: str) -> str | None:
     registry_url = get_versions_registry()
     import oras.client
+    from cleanroom_common.azure_cleanroom_core.utilities.helpers import (
+        use_insecure_http,
+    )
 
-    insecure = False
-    if urlparse("https://" + registry_url).hostname == "localhost":
-        insecure = True
+    insecure = use_insecure_http(registry_url)
 
     dir_path = os.path.dirname(os.path.realpath(__file__))
     versions_folder = os.path.join(
@@ -2046,7 +2345,7 @@ def find_version_document_entry(tag: str, component: str) -> str | None:
     if tag.startswith("sha256:"):
         tag = tag[7:]
     component_url = f"{registry_url}/versions/{component}:{tag}"
-    client = oras.client.OrasClient(hostname=registry_url, insecure=insecure)
+    client = oras.client.OrasClient(insecure=insecure)
     if not registry_url.startswith(MCR_CLEANROOM_VERSIONS_REGISTRY):
         logger.warning(
             "Downloading the version document from override url %s", component_url
@@ -2139,18 +2438,16 @@ def download_constitution_jsapp(folder, constitution_url="", jsapp_url=""):
 
 
 def download_constitution(folder, constitution_url):
-    # Extract the registry_hostname the URL.
-    # https://foo.ghcr.io/some:tag => "foo.ghcr.io"
-    registry_url = urlparse("https://" + constitution_url).netloc
+    from cleanroom_common.azure_cleanroom_core.utilities.helpers import (
+        use_insecure_http,
+    )
 
-    insecure = False
-    if urlparse("https://" + constitution_url).hostname == "localhost":
-        insecure = True
+    insecure = use_insecure_http(constitution_url)
 
     import oras.client
 
-    client = oras.client.OrasClient(hostname=registry_url, insecure=insecure)
-    logger.debug("Downloading the constitution from %s", constitution_url)
+    client = oras.client.OrasClient(insecure=insecure)
+    logger.warning("Downloading the constitution from %s", constitution_url)
 
     try:
         manifest: dict = client.remote.get_manifest(constitution_url)
@@ -2183,18 +2480,18 @@ def download_constitution(folder, constitution_url):
 
 
 def download_jsapp(folder, jsapp_url):
-    # Extract the registry_hostname from one of the URLs.
-    # https://foo.ghcr.io/some:tag => "foo.ghcr.io"
-    registry_url = urlparse("https://" + jsapp_url).netloc
+    from cleanroom_common.azure_cleanroom_core.utilities.helpers import (
+        use_insecure_http,
+    )
 
-    insecure = False
-    if urlparse("https://" + jsapp_url).hostname == "localhost":
-        insecure = True
+    insecure = use_insecure_http(jsapp_url)
 
     import oras.client
 
-    client = oras.client.OrasClient(hostname=registry_url, insecure=insecure)
-    logger.debug("Downloading the governance service js application from %s", jsapp_url)
+    client = oras.client.OrasClient(insecure=insecure)
+    logger.warning(
+        "Downloading the governance service js application from %s", jsapp_url
+    )
 
     try:
         manifest: dict = client.remote.get_manifest(jsapp_url)
@@ -2233,16 +2530,22 @@ def get_current_constitution(cgs_endpoint: str):
 
 
 def get_cgs_client_digest(gov_client_name: str) -> str:
-    try:
-        import docker
+    import docker
 
-        client = docker.from_env()
+    client = docker.from_env()
+    try:
         container_name = f"{gov_client_name}-cgs-client-1"
         container = client.containers.get(container_name)
     except Exception as e:
-        raise CLIError(
-            f"Not finding a client instance running with name '{gov_client_name}'. Check the --name parameter value."
-        ) from e
+        # Perhaps the client was started without docker compose and if so the container name might
+        # be directly supplied as input.
+        try:
+            container_name = f"{gov_client_name}"
+            container = client.containers.get(container_name)
+        except Exception as e:
+            raise CLIError(
+                f"Not finding a client instance running with name '{gov_client_name}'. Check the --name parameter value."
+            ) from e
 
     image = client.images.get(container.image.id)
     repoDigest: str = image.attrs["RepoDigests"][0]
@@ -2272,10 +2575,8 @@ def try_get_cgs_client_version(tag: str):
 
 
 def _validate_config(spec: CleanRoomSpecification):
+    from cleanroom_common.azure_cleanroom_core.utilities.helpers import validate_config
     from rich.console import Console
-    from cleanroom_common.azure_cleanroom_core.utilities.helpers import (
-        validate_config,
-    )
 
     console = Console()
     issues, warnings = validate_config(spec, logger)
@@ -2286,6 +2587,160 @@ def _validate_config(spec: CleanRoomSpecification):
     if len(issues) > 0:
         errors = [str(x) for x in issues]
         raise CLIError(errors)
+
+
+def cluster_provider_deploy_cmd(cmd, provider_client_name):
+    from .custom_cleanroom_cluster import cluster_provider_deploy
+
+    return cluster_provider_deploy(cmd, provider_client_name)
+
+
+def cluster_provider_remove_cmd(cmd, provider_client_name):
+    from .custom_cleanroom_cluster import cluster_provider_remove
+
+    return cluster_provider_remove(cmd, provider_client_name)
+
+
+def cluster_up_cmd(
+    cmd,
+    cluster_name,
+    infra_type,
+    resource_group,
+    ws_folder,
+    location,
+    provider_client_name,
+):
+    from .custom_cleanroom_cluster import cluster_up
+
+    return cluster_up(
+        cmd,
+        cluster_name,
+        infra_type,
+        resource_group,
+        ws_folder,
+        location,
+        provider_client_name,
+    )
+
+
+def cluster_create_cmd(
+    cmd,
+    cluster_name,
+    infra_type,
+    provider_config,
+    enable_observability,
+    enable_analytics_workload,
+    analytics_workload_config_url,
+    analytics_workload_config_url_ca_cert,
+    analytics_workload_disable_telemetry_collection,
+    analytics_workload_security_policy_creation_option,
+    analytics_workload_security_policy,
+    provider_client_name,
+):
+    from .custom_cleanroom_cluster import cluster_create
+
+    return cluster_create(
+        cmd,
+        cluster_name,
+        infra_type,
+        provider_config,
+        enable_observability,
+        enable_analytics_workload,
+        analytics_workload_config_url,
+        analytics_workload_config_url_ca_cert,
+        analytics_workload_disable_telemetry_collection,
+        analytics_workload_security_policy_creation_option,
+        analytics_workload_security_policy,
+        provider_client_name,
+    )
+
+
+def cluster_update_cmd(
+    cmd,
+    cluster_name,
+    infra_type,
+    provider_config,
+    enable_observability,
+    enable_analytics_workload,
+    analytics_workload_config_url,
+    analytics_workload_config_url_ca_cert,
+    analytics_workload_disable_telemetry_collection,
+    analytics_workload_security_policy_creation_option,
+    analytics_workload_security_policy,
+    provider_client_name,
+):
+    from .custom_cleanroom_cluster import cluster_update
+
+    return cluster_update(
+        cmd,
+        cluster_name,
+        infra_type,
+        provider_config,
+        enable_observability,
+        enable_analytics_workload,
+        analytics_workload_config_url,
+        analytics_workload_config_url_ca_cert,
+        analytics_workload_disable_telemetry_collection,
+        analytics_workload_security_policy_creation_option,
+        analytics_workload_security_policy,
+        provider_client_name,
+    )
+
+
+def cluster_show_cmd(
+    cmd, cluster_name, infra_type, provider_config, provider_client_name
+):
+    from .custom_cleanroom_cluster import cluster_show
+
+    return cluster_show(
+        cmd, cluster_name, infra_type, provider_config, provider_client_name
+    )
+
+
+def cluster_delete_cmd(
+    cmd, cluster_name, infra_type, provider_config, provider_client_name
+):
+    from .custom_cleanroom_cluster import cluster_delete
+
+    return cluster_delete(
+        cmd, cluster_name, infra_type, provider_config, provider_client_name
+    )
+
+
+def cluster_get_kubeconfig_cmd(
+    cmd, cluster_name, infra_type, file, provider_config, provider_client_name
+):
+    from .custom_cleanroom_cluster import cluster_get_kubeconfig
+
+    return cluster_get_kubeconfig(
+        cmd, cluster_name, infra_type, file, provider_config, provider_client_name
+    )
+
+
+def cluster_analytics_workload_deployment_generate_cmd(
+    cmd,
+    infra_type,
+    provider_config,
+    disable_telemetry_collection,
+    contract_id,
+    gov_client_name,
+    security_policy_creation_option,
+    output_dir,
+    provider_client_name,
+):
+    from .custom_cleanroom_cluster import cluster_analytics_workload_deployment_generate
+
+    return cluster_analytics_workload_deployment_generate(
+        cmd,
+        infra_type,
+        provider_config,
+        disable_telemetry_collection,
+        contract_id,
+        gov_client_name,
+        security_policy_creation_option,
+        output_dir,
+        provider_client_name,
+    )
 
 
 def ccf_provider_deploy_cmd(cmd, provider_client_name):
@@ -2523,6 +2978,16 @@ def ccf_network_recovery_agent_show_report_cmd(
     from .custom_ccf import ccf_network_recovery_agent_show_report
 
     return ccf_network_recovery_agent_show_report(
+        cmd, network_name, infra_type, provider_config, provider_client_name
+    )
+
+
+def ccf_network_recovery_agent_show_network_report_cmd(
+    cmd, network_name, infra_type, provider_config, provider_client_name
+):
+    from .custom_ccf import ccf_network_recovery_agent_show_network_report
+
+    return ccf_network_recovery_agent_show_network_report(
         cmd, network_name, infra_type, provider_config, provider_client_name
     )
 
@@ -2916,9 +3381,7 @@ def ccf_recovery_service_api_member_show_cmd(
 def ccf_recovery_service_api_member_show_report_cmd(
     cmd, member_name, service_config, provider_client_name
 ):
-    from .custom_ccf_recovery_service import (
-        ccf_recovery_service_api_member_show_report,
-    )
+    from .custom_ccf_recovery_service import ccf_recovery_service_api_member_show_report
 
     return ccf_recovery_service_api_member_show_report(
         cmd, member_name, service_config, provider_client_name
@@ -2930,6 +3393,34 @@ def ccf_recovery_service_api_show_report_cmd(cmd, service_config, provider_clien
 
     return ccf_recovery_service_api_show_report(
         cmd, service_config, provider_client_name
+    )
+
+
+def ccf_consortium_manager_create_cmd(
+    cmd,
+    consortium_manager_name,
+    infra_type,
+    provider_config,
+    provider_client_name,
+):
+    from .custom_ccf_consortium_manager import ccf_consortium_manager_create
+
+    return ccf_consortium_manager_create(
+        cmd,
+        consortium_manager_name,
+        infra_type,
+        provider_config,
+        provider_client_name,
+    )
+
+
+def ccf_consortium_manager_show_cmd(
+    cmd, consortium_manager_name, infra_type, provider_config, provider_client_name
+):
+    from .custom_ccf_consortium_manager import ccf_consortium_manager_show
+
+    return ccf_consortium_manager_show(
+        cmd, consortium_manager_name, infra_type, provider_config, provider_client_name
     )
 
 
@@ -2951,3 +3442,68 @@ def get_default_cert_policy(member_name) -> str:
     }
 
     return json.dumps(policy, indent=2)
+
+
+# TODO (gsinha): Need to register a new app in AAD and use that for authentication
+# for the device code flow. The current client ID is used only for testing purposes.
+MS_CLIENT_ID = "8a3849c1-81c5-4d62-b83e-3bb2bb11251a"
+MS_TENANT_ID = "common"  # or "organizations" or specific tenant GUID
+MS_AUTHORITY = f"https://login.microsoftonline.com/{MS_TENANT_ID}"
+MS_SCOPES = ["User.Read"]
+
+
+def load_cache(msal_token_cache_file):
+    from msal import SerializableTokenCache
+
+    cache = SerializableTokenCache()
+    if os.path.exists(msal_token_cache_file):
+        cache.deserialize(open(msal_token_cache_file, "r").read())
+    return cache
+
+
+def save_cache(cache, msal_token_cache_file):
+    if cache.has_state_changed:
+        with open(msal_token_cache_file, "w") as f:
+            f.write(cache.serialize())
+
+
+def ms_perform_device_code_flow(msal_token_cache_dir):
+    import msal
+
+    msal_token_cache_file = os.path.join(msal_token_cache_dir, "token_cache.json")
+    token_cache = load_cache(msal_token_cache_file)
+    app = msal.PublicClientApplication(
+        MS_CLIENT_ID, authority=MS_AUTHORITY, token_cache=token_cache
+    )
+    account = None
+    for x in app.get_accounts():
+        if x["environment"] == "login.microsoftonline.com" and x["realm"] == "common":
+            account = x
+            break
+    if account:
+        result = app.acquire_token_silent(MS_SCOPES, account=account)
+        if result and "access_token" in result:
+            save_cache(token_cache, msal_token_cache_file)
+            return
+
+    # If no token is found, perform device code flow.
+    flow = app.initiate_device_flow(scopes=MS_SCOPES)
+    if "user_code" not in flow:
+        raise Exception("Failed to create device flow. Error: {}".format(flow))
+
+    print("Please go to", flow["verification_uri"])
+    print("And enter the code:", flow["user_code"])
+    result = app.acquire_token_by_device_flow(flow)
+    if "access_token" in result:
+        name = result["id_token_claims"].get("name", "")
+        email = result["id_token_claims"].get("preferred_username", "")
+        oid = result["id_token_claims"].get("oid", "")
+        if email == "" or oid == "":
+            raise Exception("Login failed: missing email or oid in token claims")
+        print("User:", name)
+        print("Email:", email)
+        print("oid:", oid)
+        save_cache(token_cache, msal_token_cache_file)
+    else:
+        err = result.get("error_description")
+        raise Exception(f"Login failed: {err}")

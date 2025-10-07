@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: ccr-attestation
+    image: $containerRegistryUrl/ccr-attestation@$digest
+    command:
+    - app
+    - -socket-address
+    - /mnt/uds/sock
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+    env:
+    - name: TELEMETRY_MOUNT_PATH
+      value: $telemetryMountPath
+    volumeMounts:
+    - name: uds
+      mountPath: /mnt/uds
+      readOnly: false
+

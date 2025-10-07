@@ -15,7 +15,8 @@ $PSNativeCommandUseErrorActionPreference = $true
 . $PSScriptRoot/helpers.ps1
 
 if ($outDir -eq "") {
-    $outDir = "./.ccf-network-security-policy"
+    $root = git rev-parse --show-toplevel
+    $outDir = $root + "/.policies/ccf-network-security-policy"
     if (-not (Test-Path $outDir)) {
         New-Item -ItemType Directory $outDir 
     }

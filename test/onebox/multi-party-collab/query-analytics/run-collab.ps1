@@ -12,6 +12,10 @@ param
     [string]$tag = "latest"
 )
 
+# https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
+
 $outDir = "$PSScriptRoot/generated"
 rm -rf $outDir
 Write-Host "Using $registry registry for cleanroom container images."
@@ -29,11 +33,6 @@ $ccfEndpoint = $(Get-Content $outDir/ccf/ccf.json | ConvertFrom-Json).endpoint
 az cleanroom governance client remove --name "ob-publisher-client"
 
 pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 -registry $registry -repo $repo -tag $tag -ccfEndpoint $ccfEndpoint
-if ($LASTEXITCODE -gt 0) {
-    Write-Host -ForegroundColor Red "run-scenario-generate-template-policy returned non-zero exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
-
 
 pwsh $PSScriptRoot/../convert-template.ps1 -outDir $outDir -repo $repo -tag $tag
 

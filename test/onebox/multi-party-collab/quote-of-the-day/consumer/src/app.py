@@ -1,10 +1,11 @@
 import json
 import logging
 import sys
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+
 import requests
 import uvicorn
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 
 app = FastAPI()
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)

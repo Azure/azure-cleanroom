@@ -21,6 +21,8 @@ COPY src/ccf/ccf-provider-common/*.csproj /app/src/ccf/ccf-provider-common/
 COPY src/ccf/ccf-common/*.csproj /app/src/ccf/ccf-common/
 COPY src/ccf/tests/*.csproj /app/src/ccf/tests/
 COPY src/ccf/load-balancer/load-balancer-provider/*.csproj /app/src/ccf/load-balancer/load-balancer-provider/
+COPY src/ccf/consortium-manager/ccf-consortium-manager/*.csproj /app/src/ccf/consortium-manager/ccf-consortium-manager/
+COPY src/ccf/consortium-manager/ccf-consortium-manager-provider/*.csproj /app/src/ccf/consortium-manager/ccf-consortium-manager-provider/
 COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
 COPY src/internal/Cose/*.csproj /app/src/internal/Cose/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/

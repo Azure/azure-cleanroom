@@ -27,10 +27,9 @@ function create_version_file([string]$file_path, [string]$whlTag) {
 
 $whlTag = $tag
 if (!$tag.Contains('.')) {
-    # If the input tag is not a valid version, then use the tag to generate a random number and use that in the whl name.
-    # This is to have a valid version in the private / builds/test runs
-    $random = [math]::Abs(($tag.GetHashCode()) % 100000)
-    $whlTag = "1.0.$random"
+    # If the input tag is not a valid version, then use a placeholder value.
+    # This is to have a valid version in the private / builds/test runs.
+    $whlTag = "1.0.42"
 }
 
 if (!$localenv) {
@@ -41,6 +40,7 @@ if (!$localenv) {
     docker image build `
         --output=$output --target=dist `
         -f $PSScriptRoot/docker/Dockerfile.azcliext.cleanroom "$PSScriptRoot/.."
+    Write-Host "Built $output/cleanroom-$whlTag-py2.py3-none-any.whl"
     if ($push) {
         Push-Location $output
         oras push `

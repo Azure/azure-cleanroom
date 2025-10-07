@@ -11,7 +11,7 @@ on:
       release-type:
         description: The release type
         type: string
-        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers"
+        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client"
 
 jobs:
   pre-release-validation:
@@ -73,6 +73,8 @@ jobs:
           submodules: recursive
           fetch-tags: true
           ref: ${{ inputs.tag }}
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
 
       - name: Create file to track released unlisted containers
         run: touch released-containers-unlisted.txt
@@ -179,7 +181,7 @@ jobs:
           tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
           needs-attestation: true
-  
+
       - name: Release CGS JS app version document
         if: ${{ contains(inputs.release-type, 'cgs-js-app') }}
         uses: ./.github/actions/release-cgs-js-app-version-document
@@ -240,6 +242,54 @@ jobs:
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
           needs-attestation: true
 
+      - name: Release CCF consortium manager containers
+        if: ${{ contains(inputs.release-type, 'ccf-consortium-manager-containers') }}
+        uses: ./.github/actions/release-ccf-consortium-manager-containers
+        with:
+          tag: ${{ inputs.tag }}
+          environment: unlisted
+          registry-name: ${{ secrets.RELEASE_ACR_NAME }}
+          client-id: ${{ secrets.RELEASE_CLIENT_ID }}
+          tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
+          subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
+
+      - name: Release cleanroom workload infrastructure containers
+        if: ${{ contains(inputs.release-type, 'cleanroom-workload-infra-containers') }}
+        uses: ./.github/actions/release-cleanroom-workload-infra-containers
+        with:
+          tag: ${{ inputs.tag }}
+          environment: unlisted
+          registry-name: ${{ secrets.RELEASE_ACR_NAME }}
+          client-id: ${{ secrets.RELEASE_CLIENT_ID }}
+          tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
+          subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
+
+      - name: Release cleanroom cluster provider client
+        if: ${{ contains(inputs.release-type, 'cleanroom-cluster-provider-client') }}
+        uses: ./.github/actions/release-cleanroom-cluster-provider-client
+        with:
+          tag: ${{ inputs.tag }}
+          environment: unlisted
+          registry-name: ${{ secrets.RELEASE_ACR_NAME }}
+          client-id: ${{ secrets.RELEASE_CLIENT_ID }}
+          tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
+          subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
+
+      - name: Release version documents for cleanroom cluster provider client
+        if: ${{ contains(inputs.release-type, 'cleanroom-cluster-provider-client') }}
+        uses: ./.github/actions/release-cleanroom-cluster-provider-client-version-documents
+        with:
+          tag: ${{ inputs.tag }}
+          environment: unlisted
+          registry-name: ${{ secrets.RELEASE_ACR_NAME }}
+          client-id: ${{ secrets.RELEASE_CLIENT_ID }}
+          tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
+          subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
+
       - name: Release CCF network security policy
         if: ${{ contains(inputs.release-type, 'ccf-network-containers') }}
         uses: ./.github/actions/release-ccf-network-security-policy
@@ -255,6 +305,30 @@ jobs:
       - name: Release CCF recovery service security policy
         if: ${{ contains(inputs.release-type, 'ccf-recovery-service-containers') }}
         uses: ./.github/actions/release-ccf-recovery-service-security-policy
+        with:
+          tag: ${{ inputs.tag }}
+          environment: unlisted
+          registry-name: ${{ secrets.RELEASE_ACR_NAME }}
+          client-id: ${{ secrets.RELEASE_CLIENT_ID }}
+          tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
+          subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
+
+      - name: Release CCF consortium manager security policy
+        if: ${{ contains(inputs.release-type, 'ccf-consortium-manager-containers') }}
+        uses: ./.github/actions/release-ccf-consortium-manager-security-policy
+        with:
+          tag: ${{ inputs.tag }}
+          environment: unlisted
+          registry-name: ${{ secrets.RELEASE_ACR_NAME }}
+          client-id: ${{ secrets.RELEASE_CLIENT_ID }}
+          tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
+          subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
+
+      - name: Release cleanroom workload infrastructure containers policy
+        if: ${{ contains(inputs.release-type, 'cleanroom-workload-infra-containers') }}
+        uses: ./.github/actions/release-cleanroom-workload-infra-containers-policy
         with:
           tag: ${{ inputs.tag }}
           environment: unlisted
@@ -316,6 +390,8 @@ jobs:
           submodules: recursive
           fetch-tags: true
           ref: ${{ inputs.tag }}
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
 
       - name: Download released containers artefact
         uses: actions/download-artifact@v4
@@ -441,13 +517,12 @@ jobs:
         with:
           name: sidecar-digests-unlisted.yaml
 
-      # TODO (ashank) No such atefact exist. Check why is this listed here
-      #- name: Download ccr-artefacts
-      #  if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
-      #  id: download-ccr-artefacts
-      #  uses: actions/download-artifact@v4
-      #  with:
-      #    name: ccr-artefacts-unlisted
+      - name: Download ccr-artefacts
+        if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
+        id: download-ccr-artefacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ccr-artefacts-unlisted
 
       - name: Download CCF provider client artefacts
         if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-provider-client') }}
@@ -455,13 +530,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ccf-provider-client
-
-      - name: Download CCF nginx artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-nginx') }}
-        id: download-ccf-nginx-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: ccf-nginx
 
       - name: Download CCF SNP provider artefacts
         if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/app/run-js/snp') }}
@@ -491,12 +559,61 @@ jobs:
         with:
           name: ccf-recovery-agent
 
+      - name: Download CCF consortium manager artefacts
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-consortium-manager') }}
+        id: download-ccf-consortium-manager-artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: ccf-consortium-manager
+
       - name: Download SKR artefacts
         if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'skr') }}
         id: download-skr-artefact
         uses: actions/download-artifact@v4
         with:
           name: skr
+
+      - name: Download Cleanroom Spark Analytics Agent artefacts
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cleanroom-spark-analytics-agent') }}
+        id: download-cleanroom-spark-analytics-agent-artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: cleanroom-spark-analytics-agent
+
+      - name: Download Cleanroom Spark Analytics Agent Helm artefacts
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'helm/cleanroom-spark-analytics-agent') }}
+        id: download-cleanroom-spark-analytics-agent-helm-artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: cleanroom-spark-analytics-agent-helm
+
+      - name: Download Cleanroom Spark Frontend artefacts
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cleanroom-spark-frontend') }}
+        id: download-cleanroom-spark-frontend-artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: cleanroom-spark-frontend
+
+      - name: Download Cleanroom Spark Frontend Helm artefacts
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'helm/cleanroom-spark-frontend') }}
+        id: download-cleanroom-spark-frontend-helm-artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: cleanroom-spark-frontend-helm
+
+      - name: Download Cleanroom Spark Analytics App artefacts
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cleanroom-spark-analytics-app') }}
+        id: download-cleanroom-spark-analytics-app-artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: cleanroom-spark-analytics-app
+
+      - name: Download Cleanroom Cluster Provider Client artefacts
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'cleanroom-cluster-provider-client') }}
+        id: download-cleanroom-cluster-provider-client-artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: cleanroom-cluster-provider-client
 
       - name: Download AZ CLI whl
         id: download-az-cli-artefact
@@ -563,12 +680,11 @@ jobs:
           ${{ steps.download-ccr-secrets-artefact.outputs.download-path }}/ccr-secrets.json \
           ccr-secrets-sbom.spdx.json
 
-      # TODO (ashank) Same as above
-      #- name: Upload ccr-artefacts
-      #  if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
-      #  run: |
-      #    gh release upload ${{ inputs.tag }} \
-      #    ${{ steps.download-ccr-artefacts.outputs.download-path }}/ccr-artefacts/ccr-governance-opa-policy.tar.gz
+      - name: Upload ccr-artefacts
+        if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
+        run: |
+          gh release upload ${{ inputs.tag }} \
+          ${{ steps.download-ccr-artefacts.outputs.download-path }}/ccr-artefacts/ccr-governance-opa-policy.tar.gz
 
       # TODO (anrdesai): Re-add cleanroom-client.tar attachment to the release once we figure out a way to make it smaller than 2GB.
       - name: Upload cleanroom-client assets
@@ -659,15 +775,6 @@ jobs:
           ${{ steps.download-ccf-provider-client-artefact.outputs.download-path }}/ccf-provider-client.json \
           ccf-provider-client-sbom.spdx.json
 
-      - name: Upload CCF nginx assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-nginx') }}
-        run: |
-          cp ${{ steps.download-ccf-nginx-artefact.outputs.download-path }}/ccf-nginx-sbom/_manifest/spdx_2.2/manifest.spdx.json ccf-nginx-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccf-nginx-artefact.outputs.download-path }}/ccf-nginx-${{ inputs.tag }}.tar \
-          ${{ steps.download-ccf-nginx-artefact.outputs.download-path }}/ccf-nginx.json \
-          ccf-nginx-sbom.spdx.json
-
       - name: Upload CCF SNP provider assets
         if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/app/run-js/snp') }}
         run: |
@@ -703,6 +810,63 @@ jobs:
           ${{ steps.download-ccf-recovery-agent-artefact.outputs.download-path }}/ccf-recovery-agent-${{ inputs.tag }}.tar \
           ${{ steps.download-ccf-recovery-agent-artefact.outputs.download-path }}/ccf-recovery-agent.json \
           ccf-recovery-agent-sbom.spdx.json
+
+      - name: Upload CCF consortium manager assets
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccf/ccf-consortium-manager') }}
+        run: |
+          cp ${{ steps.download-ccf-consortium-manager-artefact.outputs.download-path }}/ccf-consortium-manager-sbom/_manifest/spdx_2.2/manifest.spdx.json ccf-consortium-manager-sbom.spdx.json
+          gh release upload ${{ inputs.tag }} \
+          ${{ steps.download-ccf-consortium-manager-artefact.outputs.download-path }}/ccf-consortium-manager-${{ inputs.tag }}.tar \
+          ${{ steps.download-ccf-consortium-manager-artefact.outputs.download-path }}/ccf-consortium-manager.json \
+          ccf-consortium-manager-sbom.spdx.json
+
+      - name: Upload Cleanroom Spark Analytics Agent
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'workloads/cleanroom-spark-analytics-agent') }}
+        run: |
+          cp ${{ steps.download-cleanroom-spark-analytics-agent-artefact.outputs.download-path }}/cleanroom-spark-analytics-agent-sbom/_manifest/spdx_2.2/manifest.spdx.json cleanroom-spark-analytics-agent-sbom.spdx.json
+          gh release upload ${{ inputs.tag }} \
+          ${{ steps.download-cleanroom-spark-analytics-agent-artefact.outputs.download-path }}/cleanroom-spark-analytics-agent-${{ inputs.tag }}.tar \
+          ${{ steps.download-cleanroom-spark-analytics-agent-artefact.outputs.download-path }}/cleanroom-spark-analytics-agent.json \
+          cleanroom-spark-analytics-agent-sbom.spdx.json
+
+      - name: Upload Cleanroom Spark Analytics Agent Helm
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'workloads/helm/cleanroom-spark-analytics-agent') }}
+        run: |
+          gh release upload ${{ inputs.tag }} \
+          ${{ steps.download-cleanroom-spark-analytics-agent-helm-artefact.outputs.download-path }}/cleanroom-spark-analytics-agent-helm.tgz
+
+      - name: Upload Cleanroom Spark Frontend
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'workloads/cleanroom-spark-frontend') }}
+        run: |
+          cp ${{ steps.download-cleanroom-spark-frontend-artefact.outputs.download-path }}/cleanroom-spark-frontend-sbom/_manifest/spdx_2.2/manifest.spdx.json cleanroom-spark-frontend-sbom.spdx.json
+          gh release upload ${{ inputs.tag }} \
+          ${{ steps.download-cleanroom-spark-frontend-artefact.outputs.download-path }}/cleanroom-spark-frontend-${{ inputs.tag }}.tar \
+          ${{ steps.download-cleanroom-spark-frontend-artefact.outputs.download-path }}/cleanroom-spark-frontend.json \
+          cleanroom-spark-frontend-sbom.spdx.json
+
+      - name: Upload Cleanroom Spark Frontend Helm
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'workloads/helm/cleanroom-spark-frontend') }}
+        run: |
+          gh release upload ${{ inputs.tag }} \
+          ${{ steps.download-cleanroom-spark-frontend-helm-artefact.outputs.download-path }}/cleanroom-spark-frontend-helm.tgz
+
+      - name: Upload Cleanroom Spark Analytics App
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'workloads/cleanroom-spark-analytics-app') }}
+        run: |
+          cp ${{ steps.download-cleanroom-spark-analytics-app-artefact.outputs.download-path }}/cleanroom-spark-analytics-app-sbom/_manifest/spdx_2.2/manifest.spdx.json cleanroom-spark-analytics-app-sbom.spdx.json
+          gh release upload ${{ inputs.tag }} \
+          ${{ steps.download-cleanroom-spark-analytics-app-artefact.outputs.download-path }}/cleanroom-spark-analytics-app-${{ inputs.tag }}.tar \
+          ${{ steps.download-cleanroom-spark-analytics-app-artefact.outputs.download-path }}/cleanroom-spark-analytics-app.json \
+          cleanroom-spark-analytics-app-sbom.spdx.json
+
+      - name: Upload Cleanroom Cluster provider client
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'workloads/cleanroom-cluster-provider-client') }}
+        run: |
+          cp ${{ steps.download-cleanroom-cluster-provider-client-artefact.outputs.download-path }}/cleanroom-cluster-provider-client-sbom/_manifest/spdx_2.2/manifest.spdx.json cleanroom-cluster-provider-client-sbom.spdx.json
+          gh release upload ${{ inputs.tag }} \
+          ${{ steps.download-cleanroom-cluster-provider-client-artefact.outputs.download-path }}/cleanroom-cluster-provider-client-${{ inputs.tag }}.tar \
+          ${{ steps.download-cleanroom-cluster-provider-client-artefact.outputs.download-path }}/cleanroom-cluster-provider-client.json \
+          cleanroom-cluster-provider-client-sbom.spdx.json
 
       - name: Upload AZ CLI extension
         run: gh release upload ${{ inputs.tag }} \

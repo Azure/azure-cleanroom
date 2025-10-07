@@ -24,8 +24,21 @@ function Create-Storage-Resources {
                 --enable-hierarchical-namespace $enableHns)
         $storageAccountResult = $result | ConvertFrom-Json
 
-        Write-Host "Assigning 'Storage Blob Data Contributor' permissions to logged in user"
-        az role assignment create --role "Storage Blob Data Contributor" --scope $storageAccountResult.id --assignee-object-id $objectId --assignee-principal-type $(Get-Assignee-Principal-Type)
+        $role = "Storage Blob Data Contributor"
+        $roleAssignment = (az role assignment list `
+                --assignee-object-id $objectId `
+                --scope $storageAccountResult.id `
+                --role $role `
+                --fill-principal-name false `
+                --fill-role-definition-name false) | ConvertFrom-Json
+
+        if ($roleAssignment.Length -eq 1) {
+            Write-Host "$role permission on the storage account already exists, skipping assignment"
+        }
+        else {
+            Write-Host "Assigning '$role' permissions to logged in user"
+            az role assignment create --role $role --scope $storageAccountResult.id --assignee-object-id $objectId --assignee-principal-type $(Get-Assignee-Principal-Type)
+        }
         $storageAccountResult
 
         if ($env:GITHUB_ACTIONS -eq "true") {
@@ -37,14 +50,14 @@ function Create-Storage-Resources {
                 $hasAccess = $false
                 while (!$hasAccess) {
                     # Do an exists check to determine whether the permissions have been applied or not.
-                    az storage container create --name ghaction-c --account-name $storageAccountName --auth-mode login
-                    az storage blob upload --data "teststring" --overwrite -c ghaction-c -n ghaction-b --account-name $storageAccountName --auth-mode login
+                    az storage container create --name ghaction-c --account-name $storageAccountName --auth-mode login 1>$null 2>$null
+                    az storage blob upload --data "teststring" --overwrite -c ghaction-c -n ghaction-b --account-name $storageAccountName --auth-mode login 1>$null 2>$null
                     if ($LASTEXITCODE -gt 0) {
                         if ($stopwatch.elapsed -gt $timeout) {
                             throw "Hit timeout waiting for rbac permissions to be applied on the storage account."
                         }
                         $sleepTime = 10
-                        Write-Host "Waiting for $sleepTime seconds before checking if permissions got applied..."
+                        Write-Host "Waiting for $sleepTime seconds before checking if storage account permissions got applied..."
                         Start-Sleep -Seconds $sleepTime
                     }
                     else {

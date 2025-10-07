@@ -19,7 +19,8 @@ $buildRoot = "$root/build"
 
 $ccfContainers = @(
     "ccf-network",
-    "ccf-recovery-service"
+    "ccf-recovery-service",
+    "ccf-consortium-manager"
 )
 
 $index = 0

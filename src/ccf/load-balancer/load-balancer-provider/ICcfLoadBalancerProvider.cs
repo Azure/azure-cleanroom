@@ -11,6 +11,7 @@ public interface ICcfLoadBalancerProvider
         string lbName,
         string networkName,
         List<string> servers,
+        List<string> agentServers,
         JsonObject? providerConfig);
 
     Task DeleteLoadBalancer(string networkName, JsonObject? providerConfig);
@@ -32,6 +33,7 @@ public interface ICcfLoadBalancerProvider
         string lbName,
         string networkName,
         List<string> servers,
+        List<string> agentServers,
         JsonObject? providerConfig);
 
     Task<LoadBalancerHealth> GetLoadBalancerHealth(

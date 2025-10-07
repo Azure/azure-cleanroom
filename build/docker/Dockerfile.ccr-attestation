@@ -1,0 +1,15 @@
+# Build
+FROM mcr.microsoft.com/oss/go/microsoft/golang:1.24.4 AS builder-app
+WORKDIR /usr/src/app
+
+COPY go.mod .
+COPY go.sum .
+RUN go mod download
+
+COPY src/attestation src/attestation
+RUN go build -v -o /usr/local/bin/app ./src/attestation/
+
+# Run
+FROM mcr.microsoft.com/azurelinux/base/core:3.0
+COPY --from=builder-app /usr/local/bin/app /usr/local/bin/app
+CMD ["app"]

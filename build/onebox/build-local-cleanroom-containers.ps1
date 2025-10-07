@@ -16,22 +16,6 @@ param(
 
     [parameter(Mandatory = $false)]
     [string[]]
-    [ValidateSet(
-        "blobfuse-launcher",
-        "ccr-attestation",
-        "ccr-governance",
-        "ccr-governance-virtual",
-        "ccr-init",
-        "ccr-secrets",
-        "ccr-proxy",
-        "ccr-proxy-ext-processor",
-        "ccr-client-proxy",
-        "code-launcher",
-        "identity",
-        "otel-collector",
-        "local-skr",
-        "skr",
-        "ccr-governance-opa-policy")]
     $containers
 )
 $ErrorActionPreference = 'Stop'
@@ -44,6 +28,7 @@ $buildRoot = "$root/build"
 
 $ccrContainers = @(
     "blobfuse-launcher",
+    "s3fs-launcher",
     "ccr-attestation",
     "ccr-governance",
     "ccr-governance-virtual",
@@ -89,12 +74,16 @@ if ($push -and $repo -eq "localhost:5000") {
     }
 }
 
+Write-Host -ForegroundColor DarkGreen "Running $($MyInvocation.MyCommand.Name)..."
+
 $index = 0
+$anyCcrArtifactsBuilt = $false
 foreach ($container in $ccrContainers) {
     $index++
     if ($null -eq $containers -or $containers.Contains($container)) {
         Write-Host -ForegroundColor DarkGreen "Building $container container ($index/$($ccrContainers.Count))"
         pwsh $buildRoot/ccr/build-$container.ps1 -tag $tag -repo $repo -push:$push
+        $anyCcrArtifactsBuilt = $true
     }
     else {
         Write-Host -ForegroundColor DarkBlue "Skipping building $container container ($index/$($ccrContainers.Count))"
@@ -123,16 +112,27 @@ foreach ($artefact in $ccrArtefacts) {
     if ($null -eq $containers -or $containers.Contains($artefact)) {
         Write-Host -ForegroundColor DarkGreen "Building $artefact container ($index/$($ccrArtefacts.Count))"
         pwsh $buildRoot/ccr/build-$artefact.ps1 -tag $tag -repo $repo -push:$push
+        $anyCcrArtifactsBuilt = $true
         Write-Host -ForegroundColor DarkGray "================================================================="
     }
 }
 
 if ($env:GITHUB_ACTIONS -ne "true") {
-    pwsh $buildRoot/build-ccr-digests.ps1 `
-        -repo $repo `
-        -tag $tag `
-        -outDir $digestFileDir `
-        -push:$push `
-        -skipRegoPolicy:$skipRegoPolicy
+    if ($anyCcrArtifactsBuilt) {
+        pwsh $buildRoot/build-ccr-digests.ps1 `
+            -repo $repo `
+            -tag $tag `
+            -outDir $digestFileDir `
+            -push:$push `
+            -skipRegoPolicy:$skipRegoPolicy
+    }
 }
 
+if ($env:GITHUB_ACTIONS -ne "true") {
+    if ($null -eq $containers) {
+        pwsh $buildRoot/build-azcliext-cleanroom.ps1 -repo $repo -tag $tag -push:$push
+    }
+    pwsh $buildRoot/ccf/build-ccf-infra-containers.ps1 -tag $tag -repo $repo -push:$push -pushPolicy:$withRegoPolicy -containers:$containers
+    pwsh $buildRoot/cleanroom-cluster/build-cleanroom-cluster-infra-containers.ps1 -tag $tag -repo $repo -push:$push -pushPolicy:$withRegoPolicy -containers:$containers
+    pwsh $buildRoot/workloads/build-workload-infra-containers.ps1 -tag $tag -repo $repo -push:$push -pushPolicy:$withRegoPolicy -containers:$containers
+}

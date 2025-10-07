@@ -37,7 +37,7 @@ function verifyContractState([string] $expectedState) {
 }
 
 function verifyDocumentState([string] $expectedState) {
-    $document = (az cleanroom governance document show --id $documentId --governance-client $projectName)
+    $document = (az cleanroom governance member-document show --id $documentId --governance-client $projectName)
     $document | jq
     $state = "$document" | jq -r ".state"
     if ($state -cne $expectedState) {

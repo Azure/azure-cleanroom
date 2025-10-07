@@ -1,0 +1,18 @@
+FROM mcr.microsoft.com/mirror/docker/library/python:3.11
+
+WORKDIR /app
+
+COPY src/workloads/cleanroom-spark-frontend/requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY src/internal/Attestation/protobuf/AttestationContainer.proto attestation-container.proto
+RUN python3 -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. attestation-container.proto
+
+COPY src/workloads/cleanroom-spark-frontend/src src
+
+EXPOSE 8000
+
+# Set PYTHONUNBUFFERED to ensure that Python output is sent straight to the terminal without buffering.
+# Otherwise, the output may be buffered and not appear immediately.
+ENV PYTHONUNBUFFERED=1

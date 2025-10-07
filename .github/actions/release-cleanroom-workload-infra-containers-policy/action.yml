@@ -1,0 +1,94 @@
+name: Release cleanroom workload infrastructure container policies
+description: Release cleanroom workload infrastructure container policies
+inputs:
+  tag:
+    description: The tag
+    required: true
+  environment:
+    description: The environment being released to
+    required: true
+  registry-name:
+    description: The registry to which the images need to be pushed
+    required: true
+  client-id:
+    description: The client ID to connect to the registry
+    required: true
+  tenant-id:
+    description: The tenant ID of the registry
+    required: true
+  subscription-id:
+    description: The subscription ID of the registry
+    required: true
+  needs-attestation:
+    description: Whether the container needs attestation
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+
+    # The azure/docker-login action currently does not support authentication using
+    # federated credentials - https://github.com/Azure/docker-login/issues/56. Hence,
+    # resorting to a manual login.
+    - shell: bash
+      run: az acr login --name ${{ inputs.registry-name }}
+
+    - shell: pwsh
+      run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
+
+    - name: Install confcom extension
+      shell: pwsh
+      run: |
+        az extension add --name confcom -y --allow-preview true
+        az version
+
+    - shell: pwsh
+      run: |
+        ./build/workloads/build-workload-infra-containers-policy.ps1 -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom -tag ${{ inputs.tag }} -push
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: cleanroom-spark-analytics-agent-security-policy-${{ inputs.environment }}.yaml
+        path: ./.policies/cleanroom-spark-analytics-agent-security-policy/cleanroom-spark-analytics-agent-security-policy.yaml
+        overwrite: true
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: cleanroom-spark-frontend-security-policy-${{ inputs.environment }}.yaml
+        path: ./.policies/cleanroom-spark-frontend-security-policy/cleanroom-spark-frontend-security-policy.yaml
+        overwrite: true
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: cleanroom-spark-analytics-app-security-policy-${{ inputs.environment }}.yaml
+        path: /.policies/cleanroom-spark-analytics-app-security-policy/cleanroom-spark-analytics-app-security-policy.yaml
+        overwrite: true
+
+    - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
+      with:
+        name: policies/workloads/cleanroom-spark-analytics-agent-security-policy
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        registry-name: ${{ inputs.registry-name }}
+
+    - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
+      with:
+        name: policies/workloads/cleanroom-spark-frontend-security-policy
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        registry-name: ${{ inputs.registry-name }}
+
+    - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
+      with:
+        name: policies/workloads/cleanroom-spark-analytics-app-security-policy
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        registry-name: ${{ inputs.registry-name }}

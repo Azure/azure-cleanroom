@@ -1,0 +1,251 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "webserver.fullname" . }}
+  labels:
+    {{- include "webserver.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "webserver.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "webserver.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "webserver.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- if .Values.ccrattestation.enabled }}
+        - name: ccr-attestation
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.images.ccrattestationUrl }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          restartPolicy: Always
+          command:
+            - "app"
+            - "-socket-address"
+            - "/mnt/uds/sock"
+          volumeMounts:
+            - mountPath: /mnt/uds
+              name: uds
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.telemetry.telemetryCollectionEnabled }}
+        - name: otel-collector
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.images.otelCollectorUrl }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          restartPolicy: Always
+          env:
+            - name: TELEMETRY_COLLECTION_ENABLED
+              value: "{{ .Values.telemetry.telemetryCollectionEnabled }}"
+            - name: PROMETHEUS_ENDPOINT
+              value: "{{ .Values.telemetry.prometheusEndpoint }}"
+            - name: LOKI_ENDPOINT
+              value: "{{ .Values.telemetry.lokiEndpoint }}"
+            - name: TEMPO_ENDPOINT
+              value: "{{ .Values.telemetry.tempoEndpoint }}"
+          ports:
+            - name: telemetry
+              containerPort: 4317
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.env.insecureVirtualEnv }}
+        - name: local-skr
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.images.ccrskrUrl }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          restartPolicy: Always
+          command: []
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- else }}
+        - name: skr-sidecar
+          image: "{{ .Values.images.ccrskrUrl }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          restartPolicy: Always
+          command:
+          - /skr.sh
+          env:
+          - name: SkrSideCarArgs
+            value: ewogICAiY2VydGNhY2hlIjogewogICAgICAiZW5kcG9pbnQiOiAiYW1lcmljYXMuYWNjY2FjaGUuYXp1cmUubmV0IiwKICAgICAgInRlZV90eXBlIjogIlNldlNucFZNIiwKICAgICAgImFwaV92ZXJzaW9uIjogImFwaS12ZXJzaW9uPTIwMjAtMTAtMTUtcHJldmlldyIKICAgfQp9
+          - name: Port
+            value: "8284"
+          - name: LogFile
+            value: "skr.json"
+          - name: LogLevel
+            value: "Info"
+        {{- end }}
+        {{- if eq .Values.ccrproxy.caType "cgs" }}
+        - name: ccr-governance
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.images.ccrgovernanceUrl }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          restartPolicy: Always
+          env:
+            - name: ccrgovEndpoint
+              value: {{ .Values.ccrgovernance.ccrgovEndpoint | quote }}
+            - name: ccrgovApiPathPrefix
+              value: {{ .Values.ccrgovernance.ccrgovApiPathPrefix | quote }}
+            {{- if .Values.ccrgovernance.ccrgovServiceCert }}
+            - name: serviceCert
+              value: {{ .Values.ccrgovernance.ccrgovServiceCert | quote }}
+            {{- end }}
+            {{- if .Values.ccrgovernance.ccrgovServiceCertDiscovery.endpoint }}
+            - name: serviceCertDiscoveryEndpoint
+              value: {{ .Values.ccrgovernance.ccrgovServiceCertDiscovery.endpoint | quote }}
+            - name: serviceCertDiscoverySnpHostData
+              value: {{ .Values.ccrgovernance.ccrgovServiceCertDiscovery.snpHostData | quote }}
+            - name: serviceCertDiscoverySkipDigestCheck
+              value: {{ .Values.ccrgovernance.ccrgovServiceCertDiscovery.skipDigestCheck | quote }}
+            - name: serviceCertDiscoveryConstitutionDigest
+              value: {{ .Values.ccrgovernance.ccrgovServiceCertDiscovery.constitutionDigest | quote }}
+            - name: serviceCertDiscoveryJsappBundleDigest
+              value: {{ .Values.ccrgovernance.ccrgovServiceCertDiscovery.jsappBundleDigest | quote }}
+            {{- end }}
+          {{- if .Values.ccrattestation.enabled }}
+          volumeMounts:
+            - mountPath: /mnt/uds
+              name: uds
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 8300
+              protocol: TCP
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
+        - name: ccr-proxy
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.images.ccrproxyUrl }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          restartPolicy: Always
+          command:
+            - "/bin/bash"
+            - "https-http/bootstrap.sh"
+            - "--ca-type"
+            - {{ .Values.ccrproxy.caType | quote }}
+          env:
+            - name: CCR_ENVOY_DESTINATION_PORT
+              value: "8080"
+            - name: CCR_ENVOY_SERVICE_CERT_OUTPUT_FILE
+              value: "/app/service/service-cert.pem"
+            {{- if .Values.ccrproxy.ccrFqdn }}
+            - name: CCR_FQDN
+              value: {{ .Values.ccrproxy.ccrFqdn | quote }}
+            {{- end }}
+          ports:
+            - name: https
+              containerPort: 443
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /app/service
+              name: shared
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.images.analyticsagentUrl }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          env:
+            {{- if .Values.env.insecureVirtualEnv }}
+            - name: INSECURE_VIRTUAL_ENVIRONMENT
+              value: "true"
+            {{- end }}
+            - name: SPARK_FRONTEND_ENDPOINT
+              value: {{ .Values.env.sparkFrontendEndpoint | quote }}
+            - name: SPARK_FRONTEND_SNP_HOST_DATA
+              value: {{ .Values.env.sparkFrontendSnpHostData | quote }}
+            {{- if .Values.env.ccfNetworkRecoveryMembers }}
+            - name: CCF_NETWORK_RECOVERY_MEMBERS
+              value: {{ .Values.env.ccfNetworkRecoveryMembers | quote }}
+            {{- end }}
+            - name: SKR_PORT
+              value: "8284"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /app/service
+              name: shared
+          {{- if .Values.ccrattestation.enabled }}
+            - name: uds
+              mountPath: /mnt/uds
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: uds
+          emptyDir: {}
+        - name: shared
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

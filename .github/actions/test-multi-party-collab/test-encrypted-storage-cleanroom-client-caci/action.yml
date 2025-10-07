@@ -26,7 +26,15 @@ runs:
     - name: Log in to Azure Container Registry
       if: ${{ !contains(inputs.repo, 'mcr.microsoft.com/azurecleanroom') }}
       shell: pwsh
-      run: az acr login -n ${{ inputs.repo }}
+      run: |
+        $pattern = '(.*?)(\.azurecr\.io.*)'
+        if ("${{ inputs.repo }}" -match $pattern) {
+            $acrName = $matches[1]
+        } else {
+            $acrName =  "${{ inputs.repo }}"
+        }
+
+        az acr login -n $acrName
 
     - name: Run collab scenario on caci
       if: ${{ !contains(inputs.repo, 'mcr.microsoft.com/azurecleanroom') }}
@@ -38,10 +46,10 @@ runs:
       shell: pwsh
       run: pwsh ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/run-collab-aci.ps1 -registry mcr -repo ${{ inputs.repo }} -tag ${{ inputs.tag }} -NoBuild
 
-    - name: Dump ccf-provider-client logs
+    - name: Dump ccf-provider logs
       shell: pwsh
       if: ${{ !cancelled() }}
-      run: docker logs ccf-provider-client-1
+      run: docker compose -p ob-encrypted-storage-cr-client-ccf-provider logs
 
     - name: Dump cleanroom-client logs
       shell: pwsh
@@ -58,31 +66,11 @@ runs:
       if: ${{ !cancelled() }}
       run: docker logs ob-publisher-client-cgs-client-1
 
-    - uses: actions/upload-artifact@v4
+    - name: Upload generated
+      uses: actions/upload-artifact@v4
       with:
-          name: results-storage-cleanroom-client-caci
-          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated/results
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - uses: actions/upload-artifact@v4
-      with:
-          name: configurations-encrypted-storage-cleanroom-client-caci
-          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated/configurations
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - uses: actions/upload-artifact@v4
-      with:
-          name: deployments-encrypted-storage-cleanroom-client-caci
-          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated/deployments
-          overwrite: true
-      if: ${{ !cancelled() }}
-
-    - uses: actions/upload-artifact@v4
-      with:
-          name: ccf-encrypted-storage-cleanroom-client-caci
-          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated/ccf
+          name: generated-storage-cleanroom-client-caci
+          path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated
           overwrite: true
       if: ${{ !cancelled() }}
 

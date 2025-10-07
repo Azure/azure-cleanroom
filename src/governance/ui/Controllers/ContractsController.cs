@@ -26,8 +26,9 @@ public class ContractsController : Controller
         try
         {
             using var client = new HttpClient();
-            var items = await client.GetFromJsonAsync<List<ContractViewModel>>(
+            var items = await client.GetFromJsonAsync<ListContractsViewModel>(
                 $"{this.configuration.GetEndpoint()}/contracts");
+            items!.Value = [.. items.Value.OrderBy(x => x.Id)];
             return this.View(items);
         }
         catch (HttpRequestException re)
@@ -193,6 +194,29 @@ public class ContractsController : Controller
         var item = await client.GetFromJsonAsync<PolicyViewModel>(
             $"{this.configuration.GetEndpoint()}/contracts/{id}/cleanroompolicy");
         return this.View(item);
+    }
+
+    [Route("Contracts/{id}/Secrets")]
+    public async Task<IActionResult> SecretsDetail(string id)
+    {
+        using var client = new HttpClient();
+        var item = (await client.GetFromJsonAsync<SecretsViewModel>(
+            $"{this.configuration.GetEndpoint()}/contracts/{id}/secrets"))!;
+        item.ContractId = id;
+        return this.View(item);
+    }
+
+    [Route("Contracts/{id}/Secrets/{secretId}")]
+    public async Task<IActionResult> SecretIdDetail(string id, string secretId)
+    {
+        using var client = new HttpClient();
+        var item = await client.GetFromJsonAsync<JsonObject>(
+            $"{this.configuration.GetEndpoint()}/contracts/{id}/secrets/{secretId}/cleanroompolicy");
+        SecretsPolicyViewModel model = new()
+        {
+            Policy = item
+        };
+        return this.View(model);
     }
 
     [Route("Contracts/{id}/Events")]

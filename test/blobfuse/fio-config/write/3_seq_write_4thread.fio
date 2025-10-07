@@ -1,0 +1,18 @@
+# This job performs sequential writes using 4 threads.
+
+[global]
+name=blobfuse_benchmark
+bs=256k
+runtime=60s
+time_based
+filename_format=$jobname.$jobnum.$filenum
+group_reporting
+
+[sequential_write_4_threads]
+size=100G
+rw=write
+ioengine=sync
+fallocate=none
+create_on_open=1
+unlink=0
+numjobs=4

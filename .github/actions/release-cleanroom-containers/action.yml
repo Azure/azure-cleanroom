@@ -67,6 +67,18 @@ runs:
 
     - uses: ./.github/actions/release-container
       with:
+        name: s3fs-launcher
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: s3fs-launcher
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}
+
+    - uses: ./.github/actions/release-container
+      with:
         name: code-launcher
         tag: ${{ inputs.tag }}
         environment: ${{ inputs.environment }}

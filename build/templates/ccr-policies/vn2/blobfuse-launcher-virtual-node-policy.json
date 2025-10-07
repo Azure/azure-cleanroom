@@ -1,0 +1,122 @@
+{
+  "name": "$datasetName-blobfuse-container",
+  "properties": {
+    "image": "$containerRegistryUrl/blobfuse-launcher@$digest",
+    "command": [
+      "python3.10",
+      "./blobfuse-launcher.py",
+      "--governance-port",
+      "8300",
+      "--skr-port",
+      "8284",
+      "--secrets-port",
+      "9300",
+      "--imds-port",
+      "8290",
+      "$readOnly",
+      "$useAdls",
+      "--mount-path",
+      "$mountPath/$datasetName",
+      "--encryption-mode",
+      "$encryptionMode"
+    ],
+    "environmentVariables": [
+      {
+        "name": "AZURE_STORAGE_ACCOUNT",
+        "value": "$storageAccountName"
+      },
+      {
+        "name": "ACCESS_NAME",
+        "value": "$datasetName"
+      },
+      {
+        "name": "AZURE_STORAGE_ACCOUNT_CONTAINER",
+        "value": "$storageContainerName"
+      },
+      {
+        "name": "AZURE_STORAGE_BLOB_ENDPOINT",
+        "value": "$storageBlobEndpoint"
+      },
+      {
+        "name": "MAA_ENDPOINT",
+        "value": "$maaUrl"
+      },
+      {
+        "name": "AKV_ENDPOINT",
+        "value": "$kekVaultUrl"
+      },
+      {
+        "name": "KID",
+        "value": "$kekKid"
+      },
+      {
+        "name": "CLIENT_ID",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "TENANT_ID",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "CGS_DEK_SECRET",
+        "value": "$cgsDekSecretId"
+      },
+      {
+        "name": "WRAPPED_DEK_SECRET",
+        "value": "$dekSecretName"
+      },
+      {
+        "name": "WRAPPED_DEK_AKV_ENDPOINT",
+        "value": "$dekVaultUrl"
+      },
+      {
+        "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "OTEL_TRACE_CONTEXT_BASE64",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "TELEMETRY_MOUNT_PATH",
+        "value": "$telemetryMountPath"
+      },
+      {
+        "name": "VOLUMESTATUS_MOUNT_PATH",
+        "value": "$volumeStatusMountPath"
+      }
+    ],
+    "volumeMounts": [
+      {
+        "name": "remotemounts",
+        "mountPath": "$mountPath",
+        "mountType": "emptyDir",
+        "readOnly": false
+      },
+      {
+        "name": "telemetrymounts",
+        "mountPath": "$telemetryMountPath",
+        "mountType": "emptyDir",
+        "readOnly": false
+      },
+      {
+        "name": "volumestatusmounts",
+        "mountPath": "$volumeStatusMountPath",
+        "mountType": "emptyDir",
+        "readOnly": false
+      }
+    ],
+    "securityContext": {
+      "privileged": "true"
+    }
+  }
+}

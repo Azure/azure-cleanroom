@@ -4,7 +4,6 @@
 using System.Text;
 using System.Text.Json;
 using AttestationClient;
-using CcfCommon;
 
 namespace Controllers;
 
@@ -30,7 +29,14 @@ public class ClientManager
 
     public async Task<HttpClient> GetCcfClient()
     {
-        return await this.GetOrCreateCcfClient();
+        await this.GetOrLoadWsConfig();
+        var client = this.httpClientManager.GetOrAddClient(
+            this.wsConfig.CcfEndpoint,
+            HttpRetries.Policies.DefaultRetryPolicy(this.logger),
+            this.wsConfig.CcfEndpointCert,
+            "ccf-endpoint",
+            this.wsConfig.CcfEndpointSkipTlsVerify);
+        return client;
     }
 
     public async Task<WorkspaceConfiguration> GetWsConfig()
@@ -60,20 +66,10 @@ public class ClientManager
 
         var client = this.httpClientManager.GetOrAddClient(
             svcEndpoint,
+            HttpRetries.Policies.DefaultRetryPolicy(this.logger),
             svcEndpointCert,
             "recovery-service",
             skipTlsVerify: this.wsConfig.CcfRecoverySvcEndpointSkipTlsVerify);
-        return client;
-    }
-
-    private async Task<HttpClient> GetOrCreateCcfClient()
-    {
-        await this.GetOrLoadWsConfig();
-        var client = this.httpClientManager.GetOrAddClient(
-            this.wsConfig.CcfEndpoint,
-            this.wsConfig.CcfEndpointCert,
-            "ccf-endpoint",
-            this.wsConfig.CcfEndpointSkipTlsVerify);
         return client;
     }
 
@@ -86,7 +82,7 @@ public class ClientManager
                 await this.semaphore.WaitAsync();
                 if (this.wsConfig == null)
                 {
-                    if (CcfUtils.IsSevSnp())
+                    if (Attestation.IsSevSnp())
                     {
                         this.wsConfig = await this.InitializeWsConfigFetchAttestation();
                     }

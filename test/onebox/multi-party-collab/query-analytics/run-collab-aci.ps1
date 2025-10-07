@@ -15,7 +15,10 @@ param
     $allowAll
 )
 
-$registryArg
+# https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
+
 if ($repo -eq "" -and $registry -eq "acr") {
     throw "-repo must be specified for acr option."
 }
@@ -23,18 +26,14 @@ if ($registry -eq "mcr") {
     $usingRegistry = "mcr"
     $registryArg = "mcr"
 }
-else {
-    $registryArg = "local"
-    if ($repo -eq "") {
-        throw "-repo must be specified for acr option."
-    }
+if ($registry -eq "acr") {
     $usingRegistry = $repo
+    $registryArg = "acr"
 }
 
 rm -rf $PSScriptRoot/generated
 
 $root = git rev-parse --show-toplevel
-. $root/test/onebox/multi-party-collab/deploy-aci-cleanroom-governance.ps1
 
 Write-Host "Using $usingRegistry registry for cleanroom container images."
 
@@ -44,7 +43,8 @@ if ($env:GITHUB_ACTIONS -eq "true") {
     $resourceGroupTags = "github_actions=multi-party-collab-${env:JOB_ID}-${env:RUN_ID}"
 }
 else {
-    $ISV_RESOURCE_GROUP = "cl-ob-isv-${env:USER}"
+    $user = $env:CODESPACES -eq "true" ? $env:GITHUB_USER : $env:USER
+    $ISV_RESOURCE_GROUP = "cl-ob-isv-${user}"
 }
 
 function Get-UniqueString ([string]$id, $length = 13) {
@@ -59,18 +59,27 @@ $ISV_RESOURCE_GROUP_LOCATION = "westeurope"
 Write-Host "Creating resource group $ISV_RESOURCE_GROUP in $ISV_RESOURCE_GROUP_LOCATION"
 az group create --location $ISV_RESOURCE_GROUP_LOCATION --name $ISV_RESOURCE_GROUP --tags $resourceGroupTags
 
+$ccfProviderProjectName = "ob-query-analytics-ccf-provider"
 $outDir = "$PSScriptRoot/generated"
-$result = Deploy-Aci-Governance `
+pwsh $root/test/onebox/multi-party-collab/deploy-caci-cleanroom-governance.ps1 `
     -resourceGroup $ISV_RESOURCE_GROUP `
     -ccfName $CCF_NAME `
     -location $ISV_RESOURCE_GROUP_LOCATION `
     -NoBuild:$NoBuild `
+    -registry $registry `
     -repo $repo `
     -tag $tag `
     -allowAll:$allowAll `
     -projectName "ob-consumer-client" `
     -initialMemberName "consumer" `
-    -outDir $outDir
+    -outDir $outDir `
+    -ccfProviderProjectName $ccfProviderProjectName
+$response = (az cleanroom ccf network show `
+        --name $CCF_NAME `
+        --provider-config $outDir/ccf/providerConfig.json `
+        --provider-client $ccfProviderProjectName | ConvertFrom-Json)
+$ccfEndpoint = $response.endpoint
+
 az cleanroom governance client remove --name "ob-publisher-client"
 
 $withSecurityPolicy = !$allowAll
@@ -78,13 +87,8 @@ pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 `
     -registry $registryArg `
     -repo $repo `
     -tag $tag `
-    -ccfEndpoint $result.ccfEndpoint `
+    -ccfEndpoint $ccfEndpoint `
     -withSecurityPolicy:$withSecurityPolicy
-
-if ($LASTEXITCODE -gt 0) {
-    Write-Host -ForegroundColor Red "run-scenario-generate-template-policy returned non-zero exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
 
 pwsh $PSScriptRoot/deploy-caci-cleanroom.ps1 -resourceGroup $ISV_RESOURCE_GROUP
 

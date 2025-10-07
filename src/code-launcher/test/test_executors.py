@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 
+import argparse
+import os.path
 import unittest
 import unittest.mock as mock
 
-import os.path
-import argparse
-
 from ..cmd_executors.executors import (
-    TempFileHandler,
-    PrivateACRCmdExecutor,
     EncContainerCmdExecutor,
+    PrivateACRCmdExecutor,
+    TempFileHandler,
 )
 
 # TODO (HPrabh): Fix the tests.

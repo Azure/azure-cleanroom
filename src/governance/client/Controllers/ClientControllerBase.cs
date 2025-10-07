@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Controllers;
@@ -18,13 +19,15 @@ public abstract class ClientControllerBase : ControllerBase
         this.httpContextAccessor = httpContextAccessor;
 
         string? ccfEndpoint = this.GetHeader("x-ms-ccf-endpoint");
-
         string? serviceCertPem = this.GetServiceCertPem("x-ms-service-cert");
+        CcfServiceCertLocator? certLocator =
+            this.GetServiceCertLocator("x-ms-service-cert-discovery");
 
         this.CcfClientManager = new CcfClientManager(
             this.Logger,
             ccfEndpoint,
-            serviceCertPem);
+            serviceCertPem,
+            certLocator);
     }
 
     protected ILogger Logger { get; }
@@ -51,6 +54,20 @@ public abstract class ClientControllerBase : ControllerBase
         {
             byte[] bytes = Convert.FromBase64String(serviceCertBase64);
             return Encoding.UTF8.GetString(bytes);
+        }
+
+        return null;
+    }
+
+    protected CcfServiceCertLocator? GetServiceCertLocator(string serviceCertDiscoveryHeader)
+    {
+        string? serviceCertDiscoveryBase64 = this.GetHeader(serviceCertDiscoveryHeader);
+        if (serviceCertDiscoveryBase64 != null)
+        {
+            byte[] bytes = Convert.FromBase64String(serviceCertDiscoveryBase64);
+            var model = JsonSerializer.Deserialize<CcfServiceCertDiscoveryModel>(
+                Encoding.UTF8.GetString(bytes))!;
+            return new CcfServiceCertLocator(this.Logger, model);
         }
 
         return null;

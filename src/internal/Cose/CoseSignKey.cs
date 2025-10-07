@@ -16,11 +16,13 @@ public class CoseSignKey
     }
 
     public CoseSignKey(
-        KeyVaultCertificate certificate,
+        Uri signingCertId,
+        X509Certificate2 certificate,
         TokenCredential tokenCredential)
     {
-        this.Certificate = new X509Certificate2(certificate.Cer).ExportCertificatePem();
-        this.KvCertificate = certificate;
+        this.Certificate = certificate.ExportCertificatePem();
+        this.PrivateKey = certificate.GetECDsaPrivateKey()!.ExportECPrivateKeyPem();
+        this.SigningCertId = signingCertId;
         this.TokenCredential = tokenCredential;
     }
 
@@ -28,7 +30,7 @@ public class CoseSignKey
 
     public string PrivateKey { get; } = default!;
 
-    public KeyVaultCertificate? KvCertificate { get; } = default!;
+    public Uri SigningCertId { get; } = default!;
 
     public TokenCredential TokenCredential { get; } = default!;
 
@@ -48,17 +50,17 @@ public class CoseSignKey
         }
 
         var certName = parts[1];
-        KeyVaultCertificate certificate;
+        X509Certificate2 certificate;
         if (parts.Length == 2)
         {
-            certificate = await certClient.GetCertificateAsync(certName);
+            certificate = await certClient.DownloadCertificateAsync(certName);
         }
         else
         {
             string version = parts[2];
-            certificate = await certClient.GetCertificateVersionAsync(certName, version);
+            certificate = await certClient.DownloadCertificateAsync(certName, version);
         }
 
-        return new CoseSignKey(certificate, creds);
+        return new CoseSignKey(signingCertId, certificate, creds);
     }
 }

@@ -91,7 +91,7 @@ function canVetoAction(action) {
     "set_deployment_spec",
     "set_contract_runtime_options_enable_logging",
     "set_contract_runtime_options_enable_telemetry",
-    "set_document"
+    "set_member_document"
   ];
 
   if (vetoActions.includes(action.name)) {
@@ -147,7 +147,8 @@ function getAcceptedCgsMemberCount() {
 }
 
 const is_set_contract = (element) => element.name == "set_contract";
-const is_set_document = (element) => element.name == "set_document";
+const is_set_member_document = (element) =>
+  element.name == "set_member_document";
 
 export function resolve(proposal, proposerId, votes) {
   // Operators proposing operator changes can accept them without a vote.
@@ -198,9 +199,9 @@ export function resolve(proposal, proposerId, votes) {
     }
   }
 
-  const anySetDocumentChange = actions.some(is_set_document);
+  const anySetDocumentChange = actions.some(is_set_member_document);
   if (anySetDocumentChange) {
-    // A set_document documentId should not be already present under a different proposal.
+    // A set_member_document documentId should not be already present under a different proposal.
     if (
       actions.some((action) =>
         documentId_proposal_already_exists(action.args.documentId)
@@ -302,7 +303,9 @@ function contractId_proposal_already_exists(contractId) {
 function documentId_proposal_already_exists(documentId) {
   // Check if the document is already accepted or open.
   if (
-    ccf.kv["public:ccf.gov.accepted_documents"].has(ccf.strToBuf(documentId))
+    ccf.kv["public:ccf.gov.accepted_member_documents"].has(
+      ccf.strToBuf(documentId)
+    )
   ) {
     return true;
   }
@@ -311,7 +314,7 @@ function documentId_proposal_already_exists(documentId) {
   ccf.kv["public:ccf.gov.proposals"].forEach((v, k) => {
     const proposal = ccf.bufToJsonCompatible(v);
     proposal.actions.forEach((value) => {
-      if (value.name === "set_document") {
+      if (value.name === "set_member_document") {
         const args = value.args;
         if (args.documentId === documentId) {
           const proposalInfo = ccf.bufToJsonCompatible(

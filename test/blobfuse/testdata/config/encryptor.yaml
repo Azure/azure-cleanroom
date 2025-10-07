@@ -1,0 +1,29 @@
+allow-other: true
+
+logging:
+  level: log_info
+  file-path: { LOG_FILE_PATH }
+  type: base
+
+components:
+  - libfuse
+  - block_cache
+  - encryptor
+
+libfuse:
+  attribute-expiration-sec: 120
+  entry-expiration-sec: 120
+  negative-entry-expiration-sec: 240
+
+block_cache:
+  block-size-mb: { BLOCK_SIZE_MB }
+  path: { 1 }
+  prefetch: 12
+  mem-size-mb: { MEM_SIZE_MB }
+  parallelism: 128
+  disk-size-mb: { DISK_SIZE_MB }
+
+encryptor:
+  block-size-mb: { BLOCK_SIZE_MB }
+  encrypted-mount-path: { PLAIN_MOUNT }
+  encryption-key: zGrju7FZlG/kcf+tQzI/j9Cp5N2eWru8Euf9WPtqygc=

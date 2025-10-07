@@ -1,32 +1,41 @@
-import hashlib
 import base64
+import hashlib
+import logging
+import os
 import uuid
+from enum import StrEnum
+from typing import Optional
 
 import yaml
-from fastapi import FastAPI
-from fastapi.responses import PlainTextResponse
-from fastapi import HTTPException
-
-from pydantic import BaseModel
-
-from azure.cli.core import get_default_cli, CLIError
-
-import os
-import logging
-from enum import StrEnum
-
-from cleanroom_common.azure_cleanroom_core.models.model import (
-    CleanRoomSpecification,
-)
+from azure.cli.core import CLIError, get_default_cli
+from cleanroom_common.azure_cleanroom_core.models.model import CleanRoomSpecification
 from cleanroom_common.azure_cleanroom_core.utilities.helpers import (
     get_deployment_template,
     validate_config,
 )
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, PlainTextResponse
+from pydantic import BaseModel
 
 logger = logging.getLogger()
 
 # Set debug to true as we are ok exposing the stack trace details in the error
 app = FastAPI(description="Cleanroom Client API", debug=True)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logging.error(f"Validation error for request: {await request.body()}")
+    logging.error(f"Error details: {exc.errors()}")
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "message": "Validation Failed",
+            "errors": exc.errors(),
+        },
+    )
 
 
 def az_cli(args_str: str):
@@ -63,6 +72,7 @@ class LoginRequest(BaseModel):
 class EncryptionMode(StrEnum):
     CPK = "CPK"
     CSE = "CSE"
+    SSE = "SSE"
 
 
 class AddDatastoreRequest(BaseModel):
@@ -157,10 +167,10 @@ class ConfigSetLoggingRequest(BaseModel):
     identity: str
     configName: str
     datastoreConfigName: str
-    secretStoreConfig: str
-    datastoreSecretStore: str
-    dekSecretStore: str
-    kekSecretStore: str
+    secretStoreConfig: Optional[str] = None
+    datastoreSecretStore: Optional[str] = None
+    dekSecretStore: Optional[str] = None
+    kekSecretStore: Optional[str] = None
     encryptionMode: EncryptionMode
     containerSuffix: str | None = None
 
@@ -170,10 +180,10 @@ class ConfigSetTelemetryRequest(BaseModel):
     identity: str
     configName: str
     datastoreConfigName: str
-    secretStoreConfig: str
-    datastoreSecretStore: str
-    dekSecretStore: str
-    kekSecretStore: str
+    secretStoreConfig: Optional[str] = None
+    datastoreSecretStore: Optional[str] = None
+    dekSecretStore: Optional[str] = None
+    kekSecretStore: Optional[str] = None
     encryptionMode: EncryptionMode
     containerSuffix: str | None = None
 
@@ -260,7 +270,7 @@ class DeploymentGenerateRequest(BaseModel):
     contract_id: str
     ccf_endpoint: str
     ssl_server_cert_base64: str
-    debug_mode: bool | None = False
+    generate_mode: str | None = None
     operationId: str | None = None
 
 
@@ -437,7 +447,7 @@ def config_add_identity_oidc_attested(request: ConfigAddIdentityOIDCAttested):
     return az_cli_ex(args)
 
 
-@app.post("/config/view", response_class=PlainTextResponse)
+@app.post("/config/view")
 def config_get(request: ConfigViewRequest):
     args = [
         "cleanroom",
@@ -736,7 +746,7 @@ def deployment_generate(request: DeploymentGenerateRequest):
     if len(issues) > 0:
         raise HTTPException(status_code=400, detail=errors)
 
-    debug_mode = request.debug_mode if request.debug_mode else False
+    generate_mode = request.generate_mode if request.generate_mode else "cached"
     operation_id = request.operationId if request.operationId else str(uuid.uuid4())
 
     logger.info(
@@ -748,7 +758,7 @@ def deployment_generate(request: DeploymentGenerateRequest):
         request.contract_id,
         request.ccf_endpoint,
         request.ssl_server_cert_base64,
-        debug_mode,
+        generate_mode,
         logger,
     )
 

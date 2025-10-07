@@ -17,6 +17,22 @@ public class SecretsController : ClientControllerBase
     {
     }
 
+    [HttpGet("/contracts/{contractId}/secrets")]
+    public async Task<JsonObject> GetSecrets([FromRoute] string contractId)
+    {
+        var appClient = this.CcfClientManager.GetAppClient();
+        using (HttpRequestMessage request =
+            new(HttpMethod.Get, $"app/contracts/{contractId}/secrets"))
+        {
+            using HttpResponseMessage response = await appClient.SendAsync(request);
+            this.Response.CopyHeaders(response.Headers);
+            await response.ValidateStatusCodeAsync(this.Logger);
+            await response.WaitAppTransactionCommittedAsync(this.Logger, this.CcfClientManager);
+            var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
+            return jsonResponse!;
+        }
+    }
+
     [HttpPut("/contracts/{contractId}/secrets/{secretName}")]
     public async Task<JsonObject> PutSecret(
         [FromRoute] string contractId,
@@ -32,6 +48,24 @@ public class SecretsController : ClientControllerBase
                 Encoding.UTF8,
                 "application/json");
 
+            using HttpResponseMessage response = await appClient.SendAsync(request);
+            this.Response.CopyHeaders(response.Headers);
+            await response.ValidateStatusCodeAsync(this.Logger);
+            await response.WaitAppTransactionCommittedAsync(this.Logger, this.CcfClientManager);
+            var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
+            return jsonResponse!;
+        }
+    }
+
+    [HttpGet("/contracts/{contractId}/secrets/{secretId}/cleanroompolicy")]
+    public async Task<JsonObject> GetSecretCleanRoomPolicy(
+        [FromRoute] string contractId,
+        [FromRoute] string secretId)
+    {
+        var appClient = this.CcfClientManager.GetAppClient();
+        using (HttpRequestMessage request =
+            new(HttpMethod.Get, $"app/contracts/{contractId}/secrets/{secretId}/cleanroompolicy"))
+        {
             using HttpResponseMessage response = await appClient.SendAsync(request);
             this.Response.CopyHeaders(response.Headers);
             await response.ValidateStatusCodeAsync(this.Logger);

@@ -22,6 +22,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
 
 $root = git rev-parse --show-toplevel
 Import-Module $root/samples/common/infra-scripts/azure-helpers.psm1 -Force -DisableNameChecking
@@ -95,12 +96,23 @@ if ($identityType -eq "service_principal") {
 
 }
 else {
-
     Write-Host "Creating managed identity $MANAGED_IDENTITY_NAME in resource group $resourceGroup"
-    $managedIdentityResult = (az identity create `
-            --name $MANAGED_IDENTITY_NAME `
-            --resource-group $resourceGroup) | ConvertFrom-Json
-    $result.mi = $managedIdentityResult
+    $script:managedIdentityResult = $null;
+    & {
+        # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
+        $PSNativeCommandUseErrorActionPreference = $false
+        # Add retry as at times the managed identity creation fails with a 499 error.
+        foreach ($value in 1..5) {
+            $script:managedIdentityResult = az identity create -n $MANAGED_IDENTITY_NAME -g $resourceGroup | ConvertFrom-Json;
+            if ($script:managedIdentityResult) { break } else { Write-Host "Managed identity creation failed. Will retry after 5s..."; Start-Sleep 5 }
+        }
+    }
+
+    if ($null -eq $script:managedIdentityResult) {
+        throw "Managed identity creation failed after multiple retries."
+    }
+
+    $result.mi = $script:managedIdentityResult
 }
 
 $result.maa_endpoint = $MAA_URL

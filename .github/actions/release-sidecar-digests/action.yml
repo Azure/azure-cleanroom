@@ -44,7 +44,7 @@ runs:
     - name: Install confcom extension
       shell: pwsh
       run: |
-        az extension add --name confcom --version 1.2.4 -y --allow-preview true
+        az extension add --name confcom -y --allow-preview true
         az version
 
     - shell: pwsh
@@ -61,6 +61,14 @@ runs:
       if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/blobfuse-launcher-policy
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        registry-name: ${{ inputs.registry-name }}
+
+    - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
+      with:
+        name: policies/s3fs-launcher-policy
         tag: ${{ inputs.tag }}
         environment: ${{ inputs.environment }}
         registry-name: ${{ inputs.registry-name }}

@@ -20,7 +20,7 @@ public class MembersController : ClientControllerBase
     [HttpGet("/members")]
     public async Task<JsonObject> Get()
     {
-        var ccfClient = await this.CcfClientManager.GetGovClient();
+        var ccfClient = this.CcfClientManager.GetNoAuthClient();
         using HttpResponseMessage response = await ccfClient.GetAsync(
             $"gov/service/members?api-version={this.CcfClientManager.GetGovApiVersion()}");
         await response.ValidateStatusCodeAsync(this.Logger);

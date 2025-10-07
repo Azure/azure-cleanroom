@@ -16,15 +16,17 @@
     ],
     "mounts": [
       {
-        "name": "shared",
-        "mountPath": "/app/service",
+        "name": "certs",
+        "mountPath": "/app/certs",
         "mountType": "emptyDir",
         "readOnly": false
       }
     ],
     "command": [
-      "/bin/sh",
-      "https-http/bootstrap.sh"
+      "/bin/bash",
+      "https-http/bootstrap.sh",
+      "--ca-type",
+      "local"
     ]
   },
   {
@@ -64,12 +66,17 @@
         "name": "ASPNETCORE_URLS",
         "value": ".*",
         "strategy": "re2"
+      },
+      {
+        "name": "SERVICE_CERT_LOCATION",
+        "value": ".*",
+        "strategy": "re2"
       }
     ],
     "mounts": [
       {
-        "name": "shared",
-        "mountPath": "/app/service",
+        "name": "certs",
+        "mountPath": "/app/certs",
         "mountType": "emptyDir",
         "readOnly": false
       },
@@ -88,6 +95,11 @@
     "environmentVariables": [
       {
         "name": "CONFIG_DATA_TGZ",
+        "value": ".*",
+        "strategy": "re2"
+      },
+      {
+        "name": "CCF_LOG_LEVEL",
         "value": ".*",
         "strategy": "re2"
       },

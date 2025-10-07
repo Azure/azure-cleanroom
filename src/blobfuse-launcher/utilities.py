@@ -1,16 +1,38 @@
 import base64
 import hashlib
-import subprocess
+import json
 import logging
 import os
-import json
-import requests
 import socket
+import subprocess
 import time
 
+import requests
 from opentelemetry import trace
-from requests.exceptions import HTTPError
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from ruamel.yaml import YAML
+
+
+def extract_otel_trace_context():
+    logger = logging.getLogger("utilities")
+    try:
+        trace_context_b64 = os.environ.get("OTEL_TRACE_CONTEXT_BASE64")
+        if trace_context_b64:
+            logger.info(
+                "Found OTEL_TRACE_CONTEXT_BASE64 environment variable, setting trace context"
+            )
+
+            trace_context_json = base64.b64decode(trace_context_b64).decode()
+            trace_context = json.loads(trace_context_json)
+
+            return TraceContextTextMapPropagator().extract(
+                trace_context,
+                context=None,
+            )
+        else:
+            logger.info("No OTEL_TRACE_CONTEXT_BASE64 environment variable found")
+    except Exception as e:
+        logger.error(f"Error restoring OTEL trace context: {e}")
 
 
 def unwrap_secret(
@@ -52,6 +74,35 @@ def unwrap_secret(
             span.set_status(
                 status=trace.StatusCode.ERROR,
                 description=f"Failed to unwrap secret {kid} via secrets sidecar.",
+            )
+            span.record_exception(e)
+            raise e
+        else:
+            result = response.json()
+            encodedSecret = result["value"]
+            secret = base64.b64decode(encodedSecret)
+            return secret
+
+
+def get_cgs_secret(
+    logger: logging.Logger,
+    tracer: trace.Tracer,
+    governance_port: str,
+    kid: str,
+) -> bytes:
+    with tracer.start_as_current_span("get_secret") as span:
+        try:
+            response = requests.post(
+                f"http://localhost:{governance_port}/secrets/{kid}"
+            )
+            response.raise_for_status()
+        except Exception as e:
+            logger.error(
+                f"Failed to get secret {kid} via governance sidecar. Error: {e}"
+            )
+            span.set_status(
+                status=trace.StatusCode.ERROR,
+                description=f"Failed to get secret {kid} via governance sidecar.",
             )
             span.record_exception(e)
             raise e
@@ -139,6 +190,8 @@ def launch_blobfuse(
     subdirectory: str,
     useAdls: bool,
     cpkEnabled: bool,
+    disableWritebackCache: bool,
+    blockSizeMB: int,
     telemetryPath: str,
 ) -> int:
     with tracer.start_as_current_span("launch_blobfuse") as span:
@@ -154,13 +207,26 @@ def launch_blobfuse(
                 "--allow-other",
                 "--read-only=" + str(readOnly).lower(),
                 f"--cpk-enabled=" + str(cpkEnabled).lower(),
-                "--tmp-path",
+                "--virtual-directory=true",
+                "--block-cache",
+                "--block-cache-path",
                 "/tmp/blobfuse_tmp",
+                "--block-cache-block-size=" + str(blockSizeMB),
+                "--block-cache-pool-size=256",
+                # Setting prefetch explicitly to 0. Otherwise, blobfuse tries to determine prefetch using
+                # the container CPUs and memory size instead of honoring the mem-size-mb limits and fails to start.
+                "--block-cache-prefetch=0",
+                # Due to the memory limit of 50 GB for CACI, we need to ensure that the total
+                # disk space used by all blobfuse processes does not exceed 50 GB.
+                # Otherwise, blobfuse might fail with a "transport endpoint disconnected" error.
+                "--block-cache-disk-size=4096",
                 "--log-file-path",
                 f"{telemetryPath}/infrastructure/{os.path.basename(mountPath)}-blobfuse.log",
+                "--log-level=LOG_INFO",
                 "--subdirectory",
                 f"{subdirectory}",
                 "--use-adls=" + str(useAdls).lower(),
+                "--disable-writeback-cache=" + str(disableWritebackCache).lower(),
             ],
         )
         return proc.returncode
@@ -181,9 +247,9 @@ def launch_blobfuse_encrypted(
             config = yaml.load(file)
 
         config_details = {
-            "block_cache": {"block-size-mb": 4},
+            "block_cache": {"block-size-mb": 16},
             "encryptor": {
-                "block-size-mb": 4,
+                "block-size-mb": 16,
                 "encrypted-mount-path": f"{mountPath}-plain/",
             },
         }
@@ -209,3 +275,15 @@ def launch_blobfuse_encrypted(
         )
 
         return proc.returncode
+
+
+def read_blobfuse_logs(logger: logging.Logger, mountPath: str, telemetryPath: str):
+    log_file_path = (
+        f"{telemetryPath}/infrastructure/{os.path.basename(mountPath)}-blobfuse.log"
+    )
+    try:
+        with open(log_file_path, "r") as log_file:
+            logs = log_file.read()
+            logger.info(f"Blobfuse logs from {log_file_path}:\n{logs}")
+    except Exception as e:
+        logger.error(f"Failed to read blobfuse logs from {log_file_path}. Error: {e}")

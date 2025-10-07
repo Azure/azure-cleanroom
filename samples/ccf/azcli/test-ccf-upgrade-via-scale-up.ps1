@@ -1,9 +1,6 @@
 [CmdletBinding()]
 param
 (
-    [string]$repo = "",
-
-    [string]$tag = "latest"
 )
 
 #https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
@@ -16,7 +13,7 @@ $networkName = $ccf.name
 $securityPolicyFile = "$sandbox_common/updatedNetworkRego.rego"
 
 # Add new hostData value in the network before scaling up.
-pwsh $PSScriptRoot/setup-ccf-upgrade.ps1 -numChangesToMake 2 -repo $repo -tag $tag
+pwsh $PSScriptRoot/setup-ccf-upgrade.ps1 -numChangesToMake 2
 
 $nodeCount = az cleanroom ccf network show `
     --name $networkName `

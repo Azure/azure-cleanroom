@@ -6,9 +6,9 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json.Nodes;
 using CcfCommon;
 using CcfProvider;
+using CcfProviderClient;
 using LoadBalancerProvider;
 using Microsoft.AspNetCore.Mvc;
-using VirtualCcfProvider;
 
 namespace Controllers;
 
@@ -19,24 +19,38 @@ public class NetworksController : CCfClientController
     private readonly IConfiguration configuration;
     private readonly CcfClientManager ccfClientManager;
     private readonly RecoveryAgentClientManager agentClientManager;
+    private readonly BackgroundTaskQueue queue;
+    private readonly IOperationStore operationStore;
 
     public NetworksController(
         ILogger logger,
         IConfiguration configuration,
         CcfClientManager ccfClientManager,
-        RecoveryAgentClientManager agentClientManager)
-        : base(logger, configuration)
+        RecoveryAgentClientManager agentClientManager,
+        ProvidersRegistry providers,
+        BackgroundTaskQueue queue,
+        IOperationStore operationStore)
+        : base(logger, configuration, providers)
     {
         this.logger = logger;
         this.configuration = configuration;
         this.ccfClientManager = ccfClientManager;
         this.agentClientManager = agentClientManager;
+        this.queue = queue;
+        this.operationStore = operationStore;
+    }
+
+    [HttpGet("/operations/{operationId}")]
+    public IActionResult GetOperationStatus([FromRoute] string operationId)
+    {
+        return this.operationStore.GetOperationStatus(operationId, this.HttpContext);
     }
 
     [HttpPost("/networks/{networkName}/create")]
     public async Task<IActionResult> PutNetwork(
         [FromRoute] string networkName,
-        [FromBody] PutNetworkInput content)
+        [FromBody] PutNetworkInput content,
+        [FromQuery] bool async = false)
     {
         var error = ValidateCreateInput();
         if (error != null)
@@ -52,16 +66,16 @@ public class NetworksController : CCfClientController
             MemberData = x.MemberData
         });
 
-        CcfNetwork network = await
-            ccfNetworkProvider.CreateNetwork(
-                networkName,
-                content.NodeCount,
-                initialMembers,
-                content.NodeLogLevel,
-                SecurityPolicyConfigInput.Convert(content.SecurityPolicy),
-                content.ProviderConfig);
-
-        return this.Ok(network);
+        if (async)
+        {
+            await this.queue.PerformAsync(this.operationStore, this.HttpContext, CreateNetwork);
+            return this.Accepted();
+        }
+        else
+        {
+            CcfNetwork network = await CreateNetwork(NoOpProgressReporter);
+            return this.Ok(network);
+        }
 
         IActionResult? ValidateCreateInput()
         {
@@ -117,6 +131,18 @@ public class NetworksController : CCfClientController
             }
 
             return null;
+        }
+
+        async Task<CcfNetwork> CreateNetwork(IProgress<string> progressReporter)
+        {
+            return await ccfNetworkProvider.CreateNetwork(
+                networkName,
+                content.NodeCount,
+                initialMembers,
+                content.NodeLogLevel,
+                SecurityPolicyConfigInput.Convert(content.SecurityPolicy),
+                content.ProviderConfig,
+                progressReporter);
         }
     }
 
@@ -201,6 +227,7 @@ public class NetworksController : CCfClientController
         CcfNetworkProvider ccfNetworkProvider = this.GetNetworkProvider(content.InfraType);
         var targetNetworkName = string.IsNullOrEmpty(content.TargetNetworkName) ?
             networkName : content.TargetNetworkName;
+        IProgress<string> noOpProgressReporter = new Progress<string>(m => { });
         CcfNetwork network = await
             ccfNetworkProvider.RecoverPublicNetwork(
                 targetNetworkName,
@@ -209,7 +236,8 @@ public class NetworksController : CCfClientController
                 content.NodeLogLevel,
                 SecurityPolicyConfigInput.Convert(content.SecurityPolicy),
                 content.PreviousServiceCertificate,
-                content.ProviderConfig);
+                content.ProviderConfig,
+                noOpProgressReporter);
 
         return this.Ok(network);
 
@@ -323,60 +351,71 @@ public class NetworksController : CCfClientController
     [HttpPost("/networks/{networkName}/recover")]
     public async Task<IActionResult> RecoverNetwork(
         [FromRoute] string networkName,
-        [FromBody] RecoverNetworkInput content)
+        [FromBody] RecoverNetworkInput content,
+        [FromQuery] bool async = false)
     {
-        var error = ValidateRecoverInput();
+        var error = await ValidateRecoverInput();
         if (error != null)
         {
             return error;
         }
 
-        CcfNetworkProvider ccfNetworkProvider = this.GetNetworkProvider(content.InfraType);
-        CcfNetwork network;
-        if (content.OperatorRecovery != null)
+        if (async)
         {
-            using RSA rsaEncKey =
-                !string.IsNullOrEmpty(content.OperatorRecovery.EncryptionPrivateKey) ?
-                Utils.ToRSAKey(content.OperatorRecovery.EncryptionPrivateKey) :
-                await Utils.ToRSAKey(new Uri(content.OperatorRecovery.EncryptionKeyId!));
-            network = await ccfNetworkProvider.RecoverNetwork(
-                networkName,
-                content.NodeCount ?? 1,
-                content.NodeLogLevel,
-                SecurityPolicyConfigInput.Convert(content.SecurityPolicy),
-                content.PreviousServiceCertificate,
-                rsaEncKey,
-                content.ProviderConfig);
+            await this.queue.PerformAsync(this.operationStore, this.HttpContext, RecoverNetwork);
+            return this.Accepted();
         }
         else
         {
-            var svcName = content.ConfidentialRecovery!.RecoveryServiceName;
-            var svcProvider = this.GetRecoveryServiceProvider(content.InfraType);
-            var recoveryService = await svcProvider.GetService(
-                svcName,
-                content.ProviderConfig);
-            if (recoveryService == null)
-            {
-                return this.NotFound(new ODataError(
-                    code: "ServiceNotFound",
-                    message: $"No endpoint for service {svcName} was found."));
-            }
-
-            network = await ccfNetworkProvider.RecoverNetwork(
-                networkName,
-                content.NodeCount ?? 1,
-                content.NodeLogLevel,
-                SecurityPolicyConfigInput.Convert(content.SecurityPolicy),
-                content.PreviousServiceCertificate,
-                this.GetRecoveryAgentProvider(content.InfraType),
-                content.ConfidentialRecovery!.MemberName,
-                recoveryService,
-                content.ProviderConfig);
+            CcfNetwork network = await RecoverNetwork(NoOpProgressReporter);
+            return this.Ok(network);
         }
 
-        return this.Ok(network);
+        async Task<CcfNetwork> RecoverNetwork(IProgress<string> progressReporter)
+        {
+            CcfNetworkProvider ccfNetworkProvider = this.GetNetworkProvider(content.InfraType);
+            CcfNetwork network;
+            if (content.OperatorRecovery != null)
+            {
+                using RSA rsaEncKey =
+                    !string.IsNullOrEmpty(content.OperatorRecovery.EncryptionPrivateKey) ?
+                    Utils.ToRSAKey(content.OperatorRecovery.EncryptionPrivateKey) :
+                    await Utils.ToRSAKey(new Uri(content.OperatorRecovery.EncryptionKeyId!));
+                network = await ccfNetworkProvider.RecoverNetwork(
+                    networkName,
+                    content.NodeCount ?? 1,
+                    content.NodeLogLevel,
+                    SecurityPolicyConfigInput.Convert(content.SecurityPolicy),
+                    content.PreviousServiceCertificate,
+                    rsaEncKey,
+                    content.ProviderConfig,
+                    progressReporter);
+            }
+            else
+            {
+                var svcName = content.ConfidentialRecovery!.RecoveryServiceName;
+                var svcProvider = this.GetRecoveryServiceProvider(content.InfraType);
+                var recoveryService = await svcProvider.GetService(
+                    svcName,
+                    content.ProviderConfig);
 
-        IActionResult? ValidateRecoverInput()
+                network = await ccfNetworkProvider.RecoverNetwork(
+                    networkName,
+                    content.NodeCount ?? 1,
+                    content.NodeLogLevel,
+                    SecurityPolicyConfigInput.Convert(content.SecurityPolicy),
+                    content.PreviousServiceCertificate,
+                    this.GetRecoveryAgentProvider(content.InfraType),
+                    content.ConfidentialRecovery!.MemberName,
+                    recoveryService!,
+                    content.ProviderConfig,
+                    progressReporter);
+            }
+
+            return network;
+        }
+
+        async Task<IActionResult?> ValidateRecoverInput()
         {
             if (!string.IsNullOrEmpty(content.NodeLogLevel))
             {
@@ -474,6 +513,18 @@ public class NetworksController : CCfClientController
                     return this.BadRequest(new ODataError(
                         code: "InputMissing",
                         message: "confidentialRecovery.memberName must be specified."));
+                }
+
+                var svcName = content.ConfidentialRecovery!.RecoveryServiceName;
+                var svcProvider = this.GetRecoveryServiceProvider(content.InfraType);
+                var recoveryService = await svcProvider.GetService(
+                    svcName,
+                    content.ProviderConfig);
+                if (recoveryService == null)
+                {
+                    return this.NotFound(new ODataError(
+                        code: "ServiceNotFound",
+                        message: $"No endpoint for service {svcName} was found."));
                 }
             }
 
@@ -623,9 +674,7 @@ public class NetworksController : CCfClientController
         {
             if (!string.IsNullOrEmpty(content.SecurityPolicy))
             {
-                using var sha256 = SHA256.Create();
-                var hashBytes = sha256.ComputeHash(Convert.FromBase64String(
-                    content.SecurityPolicy));
+                var hashBytes = SHA256.HashData(Convert.FromBase64String(content.SecurityPolicy));
                 var securityPolicyDigest = BitConverter.ToString(hashBytes)
                     .Replace("-", string.Empty).ToLower();
                 if (securityPolicyDigest != content.HostData)
@@ -718,21 +767,6 @@ public class NetworksController : CCfClientController
         return this.Ok(result);
     }
 
-    private ICcfLoadBalancerProvider GetLoadBalancerProvider(InfraType infraType)
-    {
-        switch (infraType)
-        {
-            case InfraType.@virtual:
-                return new DockerNginxLoadBalancerProvider(this.logger, this.configuration);
-            case InfraType.virtualaci:
-                return new AciNginxLoadBalancerProvider(this.logger, this.configuration);
-            case InfraType.caci:
-                return new AciNginxLoadBalancerProvider(this.logger, this.configuration);
-            default:
-                throw new NotSupportedException($"Infra type '{infraType}' is not supported.");
-        }
-    }
-
     private CcfNetworkProvider GetNetworkProvider(string infraType)
     {
         InfraType type = Enum.Parse<InfraType>(infraType, ignoreCase: true);
@@ -750,9 +784,11 @@ public class NetworksController : CCfClientController
     {
         InfraType type = Enum.Parse<InfraType>(infraType, ignoreCase: true);
         ICcfNodeProvider nodeProvider = this.GetNodeProvider(type);
+        ICcfLoadBalancerProvider lbProvider = this.GetLoadBalancerProvider(type);
         var recoveryAgentProvider = new CcfNetworkRecoveryAgentProvider(
             this.logger,
             nodeProvider,
+            lbProvider,
             this.agentClientManager);
         return recoveryAgentProvider;
     }

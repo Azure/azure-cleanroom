@@ -1,0 +1,10 @@
+spark:
+  # -- List of namespaces where to run spark jobs.
+  # If empty string is included, all namespaces will be allowed.
+  # Make sure the namespaces have already existed.
+  jobNamespaces:
+  - ""
+
+prometheus:
+  metrics:
+    enable: true

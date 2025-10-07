@@ -45,7 +45,7 @@ runs:
     - name: Install confcom extension
       shell: pwsh
       run: |
-        az extension add --name confcom --version 1.2.4 -y --allow-preview true
+        az extension add --name confcom -y --allow-preview true
         az version
 
     - shell: pwsh

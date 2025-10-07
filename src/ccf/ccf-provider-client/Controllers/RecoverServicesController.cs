@@ -4,6 +4,7 @@
 using System.Text.Json.Nodes;
 using Azure.Core;
 using CcfCommon;
+using CcfProviderClient;
 using CcfRecoveryProvider;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,8 +18,9 @@ public class RecoverServicesController : CCfClientController
 
     public RecoverServicesController(
         ILogger logger,
-        IConfiguration configuration)
-        : base(logger, configuration)
+        IConfiguration configuration,
+        ProvidersRegistry providers)
+        : base(logger, configuration, providers)
     {
         this.logger = logger;
         this.configuration = configuration;

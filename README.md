@@ -6,6 +6,9 @@ The quickest way to develop or build and run sample applications is to checkout 
  Alternatively, if your organisation supports it, you can checkout this repository in a Github codespace:  
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/microsoft/azure-cleanroom)
 
+## Managed Clean Rooms for 1P Workloads
+- See [readme](poc/managed-cleanroom/README.md) for managed clean room details.
+
 ## Multi-party Collaboration
 
 - See [readme](https://github.com/Azure-Samples/azure-cleanroom-samples) for a multi-party data sharing and processing samples.

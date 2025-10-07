@@ -22,6 +22,8 @@ jobs:
       with:
         submodules: recursive
 
+    - uses: ./.github/actions/setup-docker-on-data-disk
+
     - name: Login to Azure
       uses: azure/login@v2
       with:

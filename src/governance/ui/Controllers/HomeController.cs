@@ -32,15 +32,9 @@ public class HomeController : Controller
                 connected = true;
                 configured = true;
                 var item = (await response.Content.ReadFromJsonAsync<SettingsViewModel>())!;
-                var name = item.MemberData?["identifier"]?.ToString();
-                if (name != null)
-                {
-                    Common.Name = name;
-                }
-
+                Common.Name = item.Identifier ?? "unknown";
                 var uri = new Uri(this.configuration.GetEndpoint());
-
-                Common.ConnectedTo = $"{name ?? item.MemberId}@{uri.Host}:{uri.Port}";
+                Common.ConnectedTo = $"{Common.Name}@{uri.Host}:{uri.Port}";
                 Common.MemberId = item.MemberId;
 
                 var updates = (await client.GetFromJsonAsync<UpdatesViewModel>(

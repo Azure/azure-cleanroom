@@ -1,11 +1,8 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Net.Security;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using AttestationClient;
 using Microsoft.Extensions.Http;
 
@@ -49,7 +46,7 @@ public class CcfClientManager
                 await this.semaphore.WaitAsync();
                 if (this.ccfAppClient == null)
                 {
-                    this.ccfAppClient = this.InitializeClient();
+                    this.ccfAppClient = await this.InitializeClient();
                 }
             }
             finally
@@ -59,51 +56,46 @@ public class CcfClientManager
         }
     }
 
-    private HttpClient InitializeClient()
+    private async Task<HttpClient> InitializeClient()
     {
         var ccrgovEndpoint = new Uri(this.wsConfig.CcrgovEndpoint);
 
-        var handler = new HttpClientHandler
+        ServerCertValidationHandler GetServerCertValidationHandler(string? serviceCertPem)
         {
-            ServerCertificateCustomValidationCallback = (request, cert, chain, errors) =>
-            {
-                if (errors == SslPolicyErrors.None)
-                {
-                    return true;
-                }
+            var serverCertValidationHandler =
+                new ServerCertValidationHandler(
+                    this.logger,
+                    serviceCertPem,
+                    endpointName: "ccr-governance");
+            return serverCertValidationHandler;
+        }
 
-                if (cert == null || chain == null)
-                {
-                    return false;
-                }
+        HttpMessageHandler certValidationHandler;
+        if (this.wsConfig.ServiceCertLocator != null)
+        {
+            var initialServiceCertPem =
+                await this.wsConfig.ServiceCertLocator.DownloadServiceCertificatePem();
 
-                if (string.IsNullOrEmpty(this.wsConfig.ServiceCert))
-                {
-                    this.logger.LogError(
-                        "Failing SSL cert validation callback as no ServiceCert specified.");
-                    return false;
-                }
+            certValidationHandler = new AutoRenewingCertHandler(
+                this.logger,
+                this.wsConfig.ServiceCertLocator,
+                GetServerCertValidationHandler(initialServiceCertPem),
+                onRenewal: (serviceCertPem) => { });
+        }
+        else
+        {
+            certValidationHandler = GetServerCertValidationHandler(this.wsConfig.ServiceCert);
+        }
 
-                foreach (X509ChainElement element in chain.ChainElements)
-                {
-                    chain.ChainPolicy.ExtraStore.Add(element.Certificate);
-                }
-
-                var roots = new X509Certificate2Collection(
-                    X509Certificate2.CreateFromPem(this.wsConfig.ServiceCert));
-
-                chain.ChainPolicy.CustomTrustStore.Clear();
-                chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-                chain.ChainPolicy.CustomTrustStore.AddRange(roots);
-                return chain.Build(cert);
-            }
+        var retryPolicyHandler = new PolicyHttpMessageHandler(
+            HttpRetries.Policies.DefaultRetryPolicy(this.logger))
+        {
+            InnerHandler = certValidationHandler
         };
-
-        var policyHandler = new PolicyHttpMessageHandler(
-            HttpRetries.Policies.GetDefaultRetryPolicy(this.logger));
-        policyHandler.InnerHandler = handler;
-        var client = new HttpClient(policyHandler);
-        client.BaseAddress = ccrgovEndpoint;
+        var client = new HttpClient(retryPolicyHandler)
+        {
+            BaseAddress = ccrgovEndpoint
+        };
         return client;
     }
 
@@ -125,6 +117,14 @@ public class CcfClientManager
                         this.wsConfig = await this.InitializeWsConfigFromEnvironment();
                     }
                 }
+
+                string model = this.wsConfig.ServiceCertLocator?.Model != null ?
+                    JsonSerializer.Serialize(this.wsConfig.ServiceCertLocator.Model) : string.Empty;
+                this.logger.LogInformation($"ccr-governance initialized with " +
+                    $"ccrgovEndpoint: '{this.wsConfig.CcrgovEndpoint}', " +
+                    $"ccrgovEndpointPathPrefix: '{this.config[SettingName.CcrGovApiPathPrefix]}', " +
+                    $"serviceCert: '{this.wsConfig.ServiceCert}', " +
+                    $"serviceCertDiscoveryModel: '{model}'.");
             }
             finally
             {
@@ -157,11 +157,26 @@ public class CcfClientManager
         }
 
         string? serviceCert = await this.GetServiceCertAsync();
+        var serviceCertDiscovery = this.GetServiceCertDiscoveryModel();
+
+        if (!string.IsNullOrEmpty(serviceCert) && serviceCertDiscovery != null)
+        {
+            throw new ArgumentException(
+                $"Both {SettingName.ServiceCert} and " +
+                $"{SettingName.ServiceCertDiscoveryEndpoint} cannot be specified.");
+        }
+
+        CcfServiceCertLocator? certLocator = null;
+        if (serviceCertDiscovery != null)
+        {
+            certLocator = new CcfServiceCertLocator(this.logger, serviceCertDiscovery);
+        }
 
         var wsConfig = new WorkspaceConfiguration
         {
             CcrgovEndpoint = this.config[SettingName.CcrGovEndpoint]!,
-            ServiceCert = serviceCert
+            ServiceCert = serviceCert,
+            ServiceCertLocator = certLocator
         };
 
         var privateKey =
@@ -183,11 +198,33 @@ public class CcfClientManager
         }
 
         string? serviceCert = await this.GetServiceCertAsync();
+        var serviceCertDiscovery = this.GetServiceCertDiscoveryModel();
+
+        if (string.IsNullOrEmpty(serviceCert) && serviceCertDiscovery == null)
+        {
+            throw new ArgumentException(
+                $"Either {SettingName.ServiceCert} or " +
+                $"{SettingName.ServiceCertDiscoveryEndpoint} must be specified.");
+        }
+
+        if (!string.IsNullOrEmpty(serviceCert) && serviceCertDiscovery != null)
+        {
+            throw new ArgumentException(
+                $"Both {SettingName.ServiceCert} and " +
+                $"{SettingName.ServiceCertDiscoveryEndpoint} cannot be specified.");
+        }
+
+        CcfServiceCertLocator? certLocator = null;
+        if (serviceCertDiscovery != null)
+        {
+            certLocator = new CcfServiceCertLocator(this.logger, serviceCertDiscovery);
+        }
 
         var wsConfig = new WorkspaceConfiguration
         {
             CcrgovEndpoint = this.config[SettingName.CcrGovEndpoint]!,
-            ServiceCert = serviceCert
+            ServiceCert = serviceCert,
+            ServiceCertLocator = certLocator
         };
 
         wsConfig.Attestation = await Attestation.GenerateRsaKeyPairAndReportAsync();
@@ -205,6 +242,50 @@ public class CcfClientManager
         if (!string.IsNullOrEmpty(this.config[SettingName.ServiceCertPath]))
         {
             return await File.ReadAllTextAsync(this.config[SettingName.ServiceCertPath]!);
+        }
+
+        return null;
+    }
+
+    private CcfServiceCertDiscoveryModel? GetServiceCertDiscoveryModel()
+    {
+        var ep = this.config[SettingName.ServiceCertDiscoveryEndpoint];
+        if (!string.IsNullOrEmpty(ep))
+        {
+            var hostData = this.config[SettingName.ServiceCertDiscoverySnpHostData];
+            if (string.IsNullOrEmpty(hostData))
+            {
+                throw new ArgumentException(
+                    $"{SettingName.ServiceCertDiscoverySnpHostData} setting must be specified.");
+            }
+
+            var cd = this.config[SettingName.ServiceCertDiscoveryConstitutionDigest];
+            var jd = this.config[SettingName.ServiceCertDiscoveryJsappBundleDigest];
+            _ = bool.TryParse(
+                this.config[SettingName.ServiceCertDiscoverySkipDigestCheck],
+                out var skipDigestCheck);
+            if (!skipDigestCheck && string.IsNullOrEmpty(cd))
+            {
+                throw new ArgumentException(
+                    $"{SettingName.ServiceCertDiscoveryConstitutionDigest} setting must be " +
+                    $"specified.");
+            }
+
+            if (!skipDigestCheck && string.IsNullOrEmpty(jd))
+            {
+                throw new ArgumentException(
+                    $"{SettingName.ServiceCertDiscoveryJsappBundleDigest} setting must be " +
+                    $"specified.");
+            }
+
+            return new CcfServiceCertDiscoveryModel
+            {
+                CertificateDiscoveryEndpoint = ep,
+                HostData = [hostData],
+                SkipDigestCheck = skipDigestCheck,
+                ConstitutionDigest = cd,
+                JsAppBundleDigest = jd,
+            };
         }
 
         return null;

@@ -43,9 +43,9 @@ public class CcfClientManager
     {
         var client = this.httpClientManager.GetOrAddClient(
             ccfEndpoint,
+            HttpRetries.Policies.DefaultRetryPolicy(this.logger),
             serviceCert,
-            "gov-client",
-            retryPolicy: HttpRetries.Policies.GetDefaultRetryPolicy(this.logger));
+            "gov-client");
         return Task.FromResult(client);
     }
 

@@ -1,11 +1,7 @@
 name: "PR Validation: CGS CCF Tests"
 
 on:
-  workflow_dispatch:
-  pull_request:
-    branches:
-      - main
-      - release
+  workflow_call:
 
 permissions:
   id-token: write
@@ -14,9 +10,9 @@ permissions:
 
 # When a new revision is pushed to a PR, cancel all in-progress CI runs for that
 # PR. See https://docs.github.com/en/actions/using-jobs/using-concurrency
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+# concurrency:
+#   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+#   cancel-in-progress: true
 
 jobs:
   cgs-test:
@@ -26,6 +22,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
 
       - name: Login to Azure and refresh token
         uses: ./.github/actions/login-to-azure

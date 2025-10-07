@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using AttestationClient;
@@ -59,6 +60,76 @@ public class SecretsController : ControllerBase
             {
                 ["value"] = secret
             });
+        }
+    }
+
+    [HttpPut("/secrets/{secretName}")]
+    public async Task<JsonObject> PutSecret(
+        [FromRoute] string secretName,
+        [FromBody] JsonObject data)
+    {
+        var appClient = await this.ccfClientManager.GetAppClient();
+        var wsConfig = await this.ccfClientManager.GetWsConfig();
+        var paddingMode = RSASignaturePaddingMode.Pss;
+
+        var dataBytes = Encoding.UTF8.GetBytes(data.ToJsonString());
+        var signature = Signing.SignData(dataBytes, wsConfig.Attestation.PrivateKey, paddingMode);
+
+        var content = Attestation.PrepareSignedDataRequestContent(
+            dataBytes,
+            signature,
+            wsConfig.Attestation.PublicKey,
+            wsConfig.Attestation.Report);
+
+        using (HttpRequestMessage request = new(
+            HttpMethod.Put,
+            this.routes.Secrets(this.WebContext, secretName)))
+        {
+            request.Content = new StringContent(
+                content.ToJsonString(),
+                Encoding.UTF8,
+                "application/json");
+
+            using HttpResponseMessage response = await appClient.SendAsync(request);
+            this.Response.CopyHeaders(response.Headers);
+            await response.ValidateStatusCodeAsync(this.logger);
+            await response.WaitAppTransactionCommittedAsync(this.ccfClientManager);
+            var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
+            return jsonResponse!;
+        }
+    }
+
+    [HttpPost("/secrets/{secretId}/cleanroompolicy")]
+    public async Task<IActionResult> SetSecretCleanRoomPolicy(
+            [FromRoute] string secretId,
+            [FromBody] JsonObject data)
+    {
+        var appClient = await this.ccfClientManager.GetAppClient();
+        var wsConfig = await this.ccfClientManager.GetWsConfig();
+        var paddingMode = RSASignaturePaddingMode.Pss;
+
+        var dataBytes = Encoding.UTF8.GetBytes(data.ToJsonString());
+        var signature = Signing.SignData(dataBytes, wsConfig.Attestation.PrivateKey, paddingMode);
+
+        var content = Attestation.PrepareSignedDataRequestContent(
+            dataBytes,
+            signature,
+            wsConfig.Attestation.PublicKey,
+            wsConfig.Attestation.Report);
+
+        using (HttpRequestMessage request = new(
+            HttpMethod.Post,
+            this.routes.SecretCleanRoomPolicy(this.WebContext, secretId)))
+        {
+            request.Content = new StringContent(
+                content.ToJsonString(),
+                Encoding.UTF8,
+                "application/json");
+
+            using HttpResponseMessage response = await appClient.SendAsync(request);
+            this.Response.CopyHeaders(response.Headers);
+            await response.ValidateStatusCodeAsync(this.logger);
+            return this.Ok();
         }
     }
 }

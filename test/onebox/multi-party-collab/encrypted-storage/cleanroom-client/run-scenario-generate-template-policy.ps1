@@ -67,8 +67,9 @@ if ($env:GITHUB_ACTIONS -eq "true") {
   $resourceGroupTags = "github_actions=multi-party-collab-${env:JOB_ID}-${env:RUN_ID}"
 }
 else {
-  $publisherResourceGroup = "cl-ob-publisher-${env:USER}"
-  $consumerResourceGroup = "cl-ob-consumer-${env:USER}"
+  $user = $env:CODESPACES -eq "true" ? $env:GITHUB_USER : $env:USER
+  $publisherResourceGroup = "cl-ob-publisher-${user}"
+  $consumerResourceGroup = "cl-ob-consumer-${user}"
 }
 
 # Set tenant Id as a part of the consumer's member data.
@@ -288,14 +289,10 @@ curl --fail-with-body `
 {
     "storageAccountId": "$($result.sa.id)",
     "identity": "publisher-identity",
-    "keyVault": "$($result.dek.kv.id)",
     "configName": "$publisherConfig",
     "datastoreConfigName": "$publisherDatastoreConfig",
-    "secretStoreConfig": "$publisherSecretStoreConfig",
-    "dekSecretStore": "publisher-dek-store",
-    "kekSecretStore": "publisher-kek-store",
     "datastoreSecretStore": "publisher-local-store",
-    "encryptionMode": "CPK",
+    "encryptionMode": "SSE",
     "containerSuffix": "$containerSuffix"
 }
 "@
@@ -310,14 +307,10 @@ curl --fail-with-body `
 {
     "storageAccountId": "$($result.sa.id)",
     "identity": "publisher-identity",
-    "keyVault": "$($result.dek.kv.id)",
     "configName": "$publisherConfig",
     "datastoreConfigName": "$publisherDatastoreConfig",
-    "secretStoreConfig": "$publisherSecretStoreConfig",
-    "dekSecretStore": "publisher-dek-store",
-    "kekSecretStore": "publisher-kek-store",
     "datastoreSecretStore": "publisher-local-store",
-    "encryptionMode": "CPK",
+    "encryptionMode": "SSE",
     "containerSuffix": "$containerSuffix"
 }
 "@
@@ -453,7 +446,7 @@ curl --fail-with-body `
 
 # Generate the cleanroom config which contains all the datasources, sinks and applications that are
 # configured by both the producer and consumer.
-curl -X POST $cleanroomClientEndpoint/config/view `
+curl --fail-with-body -X POST $cleanroomClientEndpoint/config/view `
   -H "content-type: application/json" `
   -d @"
 {
@@ -521,33 +514,25 @@ if ($registry -ne "mcr") {
   $env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = "${repo}/sidecar-digests:$tag"
 }
 
-if ($caci) {
-  $serviceCertBase64 = cat $serviceCert | base64 -w 0
-  $data = $contract.data.ReplaceLineEndings("\n")
+$generateMode = $caci ? "cached-debug" : "allow-all"
+$serviceCertBase64 = cat $serviceCert | base64 -w 0
+$data = $contract.data.ReplaceLineEndings("\n")
 
-  $response = curl --fail-with-body `
-    -w "\n%{method} %{url} completed with %{response_code}\n" `
-    -X POST $cleanroomClientEndpoint/deployment/generate -H "content-type: application/json" -d @"
+$response = curl --fail-with-body `
+  -w "\n%{method} %{url} completed with %{response_code}\n" `
+  -X POST $cleanroomClientEndpoint/deployment/generate -H "content-type: application/json" -d @"
 {
     "spec": "$data",
     "contract_id": "$contractId",
     "ccf_endpoint": "$ccfEndpoint",
     "ssl_server_cert_base64": "$serviceCertBase64",
-    "debug_mode": "true"
+    "generate_mode": "$generateMode"
 }
 "@
-  $response = $response[0] | ConvertFrom-Json
+$response = $response[0] | ConvertFrom-Json
 
-  $response."arm_template" | ConvertTo-Json -Depth 100 | Out-File $outDir/deployments/cleanroom-arm-template.json
-  $response."policy_json" | ConvertTo-Json -Depth 100 | Out-File $outDir/deployments/cleanroom-governance-policy.json
-}
-else {
-  az cleanroom governance deployment generate `
-    --contract-id $contractId `
-    --governance-client "ob-consumer-client" `
-    --output-dir $outDir/deployments `
-    --security-policy-creation-option allow-all
-}
+$response."arm_template" | ConvertTo-Json -Depth 100 | Out-File $outDir/deployments/cleanroom-arm-template.json
+$response."policy_json" | ConvertTo-Json -Depth 100 | Out-File $outDir/deployments/cleanroom-governance-policy.json
 
 az cleanroom governance deployment template propose `
   --template-file $outDir/deployments/cleanroom-arm-template.json `
@@ -745,9 +730,16 @@ curl --fail-with-body `
 "@
 
 # Setup OIDC issuer and managed identity access to storage/KV in publisher tenant.
+pwsh $PSScriptRoot/../../setup-oidc-issuer.ps1 `
+  -resourceGroup $publisherResourceGroup `
+  -outDir $outDir `
+  -governanceClient "ob-publisher-client"
+$issuerUrl = Get-Content $outDir/$publisherResourceGroup/issuer-url.txt
+
 pwsh $PSScriptRoot/../../setup-access.ps1 `
   -resourceGroup $publisherResourceGroup `
-  -contractId $contractId  `
+  -subject $contractId `
+  -issuerUrl $issuerUrl `
   -outDir $outDir `
   -kvType akvpremium `
   -governanceClient "ob-publisher-client"
@@ -776,9 +768,16 @@ curl --fail-with-body `
 "@
 
 # Setup OIDC issuer endpoint and managed identity access to storage/KV in consumer tenant.
+pwsh $PSScriptRoot/../../setup-oidc-issuer.ps1 `
+  -resourceGroup $consumerResourceGroup `
+  -outDir $outDir `
+  -governanceClient "ob-consumer-client"
+$issuerUrl = Get-Content $outDir/$consumerResourceGroup/issuer-url.txt
+
 pwsh $PSScriptRoot/../../setup-access.ps1 `
   -resourceGroup $consumerResourceGroup `
-  -contractId $contractId `
+  -subject $contractId `
+  -issuerUrl $issuerUrl `
   -outDir $outDir `
   -kvType akvpremium `
   -governanceClient "ob-consumer-client"

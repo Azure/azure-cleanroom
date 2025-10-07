@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ccf-provider-common\ccf-provider-common.csproj" />
     <ProjectReference Include="..\ccf-provider\ccf-provider.csproj" />
+    <ProjectReference Include="..\consortium-manager\ccf-consortium-manager-provider\ccf-consortium-manager-provider.csproj" />
     <ProjectReference Include="..\recovery\ccf-recovery-service-provider\ccf-recovery-service-provider.csproj" />
   </ItemGroup>
 
@@ -38,10 +39,13 @@
     <None Update="insecure-virtual\recovery-service\signing_key_attestation.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="templates\virtual\join-config.json">
+    <None Update="insecure-virtual\consortium-manager\encryption_key_attestation.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="templates\nginx.conf">
+    <None Update="insecure-virtual\consortium-manager\signing_key_attestation.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="templates\virtual\join-config.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="templates\virtual\recover-config.json">

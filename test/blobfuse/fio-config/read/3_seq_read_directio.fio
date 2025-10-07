@@ -1,0 +1,16 @@
+# This job performs sequential reads with direct I/O enabled from a 50 GB file.
+
+[global]
+name=blobfuse_benchmark
+bs=256k
+runtime=60s
+time_based
+filename=read_fio.data
+group_reporting
+
+[sequential_read_direct_io]
+size=50G
+rw=read
+ioengine=sync
+fallocate=none
+direct=1

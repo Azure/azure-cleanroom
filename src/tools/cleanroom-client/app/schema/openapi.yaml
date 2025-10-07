@@ -192,9 +192,8 @@ paths:
         '200':
           description: Successful Response
           content:
-            text/plain:
-              schema:
-                type: string
+            application/json:
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -1126,12 +1125,11 @@ components:
         ssl_server_cert_base64:
           type: string
           title: Ssl Server Cert Base64
-        debug_mode:
+        generate_mode:
           anyOf:
-          - type: boolean
+          - type: string
           - type: 'null'
-          title: Debug Mode
-          default: false
+          title: Generate Mode
         operationId:
           anyOf:
           - type: string

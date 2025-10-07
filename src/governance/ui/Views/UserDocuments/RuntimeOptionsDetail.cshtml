@@ -1,0 +1,81 @@
+﻿@model RuntimeOptionsViewModel
+@{
+    ViewData["Title"] = "Runtime Options";
+}
+
+<h2>Runtime Options</h2>
+
+<h3>Execution</h3>
+<table class="table table-hover">
+    <thead>
+        <tr>
+            <th>Status</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+                <pre>@Model.Execution.Status</pre>
+            </td>
+            <td>
+                @if (@Model.Execution.Status == "enabled")
+                {
+                    <p>
+                        <a asp-controller="UserDocuments"
+                           asp-action="DisableExecution" asp-route-id="@Model.Id">Disable Execution</a>
+                    </p>
+                } else if (@Model.Execution.Status == "disabled")
+                {
+                    <p>
+                        <a asp-controller="UserDocuments"
+                           asp-action="EnableExecution" asp-route-id="@Model.Id">Enable Execution</a>
+                    </p>
+                    if (@Model.Execution.Reason?.Message != null)
+                    {
+                        <p><i>@Model.Execution.Reason.Message</i></p>
+                    }
+
+                }
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Telemetry</h3>
+<table class="table table-hover">
+    <thead>
+        <tr>
+            <th>Status</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>
+                <pre>@Model.Telemetry.Status</pre>
+            </td>
+            <td>
+                @if (@Model.Telemetry.Status == "enabled")
+                {
+                    <p>
+                        <a asp-controller="UserDocuments"
+                           asp-action="DisableTelemetry" asp-route-id="@Model.Id">Disable Telemetry</a>
+                    </p>
+                }
+                else if (@Model.Telemetry.Status == "disabled")
+                {
+                    <p>
+                        <a asp-controller="UserDocuments"
+                           asp-action="EnableTelemetry" asp-route-id="@Model.Id">Enable Telemetry</a>
+                    </p>
+                    if (@Model.Telemetry.Reason?.Message != null)
+                    {
+                        <p><i>@Model.Telemetry.Reason.Message</i></p>
+                    }
+
+                }
+            </td>
+        </tr>
+    </tbody>
+</table>

@@ -76,12 +76,6 @@ pwsh $root/build/onebox/build-local-cleanroom-containers.ps1 `
   -tag $tag `
   -withRegoPolicy:$withCcePolicy
 
-pwsh $root/build/ccf/build-ccf-infra-containers.ps1 `
-  -repo $repo `
-  -tag $tag `
-  -push `
-  -pushPolicy:$withCcePolicy
-
 # Launch the scenario.
 $scenario = "nginx-hello"
 pwsh $root/test/onebox/multi-party-collab/$scenario/run-collab-aci.ps1 `

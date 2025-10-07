@@ -16,5 +16,7 @@ COPY src/proxy/https-http/ccr-https-http-proxy-config.yaml https-http/ccr-https-
 COPY src/proxy/https-http/cert-config.cnf https-http/cert-config.cnf
 COPY src/proxy/https-http/bootstrap.sh https-http/bootstrap.sh
 RUN chmod +x https-http/bootstrap.sh
+COPY src/proxy/l4-lb/bootstrap.sh l4-lb/bootstrap.sh
+RUN chmod +x l4-lb/bootstrap.sh
 COPY src/scripts/wait-for-it.sh wait-for-it.sh
 RUN chmod +x wait-for-it.sh

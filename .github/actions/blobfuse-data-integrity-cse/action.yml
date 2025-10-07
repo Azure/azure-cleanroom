@@ -1,0 +1,204 @@
+name: "Blobfuse Data Integrity"
+description: "Data integrity validation for blobfuse mount."
+
+inputs:
+  account_type:
+    description: "Account type"
+    required: true
+  mount_dir_plain:
+    description: "Plain mount directory"
+    required: true
+  mount_dir_encrypted:
+    description: "Encrypted mount directory"
+    required: true
+  temp_dir_plain:
+    description: "Plain mount temporary directory"
+    required: true
+  temp_dir_encrypted:
+    description: "Encrypted mount temporary directory"
+    required: true
+  config_file_plain:
+    description: "Plain configuration file"
+    required: true
+  config_file_encrypted:
+    description: "Encrypted configuration file"
+    required: true
+  mount_dir_source:
+    description: "Source mount directory for data generation"
+    required: true
+  temp_dir_source:
+    description: "Source mount temporary directory"
+    required: true
+  config_file_source:
+    description: "Source configuration file"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+
+    - name: Create config file for source mount
+      shell: bash
+      run: |
+        blobfuse2 gen-test-config \
+          --config-file=./test/blobfuse/testdata/config/block_cache.yaml \
+          --container-name=${{ env.SOURCE_CONTAINER_NAME }} \
+          --temp-path=${{ inputs.temp_dir_source }} \
+          --output-file=${{ inputs.config_file_source }}
+      env:
+        STO_ACC_NAME: ${{ env.STORAGE_ACCOUNT }}
+        ACCOUNT_TYPE: ${{ inputs.account_type }}
+        ACCOUNT_ENDPOINT: ${{ env.STORAGE_ACCOUNT_ENDPOINT }}
+        LOG_FILE_PATH: ${{ github.workspace }}/blobfuse2-source-logs.txt
+        BLOCK_SIZE_MB: 16
+        MEM_SIZE_MB: 2048
+        DISK_SIZE_MB: 6144
+
+    - name: Print config file for source mount
+      shell: bash
+      run: cat ${{ inputs.config_file_source }}
+
+    - name: Blobfuse source mount
+      uses: ./.github/actions/blobfuse-mount
+      with:
+        mount_dir: ${{ inputs.mount_dir_source }}
+        temp_dir: ${{ inputs.temp_dir_source }}
+        mountStep: |
+          blobfuse2 mount \
+            ${{ inputs.mount_dir_source }} \
+            --config-file=${{ inputs.config_file_source }} \
+            --default-working-dir=${{ github.workspace }}
+
+    - name: Create config file for plain mount
+      shell: bash
+      run: |
+        blobfuse2 gen-test-config \
+          --config-file=./test/blobfuse/testdata/config/block_cache.yaml \
+          --container-name=${{ env.CONTAINER_NAME }} \
+          --temp-path=${{ inputs.temp_dir_plain }} \
+          --output-file=${{ inputs.config_file_plain }}
+      env:
+        STO_ACC_NAME: ${{ env.STORAGE_ACCOUNT }}
+        ACCOUNT_TYPE: ${{ inputs.account_type }}
+        ACCOUNT_ENDPOINT: ${{ env.STORAGE_ACCOUNT_ENDPOINT }}
+        LOG_FILE_PATH: ${{ github.workspace }}/blobfuse2-plain-logs.txt
+        BLOCK_SIZE_MB: 16
+        MEM_SIZE_MB: 2048
+        DISK_SIZE_MB: 6144
+
+    - name: Print config file for plain mount
+      shell: bash
+      run: cat ${{ inputs.config_file_plain }}
+
+    - name: Create config file for encrypted mount
+      shell: bash
+      run: |
+        blobfuse2 gen-test-config \
+          --config-file=./test/blobfuse/testdata/config/encryptor.yaml \
+          --container-name=${{ env.CONTAINER_NAME }} \
+          --temp-path=${{ inputs.temp_dir_encrypted }} \
+          --output-file=${{ inputs.config_file_encrypted }}
+      env:
+        PLAIN_MOUNT: ${{ inputs.mount_dir_plain }}
+        LOG_FILE_PATH: ${{ github.workspace }}/blobfuse2-encrypted-logs.txt
+        BLOCK_SIZE_MB: 16
+        MEM_SIZE_MB: 2048
+        DISK_SIZE_MB: 6144
+
+    - name: Print config file for encrypted mount
+      shell: bash
+      run: cat ${{ inputs.config_file_encrypted }}
+
+    - name: Upload config files
+      uses: actions/upload-artifact@v4
+      with:
+        name: blobfuse-cse-config
+        path: |
+          ${{ inputs.config_file_source }}
+          ${{ inputs.config_file_plain }}
+          ${{ inputs.config_file_encrypted }}
+        overwrite: true
+      if: ${{ !cancelled() }}
+
+    - name: Blobfuse CSE Mount
+      uses: ./.github/actions/blobfuse-cse-mount
+      with:
+        mount_dir_plain: ${{ inputs.mount_dir_plain }}
+        temp_dir_plain: ${{ inputs.temp_dir_plain }}
+        config_file_plain: ${{ inputs.config_file_plain }}
+        mount_dir_encrypted: ${{ inputs.mount_dir_encrypted }}
+        temp_dir_encrypted: ${{ inputs.temp_dir_encrypted }}
+        config_file_encrypted: ${{ inputs.config_file_encrypted }}
+
+    - name: Generate files in source mount
+      shell: bash
+      run: |
+        mkdir -p ${{ inputs.mount_dir_source }}/testData
+        for i in {1,3,7,16,50,100,1024,20480,51200}; do echo $i; done | \
+        parallel --will-cite -j 5 'head -c {}M < /dev/urandom > ${{ inputs.mount_dir_source }}/testData/testfile_{}'
+        ls -lh ${{ inputs.mount_dir_source }}/testData/testfile_*
+
+    - name: Upload test files to cse mount
+      shell: bash
+      run: |
+        for i in {1,3,7,16,50,100,1024,20480,51200}; do echo $i; done | \
+        parallel --will-cite -j 5 'cp ${{ inputs.mount_dir_source }}/testData/testfile_{} ${{ inputs.mount_dir_encrypted }}/testfile_{}'
+        ls -lh ${{ inputs.mount_dir_encrypted }}/testfile_*
+
+    - name: Unmount
+      shell: bash
+      run: |
+        sudo blobfuse2 unmount ${{ inputs.mount_dir_plain }}
+        sudo blobfuse2 unmount ${{ inputs.mount_dir_encrypted }}
+        sleep 60s
+
+    - name: Remount in read-only mode
+      uses: ./.github/actions/blobfuse-cse-mount
+      with:
+        mount_dir_plain: ${{ inputs.mount_dir_plain }}
+        temp_dir_plain: ${{ inputs.temp_dir_plain }}
+        config_file_plain: ${{ inputs.config_file_plain }}
+        mount_dir_encrypted: ${{ inputs.mount_dir_encrypted }}
+        temp_dir_encrypted: ${{ inputs.temp_dir_encrypted }}
+        config_file_encrypted: ${{ inputs.config_file_encrypted }}
+        ro_mount: 'true'
+
+    - name: Compare SHA256 checksums
+      shell: bash
+      run: |
+        for i in {1,3,7,16,50,100,1024,20480,51200}; do
+          local_sha256=$(sha256sum ${{ inputs.mount_dir_source }}/testData/testfile_$i | cut -d ' ' -f 1)
+          remote_sha256=$(sha256sum ${{ inputs.mount_dir_encrypted }}/testfile_$i | cut -d ' ' -f 1)
+          if [ "$local_sha256" != "$remote_sha256" ]; then
+          echo "SHA256 mismatch for file $i: $local_sha256 (local) vs $remote_sha256 (remote)"
+          echo "Data integrity validation failed."
+          exit 1
+          fi
+        done
+
+    - name: Blobfuse logs
+      shell: bash
+      run: |
+        cat ${{ github.workspace }}/blobfuse2-source-logs.txt
+        cat ${{ github.workspace }}/blobfuse2-plain-logs.txt
+        cat ${{ github.workspace }}/blobfuse2-encrypted-logs.txt
+      continue-on-error: true
+      if: always()
+
+    - name: Upload blobfuse logs
+      uses: actions/upload-artifact@v4
+      with:
+        name: blobfuse-cse-logs
+        path: |
+          ${{ github.workspace }}/blobfuse2-plain-logs.txt
+          ${{ github.workspace }}/blobfuse2-encrypted-logs.txt
+          ${{ github.workspace }}/blobfuse2-source-logs.txt
+        overwrite: true
+      if: ${{ !cancelled() }}
+
+    - name: Unmount
+      shell: bash
+      run: |
+        sudo blobfuse2 unmount all
+      if: always()
+      continue-on-error: true

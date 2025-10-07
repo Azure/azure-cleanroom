@@ -1,12 +1,13 @@
 # Image for building the sidecar executable.
-FROM mcr.microsoft.com/oss/go/microsoft/golang:1.23.1 AS build-image
+FROM mcr.microsoft.com/oss/go/microsoft/golang:1.24.4 AS build-image
 
 # Install prerequisities.
 RUN apt-get update -y && \
     DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install \
     software-properties-common build-essential
 
-RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.63.4
+RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.64.8
+
 
 # Set the working directory
 WORKDIR /app

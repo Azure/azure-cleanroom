@@ -22,9 +22,6 @@ namespace CAciCcfProvider;
 
 public class CAciNodeProvider : ICcfNodeProvider
 {
-    private const string ServiceFolderMountPath = "/app/service";
-    private const string ServiceCertPemFilePath = $"{ServiceFolderMountPath}/service-cert.pem";
-
     private ILogger logger;
     private IConfiguration configuration;
 
@@ -135,6 +132,7 @@ public class CAciNodeProvider : ICcfNodeProvider
             nodeName,
             dnsNameLabel,
             tgzConfigData,
+            nodeLogLevel,
             instanceId,
             securityPolicy);
 
@@ -290,6 +288,7 @@ public class CAciNodeProvider : ICcfNodeProvider
             nodeName,
             dnsNameLabel,
             tgzConfigData,
+            nodeLogLevel,
             instanceId,
             securityPolicy);
 
@@ -443,6 +442,7 @@ public class CAciNodeProvider : ICcfNodeProvider
             nodeName,
             dnsNameLabel,
             tgzConfigData,
+            nodeLogLevel,
             instanceId,
             securityPolicy);
 
@@ -668,8 +668,7 @@ public class CAciNodeProvider : ICcfNodeProvider
                     throw new ArgumentException($"Unhandled policyOption: {policyOption}");
         }
 
-        using var sha256 = SHA256.Create();
-        var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(policyRego));
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(policyRego));
         var securityPolicyDigest = BitConverter.ToString(hashBytes)
             .Replace("-", string.Empty).ToLower();
 
@@ -705,8 +704,7 @@ public class CAciNodeProvider : ICcfNodeProvider
                     throw new ArgumentException($"Unhandled policyOption: {policyOption}");
         }
 
-        using var sha256 = SHA256.Create();
-        var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(policyRego));
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(policyRego));
         var securityPolicyDigest = BitConverter.ToString(hashBytes)
             .Replace("-", string.Empty).ToLower();
 
@@ -920,6 +918,7 @@ public class CAciNodeProvider : ICcfNodeProvider
         string nodeName,
         string dnsNameLabel,
         string tgzConfigData,
+        string? nodeLogLevel,
         string instanceId,
         ContainerGroupSecurityPolicy securityPolicy)
     {
@@ -944,6 +943,10 @@ public class CAciNodeProvider : ICcfNodeProvider
                         new ContainerEnvironmentVariable("CONFIG_DATA_TGZ")
                         {
                             Value = tgzConfigData
+                        },
+                        new ContainerEnvironmentVariable("CCF_LOG_LEVEL")
+                        {
+                            Value = nodeLogLevel?.ToLower() ?? "info"
                         }
                     }
                 },
@@ -983,12 +986,16 @@ public class CAciNodeProvider : ICcfNodeProvider
                         new ContainerEnvironmentVariable("ASPNETCORE_URLS")
                         {
                             Value = $"http://+:{Ports.RecoveryAgentPort}"
+                        },
+                        new ContainerEnvironmentVariable("SERVICE_CERT_LOCATION")
+                        {
+                            Value = MountPaths.RecoveryAgentServiceCertPemFile
                         }
                     },
                     VolumeMounts =
                     {
                         new ContainerVolumeMount("uds", "/mnt/uds"),
-                        new ContainerVolumeMount("shared", "/app/service")
+                        new ContainerVolumeMount("certs", MountPaths.CertsFolderMountPath)
                     }
                 },
                 new(
@@ -1003,8 +1010,10 @@ public class CAciNodeProvider : ICcfNodeProvider
                     },
                     Command =
                     {
-                        "/bin/sh",
-                        "https-http/bootstrap.sh"
+                        "/bin/bash",
+                        "https-http/bootstrap.sh",
+                        "--ca-type",
+                        "local"
                     },
                     EnvironmentVariables =
                     {
@@ -1014,12 +1023,12 @@ public class CAciNodeProvider : ICcfNodeProvider
                         },
                         new ContainerEnvironmentVariable("CCR_ENVOY_SERVICE_CERT_OUTPUT_FILE")
                         {
-                            Value = ServiceCertPemFilePath
+                            Value = MountPaths.RecoveryAgentServiceCertPemFile
                         }
                     },
                     VolumeMounts =
                     {
-                        new ContainerVolumeMount("shared", ServiceFolderMountPath)
+                        new ContainerVolumeMount("certs", MountPaths.CertsFolderMountPath)
                     }
                 },
             },
@@ -1078,7 +1087,7 @@ public class CAciNodeProvider : ICcfNodeProvider
                 {
                     EmptyDir = BinaryData.FromObjectAsJson(new Dictionary<string, object>())
                 },
-                new ContainerVolume("shared")
+                new ContainerVolume("certs")
                 {
                     EmptyDir = BinaryData.FromObjectAsJson(new Dictionary<string, object>())
                 }

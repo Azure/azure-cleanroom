@@ -9,6 +9,7 @@ else
   export ccrgovPrivKey="./ccr_gov_priv_key.pem"
   export ccrgovPubKey="./ccr_gov_pub_key.pem"
   export maaRequest="./maa-request.json"
-  dotnet ./local-skr.dll
+  # Use exec so that SIGTERM is propagated to the child process and the process can be gracefully stopped.
+  exec dotnet ./local-skr.dll
 fi
 

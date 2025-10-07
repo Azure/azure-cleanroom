@@ -63,9 +63,9 @@ $uniqueString = Get-Content "$sandbox_common/uniqueString.txt"
 $resourceGroup = "ccf-deploy-$uniqueString"
 Write-Output "Resource group: $resourceGroup"
 
-$location = "westus"
+$location = "westeurope"
 $storageAccountName = "ccf${uniqueString}sa"
-az group create --name $resourceGroup --location westus
+az group create --name $resourceGroup --location westeurope
 
 $networkName = "ccf-network"
 $subscriptionId = az account show --query "id" -o tsv
@@ -194,9 +194,9 @@ $uniqueString = Get-Content "$sandbox_common/uniqueString.txt"
 $resourceGroup = "ccf-deploy-$uniqueString"
 Write-Output "Resource group: $resourceGroup"
 
-$location = "westus"
+$location = "westeurope"
 $storageAccountName = "ccf${uniqueString}sa"
-az group create --name $resourceGroup --location westus
+az group create --name $resourceGroup --location westeurope
 
 $networkName = "ccf-network-op"
 $subscriptionId = az account show --query "id" -o tsv
@@ -290,14 +290,14 @@ Sample healthy network output:
 ```json
 {
   "loadBalancerHealth": {
-    "endpoint": "https://lb-nw-ccf-network-op-xxxx.westus.azurecontainer.io:443",
+    "endpoint": "https://lb-nw-ccf-network-op-xxxx.westeurope.azurecontainer.io:443",
     "name": "lb-nw-ccf-network-op",
     "reasons": [],
     "status": "Ok"
   },
   "nodeHealth": [
     {
-      "endpoint": "ccf-network-op-0-xxxx.westus.azurecontainer.io:8080",
+      "endpoint": "ccf-network-op-0-xxxx.westeurope.azurecontainer.io:8080",
       "name": "ccf-network-op-0",
       "reasons": [],
       "status": "Ok"
@@ -309,14 +309,14 @@ Sample unhealthy network output:
 ```json
 {
   "loadBalancerHealth": {
-    "endpoint": "https://lb-nw-ccf-network-op-xxxx.westus.azurecontainer.io:443",
+    "endpoint": "https://lb-nw-ccf-network-op-xxxx.westeurope.azurecontainer.io:443",
     "name": "lb-nw-ccf-network-op",
     "reasons": [],
     "status": "Ok"
   },
   "nodeHealth": [
     {
-      "endpoint": "ccf-network-op-0-xxxx.westus.azurecontainer.io:8080",
+      "endpoint": "ccf-network-op-0-xxxx.westeurope.azurecontainer.io:8080",
       "name": "ccf-network-op-0",
       "reasons": [
         {

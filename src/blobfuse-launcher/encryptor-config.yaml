@@ -16,6 +16,11 @@ libfuse:
 
 block_cache:
   block-size-mb: 
+  mem-size-mb: 256
+  disk-size-mb: 2048
+  # Setting prefetch explicitly to 0. Otherwise, blobfuse tries to determine prefetch using 
+  # the container CPUs and memory size instead of honoring the mem-size-mb limits and fails to start.
+  prefetch: 0
   path: /tmp/blobfuse_temp
   parallelism: 128
 

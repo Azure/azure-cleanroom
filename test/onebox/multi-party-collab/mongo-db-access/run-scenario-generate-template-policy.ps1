@@ -66,8 +66,9 @@ if ($env:GITHUB_ACTIONS -eq "true") {
     $resourceGroupTags = "github_actions=multi-party-collab-${env:JOB_ID}-${env:RUN_ID}"
 }
 else {
-    $publisherResourceGroup = "cl-ob-publisher-${env:USER}"
-    $consumerResourceGroup = "cl-ob-consumer-${env:USER}"
+    $user = $env:CODESPACES -eq "true" ? $env:GITHUB_USER : $env:USER
+    $publisherResourceGroup = "cl-ob-publisher-${user}"
+    $consumerResourceGroup = "cl-ob-consumer-${user}"
 }
 
 # Set tenant Id as a part of the consumer's member data.
@@ -193,15 +194,6 @@ az cleanroom config init --cleanroom-config $publisherConfig
 
 $db = Deploy-MongoDB -resourceGroup $publisherResourceGroup -dbSuffix db -populateSampleData
 
-$memberId = (az cleanroom governance client show `
-        --name "ob-publisher-client" `
-        --query "memberId" `
-        --output tsv)
-$DB_CONFIG_CGS_SECRET_NAME = "dbconfig"
-$DB_CONFIG_CGS_SECRET_ID = "${memberId}:$DB_CONFIG_CGS_SECRET_NAME"
-
-Write-Host "DB_CONFIG_CGS_SECRET_ID: $DB_CONFIG_CGS_SECRET_ID"
-
 $identity = $(az resource show --ids $pubResult.mi.id --query "properties") | ConvertFrom-Json
 
 # Create identity entry in the configuration.
@@ -313,13 +305,6 @@ az cleanroom config view `
 
 # Consumer creates a DB to leak the data to.
 $consumerdb = Deploy-MongoDB -resourceGroup $consumerResourceGroup -dbSuffix consumerdb -populateSampleData
-$memberId = (az cleanroom governance client show `
-        --name "ob-consumer-client" `
-        --query "memberId" `
-        --output tsv)
-$CONSUMER_DB_CONFIG_CGS_SECRET_NAME = "consumerdbconfig"
-$CONSUMER_DB_CONFIG_CGS_SECRET_ID = "${memberId}:$CONSUMER_DB_CONFIG_CGS_SECRET_NAME"
-Write-Host "CONSUMER_DB_CONFIG_CGS_SECRET_ID: $CONSUMER_DB_CONFIG_CGS_SECRET_ID"
 
 az cleanroom config validate --cleanroom-config $outDir/configurations/cleanroom-config
 
@@ -590,11 +575,14 @@ Write-Host "DB secret configuration:"
 $secretConfig | base64 -d
 
 # Below keeps the DB configuration as a secret in CCF (option 1).
-az cleanroom governance contract secret set `
-    --secret-name $DB_CONFIG_CGS_SECRET_NAME `
-    --value $secretConfig `
-    --contract-id $contractId `
-    --governance-client "ob-publisher-client"
+$DB_CONFIG_CGS_SECRET_NAME = "dbconfig"
+$dbConfigSecretId = (az cleanroom governance contract secret set `
+        --secret-name $DB_CONFIG_CGS_SECRET_NAME `
+        --value $secretConfig `
+        --contract-id $contractId `
+        --governance-client "ob-publisher-client" `
+        --query "secretId" `
+        --output tsv)
 
 $passwordKid = "wrapped-db-password"
 $wrapResult = (az cleanroom config wrap-secret `
@@ -640,11 +628,21 @@ Write-Host "Consumer DB secret configuration:"
 $secretConfig | base64 -d
 
 # Below keeps the DB configuration as a secret in CCF (option 1).
-az cleanroom governance contract secret set `
-    --secret-name $CONSUMER_DB_CONFIG_CGS_SECRET_NAME `
-    --value $secretConfig `
-    --contract-id $contractId `
-    --governance-client "ob-consumer-client"
+$CONSUMER_DB_CONFIG_CGS_SECRET_NAME = "consumerdbconfig"
+$consumerDbConfigSecretId = (az cleanroom governance contract secret set `
+        --secret-name $CONSUMER_DB_CONFIG_CGS_SECRET_NAME `
+        --value $secretConfig `
+        --contract-id $contractId `
+        --governance-client "ob-consumer-client" `
+        --query "secretId" `
+        --output tsv)
+
+@"
+{
+  "dbConfigSecretId" : "$dbConfigSecretId",
+  "consumerDbConfigSecretId" : "$consumerDbConfigSecretId"
+}
+"@ > $outDir/secretid.json
 
 # Creates a KEK with SKR policy, wraps DEKs with the KEK and put in kv.
 az cleanroom config wrap-deks `
@@ -655,9 +653,16 @@ az cleanroom config wrap-deks `
     --governance-client "ob-publisher-client"
 
 # Setup OIDC issuer and managed identity access to storage/KV in publisher tenant.
+pwsh $PSScriptRoot/../setup-oidc-issuer.ps1 `
+    -resourceGroup $publisherResourceGroup `
+    -outDir $outDir `
+    -governanceClient "ob-publisher-client"
+$issuerUrl = Get-Content $outDir/$publisherResourceGroup/issuer-url.txt
+
 pwsh $PSScriptRoot/../setup-access.ps1 `
     -resourceGroup $publisherResourceGroup `
-    -contractId $contractId  `
+    -subject $contractId `
+    -issuerUrl $issuerUrl `
     -outDir $outDir `
     -kvType akvpremium `
     -governanceClient "ob-publisher-client"
@@ -671,9 +676,16 @@ az cleanroom config wrap-deks `
     --governance-client "ob-consumer-client"
 
 # Setup OIDC issuer endpoint and managed identity access to storage/KV in consumer tenant.
+pwsh $PSScriptRoot/../setup-oidc-issuer.ps1 `
+    -resourceGroup $consumerResourceGroup `
+    -outDir $outDir `
+    -governanceClient "ob-consumer-client"
+$issuerUrl = Get-Content $outDir/$consumerResourceGroup/issuer-url.txt
+
 pwsh $PSScriptRoot/../setup-access.ps1 `
     -resourceGroup $consumerResourceGroup `
-    -contractId $contractId `
+    -subject $contractId `
+    -issuerUrl $issuerUrl `
     -outDir $outDir `
     -kvType akvpremium `
     -governanceClient "ob-consumer-client"

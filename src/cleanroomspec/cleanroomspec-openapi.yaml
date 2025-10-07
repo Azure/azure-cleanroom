@@ -177,6 +177,7 @@ components:
       - AzureKeyVault_SecureKey
       - AzureKeyVault_Key
       - AzureKeyVault_Certificate
+      - Cgs_Secret
 
     StoreProtocolType:
       type: string
@@ -221,6 +222,7 @@ components:
       type: string
       enum:
         - AzureKeyVault
+        - Cgs
 
     ApplicationStoreType:
       type: string
@@ -289,7 +291,7 @@ components:
       - SecureVolume__ReadWrite__Azure__BlobStorage
       - API
       - SecureAPI
-    
+
     ProxyMode:
       type: string
       enum:
@@ -608,3 +610,36 @@ components:
       - method
       - validResponses
       - identity
+
+    DatasetFormat:
+      type: string
+      enum:
+      - csv
+      - json
+      - parquet
+
+    DatasetInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        viewName:
+          type: string
+        schema:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: string
+        format:
+          $ref: "#/components/schemas/DatasetFormat"
+        ownerId:
+          type: string
+        accessPoint:
+          $ref: "#/components/schemas/AccessPoint"
+      required:
+      - name
+      - viewName
+      - format
+      - accessPoint
+      - ownerId

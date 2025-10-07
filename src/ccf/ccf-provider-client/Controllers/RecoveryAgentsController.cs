@@ -4,6 +4,8 @@
 using System.Text.Json;
 using AttestationClient;
 using CcfProvider;
+using CcfProviderClient;
+using LoadBalancerProvider;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Controllers;
@@ -18,8 +20,9 @@ public class RecoveryAgentsController : CCfClientController
     public RecoveryAgentsController(
         ILogger logger,
         IConfiguration configuration,
-        RecoveryAgentClientManager agentClientManager)
-        : base(logger, configuration)
+        RecoveryAgentClientManager agentClientManager,
+        ProvidersRegistry providers)
+        : base(logger, configuration, providers)
     {
         this.logger = logger;
         this.configuration = configuration;
@@ -33,10 +36,17 @@ public class RecoveryAgentsController : CCfClientController
     {
         CcfNetworkRecoveryAgentProvider recoveryAgentProvider =
             this.GetRecoveryAgentProvider(content.InfraType);
-        CcfNetworkRecoveryAgents agent = await recoveryAgentProvider.GetNetworkRecoveryAgent(
+        CcfNetworkRecoveryAgents? agent = await recoveryAgentProvider.GetNetworkRecoveryAgent(
             networkName,
             content.ProviderConfig);
-        return this.Ok(agent);
+        if (agent != null)
+        {
+            return this.Ok(agent);
+        }
+
+        return this.NotFound(new ODataError(
+            code: "RecoveryAgentNotFound",
+            message: $"No recovery agent endpoint for {networkName} was found."));
     }
 
     [HttpPost("/networks/{networkName}/recoveryAgents/report")]
@@ -48,6 +58,37 @@ public class RecoveryAgentsController : CCfClientController
         CcfNetworkRecoveryAgentProvider recoveryAgentProvider =
             this.GetRecoveryAgentProvider(content.InfraType);
         CcfNetworkRecoveryAgentsReport agentRreport = await recoveryAgentProvider.GetReport(
+            networkName,
+            content.ProviderConfig);
+        if (!skipVerify.GetValueOrDefault() && agentRreport.Reports != null)
+        {
+            foreach (var item in agentRreport.Reports)
+            {
+                var report = item.Report?["report"];
+                if (report != null)
+                {
+                    var attestationReport = JsonSerializer.Deserialize<AttestationReport>(report)!;
+                    SnpReport.VerifySnpAttestation(
+                        attestationReport.Attestation,
+                        attestationReport.PlatformCertificates,
+                        attestationReport.UvmEndorsements);
+                    item.Verified = true;
+                }
+            }
+        }
+
+        return this.Ok(agentRreport);
+    }
+
+    [HttpPost("/networks/{networkName}/recoveryAgents/network/report")]
+    public async Task<IActionResult> GetCcfNetworkReport(
+        [FromRoute] string networkName,
+        [FromBody] GetNetworkRecoveryAgentInput content,
+        [FromQuery] bool? skipVerify = false)
+    {
+        CcfNetworkRecoveryAgentProvider recoveryAgentProvider =
+            this.GetRecoveryAgentProvider(content.InfraType);
+        CcfNetworkRecoveryAgentsReport agentRreport = await recoveryAgentProvider.GetNetworkReport(
             networkName,
             content.ProviderConfig);
         if (!skipVerify.GetValueOrDefault() && agentRreport.Reports != null)
@@ -133,9 +174,11 @@ public class RecoveryAgentsController : CCfClientController
     {
         InfraType type = Enum.Parse<InfraType>(infraType, ignoreCase: true);
         ICcfNodeProvider nodeProvider = this.GetNodeProvider(type);
+        ICcfLoadBalancerProvider lbProvider = this.GetLoadBalancerProvider(type);
         var recoveryAgentProvider = new CcfNetworkRecoveryAgentProvider(
             this.logger,
             nodeProvider,
+            lbProvider,
             this.agentClientManager);
         return recoveryAgentProvider;
     }

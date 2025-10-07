@@ -1,0 +1,10 @@
+server:
+  persistentVolume:
+    accessModes:
+    - ReadWriteMany
+    storageClass: azureblob-nfs-premium
+    size: 10Pi
+
+  service:
+    labels:
+      service: external-dns
