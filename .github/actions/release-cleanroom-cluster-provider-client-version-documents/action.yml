@@ -45,7 +45,7 @@ runs:
     - uses: ./.github/actions/attest-artefact
       if: ${{ inputs.needs-attestation == 'true' }}
       with:
-        name: cleanroom-cluster/versions/cleanroom-cluster-provider-client
+        name: versions/cleanroom-cluster/cleanroom-cluster-provider-client
         tag: latest
         environment: ${{ inputs.environment }}
         registry-name: ${{ inputs.registry-name }}
