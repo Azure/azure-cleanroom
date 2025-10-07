@@ -13,7 +13,7 @@ from ..exceptions.exception import CleanroomSpecificationError, ErrorCode
 from ..models.model import *
 
 DEFAULT_CLEANROOM_CONTAINER_REGISTRY_URL = "mcr.microsoft.com/azurecleanroom"
-DEFAULT_CLEANROOM_CONTAINER_VERSION = "4.0.0"
+DEFAULT_CLEANROOM_CONTAINER_VERSION = "6.0.0"
 DEFAULT_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = (
     "mcr.microsoft.com/azurecleanroom/sidecar-digests:"
     + DEFAULT_CLEANROOM_CONTAINER_VERSION
