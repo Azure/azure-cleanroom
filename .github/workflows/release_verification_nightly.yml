@@ -146,43 +146,42 @@ jobs:
           repo: mcr.microsoft.com/azurecleanroom
           tag: 6.0.0
 
-  # TODO (HPrabh): Enable this after the workload containers are released.
-  # big-data-query-analytics-nightly:
-  #   runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
-  #   environment: test
-  #   env:
-  #     AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-  #     AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-  #     AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-  #     RUN_ID: ${{ github.run_id }}
-  #     JOB_ID: ${{ github.job }}
-  #     USE_PREPROVISIONED_OIDC: "true"
-  #   # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
-  #   permissions:
-  #     id-token: write
-  #     contents: read  # This is required for actions/checkout
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
-  #       with:
-  #         submodules: recursive
-  #         fetch-tags: true
+  big-data-query-analytics-nightly:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    environment: test
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      USE_PREPROVISIONED_OIDC: "true"
+    # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
+    permissions:
+      id-token: write
+      contents: read  # This is required for actions/checkout
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-tags: true
 
-  #     - name: Check prerequisites
-  #       run: |
-  #         az version
-  #         openssl version
+      - name: Check prerequisites
+        run: |
+          az version
+          openssl version
 
-  #     - name: Install az cleanroom CLI
-  #       run: |
-  #         oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:6.0.0
-  #         az extension add --source ./cleanroom-*-py2.py3-none-any.whl -y --allow-preview true
+      - name: Install az cleanroom CLI
+        run: |
+          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:6.0.0
+          az extension add --source ./cleanroom-*-py2.py3-none-any.whl -y --allow-preview true
 
-  #     - name: Enabling az cli telemetry collection
-  #       run: az config set core.collect_telemetry=true
+      - name: Enabling az cli telemetry collection
+        run: az config set core.collect_telemetry=true
 
-  #     - name: Run big-data-query-analytics test
-  #       uses: ./.github/actions/test-multi-party-collab/test-big-data-query-analytics-caci
-  #       with:
-  #         repo: mcr.microsoft.com/azurecleanroom
-  #         tag: 6.0.0
+      - name: Run big-data-query-analytics test
+        uses: ./.github/actions/test-multi-party-collab/test-big-data-query-analytics-caci
+        with:
+          repo: mcr.microsoft.com/azurecleanroom
+          tag: 6.0.0
