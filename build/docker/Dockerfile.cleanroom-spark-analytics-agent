@@ -1,5 +1,5 @@
 # Use the official .NET Core SDK as the base image
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 # Set the working directory
 WORKDIR /app
@@ -8,13 +8,13 @@ WORKDIR /app
 # https://blog.nimbleways.com/docker-build-caching-for-dotnet-applications-done-right-with-dotnet-subset/
 COPY Directory.Packages.props /app
 COPY Directory.Build.props /app
-COPY src/workloads/*.sln /app/src/workloads/
-COPY src/workloads/cleanroom-spark-analytics-agent/*.csproj /app/src/workloads/cleanroom-spark-analytics-agent/
+COPY src/workloads/analytics/*.sln /app/src/workloads/analytics/
+COPY src/workloads/analytics/cleanroom-spark-analytics-agent/*.csproj /app/src/workloads/analytics/cleanroom-spark-analytics-agent/
 COPY src/secrets/common/*.csproj /app/src/secrets/common/
 COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
-COPY src/secrets/common/*.csproj /app/src/secrets/common/
-RUN dotnet restore /app/src/workloads/workloads.sln
+COPY src/internal/governance-common/*.csproj /app/src/internal/governance-common/
+RUN dotnet restore /app/src/workloads/analytics/analytics-workload.sln
 
 # copy everything else and build app
 COPY stylecop.json /app
@@ -25,12 +25,13 @@ COPY src/secrets/common /app/src/secrets/common/
 COPY src/workloads /app/src/workloads
 
 # Publish the application
-RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/workloads/cleanroom-spark-analytics-agent/cleanroom-spark-analytics-agent.csproj
+RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/workloads/analytics/cleanroom-spark-analytics-agent/cleanroom-spark-analytics-agent.csproj
 
 # Use the official .NET Core runtime as the base image for the final stage
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
-RUN apt-get update && apt-get install -y curl
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
 WORKDIR /app

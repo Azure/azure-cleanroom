@@ -135,6 +135,45 @@ if ($OneStepRecovery) {
         --provider-client $ccfProviderProjectName
     Write-Output $response
     Write-Output $response | Out-File $sandbox_common/ccf.json
+
+    # For SNP (caci) deployments, configure the join policy so that nodes can join.
+    if ($infraType -eq "caci") {
+        $platforms = @(
+            @{ cpuid = "00a00f11"; tcbVersion = "0300000000000003" },  # Milan.
+            @{ cpuid = "00a10f11"; tcbVersion = "0300000000000003" },  # Genoa.
+            @{ cpuid = "00b00f21"; tcbVersion = "0300000000000003" }   # Turin.
+        )
+        foreach ($platform in $platforms) {
+            try {
+                Write-Output "Setting minimum TCB version for CPUID $($platform.cpuid)."
+                az cleanroom ccf network join-policy set-snp-minimum-tcb-version `
+                    --name $networkName `
+                    --infra-type $infraType `
+                    --cpuid $platform.cpuid `
+                    --tcb-version $platform.tcbVersion `
+                    --provider-config $sandbox_common/providerConfig.json `
+                    --provider-client $ccfProviderProjectName
+            }
+            catch {
+                Write-Warning "Failed to set minimum TCB version for CPUID $($platform.cpuid). The CCF version may not support this platform yet: $_"
+            }
+        }
+
+        try {
+            Write-Output "Adding Azure UVM endorsement."
+            az cleanroom ccf network join-policy add-snp-uvm-endorsement `
+                --name $networkName `
+                --infra-type $infraType `
+                --did "did:x509:0:sha256:I__iuL25oXEVFdTP_aBLx_eT1RPHbCQ_ECBQfYZpt9s::eku:1.3.6.1.4.1.311.76.59.1.2" `
+                --feed "ContainerPlat-AMD-UVM" `
+                --svn "0" `
+                --provider-config $sandbox_common/providerConfig.json `
+                --provider-client $ccfProviderProjectName
+        }
+        catch {
+            Write-Warning "Failed to add Azure UVM endorsement. The CCF version may not support this feature: $_"
+        }
+    }
 }
 else {
     Write-Output "Deleting any existing network $networkToRecover while retaining storage."
@@ -166,6 +205,46 @@ else {
 
     $ccfEndpoint = ($response | ConvertFrom-Json).endpoint
     $serviceStatus = (curl "$ccfEndpoint/node/network" -k --silent | ConvertFrom-Json).service_status
+
+    # For SNP (caci) deployments, configure the join policy before opening the network
+    # so that nodes can join.
+    if ($infraType -eq "caci") {
+        $platforms = @(
+            @{ cpuid = "00a00f11"; tcbVersion = "0300000000000003" },  # Milan.
+            @{ cpuid = "00a10f11"; tcbVersion = "0300000000000003" },  # Genoa.
+            @{ cpuid = "00b00f21"; tcbVersion = "0300000000000003" }   # Turin.
+        )
+        foreach ($platform in $platforms) {
+            try {
+                Write-Output "Setting minimum TCB version for CPUID $($platform.cpuid)."
+                az cleanroom ccf network join-policy set-snp-minimum-tcb-version `
+                    --name $networkName `
+                    --infra-type $infraType `
+                    --cpuid $platform.cpuid `
+                    --tcb-version $platform.tcbVersion `
+                    --provider-config $sandbox_common/providerConfig.json `
+                    --provider-client $ccfProviderProjectName
+            }
+            catch {
+                Write-Warning "Failed to set minimum TCB version for CPUID $($platform.cpuid). The CCF version may not support this platform yet: $_"
+            }
+        }
+
+        try {
+            Write-Output "Adding Azure UVM endorsement."
+            az cleanroom ccf network join-policy add-snp-uvm-endorsement `
+                --name $networkName `
+                --infra-type $infraType `
+                --did "did:x509:0:sha256:I__iuL25oXEVFdTP_aBLx_eT1RPHbCQ_ECBQfYZpt9s::eku:1.3.6.1.4.1.311.76.59.1.2" `
+                --feed "ContainerPlat-AMD-UVM" `
+                --svn "0" `
+                --provider-config $sandbox_common/providerConfig.json `
+                --provider-client $ccfProviderProjectName
+        }
+        catch {
+            Write-Warning "Failed to add Azure UVM endorsement. The CCF version may not support this feature: $_"
+        }
+    }
 
     # Open the recovery network as the operator.
     Write-Output "Service status is: $serviceStatus. Opening network $networkName."
@@ -248,21 +327,16 @@ else {
 $setup = Get-Content $sandbox_common/setup.json | ConvertFrom-Json
 $repo = $setup.repo
 $tag = $setup.tag
-if ($repo -ne "") {
-    $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$tag"
-    $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$tag"
-}
-else {
-    $env:AZCLI_CGS_CLIENT_IMAGE = ""
-    $env:AZCLI_CGS_UI_IMAGE = ""
-}
 
+
+$envFilePath = "$sandbox_common/governance-client.env"
 if (Test-Path $sandbox_common/${operatorName}_cert.id) {
     az cleanroom governance client deploy `
         --ccf-endpoint $ccfEndpoint `
         --signing-cert-id $sandbox_common/${operatorName}_cert.id `
         --service-cert $sandbox_common/service_cert.pem `
-        --name $cgsProjectName
+        --name $cgsProjectName `
+        --env-file $envFilePath
 }
 else {
     $useServiceCertDiscovery = $setup.useServiceCertDiscovery
@@ -284,6 +358,7 @@ else {
             --signing-key $sandbox_common/${operatorName}_privk.pem `
             --signing-cert $sandbox_common/${operatorName}_cert.pem `
             --service-cert $sandbox_common/service_cert.pem `
-            --name $cgsProjectName
+            --name $cgsProjectName `
+            --env-file $envFilePath
     }
 }

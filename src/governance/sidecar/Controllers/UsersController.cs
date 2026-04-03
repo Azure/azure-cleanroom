@@ -46,6 +46,8 @@ public class UsersController : ControllerBase
                     $"Expecting Authorization header to have 2 parts but found {parts.Length}");
             }
 
+            request.Options.Set(
+                new HttpRequestOptionsKey<bool>("UsingCustomAuthorizationValue"), true);
             request.Headers.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue(parts[0], parts[1]);
         }

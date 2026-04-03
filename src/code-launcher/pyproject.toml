@@ -1,0 +1,26 @@
+[project]
+name = "code-launcher"
+version = "0.1.0"
+description = "Code launcher service for cleanroom environments"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "charset-normalizer==3.4.4",
+    "requests==2.32.4",
+    "typing-extensions==4.15.0",
+    "pydantic==2.11.7",
+    "pydantic-settings==2.10.1",
+    "uvicorn==0.35.0",
+    "fastapi==0.116.1",
+    "podman==5.2.0",
+    "psutil==6.0.0",
+    "cleanroom-internal",
+    "cleanroom-sdk"
+]
+
+[project.scripts]
+code_launcher = "code_launcher.main:main"
+
+[build-system]
+requires = ["uv_build>=0.9.3,<0.10.0"]
+build-backend = "uv_build"

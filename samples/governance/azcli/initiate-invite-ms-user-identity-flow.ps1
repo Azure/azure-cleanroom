@@ -33,7 +33,7 @@ az cleanroom governance client deploy `
 
 $username = az cleanroom governance client show `
     --name $userProjectName `
-    --query "userTokenClaims.preferred_username" `
+    --query "jwtClaims.preferred_username" `
     --output tsv
 if ($username -ne $email) {
     throw "User $username that was logged in is not the same as the -email parameter value $email"

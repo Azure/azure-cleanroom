@@ -36,32 +36,15 @@ if (!$NoBuild) {
     pwsh $root/build/ccr/build-cleanroom-client.ps1
 }
 
-# Create credentials-proxy container unless it already exists.
-# https://github.com/gsoft-inc/azure-cli-credentials-proxy
-$credproxy_name = "credentials-proxy"
-$credproxy_port = "5050"
-$credential_proxy_image = "workleap/azure-cli-credentials-proxy:1.2.5"
-if ($env:GITHUB_ACTIONS -eq "true") {
-    $credential_proxy_image = "cleanroombuild.azurecr.io/workleap/azure-cli-credentials-proxy:1.2.5"
-}
+# Deploy credentials-proxy container
+$credproxyName = "credentials-proxy"
+$credproxyHostPort = "5050"
+$credproxyNetwork = "credential-proxy-bridge"
+pwsh $PSScriptRoot/deploy-credentials-proxy.ps1 `
+    -credproxyName $credproxyName `
+    -credproxyHostPort $credproxyHostPort `
+    -networkName $credproxyNetwork
 
-& {
-    # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
-    $PSNativeCommandUseErrorActionPreference = $false
-    docker network create credential-proxy-bridge 2>$null
-    $state = docker inspect -f '{{.State.Running}}' "${credproxy_name}" 2>$null
-    if ($state -ne "true") {
-        docker run `
-            -d `
-            --restart=always `
-            --network credential-proxy-bridge `
-            -p "${credproxy_port}:8080" `
-            --name "${credproxy_name}" `
-            -v "/home/${env:USER}/.azure:/app/.azure/" `
-            -u "$(id -u $env:USER):$(id -g $env:USER)" `
-            $credential_proxy_image
-    }
-}
 
 mkdir -p $outDir
 $containerName = "cleanroom-client"
@@ -74,16 +57,16 @@ docker run -d `
     -u "$(id -u $env:USER):$(id -g $env:USER)" `
     --name $containerName `
     -p ${port}:80 `
-    --network credential-proxy-bridge `
-    -e MSI_ENDPOINT="http://${credproxy_name}:8080/token" `
-    -e IDENTITY_ENDPOINT="http://${credproxy_name}:8080/token" `
+    --network $credproxyNetwork `
+    -e MSI_ENDPOINT="http://${credproxyName}:8080/token" `
+    -e IDENTITY_ENDPOINT="http://${credproxyName}:8080/token" `
     -e IDENTITY_HEADER="dummy_required_value" `
     -e SCRATCH_DIR="${outDir}" `
     -e AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL="$env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_URL" `
     -e AZCLI_CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL="$env:AZCLI_CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL" `
     -e AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL="$env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL" `
     -e AZCLI_CLEANROOM_CONTAINER_REGISTRY_USE_HTTP="$env:AZCLI_CLEANROOM_CONTAINER_REGISTRY_USE_HTTP" `
-    cleanroom-client
+    localhost:5000/cleanroom-client
 
 if ($env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL.Contains("ccr-registry:5000")) {
     # If the registry is local, we need to connect the cleanroom-client container to the kind network

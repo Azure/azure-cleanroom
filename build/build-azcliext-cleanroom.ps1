@@ -48,7 +48,8 @@ if (!$localenv) {
             ./cleanroom-$whlTag-py2.py3-none-any.whl
         Pop-Location
     }
-    elseif ($skipInstall) {
+    
+    if ($skipInstall) {
         Write-Host "run 'az extension add -y --source $output/cleanroom-$whlTag-py2.py3-none-any.whl' to install the extension" $whlTag
     }
     else {

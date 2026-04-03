@@ -40,7 +40,7 @@ public class CAController : ClientControllerBase
     {
         var appClient = this.CcfClientManager.GetAppClient();
         using (HttpRequestMessage request =
-            new(HttpMethod.Get, $"app/contracts/{contractId}/ca/info"))
+            new(HttpMethod.Post, $"app/contracts/{contractId}/ca/status"))
         {
             using HttpResponseMessage response = await appClient.SendAsync(request);
             this.Response.CopyHeaders(response.Headers);

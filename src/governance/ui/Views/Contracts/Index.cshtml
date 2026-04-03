@@ -3,29 +3,125 @@
     ViewData["Title"] = "Contracts";
 }
 
-<h2>Contracts</h2>
-<p>
-    <a asp-action="Create">Create</a>
-</p>
-<table class="table table-hover">
-    <thead>
-        <tr>
-            <th>Id</th>
-            <th>Details</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach (var contract in @Model.Value)
-        {
-            <tr>
-                <td>@contract.Id</td>
-                <td>
-                    <!-- <snippet_AspController> -->
-                    <a asp-controller="Contracts"
-                       asp-action="Detail" asp-route-id="@contract.Id">Details</a>
-                    <!-- </snippet_AspController> -->
-                </td>
-            </tr>
-        }
-    </tbody>
-</table>
+<div class="content-wrapper">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 text-gradient mb-1">
+                <i class="fas fa-file-contract me-2"></i>Contracts
+            </h1>
+            <p class="text-muted mb-0">Manage governance contracts</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshContracts()">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+            <a asp-action="Create" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i>Create Contract
+            </a>
+        </div>
+    </div>
+
+    <!-- Contracts Table -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-list me-2"></i>All Contracts
+            </h5>
+            <div class="d-flex gap-2">
+                <div class="input-group input-group-sm" style="width: 250px;">
+                    <span class="input-group-text">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text" class="form-control" placeholder="Search contracts..." id="contractSearch">
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            @if (Model.Value.Any())
+            {
+                <div class="table-container">
+                    <table class="table table-hover mb-0" id="contractsTable">
+                        <thead>
+                            <tr>
+                                <th width="100%">
+                                    <i class="fas fa-hashtag me-1"></i>Contract ID
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var contract in Model.Value)
+                            {
+                                <tr class="contract-row" data-search="@contract.Id">
+                                    <td>
+                                        <a asp-controller="Contracts" asp-action="Detail" asp-route-id="@contract.Id"
+                                            class="text-decoration-none d-block p-0">
+                                            <div class="d-flex align-items-center p-3">
+                                                <i class="fas fa-file-contract me-2 text-primary"></i>
+                                                <div>
+                                                    <span class="font-monospace text-primary fw-semibold">@contract.Id</span>
+                                                </div>
+                                            </div>
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-5">
+                    <i class="fas fa-file-contract fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No Contracts Found</h5>
+                    <p class="text-muted mb-4">Get started by creating your first governance contract.</p>
+                    <a asp-action="Create" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Create Your First Contract
+                    </a>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+
+
+<script>
+    // Search functionality
+    document.getElementById('contractSearch').addEventListener('input', function () {
+        filterContracts();
+    });
+
+    function filterContracts() {
+        const searchTerm = document.getElementById('contractSearch').value.toLowerCase();
+        const rows = document.querySelectorAll('.contract-row');
+
+        rows.forEach(row => {
+            const searchData = row.dataset.search.toLowerCase();
+            const matchesSearch = searchData.includes(searchTerm);
+
+            row.style.display = matchesSearch ? '' : 'none';
+        });
+    }
+
+
+
+    function refreshContracts() {
+        const refreshBtn = document.querySelector('[onclick="refreshContracts()"]');
+        const icon = refreshBtn.querySelector('i');
+
+        icon.classList.add('fa-spin');
+        refreshBtn.disabled = true;
+
+        // Simulate refresh (in real app, this would be an AJAX call)
+        setTimeout(() => {
+            icon.classList.remove('fa-spin');
+            refreshBtn.disabled = false;
+
+            if (window.CleanroomUI) {
+                window.CleanroomUI.showToast('Contracts refreshed successfully.', 'success');
+            }
+        }, 1000);
+    }
+</script>

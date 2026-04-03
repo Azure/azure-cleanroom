@@ -1,10 +1,10 @@
 # Project
 ## Quickstart
 The quickest way to develop or build and run sample applications is to checkout this repository locally in its development container by clicking:  
- [![Open in VSCode](https://img.shields.io/static/v1?label=Open+in&message=VSCode&logo=visualstudiocode&color=007ACC&logoColor=007ACC&labelColor=2C2C32)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/microsoft/azure-cleanroom)
+ [![Open in VSCode](https://img.shields.io/static/v1?label=Open+in&message=VSCode&logo=visualstudiocode&color=007ACC&logoColor=007ACC&labelColor=2C2C32)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/azure-core/azure-cleanroom)
 
  Alternatively, if your organisation supports it, you can checkout this repository in a Github codespace:  
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/microsoft/azure-cleanroom)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/azure-core/azure-cleanroom)
 
 ## Managed Clean Rooms for 1P Workloads
 - See [readme](poc/managed-cleanroom/README.md) for managed clean room details.
@@ -28,7 +28,7 @@ The quickest way to develop or build and run sample applications is to checkout 
 
 ## Developer onebox setup
 
-- See [readme](test/onebox/README.md) for running clean room containers locally on a Kind cluster.
+- See [readme](DEV-ENVIRONMENT-SETUP-GUIDE.md) for running clean room containers locally on a Kind cluster.
 
 ## Contributing
 

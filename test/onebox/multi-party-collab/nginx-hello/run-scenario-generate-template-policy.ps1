@@ -4,10 +4,6 @@ param
     [string]
     $outDir = "$PSScriptRoot/generated",
 
-    [Parameter(Mandatory)]
-    [string]
-    $ccfEndpoint,
-
     [string]
     $ccfOutDir = "",
 
@@ -16,9 +12,6 @@ param
 
     [string]
     $contractId = "collab1",
-
-    [switch]
-    $y,
 
     [ValidateSet('mcr', 'local', 'acr')]
     [string]$registry = "local",
@@ -35,7 +28,6 @@ param
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 
-$root = git rev-parse --show-toplevel
 if ($ccfOutDir -eq "") {
     $ccfOutDir = "$outDir/ccf"
 }
@@ -261,8 +253,7 @@ az cleanroom governance ca propose-enable `
 
 $clientName = "ob-nginx-client"
 pwsh $PSScriptRoot/../verify-deployment-proposals.ps1 `
-    -cleanroomConfig $nginxConfig `
-    -governanceClient $clientName
+    -cleanroomConfig $nginxConfig
 
 # Vote on the proposed deployment template.
 $proposalId = az cleanroom governance deployment template show `
@@ -356,5 +347,4 @@ pwsh $PSScriptRoot/../setup-access.ps1 `
     -subject $contractId `
     -issuerUrl $issuerUrl `
     -outDir $outDir `
-    -kvType akvpremium `
-    -governanceClient "ob-nginx-client"
+    -kvType akvpremium

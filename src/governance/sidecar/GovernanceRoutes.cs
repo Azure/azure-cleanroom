@@ -24,13 +24,13 @@ public class Routes
     public string Documents(WebContext webContext, string documentId)
     {
         var prefix = this.GetPathPrefix(webContext.GovernanceApiPathPrefix);
-        return $"{prefix}/acceptedMemberDocuments/{documentId}";
+        return $"{prefix}/memberdocuments/accepted/{documentId}";
     }
 
     public string UserDocuments(WebContext webContext, string documentId)
     {
         var prefix = this.GetPathPrefix(webContext.GovernanceApiPathPrefix);
-        return $"{prefix}/acceptedUserDocuments/{documentId}";
+        return $"{prefix}/userdocuments/accepted/{documentId}";
     }
 
     public string Events(WebContext webContext)
@@ -45,16 +45,19 @@ public class Routes
         return $"{prefix}/oauth/token";
     }
 
-    public string TokenSubjectCleanRoomPolicy(WebContext webContext, string subjectName)
+    public string Sign(WebContext webContext)
     {
         var prefix = this.GetPathPrefix(webContext.GovernanceApiPathPrefix);
-        return $"{prefix}/oauth/federation/subjects/{subjectName}/cleanroompolicy";
+        return $"{prefix}/signing/sign";
     }
 
-    public string SecretCleanRoomPolicy(WebContext webContext, string secretId)
+    public string DelegateCleanRoomPolicy(
+        WebContext webContext,
+        string delegateType,
+        string delegateId)
     {
         var prefix = this.GetPathPrefix(webContext.GovernanceApiPathPrefix);
-        return $"{prefix}/secrets/{secretId}/cleanroompolicy";
+        return $"{prefix}/cleanroompolicy/delegates/{delegateType}/{delegateId}";
     }
 
     public string GenerateEndorsedCert(WebContext webContext)
@@ -66,37 +69,37 @@ public class Routes
     public string ConsentCheckExecution(WebContext webContext)
     {
         var prefix = this.GetPathPrefix(webContext.GovernanceApiPathPrefix);
-        return $"{prefix}/consentcheck/execution";
+        return $"{prefix}/runtimeoptions/execution/status";
     }
 
     public string ConsentCheckLogging(WebContext webContext)
     {
         var prefix = this.GetPathPrefix(webContext.GovernanceApiPathPrefix);
-        return $"{prefix}/consentcheck/logging";
+        return $"{prefix}/runtimeoptions/logging/status";
     }
 
     public string ConsentCheckTelemetry(WebContext webContext)
     {
         var prefix = this.GetPathPrefix(webContext.GovernanceApiPathPrefix);
-        return $"{prefix}/consentcheck/telemetry";
+        return $"{prefix}/runtimeoptions/telemetry/status";
     }
 
     public string ConsentCheckUserDocumentExecution(string documentId, WebContext webContext)
     {
         var prefix = this.GetPathPrefix(webContext.GovernanceApiPathPrefix);
-        return $"{prefix}/userdocuments/{documentId}/consentcheck/execution";
+        return $"{prefix}/userdocuments/{documentId}/runtimeoptions/execution/status";
     }
 
     public string ConsentCheckUserDocumentTelemetry(string documentId, WebContext webContext)
     {
         var prefix = this.GetPathPrefix(webContext.GovernanceApiPathPrefix);
-        return $"{prefix}/userdocuments/{documentId}/consentcheck/telemetry";
+        return $"{prefix}/userdocuments/{documentId}/runtimeoptions/telemetry/status";
     }
 
     public string IsActiveUser(WebContext webContext)
     {
-        var prefix = this.GetPathPrefix(webContext.GovernanceApiPathPrefix);
-        return $"{prefix}/users/isactive";
+        // Note that this endpoint is not in the context of a contract.
+        return $"/app/users/identities/self/status";
     }
 
     private string? SanitizePrefix(string? value)

@@ -1,0 +1,27 @@
+[project]
+name = "kserve-inferencing-frontend"
+version = "0.1.0"
+description = "KServe Inferencing Frontend service"
+authors = [
+    {name = "gsinha",email = "gsinha@microsoft.com"}
+]
+requires-python = ">=3.12"
+dependencies = [
+    "uvicorn==0.35.0",
+    "fastapi==0.116.1",
+    "pydantic==2.11.7",
+    "pydantic_settings==2.10.1",
+    "kubernetes==34.1.0",
+    "oras==0.1.29",
+    "requests==2.32.4",
+    "cleanroom-internal",
+    "frontend-internal",
+    "cleanroom-sdk",
+]
+
+[project.scripts]
+kserve_inferencing_frontend = "kserve_inferencing_frontend.main:main"
+
+[build-system]
+requires = ["uv_build>=0.9.3,<0.10.0"]
+build-backend = "uv_build"

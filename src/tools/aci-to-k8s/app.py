@@ -169,15 +169,13 @@ if "volumes" in parsed_json["resources"][0]["properties"]:
     volumes = parsed_json["resources"][0]["properties"]["volumes"]
 
 # Replace/update/remove few containers for local testing scenario.
-# Remove ccr-attestation as it is not required in local env.
-# Replace skr-sidecar with the local-skr container.
+# Replace skr sidecar with the local-skr container.
 # Replace ccr-governance sidecar with its virtual image that has the attestation report/keys baked in.
 # Remove CCR_FQDN env variable from ccr-proxy.
-pod_containers = [pc for pc in pod_containers if pc["name"] != "ccr-attestation"]
-pod_containers = [pc for pc in pod_containers if pc["name"] != "skr-sidecar"]
+pod_containers = [pc for pc in pod_containers if pc["name"] != "skr"]
 pod_containers.append(
     {
-        "name": "local-skr-sidecar",
+        "name": "local-skr",
         "image": f"{args.repo}/local-skr:{args.tag}",
     }
 )

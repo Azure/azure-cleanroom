@@ -22,7 +22,7 @@ import uuid
 from enum import StrEnum
 from pathlib import Path
 from time import sleep
-from typing import Any
+from typing import Any, List
 from urllib.parse import urlparse
 
 import requests
@@ -30,6 +30,7 @@ import yaml
 from azure.cli.core.util import CLIError, get_file_json, shell_safe_json_parse
 from cleanroom_common.azure_cleanroom_core.models.network import *
 
+from .collaboration_cmd import *
 from .config_cmd import *
 from .datastore_cmd import *
 from .secretstore_cmd import *
@@ -71,7 +72,22 @@ def governance_client_deploy_cmd(
     service_cert_discovery_snp_host_data="",
     service_cert_discovery_constitution_digest="",
     service_cert_discovery_jsapp_bundle_digest="",
+    env_file=None,
 ):
+    # Read and set environment variables from file if provided
+    if env_file:
+        if not os.path.exists(env_file):
+            raise CLIError(f"Environment file not found: {env_file}")
+
+        logger.warning(f"Loading environment variables from: {env_file}")
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    os.environ[key.strip()] = value.strip()
+                    logger.debug(f"Set environment variable: {key.strip()}")
+
     if (
         not signing_cert
         and not signing_key
@@ -180,8 +196,8 @@ def governance_client_deploy_cmd(
     started = False
     while time.time() < timeout_start + timeout:
         try:
-            (_, port) = docker.compose.port(service="cgs-client", private_port=8080)
-            (_, uiport) = docker.compose.port(service="cgs-ui", private_port=6300)
+            _, port = docker.compose.port(service="cgs-client", private_port=8080)
+            _, uiport = docker.compose.port(service="cgs-ui", private_port=6300)
             cgs_endpoint = f"http://localhost:{port}"
             r = requests.get(f"{cgs_endpoint}/ready")
             if r.status_code == 200:
@@ -336,8 +352,8 @@ def governance_client_show_deployment_cmd(cmd, gov_client_name=""):
         compose_files=[cgs_client_compose_file], compose_project_name=gov_client_name
     )
     try:
-        (_, port) = docker.compose.port(service="cgs-client", private_port=8080)
-        (_, uiport) = docker.compose.port(service="cgs-ui", private_port=6300)
+        _, port = docker.compose.port(service="cgs-client", private_port=8080)
+        _, uiport = docker.compose.port(service="cgs-ui", private_port=6300)
 
     except exceptions.DockerException as e:
         raise CLIError(
@@ -352,7 +368,21 @@ def governance_client_show_deployment_cmd(cmd, gov_client_name=""):
     }
 
 
-def governance_service_deploy_cmd(cmd, gov_client_name):
+def governance_service_deploy_cmd(cmd, gov_client_name, env_file=None):
+    # Read and set environment variables from file if provided
+    if env_file:
+        if not os.path.exists(env_file):
+            raise CLIError(f"Environment file not found: {env_file}")
+
+        logger.warning(f"Loading environment variables from: {env_file}")
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    os.environ[key.strip()] = value.strip()
+                    logger.debug(f"Set environment variable: {key.strip()}")
+
     cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
 
     # Download the constitution and js_app to deploy.
@@ -489,7 +519,7 @@ def governance_service_deploy_cmd(cmd, gov_client_name):
 def governance_service_version_cmd(cmd, gov_client_name=""):
     cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
     _, current_constitution_hash = get_current_constitution(cgs_endpoint)
-    (_, _, _, canonical_current_jsapp_bundle_hash) = get_current_jsapp_bundle(
+    _, _, _, canonical_current_jsapp_bundle_hash = get_current_jsapp_bundle(
         cgs_endpoint
     )
     constitution_version = try_get_constitution_version(current_constitution_hash)
@@ -511,7 +541,7 @@ def governance_service_get_upgrades_cmd(cmd, gov_client_name=""):
     cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
 
     _, current_constitution_hash = get_current_constitution(cgs_endpoint)
-    (_, _, _, canonical_current_jsapp_bundle_hash) = get_current_jsapp_bundle(
+    _, _, _, canonical_current_jsapp_bundle_hash = get_current_jsapp_bundle(
         cgs_endpoint
     )
     upgrades = []
@@ -929,6 +959,7 @@ def governance_deployment_generate_cmd(
 
     governance_policy_json = {
         "type": "add",
+        "policyType": "snp-caci",
         "claims": {
             "x-ms-sevsnpvm-is-debuggable": False,
             "x-ms-sevsnpvm-hostdata": cce_policy_hash,
@@ -982,6 +1013,7 @@ def governance_deployment_policy_propose_cmd(
     if allow_all:
         policy_json = {
             "type": "add",
+            "policyType": "snp-caci",
             "claims": {
                 "x-ms-sevsnpvm-is-debuggable": False,
                 "x-ms-sevsnpvm-hostdata": "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20",
@@ -1009,6 +1041,32 @@ def governance_deployment_policy_propose_cmd(
 def governance_deployment_policy_show_cmd(cmd, contract_id, gov_client_name=""):
     cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
     r = requests.get(f"{cgs_endpoint}/contracts/{contract_id}/cleanroompolicy")
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_deployment_information_propose_cmd(
+    cmd, contract_id, deployment_information, gov_client_name=""
+):
+    if os.path.exists(deployment_information):
+        info = get_file_json(deployment_information)
+    else:
+        info = shell_safe_json_parse(deployment_information)
+
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.post(
+        f"{cgs_endpoint}/contracts/{contract_id}/deploymentinfo/propose",
+        json=info,
+    )
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_deployment_information_show_cmd(cmd, contract_id, gov_client_name=""):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.get(f"{cgs_endpoint}/contracts/{contract_id}/deploymentinfo")
     if r.status_code != 200:
         raise CLIError(response_error_message(r))
     return r.json()
@@ -1066,6 +1124,42 @@ def governance_oidc_issuer_propose_set_issuer_url_cmd(cmd, url, gov_client_name=
 def governance_oidc_issuer_show_cmd(cmd, gov_client_name=""):
     cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
     r = requests.get(f"{cgs_endpoint}/oidc/issuerInfo")
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_signing_propose_enable_cmd(cmd, gov_client_name=""):
+    content = {
+        "actions": [{"name": "enable_signing", "args": {"kid": uuid.uuid4().hex}}]
+    }
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.post(f"{cgs_endpoint}/proposals/create", json=content)
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_signing_generate_signing_key_cmd(cmd, gov_client_name=""):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.post(f"{cgs_endpoint}/signing/generateSigningKey")
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_signing_propose_rotate_signing_key_cmd(cmd, gov_client_name=""):
+    content = {"actions": [{"name": "signing_enable_rotate_signing_key", "args": {}}]}
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.post(f"{cgs_endpoint}/proposals/create", json=content)
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def governance_signing_show_cmd(cmd, gov_client_name=""):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    r = requests.post(f"{cgs_endpoint}/signing/info")
     if r.status_code != 200:
         raise CLIError(response_error_message(r))
     return r.json()
@@ -1246,13 +1340,28 @@ def governance_member_document_vote_cmd(
 
 
 def governance_user_document_create_cmd(
-    cmd, document_id, contract_id, data, approvers="", gov_client_name="", version=""
+    cmd,
+    document_id,
+    contract_id,
+    data,
+    approvers="",
+    labels="",
+    gov_client_name="",
+    version="",
 ):
     cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+
+    user_document_labels = None
+    if labels:
+        if os.path.exists(labels):
+            user_document_labels = get_file_json(labels)
+        else:
+            user_document_labels = shell_safe_json_parse(labels)
     document = {
         "version": version,
         "contractId": contract_id,
         "data": data,
+        "labels": user_document_labels,
         "approvers": [],
     }
 
@@ -1329,6 +1438,17 @@ def governance_user_document_runtime_option_set_cmd(
     )
     if r.status_code != 200:
         raise CLIError(response_error_message(r))
+
+
+def governance_user_document_list_cmd(cmd, label_selector="", gov_client_name=""):
+    cgs_endpoint = get_cgs_client_endpoint(cmd, gov_client_name)
+    url = f"{cgs_endpoint}/userdocuments"
+    if label_selector != "":
+        url += f"?labelSelector={label_selector}"
+    r = requests.get(url)
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
 
 
 def governance_network_set_recovery_threshold_cmd(
@@ -2107,7 +2227,7 @@ def telemetry_aspire_dashboard_cmd(cmd, telemetry_folder, project_name=""):
         compose_project_name=project_name,
     )
     docker.compose.up(remove_orphans=True, detach=True)
-    (_, port) = docker.compose.port(service="aspire", private_port=18888)
+    _, port = docker.compose.port(service="aspire", private_port=18888)
 
     logger.warning("Open Aspire Dashboard at http://localhost:%s.", port)
 
@@ -2589,10 +2709,10 @@ def _validate_config(spec: CleanRoomSpecification):
         raise CLIError(errors)
 
 
-def cluster_provider_deploy_cmd(cmd, provider_client_name):
+def cluster_provider_deploy_cmd(cmd, provider_client_name, env_file=None):
     from .custom_cleanroom_cluster import cluster_provider_deploy
 
-    return cluster_provider_deploy(cmd, provider_client_name)
+    return cluster_provider_deploy(cmd, provider_client_name, env_file)
 
 
 def cluster_provider_remove_cmd(cmd, provider_client_name):
@@ -2608,7 +2728,9 @@ def cluster_up_cmd(
     resource_group,
     ws_folder,
     location,
+    node_vm_size,
     provider_client_name,
+    env_file=None,
 ):
     from .custom_cleanroom_cluster import cluster_up
 
@@ -2619,7 +2741,9 @@ def cluster_up_cmd(
         resource_group,
         ws_folder,
         location,
+        node_vm_size,
         provider_client_name,
+        env_file,
     )
 
 
@@ -2628,13 +2752,28 @@ def cluster_create_cmd(
     cluster_name,
     infra_type,
     provider_config,
+    node_vm_size,
     enable_observability,
+    enable_monitoring,
     enable_analytics_workload,
     analytics_workload_config_url,
     analytics_workload_config_url_ca_cert,
     analytics_workload_disable_telemetry_collection,
     analytics_workload_security_policy_creation_option,
     analytics_workload_security_policy,
+    analytics_workload_pool_node_count,
+    enable_kserve_inferencing_workload,
+    kserve_inferencing_workload_config_url,
+    kserve_inferencing_workload_config_url_ca_cert,
+    kserve_inferencing_workload_disable_telemetry_collection,
+    kserve_inferencing_workload_security_policy_creation_option,
+    kserve_inferencing_workload_security_policy,
+    enable_flex_node,
+    flex_node_ssh_private_key,
+    flex_node_ssh_public_key,
+    flex_node_policy_signing_cert,
+    flex_node_vm_size,
+    flex_node_count,
     provider_client_name,
 ):
     from .custom_cleanroom_cluster import cluster_create
@@ -2644,13 +2783,28 @@ def cluster_create_cmd(
         cluster_name,
         infra_type,
         provider_config,
+        node_vm_size,
         enable_observability,
+        enable_monitoring,
         enable_analytics_workload,
         analytics_workload_config_url,
         analytics_workload_config_url_ca_cert,
         analytics_workload_disable_telemetry_collection,
         analytics_workload_security_policy_creation_option,
         analytics_workload_security_policy,
+        analytics_workload_pool_node_count,
+        enable_kserve_inferencing_workload,
+        kserve_inferencing_workload_config_url,
+        kserve_inferencing_workload_config_url_ca_cert,
+        kserve_inferencing_workload_disable_telemetry_collection,
+        kserve_inferencing_workload_security_policy_creation_option,
+        kserve_inferencing_workload_security_policy,
+        enable_flex_node,
+        flex_node_ssh_private_key,
+        flex_node_ssh_public_key,
+        flex_node_policy_signing_cert,
+        flex_node_vm_size,
+        flex_node_count,
         provider_client_name,
     )
 
@@ -2661,12 +2815,26 @@ def cluster_update_cmd(
     infra_type,
     provider_config,
     enable_observability,
+    enable_monitoring,
     enable_analytics_workload,
     analytics_workload_config_url,
     analytics_workload_config_url_ca_cert,
     analytics_workload_disable_telemetry_collection,
     analytics_workload_security_policy_creation_option,
     analytics_workload_security_policy,
+    analytics_workload_pool_node_count,
+    enable_kserve_inferencing_workload,
+    kserve_inferencing_workload_config_url,
+    kserve_inferencing_workload_config_url_ca_cert,
+    kserve_inferencing_workload_disable_telemetry_collection,
+    kserve_inferencing_workload_security_policy_creation_option,
+    kserve_inferencing_workload_security_policy,
+    enable_flex_node,
+    flex_node_ssh_private_key,
+    flex_node_ssh_public_key,
+    flex_node_policy_signing_cert,
+    flex_node_vm_size,
+    flex_node_count,
     provider_client_name,
 ):
     from .custom_cleanroom_cluster import cluster_update
@@ -2677,12 +2845,26 @@ def cluster_update_cmd(
         infra_type,
         provider_config,
         enable_observability,
+        enable_monitoring,
         enable_analytics_workload,
         analytics_workload_config_url,
         analytics_workload_config_url_ca_cert,
         analytics_workload_disable_telemetry_collection,
         analytics_workload_security_policy_creation_option,
         analytics_workload_security_policy,
+        analytics_workload_pool_node_count,
+        enable_kserve_inferencing_workload,
+        kserve_inferencing_workload_config_url,
+        kserve_inferencing_workload_config_url_ca_cert,
+        kserve_inferencing_workload_disable_telemetry_collection,
+        kserve_inferencing_workload_security_policy_creation_option,
+        kserve_inferencing_workload_security_policy,
+        enable_flex_node,
+        flex_node_ssh_private_key,
+        flex_node_ssh_public_key,
+        flex_node_policy_signing_cert,
+        flex_node_vm_size,
+        flex_node_count,
         provider_client_name,
     )
 
@@ -2693,6 +2875,16 @@ def cluster_show_cmd(
     from .custom_cleanroom_cluster import cluster_show
 
     return cluster_show(
+        cmd, cluster_name, infra_type, provider_config, provider_client_name
+    )
+
+
+def cluster_show_health_cmd(
+    cmd, cluster_name, infra_type, provider_config, provider_client_name
+):
+    from .custom_cleanroom_cluster import cluster_show_health
+
+    return cluster_show_health(
         cmd, cluster_name, infra_type, provider_config, provider_client_name
     )
 
@@ -2708,12 +2900,24 @@ def cluster_delete_cmd(
 
 
 def cluster_get_kubeconfig_cmd(
-    cmd, cluster_name, infra_type, file, provider_config, provider_client_name
+    cmd,
+    cluster_name,
+    infra_type,
+    file,
+    provider_config,
+    provider_client_name,
+    access_role="admin",
 ):
     from .custom_cleanroom_cluster import cluster_get_kubeconfig
 
     return cluster_get_kubeconfig(
-        cmd, cluster_name, infra_type, file, provider_config, provider_client_name
+        cmd,
+        cluster_name,
+        infra_type,
+        file,
+        provider_config,
+        provider_client_name,
+        access_role,
     )
 
 
@@ -2743,10 +2947,38 @@ def cluster_analytics_workload_deployment_generate_cmd(
     )
 
 
-def ccf_provider_deploy_cmd(cmd, provider_client_name):
+def cluster_kserve_inferencing_workload_deployment_generate_cmd(
+    cmd,
+    infra_type,
+    provider_config,
+    disable_telemetry_collection,
+    contract_id,
+    gov_client_name,
+    security_policy_creation_option,
+    output_dir,
+    provider_client_name,
+):
+    from .custom_cleanroom_cluster import (
+        cluster_kserve_inferencing_workload_deployment_generate,
+    )
+
+    return cluster_kserve_inferencing_workload_deployment_generate(
+        cmd,
+        infra_type,
+        provider_config,
+        disable_telemetry_collection,
+        contract_id,
+        gov_client_name,
+        security_policy_creation_option,
+        output_dir,
+        provider_client_name,
+    )
+
+
+def ccf_provider_deploy_cmd(cmd, provider_client_name, env_file=None):
     from .custom_ccf import ccf_provider_deploy
 
-    return ccf_provider_deploy(cmd, provider_client_name)
+    return ccf_provider_deploy(cmd, provider_client_name, env_file)
 
 
 def ccf_provider_configure_cmd(
@@ -3222,6 +3454,94 @@ def ccf_network_join_policy_remove_snp_host_data_cmd(
     )
 
 
+def ccf_network_join_policy_set_snp_minimum_tcb_version_cmd(
+    cmd,
+    network_name,
+    infra_type,
+    cpuid,
+    tcb_version,
+    provider_config,
+    provider_client_name,
+):
+    from .custom_ccf import ccf_network_join_policy_set_snp_minimum_tcb_version
+
+    return ccf_network_join_policy_set_snp_minimum_tcb_version(
+        cmd,
+        network_name,
+        infra_type,
+        cpuid,
+        tcb_version,
+        provider_config,
+        provider_client_name,
+    )
+
+
+def ccf_network_join_policy_remove_snp_minimum_tcb_version_cmd(
+    cmd,
+    network_name,
+    infra_type,
+    cpuid,
+    provider_config,
+    provider_client_name,
+):
+    from .custom_ccf import ccf_network_join_policy_remove_snp_minimum_tcb_version
+
+    return ccf_network_join_policy_remove_snp_minimum_tcb_version(
+        cmd,
+        network_name,
+        infra_type,
+        cpuid,
+        provider_config,
+        provider_client_name,
+    )
+
+
+def ccf_network_join_policy_add_snp_uvm_endorsement_cmd(
+    cmd,
+    network_name,
+    infra_type,
+    did,
+    feed,
+    svn,
+    provider_config,
+    provider_client_name,
+):
+    from .custom_ccf import ccf_network_join_policy_add_snp_uvm_endorsement
+
+    return ccf_network_join_policy_add_snp_uvm_endorsement(
+        cmd,
+        network_name,
+        infra_type,
+        did,
+        feed,
+        svn,
+        provider_config,
+        provider_client_name,
+    )
+
+
+def ccf_network_join_policy_remove_snp_uvm_endorsement_cmd(
+    cmd,
+    network_name,
+    infra_type,
+    did,
+    feed,
+    provider_config,
+    provider_client_name,
+):
+    from .custom_ccf import ccf_network_join_policy_remove_snp_uvm_endorsement
+
+    return ccf_network_join_policy_remove_snp_uvm_endorsement(
+        cmd,
+        network_name,
+        infra_type,
+        did,
+        feed,
+        provider_config,
+        provider_client_name,
+    )
+
+
 def ccf_network_join_policy_show_cmd(
     cmd,
     network_name,
@@ -3400,6 +3720,9 @@ def ccf_consortium_manager_create_cmd(
     cmd,
     consortium_manager_name,
     infra_type,
+    key_vault,
+    maa_endpoint,
+    identity,
     provider_config,
     provider_client_name,
 ):
@@ -3409,6 +3732,9 @@ def ccf_consortium_manager_create_cmd(
         cmd,
         consortium_manager_name,
         infra_type,
+        key_vault,
+        maa_endpoint,
+        identity,
         provider_config,
         provider_client_name,
     )

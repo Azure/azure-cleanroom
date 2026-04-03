@@ -3,7 +3,7 @@ param(
     [string]$tag = "latest",
 
     [parameter(Mandatory = $false)]
-    [string]$repo = "docker.io",
+    [string]$repo = "localhost:5000",
 
     [parameter(Mandatory = $false)]
     [switch]$push,
@@ -34,9 +34,6 @@ else {
 . $PSScriptRoot/../helpers.ps1
 
 $root = git rev-parse --show-toplevel
-$external = Join-Path $root -ChildPath "/external"
-git submodule update --init --recursive $external/virtualnodesOnAzureContainerInstances
-
 $buildRoot = "$root/build"
 
 docker image build -t $imageName -f $buildRoot/docker/Dockerfile.cleanroom-cluster-provider-client "$root"

@@ -27,6 +27,7 @@ public abstract class RunCommand
         StringBuilder outputTextWriter,
         StringBuilder errorTextWriter,
         bool skipOutputLogging = false,
+        string? stdinContent = null,
         int? timeout = null)
     {
         this.Logger.LogInformation($"Executing command: {binary} {args}");
@@ -40,6 +41,7 @@ public abstract class RunCommand
             {
                 FileName = binary,
                 Arguments = escapedArgs,
+                RedirectStandardInput = stdinContent != null,
                 RedirectStandardOutput = outputTextWriter != null,
                 RedirectStandardError = errorTextWriter != null,
                 UseShellExecute = false,
@@ -52,6 +54,12 @@ public abstract class RunCommand
                 new CancellationTokenSource();
 
             process.Start();
+
+            if (stdinContent != null)
+            {
+                await process.StandardInput.WriteAsync(stdinContent);
+                process.StandardInput.Close();
+            }
 
             var tasks = new List<Task>(3)
             {

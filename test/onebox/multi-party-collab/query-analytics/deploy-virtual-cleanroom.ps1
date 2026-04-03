@@ -11,8 +11,6 @@ param
     $skiplogs
 )
 
-$root = git rev-parse --show-toplevel
-
 kubectl delete pod virtual-cleanroom --force
 kubectl apply -f $outDir/deployments/virtual-cleanroom-pod.yaml
 if (!$nowait) {

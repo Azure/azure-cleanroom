@@ -38,7 +38,7 @@ public class UserIdentitiesController : ClientControllerBase
     {
         var appClient = this.CcfClientManager.GetAppClient();
         using (HttpRequestMessage request =
-            new(HttpMethod.Get, $"app/users/identities/{identityId}"))
+            new(HttpMethod.Post, $"app/users/identities/{identityId}"))
         {
             using HttpResponseMessage response = await appClient.SendAsync(request);
             this.Response.CopyHeaders(response.Headers);
@@ -112,7 +112,7 @@ public class UserIdentitiesController : ClientControllerBase
 
             var appClient = this.CcfClientManager.GetAppClient();
             using (HttpRequestMessage invRequest =
-                new(HttpMethod.Get, $"app/users/invitations/{invitationId}"))
+                new(HttpMethod.Post, $"app/users/invitations/{invitationId}"))
             {
                 using HttpResponseMessage invResponse = await appClient.SendAsync(invRequest);
                 await invResponse.ValidateStatusCodeAsync(this.Logger);

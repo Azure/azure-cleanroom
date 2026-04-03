@@ -57,6 +57,33 @@ actions.set(
   )
 );
 
+actions.set(
+  "set_deployment_info",
+  new Action(
+    function (args) {
+      checkType(args.contractId, "string", "contractId");
+      checkType(args.info, "object", "info");
+
+      if (
+        !ccf.kv[accepted_contracts_table].has(ccf.strToBuf(args.contractId))
+      ) {
+        throw new Error(
+          `Deployment info can only be proposed once contract '${args.contractId}' has been accepted.`
+        );
+      }
+    },
+    function (args) {
+      const deployment_info_table = "public:ccf.gov.deployment_info";
+      let deployment_info_item = {};
+      deployment_info_item.data = args.info.data;
+      ccf.kv[deployment_info_table].set(
+        ccf.strToBuf(args.contractId),
+        ccf.jsonCompatibleToBuf(deployment_info_item)
+      );
+    }
+  )
+);
+
 const oidc_issuer_table = "public:ccf.gov.oidc_issuer";
 const idp_oidc_config_IssuerUrl = "issuerUrl";
 const idp_oidc_config_enabled = "enabled";
@@ -130,7 +157,58 @@ actions.set(
   )
 );
 
-const CLAIMS = {
+const signing_table = "public:ccf.gov.signing";
+const signing_config_enabled = "enabled";
+const signing_config_requestId = "generateSigningKeyRequestId";
+const signing_config_kid = "generateSigningKeyKid";
+
+actions.set(
+  "enable_signing",
+  new Action(
+    function (args) {
+      checkType(args.kid, "string", "kid");
+    },
+    function (args) {
+      if (!ccf.kv[signing_table].has(ccf.strToBuf(signing_config_enabled))) {
+        ccf.kv[signing_table].set(
+          ccf.strToBuf(signing_config_enabled),
+          ccf.strToBuf("true")
+        );
+        ccf.kv[signing_table].set(
+          ccf.strToBuf(signing_config_requestId),
+          ccf.strToBuf("1")
+        );
+        ccf.kv[signing_table].set(
+          ccf.strToBuf(signing_config_kid),
+          ccf.strToBuf(args.kid)
+        );
+      }
+    }
+  )
+);
+
+actions.set(
+  "signing_enable_rotate_signing_key",
+  new Action(
+    function (args) {},
+    function (args) {
+      if (ccf.kv[signing_table].has(ccf.strToBuf(signing_config_requestId))) {
+        let reqId = Number(
+          ccf.bufToStr(
+            ccf.kv[signing_table].get(ccf.strToBuf(signing_config_requestId))
+          )
+        );
+        reqId++;
+        ccf.kv[signing_table].set(
+          ccf.strToBuf(signing_config_requestId),
+          ccf.strToBuf(reqId.toString())
+        );
+      }
+    }
+  )
+);
+
+const CACI_SNP_POLICY_CLAIMS = {
   "x-ms-attestation-type": "string",
   "x-ms-compliance-status": "string",
   "x-ms-policy-hash": "string",
@@ -158,12 +236,48 @@ const CLAIMS = {
   "x-ms-ver": "string"
 };
 
+const JWT_POLICY_CLAIMS = {
+  oid: "string",
+  appid: "string",
+  tid: "string",
+  sub: "string",
+  iss: "string"
+};
+
+const CVM_SNP_POLICY_CLAIMS = {
+  pcr0: "string",
+  pcr1: "string",
+  pcr2: "string",
+  pcr3: "string",
+  pcr4: "string",
+  pcr5: "string",
+  pcr6: "string",
+  pcr7: "string",
+  pcr8: "string",
+  pcr9: "string",
+  pcr10: "string",
+  pcr11: "string",
+  pcr12: "string",
+  pcr13: "string",
+  pcr14: "string",
+  pcr15: "string",
+  pcr16: "string",
+  pcr17: "string",
+  pcr18: "string",
+  pcr19: "string",
+  pcr20: "string",
+  pcr21: "string",
+  pcr22: "string",
+  pcr23: "string"
+};
+
 actions.set(
   "set_clean_room_policy",
   new Action(
     function (args) {
       checkType(args.contractId, "string", "contractId");
       checkType(args.type, "string", "type");
+      checkType(args.policyType, "string?", "policyType");
       checkType(args.claims, "object", "claims");
 
       if (args.type !== "add" && args.type !== "remove") {
@@ -172,11 +286,31 @@ actions.set(
         );
       }
 
-      Object.keys(args.claims).forEach((key) => {
-        if (CLAIMS[key] === undefined) {
-          throw new Error(`The claim '${key}' is not an allowed claim`);
-        }
-      });
+      if (args.policyType === undefined || args.policyType === "snp-caci") {
+        Object.keys(args.claims).forEach((key) => {
+          if (CACI_SNP_POLICY_CLAIMS[key] === undefined) {
+            throw new Error(
+              `The claim '${key}' is not an allowed snp-caci claim`
+            );
+          }
+        });
+      } else if (args.policyType === "jwt") {
+        Object.keys(args.claims).forEach((key) => {
+          if (JWT_POLICY_CLAIMS[key] === undefined) {
+            throw new Error(`The claim '${key}' is not an allowed jwt claim`);
+          }
+        });
+      } else if (args.policyType === "snp-cvm") {
+        Object.keys(args.claims).forEach((key) => {
+          if (CVM_SNP_POLICY_CLAIMS[key] === undefined) {
+            throw new Error(
+              `The claim '${key}' is not an allowed snp-cvm claim`
+            );
+          }
+        });
+      } else {
+        throw new Error(`Unknown policyType '${args.policyType}'`);
+      }
 
       if (
         !ccf.kv[accepted_contracts_table].has(ccf.strToBuf(args.contractId))
@@ -484,6 +618,7 @@ const runtimeOptions = [
   "autoapprove-constitution-proposal",
   "autoapprove-jsapp-proposal",
   "autoapprove-deploymentspec-proposal",
+  "autoapprove-deploymentinfo-proposal",
   "autoapprove-cleanroompolicy-proposal"
 ];
 actions.set(

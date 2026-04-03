@@ -1,0 +1,39 @@
+{
+    "name": "ccr-proxy",
+    "properties": {
+        "image": "$containerRegistryUrl/ccr-proxy@$digest",
+        "command": [
+            "/bin/bash",
+            "https-http/bootstrap.sh",
+            "--ca-type",
+            "$caType"
+        ],
+        "environmentVariables": [
+            {
+                "name": "CCR_ENVOY_LISTENER_HTTPS_PORT",
+                "value": "$listenerPort"
+            },
+            {
+                "name": "CCR_ENVOY_DESTINATION_PORT",
+                "value": "$destinationPort"
+            },
+            {
+                "name": "CCR_ENVOY_SERVICE_CERT_OUTPUT_FILE",
+                "value": "/app/service/service-cert.pem"
+            },
+            {
+                "name": "CCR_FQDN",
+                "value": ".*",
+                "regex": true
+            }
+        ],
+        "volumeMounts": [
+            {
+                "name": "shared",
+                "mountPath": "/app/service",
+                "mountType": "emptyDir",
+                "readOnly": false
+            }
+        ]
+    }
+}

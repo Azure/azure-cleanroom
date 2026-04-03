@@ -3,8 +3,8 @@ import json
 
 from ..exceptions import *
 from ..exceptions.exception import CleanroomSpecificationError, ErrorCode
+from ..models.cleanroom import *
 from ..models.datastore import *
-from ..models.model import *
 
 
 class Encryptor:
@@ -149,6 +149,23 @@ def config_add_datastore(
             )
         protection_identity = access_identity[0]
         provider_protocol = ProtocolType.Azure_BlobStorage
+    elif (
+        datastore_entry.storeType
+        == DataStoreEntry.StoreType.Azure_BlobStorage_DataLakeGen2
+    ):
+        proxy_type = (
+            ProxyType.SecureVolume__ReadOnly__Azure__BlobStorage__DataLakeGen2
+            if access_mode == DataStoreEntry.AccessMode.Source
+            else ProxyType.SecureVolume__ReadWrite__Azure__BlobStorage__DataLakeGen2
+        )
+        access_identity = [x for x in cleanroom_spec.identities if x.name == identity]
+        if len(access_identity) == 0:
+            raise CleanroomSpecificationError(
+                ErrorCode.IdentityConfigurationNotFound,
+                "Identity configuration not found.",
+            )
+        protection_identity = access_identity[0]
+        provider_protocol = ProtocolType.Azure_BlobStorage_DataLakeGen2
     elif datastore_entry.storeType == DataStoreEntry.StoreType.Azure_OneLake:
         proxy_type = (
             ProxyType.SecureVolume__ReadOnly__Azure__OneLake

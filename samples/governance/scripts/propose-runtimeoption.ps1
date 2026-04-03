@@ -4,7 +4,7 @@ function Propose-RuntimeOption {
   (
     [string]
     [Parameter(Mandatory)]
-    [ValidateSet('autoapprove-constitution-proposal', 'autoapprove-jsapp-proposal', 'autoapprove-deploymentspec-proposal', 'autoapprove-cleanroompolicy-proposal')]
+    [ValidateSet('autoapprove-constitution-proposal', 'autoapprove-jsapp-proposal', 'autoapprove-deploymentspec-proposal', 'autoapprove-deploymentinfo-proposal', 'autoapprove-cleanroompolicy-proposal')]
     $option,
 
     [string]

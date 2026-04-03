@@ -1,0 +1,89 @@
+name: Test kserve inferencing
+description: Test kserve inferencing on pre-deployed cleanroom environment
+inputs:
+  repo:
+    description: The registry URL
+    required: true
+  tag:
+    description: The tag for the built image
+    required: true
+  location:
+    description: Azure region for resource deployment
+    required: true
+  deploymentConfigDir:
+    description: The directory containing deployment-config.json
+    required: true
+  models:
+    description: Comma-separated models to deploy (iris,gpt2,all)
+    required: false
+    default: "all"
+runs:
+  using: composite
+  steps:
+    - name: Login to Azure and refresh token
+      uses: ./.github/actions/login-to-azure
+      env:
+        CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
+        TENANT_ID: ${{ env.AZURE_TENANT_ID }}
+        SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Install az cleanroom extension
+      shell: bash
+      run: |
+        oras pull ${{ inputs.repo }}/cli/cleanroom-whl:${{ inputs.tag }}
+        az extension add --allow-preview true --source ./cleanroom-*-py2.py3-none-any.whl -y
+
+    # TODO: Re-enable once astral-sh/setup-uv action is enabled.
+    # - name: Install uv
+    #   uses: astral-sh/setup-uv@v7
+    
+    - name: Install uv
+      shell: bash
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+
+    - name: Install python
+      shell: bash
+      run: |
+        uv python install 3.12 3.10
+
+    - name: Deploy governance client
+      shell: bash
+      run: |
+        project_name=$(jq -r '.project_name' "${{ inputs.deploymentConfigDir }}/deployment-config.json")
+        initial_member_name=$(jq -r '.initial_member_name' "${{ inputs.deploymentConfigDir }}/deployment-config.json")
+        ccf_endpoint=$(jq -r '.ccf_endpoint' "${{ inputs.deploymentConfigDir }}/deployment-config.json")
+        out_dir=$(jq -r '.out_dir' "${{ inputs.deploymentConfigDir }}/deployment-config.json")
+        
+        az cleanroom governance client deploy \
+          --ccf-endpoint "$ccf_endpoint" \
+          --signing-key "$out_dir/ccf/${initial_member_name}_privk.pem" \
+          --signing-cert "$out_dir/ccf/${initial_member_name}_cert.pem" \
+          --service-cert "$out_dir/ccf/service_cert.pem" \
+          --name "$project_name" \
+          --env-file "$out_dir/ccf/governance-client.env"
+
+    - name: Deploy cluster provider client
+      shell: bash
+      run: |
+        cluster_provider_project_name=$(jq -r '.cluster_provider_project_name' "${{ inputs.deploymentConfigDir }}/deployment-config.json")
+        out_dir=$(jq -r '.out_dir' "${{ inputs.deploymentConfigDir }}/deployment-config.json")
+        az cleanroom cluster provider deploy --name "$cluster_provider_project_name" --env-file "$out_dir/cl-cluster/cluster-provider.env"
+
+    - name: Run kserve inferencing test
+      shell: pwsh
+      run: ./test/onebox/model-serving/kserve-inferencing/test-kserve-inferencing.ps1 `
+          -deploymentConfigDir "${{ inputs.deploymentConfigDir }}" -location ${{ inputs.location }} -models "${{ inputs.models }}"
+
+    - name: Dump cleanroom-cluster-provider logs
+      shell: bash
+      if: ${{ !cancelled() }}
+      run: |
+        cluster_provider_project_name=$(jq -r '.cluster_provider_project_name' "${{ inputs.deploymentConfigDir }}/deployment-config.json")
+        docker compose -p "$cluster_provider_project_name" logs
+
+    - name: Dump cleanroom-cluster logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: ./test/onebox/model-serving/kserve-inferencing/dump-cleanroom-cluster-logs.ps1 `
+          -kubeConfig "${{ inputs.deploymentConfigDir }}/cl-cluster/k8s-credentials.yaml"

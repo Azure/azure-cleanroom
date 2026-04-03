@@ -1,7 +1,0 @@
-FROM mcr.microsoft.com/cbl-mariner/base/python:3
-
-RUN yum install jq bc awk -y
-
-RUN pip install ccf
-
-ENTRYPOINT [ "/bin/bash" ]

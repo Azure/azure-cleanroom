@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   cgs-test:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=cgs-test-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     steps:
       - uses: actions/checkout@v4

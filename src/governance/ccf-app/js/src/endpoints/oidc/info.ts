@@ -1,16 +1,13 @@
 import * as ccfapp from "@microsoft/ccf-app";
-import { OidcIssuerInfo } from "../../models/openidmodels";
+import { OidcIssuerInfo } from "../../models";
 import {
   getGovIssuerUrl,
-  getTenantIdIssuerUrl,
+  getMemberTenantIdIssuerUrl,
+  getUserTenantIdIssuerUrl,
   isOidcIssuerEnabled
 } from "./issuer";
-import {
-  getCallerId,
-  getTenantId,
-  validateCallerAuthorized
-} from "../../utils/utils";
-import { ErrorResponse } from "../../models/errorresponse";
+import { getCallerTenantId, validateCallerAuthorized } from "../../utils/utils";
+import { ErrorResponse } from "../../utils/ErrorResponse";
 
 export function getOidcIssuerInfo(
   request: ccfapp.Request
@@ -29,9 +26,15 @@ export function getOidcIssuerInfo(
     info.issuerUrl = issuerUrl;
   }
 
-  const tenantId = getTenantId(getCallerId(request));
+  // Get tenant ID based on auth policy.
+  const tenantId = getCallerTenantId(request);
+
   if (tenantId) {
-    const tenantIdIssuerUrl = getTenantIdIssuerUrl(tenantId);
+    // Return the issuer URL matching the caller type.
+    const tenantIdIssuerUrl =
+      request.caller.policy === "jwt" || request.caller.policy === "user_cert"
+        ? getUserTenantIdIssuerUrl(tenantId)
+        : getMemberTenantIdIssuerUrl(tenantId);
     if (tenantIdIssuerUrl) {
       info.tenantData = {
         tenantId: tenantId,

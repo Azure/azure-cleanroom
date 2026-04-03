@@ -30,7 +30,7 @@ public abstract class ClusterClientController : ControllerBase
         ICleanRoomClusterProvider provider = infraType switch
         {
             InfraType.@virtual => this.providers.VirtualClusterProvider,
-            InfraType.caci => this.providers.CAciClusterProvider,
+            InfraType.aks => this.providers.AksClusterProvider,
             _ => throw new NotSupportedException($"Infra type '{infraType}' is not supported."),
         };
 

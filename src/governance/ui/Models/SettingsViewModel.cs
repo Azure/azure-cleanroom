@@ -25,7 +25,7 @@ public class SettingsViewModel
 
     public JsonObject MemberData { get; set; } = default!;
 
-    public JsonObject UserTokenClaims { get; set; } = default!;
+    public JsonObject JwtClaims { get; set; } = default!;
 
     public UpdatesViewModel Updates { get; set; } = default!;
 }

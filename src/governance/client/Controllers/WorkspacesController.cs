@@ -163,10 +163,10 @@ public class WorkspacesController : ClientControllerBase
         if (!string.IsNullOrEmpty(model.AuthMode))
         {
             // App authentication uses JWT authentication.
-            if (model.AuthMode == "AzureLogin")
+            if (model.AuthMode == AuthMode.AzureLogin)
             {
                 // Request a token to extract details that are useful to show in CLI/UI experiences.
-                var scope = "https://management.core.windows.net";
+                var scope = "https://management.azure.com/.default";
                 var ctx = new TokenRequestContext(new string[] { scope });
                 var creds = new DefaultAzureCcfTokenCredential();
                 string token = await creds.GetTokenAsync(
@@ -193,7 +193,7 @@ public class WorkspacesController : ClientControllerBase
                     };
                 }
             }
-            else if (model.AuthMode == "MsLogin")
+            else if (model.AuthMode == AuthMode.MsLogin)
             {
                 var scope = "User.Read";
                 var ctx = new TokenRequestContext(new string[] { scope });
@@ -216,7 +216,7 @@ public class WorkspacesController : ClientControllerBase
                     };
                 }
             }
-            else if (model.AuthMode == "LocalIdp")
+            else if (model.AuthMode == AuthMode.LocalIdp)
             {
                 string identityUrl = this.config["LOCAL_IDP_ENDPOINT"]!;
 
@@ -236,6 +236,7 @@ public class WorkspacesController : ClientControllerBase
                     return new JsonObject
                     {
                         ["oid"] = claims["oid"]?.ToString(),
+                        ["preferred_username"] = claims["preferred_username"]?.ToString(),
                         ["sub"] = claims["sub"]?.ToString(),
                         ["tid"] = claims["tid"]?.ToString()
                     };
@@ -336,22 +337,22 @@ public class WorkspacesController : ClientControllerBase
 
         // App authentication uses JWT authentication.
         string token;
-        if (wsConfig.AuthMode == "AzureLogin")
+        if (wsConfig.AuthMode == AuthMode.AzureLogin)
         {
             // Request a token to return.
-            var scope = "https://management.core.windows.net";
+            var scope = "https://management.azure.com/.default";
             var ctx = new TokenRequestContext(new string[] { scope });
             var creds = new DefaultAzureCcfTokenCredential();
             token = await creds.GetTokenAsync(ctx, CancellationToken.None);
         }
-        else if (wsConfig.AuthMode == "MsLogin")
+        else if (wsConfig.AuthMode == AuthMode.MsLogin)
         {
             var scope = "User.Read";
             var ctx = new TokenRequestContext(new string[] { scope });
             var creds = new MsalCachedCcfTokenCredential(this.config["MSAL_TOKEN_CACHE_DIR"]);
             token = await creds.GetTokenAsync(ctx, CancellationToken.None);
         }
-        else if (wsConfig.AuthMode == "LocalIdp")
+        else if (wsConfig.AuthMode == AuthMode.LocalIdp)
         {
             string identityUrl = this.config["LOCAL_IDP_ENDPOINT"]!;
             var scope = "https://does.not.matter";
@@ -396,7 +397,7 @@ public class WorkspacesController : ClientControllerBase
                         "app/users/identities");
                     await response.ValidateStatusCodeAsync(this.Logger);
                     var users = (await response.Content.ReadFromJsonAsync<UserIdentities>())!;
-                    var oid = copy.UserTokenClaims!["oid"]!.ToString();
+                    var oid = copy.JwtClaims!["oid"]!.ToString();
                     copy.Identifier = users.Value.Find(u => u.Id == oid)?.Data?.Identifier ?? oid;
                 }
                 catch (Exception e)

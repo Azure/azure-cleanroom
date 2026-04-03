@@ -4,6 +4,7 @@
 # pylint: disable=missing-module-docstring
 # pylint: disable=missing-function-docstring
 
+
 from azure.cli.core.commands.parameters import (
     get_enum_type,
     name_type,
@@ -171,6 +172,12 @@ def load_arguments(self, _):
             options_list=["--local-identity-endpoint"],
             required=False,
         )
+        c.argument(
+            "env_file",
+            help="Path to environment file containing key=value pairs for environment variables",
+            options_list=["--env-file"],
+            required=False,
+        )
 
     # governance contract
     with self.argument_context("cleanroom governance service") as c:
@@ -185,6 +192,12 @@ def load_arguments(self, _):
             "gov_client_name",
             help="Name of the governance client instance to use",
             options_list=["--governance-client"],
+        )
+        c.argument(
+            "env_file",
+            help="Path to environment file containing key=value pairs for environment variables",
+            options_list=["--env-file"],
+            required=False,
         )
 
     with self.argument_context(
@@ -484,6 +497,13 @@ def load_arguments(self, _):
             "url",
             help="The issuer url",
             options_list=["--url"],
+        )
+
+    with self.argument_context("cleanroom governance signing") as c:
+        c.argument(
+            "gov_client_name",
+            help="Name of the client instance",
+            options_list=["--governance-client"],
         )
 
     with self.argument_context("cleanroom governance contract runtime-option") as c:
@@ -1188,6 +1208,12 @@ def load_arguments(self, _):
             required=False,
             default="cleanroom-cluster-provider",
         )
+        c.argument(
+            "env_file",
+            help="Path to environment file containing key=value pairs for environment variables",
+            options_list=["--env-file"],
+            required=False,
+        )
     with self.argument_context("cleanroom cluster provider remove") as c:
         c.argument(
             "provider_client_name",
@@ -1208,11 +1234,11 @@ def load_arguments(self, _):
         )
         c.argument(
             "infra_type",
-            arg_type=get_enum_type(["caci", "virtual"]),
+            arg_type=get_enum_type(["aks", "virtual"]),
             help="The platform used for hosting the cluster",
             options_list=["--infra-type"],
             required=False,
-            default="caci",
+            default="aks",
         )
 
     with self.argument_context("cleanroom cluster up") as c:
@@ -1238,6 +1264,18 @@ def load_arguments(self, _):
             options_list=["--location"],
             required=False,
         )
+        c.argument(
+            "node_vm_size",
+            help="The VM size for AKS agent pool nodes. Defaults to Standard_D4ds_v5 if not specified. Size selected for AKS must be at least 4 CPU and 16 GB RAM to accommodate virtual nodes being run on them.",
+            options_list=["--node-vm-size"],
+            required=False,
+        )
+        c.argument(
+            "env_file",
+            help="Path to environment file containing key=value pairs for environment variables",
+            options_list=["--env-file"],
+            required=False,
+        )
 
     with self.argument_context("cleanroom cluster create") as c:
         c.argument(
@@ -1252,10 +1290,23 @@ def load_arguments(self, _):
             required=False,
         )
         c.argument(
+            "node_vm_size",
+            help="The VM size for AKS agent pool nodes. Defaults to Standard_D4ds_v5 if not specified. Size selected for AKS must be at least 4 CPU and 16 GB RAM to accommodate virtual nodes being run on them.",
+            options_list=["--node-vm-size"],
+            required=False,
+        )
+        c.argument(
             "enable_observability",
             action="store_true",
             help="Whether to enable observability on the cluster",
             options_list=["--enable-observability"],
+            required=False,
+        )
+        c.argument(
+            "enable_monitoring",
+            action="store_true",
+            help="Whether to enable monitoring on the cluster",
+            options_list=["--enable-monitoring"],
             required=False,
         )
         c.argument(
@@ -1300,6 +1351,96 @@ def load_arguments(self, _):
             help="Path to a file containing or a base64 encoded string itself that specifies the security policy to use instead of passing a --analytics-workload-security-policy-creation-option value.",
             options_list=["--analytics-workload-security-policy"],
             required=False,
+        )
+        c.argument(
+            "analytics_workload_pool_node_count",
+            help="Number of nodes in the analytics workload pool.",
+            options_list=["--analytics-workload-pool-node-count"],
+            required=False,
+        )
+        c.argument(
+            "enable_kserve_inferencing_workload",
+            action="store_true",
+            help="Whether to enable kserve inferencing workload support on the cluster",
+            options_list=["--enable-kserve-inferencing-workload"],
+            required=False,
+        )
+        c.argument(
+            "kserve_inferencing_workload_config_url",
+            help="The url containing the inputs required to enable kserve inferencing workload on the cluster",
+            options_list=["--kserve-inferencing-workload-config-url"],
+            required=False,
+        )
+        c.argument(
+            "kserve_inferencing_workload_config_url_ca_cert",
+            help="CA certificate to verify the peer for the url",
+            options_list=["--kserve-inferencing-workload-config-url-ca-cert"],
+            required=False,
+        )
+        c.argument(
+            "kserve_inferencing_workload_disable_telemetry_collection",
+            action="store_true",
+            help="Whether to disable telemetry collection for kserve inferencing workload",
+            options_list=["--kserve-inferencing-workload-disable-telemetry-collection"],
+            required=False,
+            default=False,
+        )
+        c.argument(
+            "kserve_inferencing_workload_security_policy_creation_option",
+            arg_type=get_enum_type(
+                ["cached", "cached-debug", "allow-all", "user-supplied"]
+            ),
+            help="Whether to use the cached policy files or use the allow all security policy",
+            options_list=[
+                "--kserve-inferencing-workload-security-policy-creation-option"
+            ],
+            required=False,
+            default=default_workloads_security_policy_creation_option,
+        )
+        c.argument(
+            "kserve_inferencing_workload_security_policy",
+            help="Path to a file containing or a base64 encoded string itself that specifies the security policy to use instead of passing a --kserve-inferencing-workload-security-policy-creation-option value.",
+            options_list=["--kserve-inferencing-workload-security-policy"],
+            required=False,
+        )
+        c.argument(
+            "enable_flex_node",
+            action="store_true",
+            help="Whether to enable flex node deployment for the cluster",
+            options_list=["--enable-flex-node"],
+            required=False,
+        )
+        c.argument(
+            "flex_node_ssh_private_key",
+            help="Path to a file containing the SSH private key PEM for flex node VM access.",
+            options_list=["--flex-node-ssh-private-key"],
+            required=False,
+        )
+        c.argument(
+            "flex_node_ssh_public_key",
+            help="Path to a file containing the SSH public key for flex node VM access.",
+            options_list=["--flex-node-ssh-public-key"],
+            required=False,
+        )
+        c.argument(
+            "flex_node_policy_signing_cert",
+            help="Path to a file containing the policy signing certificate PEM for api-server-proxy pod verification.",
+            options_list=["--flex-node-policy-signing-cert"],
+            required=False,
+        )
+        c.argument(
+            "flex_node_vm_size",
+            help="The VM size for the flex node (e.g. Standard_DC4as_v5).",
+            options_list=["--flex-node-vm-size"],
+            required=False,
+        )
+        c.argument(
+            "flex_node_count",
+            help="Number of flex nodes to create.",
+            options_list=["--flex-node-count"],
+            required=False,
+            type=int,
+            default=1,
         )
 
     with self.argument_context("cleanroom cluster update") as c:
@@ -1323,6 +1464,14 @@ def load_arguments(self, _):
             default=False,
         )
         c.argument(
+            "enable_monitoring",
+            action="store_true",
+            help="Whether to enable monitoring on the cluster",
+            options_list=["--enable-monitoring"],
+            required=False,
+            default=False,
+        )
+        c.argument(
             "enable_analytics_workload",
             action="store_true",
             help="Whether to enable analytics workload support on the cluster",
@@ -1365,8 +1514,111 @@ def load_arguments(self, _):
             options_list=["--analytics-workload-security-policy"],
             required=False,
         )
+        c.argument(
+            "analytics_workload_pool_node_count",
+            help="Number of nodes in the analytics workload pool.",
+            options_list=["--analytics-workload-pool-node-count"],
+            required=False,
+        )
+        c.argument(
+            "enable_kserve_inferencing_workload",
+            action="store_true",
+            help="Whether to enable kserve inferencing workload support on the cluster",
+            options_list=["--enable-kserve-inferencing-workload"],
+            required=False,
+        )
+        c.argument(
+            "kserve_inferencing_workload_config_url",
+            help="The url containing the inputs required to enable kserve inferencing workload on the cluster",
+            options_list=["--kserve-inferencing-workload-config-url"],
+            required=False,
+        )
+        c.argument(
+            "kserve_inferencing_workload_config_url_ca_cert",
+            help="CA certificate to verify the peer for the url",
+            options_list=["--kserve-inferencing-workload-config-url-ca-cert"],
+            required=False,
+        )
+        c.argument(
+            "kserve_inferencing_workload_disable_telemetry_collection",
+            action="store_true",
+            help="Whether to disable telemetry collection for kserve inferencing workload",
+            options_list=["--kserve-inferencing-workload-disable-telemetry-collection"],
+            required=False,
+            default=False,
+        )
+        c.argument(
+            "kserve_inferencing_workload_security_policy_creation_option",
+            arg_type=get_enum_type(
+                ["cached", "cached-debug", "allow-all", "user-supplied"]
+            ),
+            help="Whether to use the cached policy files or use the allow all security policy",
+            options_list=[
+                "--kserve-inferencing-workload-security-policy-creation-option"
+            ],
+            required=False,
+            default=default_workloads_security_policy_creation_option,
+        )
+        c.argument(
+            "kserve_inferencing_workload_security_policy",
+            help="Path to a file containing or a base64 encoded string itself that specifies the security policy to use instead of passing a --kserve-inferencing-workload-security-policy-creation-option value.",
+            options_list=["--kserve-inferencing-workload-security-policy"],
+            required=False,
+        )
+        c.argument(
+            "enable_flex_node",
+            action="store_true",
+            help="Whether to enable flex node deployment for the cluster",
+            options_list=["--enable-flex-node"],
+            required=False,
+        )
+        c.argument(
+            "flex_node_ssh_private_key",
+            help="Path to a file containing the SSH private key PEM for flex node VM access.",
+            options_list=["--flex-node-ssh-private-key"],
+            required=False,
+        )
+        c.argument(
+            "flex_node_ssh_public_key",
+            help="Path to a file containing the SSH public key for flex node VM access.",
+            options_list=["--flex-node-ssh-public-key"],
+            required=False,
+        )
+        c.argument(
+            "flex_node_policy_signing_cert",
+            help="Path to a file containing the policy signing certificate PEM for api-server-proxy pod verification.",
+            options_list=["--flex-node-policy-signing-cert"],
+            required=False,
+        )
+        c.argument(
+            "flex_node_vm_size",
+            help="The VM size for the flex node (e.g. Standard_DC4as_v5).",
+            options_list=["--flex-node-vm-size"],
+            required=False,
+        )
+        c.argument(
+            "flex_node_count",
+            help="Number of flex nodes to create.",
+            options_list=["--flex-node-count"],
+            required=False,
+            type=int,
+            default=1,
+        )
 
     with self.argument_context("cleanroom cluster show") as c:
+        c.argument(
+            "cluster_name",
+            help="The name of the cluster",
+            options_list=["--name"],
+        )
+        c.argument(
+            "provider_config",
+            help="Infra specific provider_config details as JSON, or a path to a file containing a JSON description.",
+            options_list=["--provider-config"],
+            required=False,
+        )
+
+    with self.argument_context("cleanroom cluster show-health") as c:
         c.argument(
             "cluster_name",
             help="The name of the cluster",
@@ -1409,9 +1661,57 @@ def load_arguments(self, _):
             help="The kubernetes configuration file to create.",
             options_list=["--file", "-f"],
         )
+        c.argument(
+            "access_role",
+            help="The access role for the kubeconfig. 'admin' gives full access, 'readonly' gives read-only permissions, 'diagnostic' gives diagnostic access.",
+            required=False,
+            default="admin",
+            options_list=["--access-role"],
+        )
 
     with self.argument_context(
         "cleanroom cluster analytics-workload deployment generate"
+    ) as c:
+        c.argument(
+            "provider_config",
+            help="Infra specific provider_config details as JSON, or a path to a file containing a JSON description.",
+            options_list=["--provider-config"],
+            required=False,
+        )
+        c.argument(
+            "contract_id",
+            help="The contract containing the inputs required to enable analytics workload on the cluster",
+            options_list=["--contract-id"],
+        )
+        c.argument(
+            "disable_telemetry_collection",
+            help="Defines whether to disable telemetry collection in the analytics workload.",
+            options_list=["--disable-telemetry-collection"],
+            action="store_true",
+            required=False,
+            default=False,
+        )
+        c.argument(
+            "gov_client_name",
+            help="Name of the governance client instance to use to access the contract",
+            options_list=["--governance-client"],
+        )
+        c.argument(
+            "security_policy_creation_option",
+            arg_type=get_enum_type(["cached", "cached-debug", "allow-all"]),
+            help="Whether to use the cached policy files or use the allow all security policy",
+            options_list=["--security-policy-creation-option"],
+            required=False,
+            default=default_workloads_security_policy_creation_option,
+        )
+        c.argument(
+            "output_dir",
+            help="The output directory where files will get created",
+            options_list=["--output-dir"],
+        )
+
+    with self.argument_context(
+        "cleanroom cluster kserve-inferencing-workload deployment generate"
     ) as c:
         c.argument(
             "provider_config",
@@ -1459,6 +1759,12 @@ def load_arguments(self, _):
             options_list=["--name"],
             required=False,
             default="ccf-provider",
+        )
+        c.argument(
+            "env_file",
+            help="Path to environment file containing key=value pairs",
+            options_list=["--env-file"],
+            required=False,
         )
 
     with self.argument_context("cleanroom ccf provider configure") as c:
@@ -1897,6 +2203,106 @@ def load_arguments(self, _):
             options_list=["--host-data"],
         )
 
+    with self.argument_context(
+        "cleanroom ccf network join-policy set-snp-minimum-tcb-version"
+    ) as c:
+        c.argument(
+            "network_name",
+            help="The name of the CCF network",
+            options_list=["--name"],
+        )
+        c.argument(
+            "provider_config",
+            help="Infra specific provider_config details as JSON, or a path to a file containing a JSON description.",
+            options_list=["--provider-config"],
+            required=False,
+        )
+        c.argument(
+            "cpuid",
+            help="The CPUID family identifier for the AMD SEV-SNP platform (e.g. 00a00f11 for Milan, 00a10f11 for Genoa, 00b00f21 for Turin).",
+            options_list=["--cpuid"],
+        )
+        c.argument(
+            "tcb_version",
+            help="The minimum TCB version in hex format (e.g. 0300000000000003).",
+            options_list=["--tcb-version"],
+        )
+
+    with self.argument_context(
+        "cleanroom ccf network join-policy remove-snp-minimum-tcb-version"
+    ) as c:
+        c.argument(
+            "network_name",
+            help="The name of the CCF network",
+            options_list=["--name"],
+        )
+        c.argument(
+            "provider_config",
+            help="Infra specific provider_config details as JSON, or a path to a file containing a JSON description.",
+            options_list=["--provider-config"],
+            required=False,
+        )
+        c.argument(
+            "cpuid",
+            help="The CPUID family identifier to remove.",
+            options_list=["--cpuid"],
+        )
+
+    with self.argument_context(
+        "cleanroom ccf network join-policy add-snp-uvm-endorsement"
+    ) as c:
+        c.argument(
+            "network_name",
+            help="The name of the CCF network",
+            options_list=["--name"],
+        )
+        c.argument(
+            "provider_config",
+            help="Infra specific provider_config details as JSON, or a path to a file containing a JSON description.",
+            options_list=["--provider-config"],
+            required=False,
+        )
+        c.argument(
+            "did",
+            help="The DID (Decentralized Identifier) for the UVM endorsement.",
+            options_list=["--did"],
+        )
+        c.argument(
+            "feed",
+            help="The feed name for the UVM endorsement.",
+            options_list=["--feed"],
+        )
+        c.argument(
+            "svn",
+            help="The minimum SVN (Security Version Number) for the UVM endorsement.",
+            options_list=["--svn"],
+        )
+
+    with self.argument_context(
+        "cleanroom ccf network join-policy remove-snp-uvm-endorsement"
+    ) as c:
+        c.argument(
+            "network_name",
+            help="The name of the CCF network",
+            options_list=["--name"],
+        )
+        c.argument(
+            "provider_config",
+            help="Infra specific provider_config details as JSON, or a path to a file containing a JSON description.",
+            options_list=["--provider-config"],
+            required=False,
+        )
+        c.argument(
+            "did",
+            help="The DID (Decentralized Identifier) for the UVM endorsement to remove.",
+            options_list=["--did"],
+        )
+        c.argument(
+            "feed",
+            help="The feed name for the UVM endorsement to remove.",
+            options_list=["--feed"],
+        )
+
     with self.argument_context("cleanroom ccf network recovery-agent show") as c:
         c.argument(
             "network_name",
@@ -2259,6 +2665,22 @@ def load_arguments(self, _):
             "consortium_manager_name",
             help="A unique name for the CCF consortium manager",
             options_list=["--name"],
+        )
+        c.argument(
+            "key_vault",
+            help="The key vault to use to store the consortium manager keys.",
+            options_list=["--key-vault"],
+        )
+        c.argument(
+            "maa_endpoint",
+            help="The MAA endpoint.",
+            options_list=["--maa-endpoint"],
+        )
+        c.argument(
+            "identity",
+            help="The identity to use to access the key vault",
+            options_list=["--identity"],
+            required=False,
         )
 
     with self.argument_context("cleanroom ccf consortium-manager show") as c:

@@ -1,0 +1,42 @@
+# Use the official .NET Core SDK as the base image
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+
+# Set the working directory
+WORKDIR /app
+
+# copy csproj and restore as distinct layers
+# https://blog.nimbleways.com/docker-build-caching-for-dotnet-applications-done-right-with-dotnet-subset/
+COPY Directory.Packages.props /app
+COPY Directory.Build.props /app
+COPY src/workloads/inferencing/*.sln /app/src/workloads/inferencing/
+COPY src/workloads/inferencing/kserve-inferencing-agent/*.csproj /app/src/workloads/inferencing/kserve-inferencing-agent/
+COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
+COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
+COPY src/internal/governance-common/*.csproj /app/src/internal/governance-common/
+COPY src/secrets/common/*.csproj /app/src/secrets/common/
+RUN dotnet restore /app/src/workloads/inferencing/inferencing-workload.sln
+
+# copy everything else and build app
+COPY stylecop.json /app
+COPY Menees.Analyzers.Settings.xml /app
+COPY .editorconfig /app
+COPY src/internal /app/src/internal
+COPY src/workloads /app/src/workloads
+
+# Publish the application
+RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/workloads/inferencing/kserve-inferencing-agent/kserve-inferencing-agent.csproj
+
+# Use the official .NET Core runtime as the base image for the final stage
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the published output from the build stage to the runtime stage
+COPY --from=build /app/publish .
+
+# Set the entry point for the container
+ENTRYPOINT ["dotnet", "kserve-inferencing-agent.dll"]

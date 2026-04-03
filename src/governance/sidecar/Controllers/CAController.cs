@@ -38,12 +38,12 @@ public class CAController : ControllerBase
         var paddingMode = RSASignaturePaddingMode.Pss;
 
         var dataBytes = Encoding.UTF8.GetBytes(data.ToJsonString());
-        var signature = Signing.SignData(dataBytes, wsConfig.Attestation.PrivateKey, paddingMode);
+        var signature = Signing.SignData(dataBytes, wsConfig.KeyPair.PrivateKey, paddingMode);
         var content = Attestation.PrepareSignedDataRequestContent(
             dataBytes,
             signature,
-            wsConfig.Attestation.PublicKey,
-            wsConfig.Attestation.Report);
+            wsConfig.KeyPair.PublicKey,
+            wsConfig.Report);
 
         using (HttpRequestMessage request = new(
             HttpMethod.Post,
@@ -61,7 +61,7 @@ public class CAController : ControllerBase
             string base64WrappedValue = jsonResponse["value"]!.ToString();
             byte[] wrappedValue = Convert.FromBase64String(base64WrappedValue);
             byte[] unwrappedValue = wrappedValue.UnwrapRsaOaepAesKwpValue(
-                wsConfig.Attestation.PrivateKey);
+                wsConfig.KeyPair.PrivateKey);
             string serializedJson = Encoding.UTF8.GetString(unwrappedValue);
             return this.Ok(JsonSerializer.Deserialize<JsonObject>(serializedJson));
         }

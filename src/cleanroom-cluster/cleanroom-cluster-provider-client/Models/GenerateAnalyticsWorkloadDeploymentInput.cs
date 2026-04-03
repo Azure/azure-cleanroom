@@ -18,5 +18,7 @@ public class GenerateAnalyticsWorkloadDeploymentInput
 
     public string? ContractUrlCaCert { get; set; }
 
+    public Dictionary<string, string>? ContractUrlHeaders { get; set; }
+
     public JsonObject? ProviderConfig { get; set; }
 }

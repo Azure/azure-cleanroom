@@ -20,6 +20,11 @@ public static class ImageUtils
         return AnalyticsAgentSecurityPolicyDocumentUrl();
     }
 
+    public static string GetKServeInferencingAgentSecurityPolicyDocumentUrl()
+    {
+        return KServeInferencingAgentSecurityPolicyDocumentUrl();
+    }
+
     public static async Task<SecurityPolicyDocument> GetAnalyticsAgentSecurityPolicyDocument(
         ILogger logger,
         IConfiguration config)
@@ -80,6 +85,67 @@ public static class ImageUtils
         }
     }
 
+    public static async Task<SecurityPolicyDocument> GetKServeInferencingAgentSecurityPolicyDocument(
+        ILogger logger,
+        IConfiguration config)
+    {
+        var oras = new OrasClient(logger, config);
+        string outDir = Path.GetTempPath();
+        string documentUrl = KServeInferencingAgentSecurityPolicyDocumentUrl();
+        string document =
+            Path.Combine(outDir, "kserve-inferencing-agent-security-policy.yaml");
+
+        try
+        {
+            // Avoid simultaneous downloads to the same location to avoid races in reading the
+            // file.
+            await semaphore.WaitAsync();
+            await oras.Pull(documentUrl, outDir);
+            var deserializer = new DeserializerBuilder()
+                .WithNamingConvention(UnderscoredNamingConvention.Instance)
+                .IgnoreUnmatchedProperties()
+                .Build();
+            var yml = await File.ReadAllTextAsync(document);
+            var policyDocument = deserializer.Deserialize<SecurityPolicyDocument>(yml);
+            return policyDocument;
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
+    public static async Task<SecurityPolicyDocument>
+        GetKServeInferencingFrontendSecurityPolicyDocument(
+            ILogger logger,
+            IConfiguration config)
+    {
+        var oras = new OrasClient(logger, config);
+        string outDir = Path.GetTempPath();
+        string documentUrl = KServeInferencingSecurityPolicyDocumentUrl();
+        string document =
+            Path.Combine(outDir, "kserve-inferencing-frontend-security-policy.yaml");
+
+        try
+        {
+            // Avoid simultaneous downloads to the same location to avoid races in reading the
+            // file.
+            await semaphore.WaitAsync();
+            await oras.Pull(documentUrl, outDir);
+            var deserializer = new DeserializerBuilder()
+                .WithNamingConvention(UnderscoredNamingConvention.Instance)
+                .IgnoreUnmatchedProperties()
+                .Build();
+            var yml = await File.ReadAllTextAsync(document);
+            var policyDocument = deserializer.Deserialize<SecurityPolicyDocument>(yml);
+            return policyDocument;
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
     public static string RegistryUrl()
     {
         var url = Environment.GetEnvironmentVariable("CR_CLUSTER_PROVIDER_CONTAINER_REGISTRY_URL");
@@ -104,6 +170,16 @@ public static class ImageUtils
         return useHttp.ToString().ToLower();
     }
 
+    public static string KServeInferencingAgentSecurityPolicyDocumentUrl()
+    {
+        var url = Environment.GetEnvironmentVariable(
+            "CR_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_SECURITY_POLICY_DOCUMENT_URL");
+
+        return !string.IsNullOrEmpty(url) ? url :
+            $"{McrRegistryUrl}" +
+            $"/policies/workloads/cleanroom-kserve-inferencing-agent-security-policy:{McrTag}";
+    }
+
     public static string AnalyticsAgentSecurityPolicyDocumentUrl()
     {
         var url = Environment.GetEnvironmentVariable(
@@ -122,6 +198,25 @@ public static class ImageUtils
         return !string.IsNullOrEmpty(url) ? url :
             $"{McrRegistryUrl}" +
             $"/policies/workloads/cleanroom-spark-frontend-security-policy:{McrTag}";
+    }
+
+    public static string KServeInferencingSecurityPolicyDocumentUrl()
+    {
+        var url = Environment.GetEnvironmentVariable(
+            "CR_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_SECURITY_POLICY_DOCUMENT_URL");
+
+        return !string.IsNullOrEmpty(url) ? url :
+            $"{McrRegistryUrl}" +
+            $"/policies/workloads/cleanroom-kserve-inferencing-frontend-security-policy:{McrTag}";
+    }
+
+    public static string ApiServerProxyPackageUrl()
+    {
+        var url = Environment.GetEnvironmentVariable(
+            "CR_CLUSTER_PROVIDER_API_SERVER_PROXY_PACKAGE_URL");
+
+        return !string.IsNullOrEmpty(url) ? url :
+            $"{McrRegistryUrl}/k8s-node/api-server-proxy:{McrTag}";
     }
 
     public static string GetAnalyticsAgentChartPath()
@@ -170,6 +265,52 @@ public static class ImageUtils
         return GetTag("CR_CLUSTER_PROVIDER_SPARK_FRONTEND_IMAGE") ?? $"{McrTag}";
     }
 
+    public static string GetInferencingAgentChartPath()
+    {
+        return GetImage("CR_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_CHART_URL") ??
+            $"{McrRegistryUrl}/workloads/helm/kserve-inferencing-agent";
+    }
+
+    public static string GetInferencingAgentChartVersion()
+    {
+        return GetTag("CR_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_CHART_URL") ??
+            McrTag;
+    }
+
+    public static string GetInferencingFrontendChartPath()
+    {
+        return GetImage("CR_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_CHART_URL") ??
+            $"{McrRegistryUrl}/workloads/helm/kserve-inferencing-frontend";
+    }
+
+    public static string GetInferencingFrontendChartVersion()
+    {
+        return GetTag("CR_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_CHART_URL") ??
+            McrTag;
+    }
+
+    public static string InferencingAgentImage()
+    {
+        return GetImage("CR_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_IMAGE") ??
+        $"{McrRegistryUrl}/workloads/kserve-inferencing-agent";
+    }
+
+    public static string InferencingAgentTag()
+    {
+        return GetTag("CR_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_IMAGE") ?? $"{McrTag}";
+    }
+
+    public static string InferencingFrontendImage()
+    {
+        return GetImage("CR_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_IMAGE") ??
+        $"{McrRegistryUrl}/workloads/kserve-inferencing-frontend";
+    }
+
+    public static string InferencingFrontendTag()
+    {
+        return GetTag("CR_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_IMAGE") ?? $"{McrTag}";
+    }
+
     public static string CcrProxyImage()
     {
         return GetImage("CR_CLUSTER_PROVIDER_PROXY_IMAGE") ??
@@ -192,15 +333,15 @@ public static class ImageUtils
         return GetTag("CR_CLUSTER_PROVIDER_GOVERNANCE_IMAGE") ?? McrTag;
     }
 
-    public static string CcrAttestationImage()
+    public static string CcrGovernanceVirtualImage()
     {
-        return GetImage("CR_CLUSTER_PROVIDER_ATTESTATION_IMAGE")
-            ?? $"{McrRegistryUrl}/ccr-attestation";
+        return GetImage("CR_CLUSTER_PROVIDER_GOVERNANCE_VIRTUAL_IMAGE")
+            ?? $"{McrRegistryUrl}/ccr-governance-virtual";
     }
 
-    public static string CcrAttestationTag()
+    public static string CcrGovernanceVirtualTag()
     {
-        return GetTag("CR_CLUSTER_PROVIDER_ATTESTATION_IMAGE") ?? McrTag;
+        return GetTag("CR_CLUSTER_PROVIDER_GOVERNANCE_VIRTUAL_IMAGE") ?? McrTag;
     }
 
     public static string OtelCollectorImage()
@@ -224,6 +365,16 @@ public static class ImageUtils
         return GetTag("CR_CLUSTER_PROVIDER_SKR_IMAGE") ?? $"{McrTag}";
     }
 
+    public static string LocalSkrImage()
+    {
+        return GetImage("CR_CLUSTER_PROVIDER_LOCAL_SKR_IMAGE") ?? $"{McrRegistryUrl}/local-skr";
+    }
+
+    public static string LocalSkrTag()
+    {
+        return GetTag("CR_CLUSTER_PROVIDER_LOCAL_SKR_IMAGE") ?? $"{McrTag}";
+    }
+
     public static string CredentialsProxyImage()
     {
         // TODO (anrdesai): Move test image references to test project
@@ -242,6 +393,28 @@ public static class ImageUtils
 
         return !string.IsNullOrEmpty(url) ? url :
             $"{McrRegistryUrl}/sidecar-digests:{McrTag}";
+    }
+
+    public static string GetCleanroomCvmMeasurementsDocumentUrl()
+    {
+        var url = Environment.GetEnvironmentVariable(
+           "CR_CLUSTER_PROVIDER_CLEANROOM_CVM_MEASUREMENTS_DOCUMENT_URL");
+
+        return !string.IsNullOrEmpty(url) ? url :
+            $"{McrRegistryUrl}/cvm-measurements:{McrTag}";
+    }
+
+    /// <summary>
+    /// Gets the URL of the inferencing runtime digests document.
+    /// </summary>
+    /// <returns>The runtime digests document URL.</returns>
+    public static string GetRuntimeDigestsDocumentUrl()
+    {
+        var url = Environment.GetEnvironmentVariable(
+           "CR_CLUSTER_PROVIDER_RUNTIME_DIGESTS_DOCUMENT_URL");
+
+        return !string.IsNullOrEmpty(url) ? url :
+            $"{McrRegistryUrl}/inf-runtime-digests:{McrTag}";
     }
 
     public static string CleanroomAnalyticsApp()

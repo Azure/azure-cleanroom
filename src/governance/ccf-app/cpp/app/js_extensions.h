@@ -11,4 +11,7 @@ namespace cleanroomapp::js::extensions
 
   JSValue js_generate_endorsed_cert(
     JSContext* ctx, JSValueConst, int argc, JSValueConst* argv);
+
+  JSValue js_verify_cvm_snp_attestation(
+    JSContext* ctx, JSValueConst, int argc, JSValueConst* argv);
 }

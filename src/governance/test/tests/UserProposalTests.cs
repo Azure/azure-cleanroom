@@ -137,7 +137,7 @@ public class UserProposalTests : TestBase
             proposalStatus = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
             Assert.AreEqual(nameof(ProposalState.Accepted), proposalStatus[StateKey]!.ToString());
             var ballots = proposalStatus["ballots"]!.AsArray().ToList();
-            Assert.AreEqual(2, ballots.Count);
+            Assert.HasCount(2, ballots);
             Assert.IsTrue(ballots.Any(b => b!["approverId"]!.ToString() == member0Id));
             Assert.IsTrue(ballots.Any(b => b!["approverId"]!.ToString() == member1Id));
         }
@@ -234,7 +234,7 @@ public class UserProposalTests : TestBase
             proposalStatus = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
             Assert.AreEqual(nameof(ProposalState.Accepted), proposalStatus[StateKey]!.ToString());
             var ballots = proposalStatus["ballots"]!.AsArray().ToList();
-            Assert.AreEqual(3, ballots.Count);
+            Assert.HasCount(3, ballots);
             Assert.IsTrue(ballots.Any(b => b!["approverId"]!.ToString() == member0Id));
             Assert.IsTrue(ballots.Any(b => b!["approverId"]!.ToString() == member1Id));
             Assert.IsTrue(ballots.Any(b => b!["approverId"]!.ToString() == member2Id));

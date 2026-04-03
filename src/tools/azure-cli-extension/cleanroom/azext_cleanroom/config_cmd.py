@@ -1,4 +1,4 @@
-from cleanroom_common.azure_cleanroom_core.models.model import *
+from cleanroom_common.azure_cleanroom_core.models.cleanroom import *
 
 from .utilities._datastore_helpers import DataStoreConfiguration
 from .utilities._secretstore_helpers import SecretStoreConfiguration
@@ -14,6 +14,13 @@ def config_add_identity_az_federated_cmd(
     issuer_url="",
 ):
     from azure.cli.core.util import CLIError
+    from cleanroom_common.azure_cleanroom_core.exceptions.exception import (
+        CleanroomSpecificationError,
+        ErrorCode,
+    )
+    from cleanroom_common.azure_cleanroom_core.utilities.identity_manager import (
+        IdentityManager,
+    )
 
     from .utilities._azcli_helpers import logger
     from .utilities._configuration_helpers import (
@@ -23,34 +30,24 @@ def config_add_identity_az_federated_cmd(
 
     spec = read_cleanroom_spec_internal(cleanroom_config_file)
 
-    identities = [x for x in spec.identities if x.name == backing_identity]
-    if len(identities) == 0:
-        raise CLIError(
-            f"Identity {backing_identity} could not be found in the config file. "
-            + f"First add the {backing_identity} before adding a federated identity."
+    try:
+        IdentityManager(spec.identities, logger).add_identity_az_federated(
+            name=name,
+            client_id=client_id,
+            tenant_id=tenant_id,
+            backing_identity_name=backing_identity,
+            token_issuer_url=issuer_url,
         )
+    except CleanroomSpecificationError as e:
+        match e.code:
+            case ErrorCode.BackingIdentityNotFound:
+                raise CLIError(
+                    f"Identity {backing_identity} could not be found in the config file. "
+                    + f"First add the {backing_identity} before adding a federated identity."
+                )
+            case _:
+                raise CLIError(f"Error adding identity: {e}")
 
-    federated_identity = Identity(
-        name=name,
-        clientId=client_id,
-        tenantId=tenant_id,
-        tokenIssuer=FederatedIdentityBasedTokenIssuer(
-            issuer=ServiceEndpoint(
-                protocol=ProtocolType.AzureAD_Federated,
-                url=issuer_url,
-            ),
-            federatedIdentity=identities[0],
-            issuerType="FederatedIdentityBasedTokenIssuer",
-        ),
-    )
-
-    index = next((i for i, x in enumerate(spec.identities) if x.name == name), None)
-    if index == None:
-        logger.info(f"Adding entry for identity {name} in configuration.")
-        spec.identities.append(federated_identity)
-    else:
-        logger.info(f"Patching identity {name} in configuration.")
-        spec.identities[index] = federated_identity
     write_cleanroom_spec_internal(cleanroom_config_file, spec)
 
 
@@ -65,6 +62,13 @@ def config_add_identity_az_secret_cmd(
     backing_identity,
 ):
     from azure.cli.core.util import CLIError
+    from cleanroom_common.azure_cleanroom_core.exceptions.exception import (
+        CleanroomSpecificationError,
+        ErrorCode,
+    )
+    from cleanroom_common.azure_cleanroom_core.utilities.identity_manager import (
+        IdentityManager,
+    )
 
     from .utilities._azcli_helpers import logger
     from .utilities._configuration_helpers import (
@@ -74,49 +78,25 @@ def config_add_identity_az_secret_cmd(
 
     spec = read_cleanroom_spec_internal(cleanroom_config_file)
 
-    backing_identities = [x for x in spec.identities if x.name == backing_identity]
-    if len(backing_identities) == 0:
-        raise CLIError(
-            f"Identity {backing_identity} could not be found in the config file."
-            + f"First add the {backing_identity} before adding a secret based identity."
+    try:
+        IdentityManager(spec.identities, logger).add_identity_az_secret(
+            name=name,
+            client_id=client_id,
+            tenant_id=tenant_id,
+            secret_name=secret_name,
+            secret_store_url=secret_store_url,
+            backing_identity_name=backing_identity,
         )
+    except CleanroomSpecificationError as e:
+        match e.code:
+            case ErrorCode.BackingIdentityNotFound:
+                raise CLIError(
+                    f"Identity {backing_identity} could not be found in the config file. "
+                    + f"First add the {backing_identity} before adding a secret based identity."
+                )
+            case _:
+                raise CLIError(f"Error adding identity: {e}")
 
-    # Add Secret Stores
-    secret_store = ServiceEndpoint(
-        protocol=ProtocolType.AzureKeyVault_Secret,
-        url=secret_store_url,
-    )
-
-    secret_identity = Identity(
-        name=name,
-        clientId=client_id,
-        tenantId=tenant_id,
-        tokenIssuer=SecretBasedTokenIssuer(
-            issuer=ServiceEndpoint(
-                protocol=ProtocolType.AzureAD_Secret,
-                url="https://AzureAD",
-            ),
-            secret=CleanroomSecret(
-                secretType=SecretType.Secret,
-                backingResource=Resource(
-                    name=secret_name,
-                    id=secret_name,
-                    provider=secret_store,
-                    type=ResourceType.AzureKeyVault,
-                ),
-            ),
-            secretAccessIdentity=backing_identities[0],
-            issuerType="SecretBasedTokenIssuer",
-        ),
-    )
-
-    index = next((i for i, x in enumerate(spec.identities) if x.name == name), None)
-    if index == None:
-        logger.info(f"Adding entry for identity {name} in configuration.")
-        spec.identities.append(secret_identity)
-    else:
-        logger.info(f"Patching identity {name} in configuration.")
-        spec.identities[index] = secret_identity
     write_cleanroom_spec_internal(cleanroom_config_file, spec)
 
 
@@ -124,6 +104,9 @@ def config_add_identity_oidc_attested_cmd(
     cmd, cleanroom_config_file, name, client_id, tenant_id, issuer_url
 ):
     from azure.cli.core.util import CLIError
+    from cleanroom_common.azure_cleanroom_core.utilities.identity_manager import (
+        IdentityManager,
+    )
 
     from .utilities._azcli_helpers import logger
     from .utilities._configuration_helpers import (
@@ -133,23 +116,13 @@ def config_add_identity_oidc_attested_cmd(
 
     spec = read_cleanroom_spec_internal(cleanroom_config_file)
 
-    secret_identity = Identity(
+    IdentityManager(spec.identities, logger).add_identity_oidc_attested(
         name=name,
-        clientId=client_id,
-        tenantId=tenant_id,
-        tokenIssuer=AttestationBasedTokenIssuer(
-            issuer=ServiceEndpoint(protocol=ProtocolType.Attested_OIDC, url=issuer_url),
-            issuerType="AttestationBasedTokenIssuer",
-        ),
+        client_id=client_id,
+        tenant_id=tenant_id,
+        issuer_url=issuer_url,
     )
 
-    index = next((i for i, x in enumerate(spec.identities) if x.name == name), None)
-    if index == None:
-        logger.info(f"Adding entry for identity {name} in configuration.")
-        spec.identities.append(secret_identity)
-    else:
-        logger.info(f"Patching identity {name} in configuration.")
-        spec.identities[index] = secret_identity
     write_cleanroom_spec_internal(cleanroom_config_file, spec)
 
 

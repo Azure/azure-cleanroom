@@ -6,6 +6,10 @@ param
 
   [string]$idpPort = "8399",
 
+  [string]$repo = "localhost:5000",
+
+  [string]$tag = "latest",
+    
   [Parameter(Mandatory)]
   [string]$outDir
 
@@ -18,7 +22,7 @@ $PSNativeCommandUseErrorActionPreference = $true
 $root = git rev-parse --show-toplevel
 
 Write-Output "Setting up local IDP endpoint."
-pwsh $root/src/tools/local-idp/deploy-local-idp.ps1 -port $idpPort
+pwsh $root/src/tools/local-idp/deploy-local-idp.ps1 -port $idpPort -repo $repo -tag $tag
 $idpEndpoint = "http://localhost:$idpPort"
 $timeout = New-TimeSpan -Minutes 1
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -36,30 +40,31 @@ $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
   }
 }
 
-if ($env:CODESPACES -ne "true" -and $env:GITHUB_ACTIONS -ne "true") {
-  $localIdpEndpoint = "http://host.docker.internal:$idpPort"
+if ($env:GITHUB_ACTIONS -eq "true") {
+  # Using JOB_ID as hostname in GitHub Actions environment so that a shared CCF instance can 
+  # have multiple local IDP instances registered with it with unique issuer names.
+  $issuerEndpoint = "http://${env:JOB_ID}.com"
 }
 else {
-  # 172.17.0.1: https://stackoverflow.com/questions/48546124/what-is-the-linux-equivalent-of-host-docker-internal
-  $localIdpEndpoint = "http://172.17.0.1:$idpPort"
+  $issuerEndpoint = "http://local-idp.com"
 }
 
 # Setting up IDP for user authentication using JWT.
 curl --fail-with-body -s -X POST "$idpEndpoint/setissuerurl" -d `
   @"
 {
-  "url": "${localIdpEndpoint}/oidc"
+  "url": "${issuerEndpoint}/oidc"
 }
 "@ -H "content-type: application/json" | jq
 
-Write-Output "Submitting set_jwt_issuer proposal for local IDP"
+Write-Output "Submitting set_jwt_issuer proposal for local IDP with issuer endpoint ${issuerEndpoint}/oidc"
 $proposalId = (az cleanroom governance proposal create --content `
     @"
 {
   "actions": [ {
     "name": "set_jwt_issuer",
     "args": {
-      "issuer": "${localIdpEndpoint}/oidc",
+      "issuer": "${issuerEndpoint}/oidc",
       "auto_refresh": false
     }
   }]
@@ -76,13 +81,14 @@ $idpSigningKey = (curl --fail-with-body -s -X POST "$idpEndpoint/generatesigning
 $idpSigningKey.pem.TrimEnd("`n") | Out-File "$outDir/local_idp_cert.pem"
 $kid = $idpSigningKey.kid
 $x5c = $idpSigningKey.x5c
+Write-Output "set_jwt_public_signing_keys proposal with kid: $kid"
 $proposalId = (az cleanroom governance proposal create --content `
     @"
 {
   "actions": [ {
     "name": "set_jwt_public_signing_keys",
     "args": {
-      "issuer": "${localIdpEndpoint}/oidc",
+      "issuer": "${issuerEndpoint}/oidc",
       "jwks": {
         "keys": [
           {

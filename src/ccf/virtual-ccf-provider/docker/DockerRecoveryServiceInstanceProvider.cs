@@ -197,7 +197,7 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
         // Copy out the test keys/report into the host directory so that it can be mounted into
         // the container.
         WorkspaceDirectories.CopyDirectory(
-            Directory.GetCurrentDirectory() + "/insecure-virtual/recovery-service",
+            Directory.GetCurrentDirectory() + "/insecure-virtual",
             insecureVirtualDir,
             recursive: true);
 

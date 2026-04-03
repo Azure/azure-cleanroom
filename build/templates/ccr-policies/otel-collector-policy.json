@@ -1,43 +1,49 @@
 {
   "name": "otel-collector",
-  "containerImage": "$containerRegistryUrl/otel-collector@$digest",
-  "command": [],
-  "environmentVariables": [
-    {
-      "name": "TELEMETRY_COLLECTION_ENABLED",
-      "value": "$telemetryCollectionEnabled",
-      "strategy": "string"
+  "properties": {
+    "image": "$containerRegistryUrl/otel-collector@$digest",
+    "command": [],
+    "environmentVariables": [
+      {
+        "name": "TELEMETRY_COLLECTION_ENABLED",
+        "value": "$telemetryCollectionEnabled"
+      },
+      {
+        "name": "TELEMETRY_PATH",
+        "value": "$telemetryPath"
+      },
+      {
+        "name": "PROMETHEUS_ENDPOINT",
+        "value": "$prometheusEndpoint"
+      },
+      {
+        "name": "LOKI_ENDPOINT",
+        "value": "$lokiEndpoint"
+      },
+      {
+        "name": "TEMPO_ENDPOINT",
+        "value": "$tempoEndpoint"
+      },
+      {
+        "name": "SPARK_METRICS_ENDPOINT",
+        "value": "$sparkMetricsEndpoint"
+      },
+      {
+        "name": "RESOURCE_ATTRIBUTES",
+        "value": ".*",
+        "regex": true
+      }
+    ],
+    "securityContext": {
+      "privileged": "false"
     },
-    {
-      "name": "TELEMETRY_PATH",
-      "value": "$telemetryPath",
-      "strategy": "string"
-    },
-    {
-      "name": "PROMETHEUS_ENDPOINT",
-      "value": "$prometheusEndpoint",
-      "strategy": "string"
-    },
-    {
-      "name": "LOKI_ENDPOINT",
-      "value": "$lokiEndpoint",
-      "strategy": "string"
-    },
-    {
-      "name": "TEMPO_ENDPOINT",
-      "value": "$tempoEndpoint",
-      "strategy": "string"
-    }
-  ],
-  "securityContext": {
-    "privileged": "false"
-  },
-  "mounts": [
-    {
-      "name": "telemetrymounts",
-      "mountPath": "$telemetryMountPath",
-      "mountType": "emptyDir",
-      "readOnly": false
-    }
-  ]
+    "volumeMounts": [
+      {
+        "name": "telemetrymounts",
+        "mountPath": "$telemetryMountPath",
+        "mountType": "emptyDir",
+        "readOnly": false
+      }
+    ]
+  }
 }

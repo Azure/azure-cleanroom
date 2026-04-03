@@ -75,9 +75,9 @@ public class OidcTests : TestBase
             var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
 
             string clientAssertion = responseBody["value"]!.ToString();
-            Assert.IsTrue(!string.IsNullOrEmpty(clientAssertion));
+            Assert.IsFalse(string.IsNullOrEmpty(clientAssertion));
             var parts = clientAssertion.Split('.');
-            Assert.AreEqual(3, parts.Length);
+            Assert.HasCount(3, parts);
 
             var header = JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[0]))!;
             var expectedAlgHeader = "PS256";
@@ -101,9 +101,9 @@ public class OidcTests : TestBase
             var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
 
             string clientAssertion = responseBody["value"]!.ToString();
-            Assert.IsTrue(!string.IsNullOrEmpty(clientAssertion));
+            Assert.IsFalse(string.IsNullOrEmpty(clientAssertion));
             var parts = clientAssertion.Split('.');
-            Assert.AreEqual(3, parts.Length);
+            Assert.HasCount(3, parts);
 
             var header = JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[0]))!;
             var expectedAlgHeader = "PS256";
@@ -188,7 +188,8 @@ public class OidcTests : TestBase
             // Payload contains valid attestation report but no clean room policy has been proposed
             // yet so get token should fail.
             var attestationReport = JsonSerializer.Deserialize<JsonObject>(
-                await File.ReadAllTextAsync("data/attestation-report.json"))!;
+                await File.ReadAllTextAsync(
+                    "data/encryption/attestation.json"))!["report"]!["snpCACI"]!;
             var publicKey = CreateX509Certificate2("foo").PublicKey.ExportSubjectPublicKeyInfo();
             var publicKeyPem = PemEncoding.Write("PUBLIC KEY", publicKey);
             request.Content = new StringContent(
@@ -225,7 +226,8 @@ public class OidcTests : TestBase
         {
             // Payload contains valid attestation report but public key does not match reportdata.
             var attestationReport = JsonSerializer.Deserialize<JsonObject>(
-                await File.ReadAllTextAsync("data/attestation-report.json"))!;
+                await File.ReadAllTextAsync(
+                    "data/encryption/attestation.json"))!["report"]!["snpCACI"]!;
             var publicKey = CreateX509Certificate2("foo").PublicKey.ExportSubjectPublicKeyInfo();
             var publicKeyPem = PemEncoding.Write("PUBLIC KEY", publicKey);
             request.Content = new StringContent(
@@ -263,8 +265,7 @@ public class OidcTests : TestBase
                 HashAlgorithmName.SHA256,
                 RSASignaturePadding.Pkcs1);
             var cert = req.CreateSelfSigned(DateTimeOffset.Now, DateTimeOffset.Now.AddYears(1));
-            return new X509Certificate2(
-                cert.Export(X509ContentType.Pfx, string.Empty), string.Empty);
+            return cert;
         }
     }
 
@@ -280,16 +281,17 @@ public class OidcTests : TestBase
         await this.MemberSetIssuerUrl(Members.Member1, issuerUrl);
         string sub = "cleanroom-azure-analytics";
         string policyUrl =
-            $"contracts/{contractId}/oauth/federation/subjects/{sub}/cleanroompolicy";
+            $"contracts/{contractId}/cleanroompolicy/delegates/oauth-federation-subjects/{sub}";
 
-        // Setup a subject level policy (hostData2) using ccr-governance running with the
+        // Setup a delegate policy (hostData2) using ccr-governance running with the
         // contract level clean room policy (hostData1). Then request token using hostData2.
         using (HttpRequestMessage request =
-            new(HttpMethod.Post, $"oauth/federation/subjects/{sub}/cleanroompolicy"))
+            new(HttpMethod.Post, $"cleanroompolicy/delegates/oauth-federation-subjects/{sub}"))
         {
             var addPolicy = new JsonObject
             {
                 ["type"] = "add",
+                ["policyType"] = "snp-caci",
                 ["claims"] = new JsonObject
                 {
                     ["x-ms-sevsnpvm-is-debuggable"] = false,
@@ -327,9 +329,9 @@ public class OidcTests : TestBase
             var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
 
             string clientAssertion = responseBody["value"]!.ToString();
-            Assert.IsTrue(!string.IsNullOrEmpty(clientAssertion));
+            Assert.IsFalse(string.IsNullOrEmpty(clientAssertion));
             var parts = clientAssertion.Split('.');
-            Assert.AreEqual(3, parts.Length);
+            Assert.HasCount(3, parts);
 
             var header = JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[0]))!;
             var expectedAlgHeader = "PS256";
@@ -343,24 +345,33 @@ public class OidcTests : TestBase
             Assert.AreEqual(issuerUrl, claims["iss"]!.ToString());
         }
 
-        // Getting the client assertion (jwt) via gov sidecar using contract level
-        // policy (ie hostData1) should fail.
+        // Access via hostData1 should be possible always.
         using (HttpRequestMessage request = new(HttpMethod.Post, $"oauth/token{query}"))
         {
             using HttpResponseMessage response = await this.GovSidecarClient.SendAsync(request);
-            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
-            var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
-            Assert.AreEqual("VerifySnpAttestationFailed", error.Code);
-            Assert.AreEqual(
-                $"Attestation claim x-ms-sevsnpvm-hostdata, value {this.GovSidecarHostData} " +
-                $"does not match policy values: {this.GovSidecar2HostData}",
-                error.Message);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+
+            string clientAssertion = responseBody["value"]!.ToString();
+            Assert.IsFalse(string.IsNullOrEmpty(clientAssertion));
+            var parts = clientAssertion.Split('.');
+            Assert.HasCount(3, parts);
+
+            var header = JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[0]))!;
+            var expectedAlgHeader = "PS256";
+            Assert.AreEqual(expectedAlgHeader, header["alg"]!.ToString());
+            Assert.AreEqual("JWT", header["typ"]!.ToString());
+            Assert.AreEqual(kid, header["kid"]!.ToString());
+
+            var claims = JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[1]))!;
+            Assert.AreEqual("api://AzureADTokenExchange", claims["aud"]!.ToString());
+            Assert.AreEqual(sub, claims["sub"]!.ToString());
+            Assert.AreEqual(issuerUrl, claims["iss"]!.ToString());
         }
 
-        // Removing policy should allow getting the client assertion (jwt) contract
-        // level policy (ie hostData1).
+        // Removing policy should prevent getting the client assertion (jwt) with delegate policy.
         using (HttpRequestMessage request =
-            new(HttpMethod.Post, $"oauth/federation/subjects/{sub}/cleanroompolicy"))
+            new(HttpMethod.Post, $"cleanroompolicy/delegates/oauth-federation-subjects/{sub}"))
         {
             request.Content = new StringContent(
                 new JsonObject
@@ -378,24 +389,16 @@ public class OidcTests : TestBase
             using HttpResponseMessage response = await this.GovSidecarClient.SendAsync(request);
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
-            // After removing the policy above check the get response by the user matches with the
-            // contract level policy now.
+            // After removing the policy above check the get response by the user.
             using HttpRequestMessage request2 = new(HttpMethod.Get, policyUrl);
             using HttpResponseMessage response2 = await this.CgsClient_Member0.SendAsync(request2);
             Assert.AreEqual(HttpStatusCode.OK, response2.StatusCode);
             var responseBody = (await response2.Content.ReadFromJsonAsync<JsonObject>())!;
-            JsonObject expectedClaims = this.ConvertClaimsToArrayFormat(new()
-            {
-                ["x-ms-sevsnpvm-is-debuggable"] = false,
-                ["x-ms-sevsnpvm-hostdata"] = this.GovSidecarHostData
-            });
-            Assert.IsTrue(
-                JsonNode.DeepEquals(expectedClaims, responseBody["claims"]),
-                $"Expected: {expectedClaims.ToJsonString()}, " +
-                $"actual: {responseBody["claims"]?.ToJsonString()}");
+            var claimsJson = responseBody["claims"]?.ToJsonString();
+            Assert.AreEqual("{}", claimsJson, $"Expected empty claims {{}}, but got: {claimsJson}");
         }
 
-        // Getting the client assertion (jwt) via gov sidecar using custom policy (ie hostData2)
+        // Getting the client assertion (jwt) via gov sidecar using delegate policy (ie hostData2)
         // should now fail as its access was removed.
         using (HttpRequestMessage request = new(HttpMethod.Post, $"oauth/token{query}"))
         {
@@ -403,13 +406,9 @@ public class OidcTests : TestBase
             Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
             var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
             Assert.AreEqual("VerifySnpAttestationFailed", error.Code);
-            Assert.AreEqual(
-                $"Attestation claim x-ms-sevsnpvm-hostdata, value {this.GovSidecar2HostData} " +
-                $"does not match policy values: {this.GovSidecarHostData}",
-                error.Message);
         }
 
-        // Since no subject level policy is now set, access via hostData1 should be possible.
+        // Access from contract policy should always be possible.
         using (HttpRequestMessage request = new(HttpMethod.Post, $"oauth/token{query}"))
         {
             using HttpResponseMessage response = await this.GovSidecarClient.SendAsync(request);
@@ -417,9 +416,9 @@ public class OidcTests : TestBase
             var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
 
             string clientAssertion = responseBody["value"]!.ToString();
-            Assert.IsTrue(!string.IsNullOrEmpty(clientAssertion));
+            Assert.IsFalse(string.IsNullOrEmpty(clientAssertion));
             var parts = clientAssertion.Split('.');
-            Assert.AreEqual(3, parts.Length);
+            Assert.HasCount(3, parts);
 
             var header = JsonSerializer.Deserialize<JsonObject>(Base64UrlEncoder.Decode(parts[0]))!;
             var expectedAlgHeader = "PS256";

@@ -19,7 +19,6 @@ param
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 
-$registryArg
 if ($repo -eq "" -and $registry -eq "acr") {
     throw "-repo must be specified for acr option."
 }

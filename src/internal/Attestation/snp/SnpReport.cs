@@ -15,8 +15,10 @@ public class SnpReport
 {
     public const int RuntimeDataDigestSize = 32;
 
-    // AMD Root Public key.
-    public const string AmdRootPublicKey = @"-----BEGIN PUBLIC KEY-----
+    // AMD Root Public keys per platform.
+    // From https://developer.amd.com/sev/ and
+    // https://github.com/microsoft/CCF/blob/main/include/ccf/pal/attestation_sev_snp.h
+    public const string AmdMilanRootPublicKey = @"-----BEGIN PUBLIC KEY-----
 MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA0Ld52RJOdeiJlqK2JdsV
 mD7FktuotWwX1fNgW41XY9Xz1HEhSUmhLz9Cu9DHRlvgJSNxbeYYsnJfvyjx1MfU
 0V5tkKiU1EesNFta1kTA0szNisdYc9isqk7mXT5+KfGRbfc4V/9zRIcE8jlHN61S
@@ -31,9 +33,44 @@ pCCoMNit2uLo9M18fHz10lOMT8nWAUvRZFzteXCm+7PHdYPlmQwUw3LvenJ/ILXo
 QPHfbkH0CyPfhl1jWhJFZasCAwEAAQ==
 -----END PUBLIC KEY-----";
 
+    public const string AmdGenoaRootPublicKey = @"-----BEGIN PUBLIC KEY-----
+MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA3Cd95S/uFOuRIskW9vz9
+VDBF69NDQF79oRhL/L2PVQGhK3YdfEBgpF/JiwWFBsT/fXDhzA01p3LkcT/7Ldjc
+RfKXjHl+0Qq/M4dZkh6QDoUeKzNBLDcBKDDGWo3v35NyrxbA1DnkYwUKU5AAk4P9
+4tKXLp80oxt84ahyHoLmc/LqsGsp+oq1Bz4PPsYLwTG4iMKVaaT90/oZ4I8oibSr
+u92vJhlqWO27d/Rxc3iUMyhNeGToOvgx/iUo4gGpG61NDpkEUvIzuKcaMx8IdTpW
+g2DF6SwF0IgVMffnvtJmA68BwJNWo1E4PLJdaPfBifcJpuBFwNVQIPQEVX3aP89H
+JSp8YbY9lySS6PlVEqTBBtaQmi4ATGmMR+n2K/e+JAhU2Gj7jIpJhOkdH9firQDn
+mlA2SFfJ/Cc0mGNzW9RmIhyOUnNFoclmkRhl3/AQU5Ys9Qsan1jT/EiyT+pCpmnA
++y9edvhDCbOG8F2oxHGRdTBkylungrkXJGYiwGrR8kaiqv7NN8QhOBMqYjcbrkEr
+0f8QMKklIS5ruOfqlLMCBw8JLB3LkjpWgtD7OpxkzSsohN47Uom86RY6lp72g8eX
+HP1qYrnvhzaG1S70vw6OkbaaC9EjiH/uHgAJQGxon7u0Q7xgoREWA/e7JcBQwLg8
+0Hq/sbRuqesxz7wBWSY254cCAwEAAQ==
+-----END PUBLIC KEY-----";
+
+    public const string AmdTurinRootPublicKey = @"-----BEGIN PUBLIC KEY-----
+MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAwaAriB7EIuVc4ZB1wD3Y
+fDx+9eyS7+izm0Jj3W772NINCWl8Bj3w/JD2ZjmbRxWdIq/4d9iarCKorXloJUB
+1jRdgxqccTx1aOoig42w1XhVVJT7K457wT5ZLNJgQaxqa9Etkwjd6+9sOhlCDE9
+l43kQ0R2BikVJa/uyyVOSwEk5w5tXKOuGjvq6QtAMJasW38wlqRDaKEGtZ9VUgG
+on27ZuL4sTJuC/azz9/iQBw8kEilzOl95AiTkeY5jSEBDWbAnZk5qlM7kISKG20
+kgQm14mhNKDI2p2oua+zuAG7i52epoRF2GfU0TYk/yf+vCNB2tnechFQuP2e8bL
+95ZdqPi9/UWw4JXjtdEA4u2JYplSSUPQVAXKt6LVqujtJcM59JKr2u0XQ75KwxcM
+p15gSXhBfInvPwuAY4dEwwGqT8oIg4esPHwEsmChhYeDIxPG9R4fx9O0q6p8Gb+
+HXlTiS47P9YNeOpidOUKzDl/S1OvhDtSL8LJc24QATFydo/iD/KUdvFTRlD0crk
+AMkZLoWQ8hLDGc6BZJXsdd7Zf2e4UW3tI/1oh/2t23O3zyhTcv5gDbABu0LjVe9
+8uRnS15SMwK//lJt9e5BqKvgABkSoABf+B4VFtPVEX0ygrYaFaI9i5ABrxnVBmzX
+pRb21iI1NlNCfOGUPIhVpWECAwEAAQ==
+-----END PUBLIC KEY-----";
+
+    // Keep backward-compatible alias for existing code.
+    public const string AmdRootPublicKey = AmdMilanRootPublicKey;
+
     public static readonly List<string> TrustedAmdRootPublicKeys = new()
     {
-        AmdRootPublicKey
+        AmdMilanRootPublicKey,
+        AmdGenoaRootPublicKey,
+        AmdTurinRootPublicKey
     };
 
     private string familyId;
@@ -251,7 +288,9 @@ QPHfbkH0CyPfhl1jWhJFZasCAwEAAQ==
             if (TrustedAmdRootPublicKeys.FirstOrDefault(
                 (trustedKey) => ComparePublicKey(this.RootCert.PublicKey, trustedKey)) == null)
             {
-                throw new Exception("AMD RootKey did not match expected value.");
+                throw new Exception(
+                    "AMD RootKey did not match any expected value " +
+                    "(checked Milan, Genoa, and Turin root keys).");
             }
 
             if (this.LeafCert == null)
@@ -297,7 +336,9 @@ QPHfbkH0CyPfhl1jWhJFZasCAwEAAQ==
 
             foreach (Match match in matches)
             {
-                certCollection.Import(Encoding.UTF8.GetBytes(match.Value));
+                var cert =
+                    X509CertificateLoader.LoadCertificate(Encoding.UTF8.GetBytes(match.Value));
+                certCollection.Add(cert);
             }
 
             // Example certCollection:

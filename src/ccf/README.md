@@ -69,6 +69,7 @@ az group create --name $resourceGroup --location westeurope
 
 $networkName = "ccf-network"
 $subscriptionId = az account show --query "id" -o tsv
+$tenantId = az account show --query "tenantId" -o tsv
 
 # Create a storage account for using Azure File shares for the CCF nodes.
 az storage account create `
@@ -103,6 +104,7 @@ if (!(Test-Path "$sandbox_common/${operatorName}_cert.pem")) {
 {
     "location": "$location",
     "subscriptionId": "$subscriptionId",
+    "tenantId": "$tenantId",
     "resourceGroupName": "$resourceGroup",
     "azureFiles": {
         "storageAccountId": "$storageAccountId"
@@ -200,6 +202,7 @@ az group create --name $resourceGroup --location westeurope
 
 $networkName = "ccf-network-op"
 $subscriptionId = az account show --query "id" -o tsv
+$tenantId = az account show --query "tenantId" -o tsv
 
 # Create a storage account for using Azure File shares for the CCF nodes.
 az storage account create `
@@ -235,6 +238,7 @@ if (!(Test-Path "$sandbox_common/${operatorName}_cert.pem")) {
 {
     "location": "$location",
     "subscriptionId": "$subscriptionId",
+    "tenantId": "$tenantId",
     "resourceGroupName": "$resourceGroup",
     "azureFiles": {
         "storageAccountId": "$storageAccountId"
@@ -321,7 +325,7 @@ Sample unhealthy network output:
       "reasons": [
         {
           "code": "ContainerTerminated",
-          "message": "Following container(s) are reporting as terminated. ccf-cchost. ccr-attestation. ccf-recovery-agent. ccr-proxy."
+          "message": "Following container(s) are reporting as terminated. ccf-cchost. skr. ccf-recovery-agent. ccr-proxy."
         },
         {
           "code": "ContainerGroupStopped",

@@ -1157,6 +1157,39 @@ const actions = new Map([
     )
   ],
   [
+    "set_snp_minimum_tcb_version_hex",
+    new Action(
+      function (args) {
+        checkType(args.cpuid, "string", "cpuid");
+        checkType(args.tcb_version, "string", "tcb_version");
+      },
+      function (args, proposalId) {
+        let tcb_policy = ccf.tcbHexToPolicy(args.cpuid, args.tcb_version);
+        ccf.kv["public:ccf.gov.nodes.snp.tcb_versions"].set(
+          ccf.strToBuf(args.cpuid),
+          ccf.jsonCompatibleToBuf(tcb_policy)
+        );
+        invalidateOtherOpenProposals(proposalId);
+      }
+    )
+  ],
+  [
+    "remove_snp_minimum_tcb_version",
+    new Action(
+      function (args) {
+        checkType(args.cpuid, "string", "cpuid");
+      },
+      function (args) {
+        const cpuid = ccf.strToBuf(args.cpuid);
+        if (ccf.kv["public:ccf.gov.nodes.snp.tcb_versions"].has(cpuid)) {
+          ccf.kv["public:ccf.gov.nodes.snp.tcb_versions"].delete(cpuid);
+        } else {
+          throw new Error(`CPUID ${args.cpuid} not found`);
+        }
+      }
+    )
+  ],
+  [
     "set_node_data",
     new Action(
       function (args) {

@@ -2,8 +2,7 @@
   "name": "$datasetName-blobfuse-container",
   "properties": {
     "command": [
-      "python3.10",
-      "./blobfuse-launcher.py",
+     "blobfuse_launcher",
       "--governance-port",
       "8300",
       "--skr-port",

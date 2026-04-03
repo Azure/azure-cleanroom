@@ -1,188 +1,215 @@
 [
   {
     "name": "ccr-proxy",
-    "containerImage": "$containerRegistryUrl/ccr-proxy@$digest",
-    "environmentVariables": [
-      {
-        "name": "CCR_ENVOY_DESTINATION_PORT",
-        "value": ".*",
-        "strategy": "re2"
-      },
-      {
-        "name": "CCR_ENVOY_SERVICE_CERT_OUTPUT_FILE",
-        "value": ".*",
-        "strategy": "re2"
-      }
-    ],
-    "mounts": [
-      {
-        "name": "certs",
-        "mountPath": "/app/certs",
-        "mountType": "emptyDir",
-        "readOnly": false
-      }
-    ],
-    "command": [
-      "/bin/bash",
-      "https-http/bootstrap.sh",
-      "--ca-type",
-      "local"
-    ]
+    "properties": {
+      "image": "$containerRegistryUrl/ccr-proxy@$digest",
+      "environmentVariables": [
+        {
+          "name": "CCR_ENVOY_DESTINATION_PORT",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CCR_ENVOY_SERVICE_CERT_OUTPUT_FILE",
+          "value": ".*",
+          "regex": true
+        }
+      ],
+      "volumeMounts": [
+        {
+          "name": "certs",
+          "mountPath": "/app/certs",
+          "mountType": "emptyDir",
+          "readOnly": false
+        }
+      ],
+      "command": [
+        "/bin/bash",
+        "https-http/bootstrap.sh",
+        "--ca-type",
+        "local"
+      ]
+    }
   },
   {
-    "name": "ccr-attestation",
-    "containerImage": "$containerRegistryUrl/ccr-attestation@$digest",
-    "command": [
-      "app",
-      "-socket-address",
-      "/mnt/uds/sock"
-    ],
-    "environmentVariables": [],
-    "mounts": [
-      {
-        "name": "uds",
-        "mountPath": "/mnt/uds",
-        "mountType": "emptyDir",
-        "readOnly": false
-      }
-    ]
+    "name": "skr",
+    "properties": {
+      "image": "$containerRegistryUrl/skr@$digest",
+      "command": [
+        "/skr.sh"
+      ],
+      "environmentVariables": [
+        {
+          "name": "SkrSideCarArgs",
+          "value": "ewogICAiY2VydGNhY2hlIjogewogICAgICAiZW5kcG9pbnQiOiAiYW1lcmljYXMuYWNjY2FjaGUuYXp1cmUubmV0IiwKICAgICAgInRlZV90eXBlIjogIlNldlNucFZNIiwKICAgICAgImFwaV92ZXJzaW9uIjogImFwaS12ZXJzaW9uPTIwMjAtMTAtMTUtcHJldmlldyIKICAgfQp9"
+        },
+        {
+          "name": "Port",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "LogFile",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "LogLevel",
+          "value": "Info"
+        }
+      ]
+    }
   },
   {
     "name": "ccf-recovery-agent",
-    "containerImage": "$containerRegistryUrl/ccf/ccf-recovery-agent@$digest",
-    "command": [],
-    "environmentVariables": [
-      {
-        "name": "CCF_ENDPOINT",
-        "value": "localhost:.*",
-        "strategy": "re2"
-      },
-      {
-        "name": "CCF_ENDPOINT_SKIP_TLS_VERIFY",
-        "value": ".*",
-        "strategy": "re2"
-      },
-      {
-        "name": "ASPNETCORE_URLS",
-        "value": ".*",
-        "strategy": "re2"
-      },
-      {
-        "name": "SERVICE_CERT_LOCATION",
-        "value": ".*",
-        "strategy": "re2"
-      }
-    ],
-    "mounts": [
-      {
-        "name": "certs",
-        "mountPath": "/app/certs",
-        "mountType": "emptyDir",
-        "readOnly": false
-      },
-      {
-        "name": "uds",
-        "mountPath": "/mnt/uds",
-        "mountType": "emptyDir",
-        "readOnly": false
-      }
-    ]
+    "properties": {
+      "image": "$containerRegistryUrl/ccf/ccf-recovery-agent@$digest",
+      "command": [],
+      "environmentVariables": [
+        {
+          "name": "CCF_ENDPOINT",
+          "value": "localhost:.*",
+          "regex": true
+        },
+        {
+          "name": "CCF_ENDPOINT_SKIP_TLS_VERIFY",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "ASPNETCORE_URLS",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "SERVICE_CERT_LOCATION",
+          "value": ".*",
+          "regex": true
+        }
+      ],
+      "volumeMounts": [
+        {
+          "name": "certs",
+          "mountPath": "/app/certs",
+          "mountType": "emptyDir",
+          "readOnly": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "cvm-attestation-verifier",
+    "properties": {
+      "image": "$containerRegistryUrl/cvm/cvm-attestation-verifier@$digest",
+      "command": [],
+      "environmentVariables": []
+    }
   },
   {
     "name": "ccf-cchost",
-    "containerImage": "$containerRegistryUrl/ccf/app/run-js/snp@$digest",
-    "command": [],
-    "environmentVariables": [
-      {
-        "name": "CONFIG_DATA_TGZ",
-        "value": ".*",
-        "strategy": "re2"
-      },
-      {
-        "name": "CCF_LOG_LEVEL",
-        "value": ".*",
-        "strategy": "re2"
-      },
-      {
-        "name": "LOGS_DIR",
-        "value": ".*",
-        "strategy": "re2"
-      }
-    ],
-    "mounts": [
-      {
-        "name": "storagevolume",
-        "mountPath": "/mnt/storage",
-        "mountType": "azureFile",
-        "readOnly": false
-      },
-      {
-        "name": "rosnapshotsvolume",
-        "mountPath": "/mnt/ro-snapshots",
-        "mountType": "azureFile",
-        "readOnly": false
-      },
-      {
-        "name": "roledgervolume-0",
-        "mountPath": "/mnt/ro-ledgers-0",
-        "mountType": "azureFile",
-        "readOnly": false
-      },
-      {
-        "name": "roledgervolume-1",
-        "mountPath": "/mnt/ro-ledgers-1",
-        "mountType": "azureFile",
-        "readOnly": false
-      },
-      {
-        "name": "roledgervolume-2",
-        "mountPath": "/mnt/ro-ledgers-2",
-        "mountType": "azureFile",
-        "readOnly": false
-      },
-      {
-        "name": "roledgervolume-3",
-        "mountPath": "/mnt/ro-ledgers-3",
-        "mountType": "azureFile",
-        "readOnly": false
-      },
-      {
-        "name": "roledgervolume-4",
-        "mountPath": "/mnt/ro-ledgers-4",
-        "mountType": "azureFile",
-        "readOnly": false
-      },
-      {
-        "name": "roledgervolume-5",
-        "mountPath": "/mnt/ro-ledgers-5",
-        "mountType": "azureFile",
-        "readOnly": false
-      },
-      {
-        "name": "roledgervolume-6",
-        "mountPath": "/mnt/ro-ledgers-6",
-        "mountType": "azureFile",
-        "readOnly": false
-      },
-      {
-        "name": "roledgervolume-7",
-        "mountPath": "/mnt/ro-ledgers-7",
-        "mountType": "azureFile",
-        "readOnly": false
-      },
-      {
-        "name": "roledgervolume-8",
-        "mountPath": "/mnt/ro-ledgers-8",
-        "mountType": "azureFile",
-        "readOnly": false
-      },
-      {
-        "name": "roledgervolume-9",
-        "mountPath": "/mnt/ro-ledgers-9",
-        "mountType": "azureFile",
-        "readOnly": false
-      }
-    ]
-
+    "properties": {
+      "image": "$containerRegistryUrl/ccf/app/run-js/snp@$digest",
+      "command": [],
+      "environmentVariables": [
+        {
+          "name": "CONFIG_DATA_TGZ",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CCF_LOG_LEVEL",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "LOGS_DIR",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CCR_ATTESTATION_HOST",
+          "value": "localhost"
+        },
+        {
+          "name": "CCR_ATTESTATION_PORT",
+          "value": ".*",
+          "regex": true
+        }
+      ],
+      "volumeMounts": [
+        {
+          "name": "storagevolume",
+          "mountPath": "/mnt/storage",
+          "mountType": "azureFile",
+          "readOnly": false
+        },
+        {
+          "name": "rosnapshotsvolume",
+          "mountPath": "/mnt/ro-snapshots",
+          "mountType": "azureFile",
+          "readOnly": false
+        },
+        {
+          "name": "roledgervolume-0",
+          "mountPath": "/mnt/ro-ledgers-0",
+          "mountType": "azureFile",
+          "readOnly": false
+        },
+        {
+          "name": "roledgervolume-1",
+          "mountPath": "/mnt/ro-ledgers-1",
+          "mountType": "azureFile",
+          "readOnly": false
+        },
+        {
+          "name": "roledgervolume-2",
+          "mountPath": "/mnt/ro-ledgers-2",
+          "mountType": "azureFile",
+          "readOnly": false
+        },
+        {
+          "name": "roledgervolume-3",
+          "mountPath": "/mnt/ro-ledgers-3",
+          "mountType": "azureFile",
+          "readOnly": false
+        },
+        {
+          "name": "roledgervolume-4",
+          "mountPath": "/mnt/ro-ledgers-4",
+          "mountType": "azureFile",
+          "readOnly": false
+        },
+        {
+          "name": "roledgervolume-5",
+          "mountPath": "/mnt/ro-ledgers-5",
+          "mountType": "azureFile",
+          "readOnly": false
+        },
+        {
+          "name": "roledgervolume-6",
+          "mountPath": "/mnt/ro-ledgers-6",
+          "mountType": "azureFile",
+          "readOnly": false
+        },
+        {
+          "name": "roledgervolume-7",
+          "mountPath": "/mnt/ro-ledgers-7",
+          "mountType": "azureFile",
+          "readOnly": false
+        },
+        {
+          "name": "roledgervolume-8",
+          "mountPath": "/mnt/ro-ledgers-8",
+          "mountType": "azureFile",
+          "readOnly": false
+        },
+        {
+          "name": "roledgervolume-9",
+          "mountPath": "/mnt/ro-ledgers-9",
+          "mountType": "azureFile",
+          "readOnly": false
+        }
+      ]
+    }
   }
 ]

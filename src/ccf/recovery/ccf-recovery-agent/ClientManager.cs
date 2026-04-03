@@ -12,7 +12,7 @@ public class ClientManager
     private ILogger logger;
     private IConfiguration config;
     private HttpClientManager httpClientManager;
-    private WorkspaceConfiguration wsConfig = default!;
+    private WorkspaceConfiguration? wsConfigOnce;
     private SemaphoreSlim semaphore = new(1, 1);
 
     public ClientManager(ILogger logger, IConfiguration config)
@@ -29,13 +29,13 @@ public class ClientManager
 
     public async Task<HttpClient> GetCcfClient()
     {
-        await this.GetOrLoadWsConfig();
+        var wsConfig = await this.GetOrLoadWsConfig();
         var client = this.httpClientManager.GetOrAddClient(
-            this.wsConfig.CcfEndpoint,
+            wsConfig.CcfEndpoint,
             HttpRetries.Policies.DefaultRetryPolicy(this.logger),
-            this.wsConfig.CcfEndpointCert,
+            wsConfig.CcfEndpointCert,
             "ccf-endpoint",
-            this.wsConfig.CcfEndpointSkipTlsVerify);
+            wsConfig.CcfEndpointSkipTlsVerify);
         return client;
     }
 
@@ -53,8 +53,8 @@ public class ClientManager
         string? svcEndpoint,
         string? svcEndpointCert)
     {
-        await this.GetOrLoadWsConfig();
-        svcEndpoint ??= this.wsConfig.CcfRecoverySvcEndpoint;
+        var wsConfig = await this.GetOrLoadWsConfig();
+        svcEndpoint ??= wsConfig.CcfRecoverySvcEndpoint;
         if (string.IsNullOrEmpty(svcEndpoint))
         {
             throw new ArgumentException(
@@ -62,35 +62,35 @@ public class ClientManager
                 $"variable must be specified.");
         }
 
-        svcEndpointCert = svcEndpointCert ?? this.wsConfig.CcfRecoverySvcEndpointCert;
+        svcEndpointCert = svcEndpointCert ?? wsConfig.CcfRecoverySvcEndpointCert;
 
         var client = this.httpClientManager.GetOrAddClient(
             svcEndpoint,
             HttpRetries.Policies.DefaultRetryPolicy(this.logger),
             svcEndpointCert,
             "recovery-service",
-            skipTlsVerify: this.wsConfig.CcfRecoverySvcEndpointSkipTlsVerify);
+            skipTlsVerify: wsConfig.CcfRecoverySvcEndpointSkipTlsVerify);
         return client;
     }
 
     private async Task<WorkspaceConfiguration> GetOrLoadWsConfig()
     {
-        if (this.wsConfig == null)
+        if (this.wsConfigOnce == null)
         {
             try
             {
                 await this.semaphore.WaitAsync();
-                if (this.wsConfig == null)
+                if (this.wsConfigOnce == null)
                 {
-                    if (Attestation.IsSevSnp())
+                    if (Attestation.IsSnpCACI())
                     {
-                        this.wsConfig = await this.InitializeWsConfigFetchAttestation();
+                        this.wsConfigOnce = await this.InitializeWsConfigFetchAttestation();
                     }
                     else
                     {
                         this.logger.LogWarning(
                             "Running in insecure-virtual mode. This is for dev/test environment.");
-                        this.wsConfig = await this.InitializeWsConfigFromEnvironment();
+                        this.wsConfigOnce = await this.InitializeWsConfigFromEnvironment();
                     }
                 }
             }
@@ -100,7 +100,7 @@ public class ClientManager
             }
         }
 
-        return this.wsConfig;
+        return this.wsConfigOnce;
     }
 
     private async Task<WorkspaceConfiguration> InitializeWsConfigFromEnvironment()
@@ -131,15 +131,9 @@ public class ClientManager
             CcfRecoverySvcEndpointSkipTlsVerify = ccfRecoverySvcEndpointSkipTlsVerify
         };
 
-        var privateKey =
-            await File.ReadAllTextAsync("/app/insecure-virtual/keys/priv_key.pem");
-        var publicKey =
-            await File.ReadAllTextAsync("/app/insecure-virtual/keys/pub_key.pem");
         var content = await File.ReadAllTextAsync(
-            "/app/insecure-virtual/attestation/attestation-report.json");
-        var attestationReport = JsonSerializer.Deserialize<AttestationReport>(content)!;
-
-        wsConfig.Attestation = new AttestationReportKey(publicKey, privateKey, attestationReport);
+            "/app/insecure-virtual/encryption/attestation.json");
+        wsConfig.Attestation = JsonSerializer.Deserialize<AttestationReportKey>(content)!;
         return wsConfig;
     }
 

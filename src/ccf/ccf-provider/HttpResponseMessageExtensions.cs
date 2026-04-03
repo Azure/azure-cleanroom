@@ -4,7 +4,6 @@
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
-using Microsoft.Rest.TransientFaultHandling;
 
 namespace CcfProvider;
 
@@ -26,10 +25,7 @@ internal static class HttpResponseMessageExtensions
                 $"failed with statusCode {response.StatusCode}, " +
                 $"reasonPhrase: {response.ReasonPhrase} and content: {content}.");
 
-            throw new HttpRequestWithStatusException(content)
-            {
-                StatusCode = response.StatusCode
-            };
+            throw new Azure.RequestFailedException((int)response.StatusCode, content);
         }
     }
 
@@ -75,7 +71,7 @@ internal static class HttpResponseMessageExtensions
         string? transactionId = null;
         if (response.Headers.TryGetValues(TransactionIdHeader, out var values))
         {
-            transactionId = values!.First();
+            transactionId = values.First();
         }
 
         return transactionId;

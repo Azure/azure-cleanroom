@@ -1,11 +1,11 @@
 import * as ccfapp from "@microsoft/ccf-app";
-import { UserIdentityStoreItem } from "../models/kvstoremodels";
+import { UserIdentityStoreItem } from "../models";
 import { validateCallerAuthorized } from "../utils/utils";
-import { ErrorResponse } from "../models/errorresponse";
+import { ErrorResponse } from "../utils/ErrorResponse";
 import {
   GetUserIdentityResponse,
   ListUserIdentitiesResponse
-} from "../models/useridentitiesmodel";
+} from "../models";
 
 // Code adapted from https://raw.githubusercontent.com/microsoft/ccf-app-samples/main/auditable-logging-app/src/endpoints/log.ts
 
@@ -62,7 +62,7 @@ export function getUserIdentity(
   };
 }
 
-export function isActiveUser(
+export function checkUserIdentity(
   request: ccfapp.Request
 ): ccfapp.Response | ccfapp.Response<ErrorResponse> {
   const error = validateCallerAuthorized(request);

@@ -13,6 +13,8 @@ internal class Startup : ApiStartup
     {
     }
 
+    public override bool EnableOpenTelemetry => true;
+
     public override void OnConfigureServices(IServiceCollection services)
     {
         services.AddControllers(options =>

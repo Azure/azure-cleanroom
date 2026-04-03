@@ -1,0 +1,33 @@
+[
+    {
+        "name": "app",
+        "properties": {
+            "image": "busybox:latest",
+            "command": [
+                "/bin/myapp"
+            ],
+            "environmentVariables": [
+                {
+                    "name": "APP_ENV",
+                    "value": "production"
+                },
+                {
+                    "name": "LOG_LEVEL",
+                    "value": "debug"
+                }
+            ],
+            "volumeMounts": [
+                {
+                    "name": "config",
+                    "mountPath": "/etc/app",
+                    "readOnly": true
+                },
+                {
+                    "name": "data",
+                    "mountPath": "/data",
+                    "readOnly": false
+                }
+            ]
+        }
+    }
+]

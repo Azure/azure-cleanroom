@@ -5,7 +5,7 @@ import {
   UserProposalInfoItem,
   UserProposalStoreItem
 } from "../models";
-import { ErrorResponse } from "../models/errorresponse";
+import { ErrorResponse } from "../utils/ErrorResponse";
 
 const userProposalsStore = ccfapp.typedKv(
   "public:user_proposals",
@@ -115,6 +115,7 @@ export const userProposalActions: Map<string, UserProposalAction> = new Map([
         const acceptedUserDocumentItem: AcceptedUserDocumentStoreItem = {
           contractId: args.document.contractId,
           data: args.document.data,
+          labels: args.document.labels,
           proposalId: proposalId,
           proposerId: proposerId,
           approvers: approvers,

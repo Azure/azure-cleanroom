@@ -1,46 +1,44 @@
 {
   "name": "ccr-proxy",
-  "containerImage": "$containerRegistryUrl/ccr-proxy@$digest",
-  "command": [
-    "/bin/bash",
-    "bootstrap.sh"
-  ],
-  "securityContext": {
-    "privileged": "true"
-  },
-  "environmentVariables": [
-    {
-      "name": "CCR_FQDN",
-      "value": ".*",
-      "strategy": "re2"
+  "properties": {
+    "image": "$containerRegistryUrl/ccr-proxy@$digest",
+    "command": [
+      "/bin/bash",
+      "bootstrap.sh"
+    ],
+    "securityContext": {
+      "privileged": "true"
     },
-    {
-      "name": "TELEMETRY_MOUNT_PATH",
-      "value": "$telemetryMountPath",
-      "strategy": "string"
-    },
-    {
-      "name": "ALLOW_HTTP_INBOUND_ACCESS",
-      "value": "$allowHttpInboundAccess",
-      "strategy": "string"
-    },
-    {
-      "name": "ALLOW_HTTP_OUTBOUND_ACCESS",
-      "value": "$allowHttpOutboundAccess",
-      "strategy": "string"
-    },
-    {
-      "name": "ALLOW_TCP_OUTBOUND_ACCESS",
-      "value": "$allowTcpOutboundAccess",
-      "strategy": "string"
-    }
-  ],
-  "mounts": [
-    {
-      "name": "telemetrymounts",
-      "mountPath": "$telemetryMountPath",
-      "mountType": "emptyDir",
-      "readOnly": false
-    }
-  ]
+    "environmentVariables": [
+      {
+        "name": "CCR_FQDN",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "TELEMETRY_MOUNT_PATH",
+        "value": "$telemetryMountPath"
+      },
+      {
+        "name": "ALLOW_HTTP_INBOUND_ACCESS",
+        "value": "$allowHttpInboundAccess"
+      },
+      {
+        "name": "ALLOW_HTTP_OUTBOUND_ACCESS",
+        "value": "$allowHttpOutboundAccess"
+      },
+      {
+        "name": "ALLOW_TCP_OUTBOUND_ACCESS",
+        "value": "$allowTcpOutboundAccess"
+      }
+    ],
+    "volumeMounts": [
+      {
+        "name": "telemetrymounts",
+        "mountPath": "$telemetryMountPath",
+        "mountType": "emptyDir",
+        "readOnly": false
+      }
+    ]
+  }
 }

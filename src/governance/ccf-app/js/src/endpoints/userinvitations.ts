@@ -4,13 +4,13 @@ import {
   AcceptedUserInvitationStoreItem,
   UserInvitationInfoStoreItem,
   UserInvitationStoreItem
-} from "../models/kvstoremodels";
+} from "../models";
 import { getIssuerType } from "../utils/utils";
-import { ErrorResponse } from "../models/errorresponse";
+import { ErrorResponse } from "../utils/ErrorResponse";
 import {
   GetUserInvitationResponse,
   ListUserInvitationsResponse
-} from "../models/userinvitationmodels";
+} from "../models";
 
 const userInvitations = ccfapp.typedKv(
   "public:ccf.gov.user_invitations",

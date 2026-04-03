@@ -1,0 +1,138 @@
+@model ListDelegatePoliciesViewModel
+@{
+    ViewData["Title"] = "Delegate Policies";
+}
+
+<div class="content-wrapper">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 text-gradient mb-1">
+                <i class="fas fa-user-shield me-2"></i>Delegate Policies
+            </h1>
+            <p class="text-muted mb-0">View all delegate clean room policy configurations</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshPolicies()">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+            <a href="/Contracts" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Contracts
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-12">
+            @if (Model.Value != null && Model.Value.Count > 0)
+            {
+                <!-- Policy Count Badge -->
+                <div class="alert alert-info mb-4">
+                    <i class="fas fa-info-circle me-1"></i>
+                    <strong>@Model.Value.Count</strong> delegate @(Model.Value.Count == 1 ? "policy" : "policies") found
+                </div>
+
+                <!-- Policies List -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-list me-2"></i>Delegate Policy List
+                        </h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col" style="width: 5%;">#</th>
+                                        <th scope="col" style="width: 25%;">Delegate Type</th>
+                                        <th scope="col" style="width: 40%;">Delegate ID</th>
+                                        <th scope="col" style="width: 30%;" class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (int i = 0; i < Model.Value.Count; i++)
+                                    {
+                                        var policy = Model.Value[i];
+
+                                        <tr>
+                                            <td class="align-middle">
+                                                <span class="badge bg-primary">@(i + 1)</span>
+                                            </td>
+                                            <td class="align-middle">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="fas fa-tag text-muted me-2"></i>
+                                                    <span class="fw-medium">@policy.DelegateType</span>
+                                                </div>
+                                            </td>
+                                            <td class="align-middle">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="fas fa-fingerprint text-muted me-2"></i>
+                                                    <code class="text-break">@policy.DelegateId</code>
+                                                </div>
+                                            </td>
+                                            <td class="align-middle text-end">
+                                                <a href="@Url.Action("DelegatePolicyDetail", "Contracts", new { id = Model.ContractId, delegateType = policy.DelegateType, delegateId = policy.DelegateId })"
+                                                    class="btn btn-sm btn-outline-primary" title="View policy details">
+                                                    <i class="fas fa-eye me-1"></i>View Details
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Policy Information -->
+                <div class="mt-4">
+                    <div class="alert alert-info">
+                        <h6 class="alert-heading mb-2">
+                            <i class="fas fa-info-circle me-1"></i>About Delegate Policies
+                        </h6>
+                        <small>
+                            <strong>Delegate policies</strong> allow clean rooms to set custom attestation policies
+                            that are validated when issuing tokens, receiving events, fetching secrets and other operations.
+                            These policies
+                            define the claims that must be present in attestation reports. Click on "View Details" to see
+                            the full policy configuration for each delegate policy.
+                        </small>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <!-- Empty State -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="text-center py-5">
+                            <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+                            <h5 class="text-muted">No Delegate Policies Found</h5>
+                            <p class="text-muted mb-0">No delegate policy configurations are currently available for this
+                                contract.</p>
+                            <small class="text-muted d-block mt-2">Delegate policies can be set by clean rooms to define
+                                custom attestation requirements.</small>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<script>
+    function refreshPolicies() {
+        const refreshBtn = document.querySelector('[onclick="refreshPolicies()"]');
+        const icon = refreshBtn.querySelector('i');
+
+        icon.classList.add('fa-spin');
+        refreshBtn.disabled = true;
+
+        setTimeout(() => {
+            icon.classList.remove('fa-spin');
+            refreshBtn.disabled = false;
+            location.reload();
+        }, 1000);
+    }
+</script>

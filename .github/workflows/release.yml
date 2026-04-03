@@ -11,11 +11,11 @@ on:
       release-type:
         description: The release type
         type: string
-        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client"
+        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client, frontend-service"
 
 jobs:
   pre-release-validation:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=pre-release-validation-${{ github.run_id }}-${{ github.run_attempt }}"]
     permissions:
       contents: read  # This is required for reading tags
     env:
@@ -47,14 +47,14 @@ jobs:
 
   # Add release specific tests here
   release-tests:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=release-tests-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: ["build-test-msint"]
     steps:
       - name: Run release test
         run: echo 'No release tests configured!'
 
   release-to-prod:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=release-to-prod-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: production
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
@@ -278,6 +278,18 @@ jobs:
           subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
           needs-attestation: true
 
+      - name: Release Frontend Service container
+        if: ${{ contains(inputs.release-type, 'frontend-service') }}
+        uses: ./.github/actions/release-frontend-service
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+          environment: unlisted
+          registry-name: ${{ secrets.RELEASE_ACR_NAME }}
+          client-id: ${{ secrets.RELEASE_CLIENT_ID }}
+          tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
+          subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
+
       - name: Release version documents for cleanroom cluster provider client
         if: ${{ contains(inputs.release-type, 'cleanroom-cluster-provider-client') }}
         uses: ./.github/actions/release-cleanroom-cluster-provider-client-version-documents
@@ -317,6 +329,18 @@ jobs:
       - name: Release CCF consortium manager security policy
         if: ${{ contains(inputs.release-type, 'ccf-consortium-manager-containers') }}
         uses: ./.github/actions/release-ccf-consortium-manager-security-policy
+        with:
+          tag: ${{ inputs.tag }}
+          environment: unlisted
+          registry-name: ${{ secrets.RELEASE_ACR_NAME }}
+          client-id: ${{ secrets.RELEASE_CLIENT_ID }}
+          tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
+          subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
+          needs-attestation: true
+
+      - name: Release Frontend Service security policy
+        if: ${{ contains(inputs.release-type, 'frontend-service') }}
+        uses: ./.github/actions/release-frontend-service-security-policy
         with:
           tag: ${{ inputs.tag }}
           environment: unlisted
@@ -375,7 +399,7 @@ jobs:
     uses: ./.github/workflows/release_verification_nightly.yml
 
   create-github-release:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=create-github-release-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: ["release-to-prod", "post-release-validation"]
     # Permission and environment variables below are needed to create a GitHub release
     permissions:
@@ -432,13 +456,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ccr-init
-
-      - name: Download ccr-attestation artefacts
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-attestation') }}
-        id: download-ccr-attestation-artefact
-        uses: actions/download-artifact@v4
-        with:
-          name: ccr-attestation
 
       - name: Download ccr-secrets artefacts
         if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-secrets') }}
@@ -615,6 +632,20 @@ jobs:
         with:
           name: cleanroom-cluster-provider-client
 
+      - name: Download frontend-service artefacts
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'frontend-service') }}
+        id: download-frontend-service-artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-service
+
+      - name: Download Frontend-Service Helm artefacts
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'helm/frontend-service') }}
+        id: download-frontend-service-helm-artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-service-helm
+
       - name: Download AZ CLI whl
         id: download-az-cli-artefact
         uses: actions/download-artifact@v4
@@ -661,15 +692,6 @@ jobs:
           ${{ steps.download-ccr-init-artefact.outputs.download-path }}/ccr-init-${{ inputs.tag }}.tar \
           ${{ steps.download-ccr-init-artefact.outputs.download-path }}/ccr-init.json \
           ccr-init-sbom.spdx.json
-
-      - name: Upload ccr-attestation assets
-        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-attestation') }}
-        run: |
-          cp ${{ steps.download-ccr-attestation-artefact.outputs.download-path }}/ccr-attestation-sbom/_manifest/spdx_2.2/manifest.spdx.json ccr-attestation-sbom.spdx.json
-          gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccr-attestation-artefact.outputs.download-path }}/ccr-attestation-${{ inputs.tag }}.tar \
-          ${{ steps.download-ccr-attestation-artefact.outputs.download-path }}/ccr-attestation.json \
-          ccr-attestation-sbom.spdx.json
 
       - name: Upload ccr-secrets assets
         if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'ccr-secrets') }}
@@ -867,6 +889,15 @@ jobs:
           ${{ steps.download-cleanroom-cluster-provider-client-artefact.outputs.download-path }}/cleanroom-cluster-provider-client-${{ inputs.tag }}.tar \
           ${{ steps.download-cleanroom-cluster-provider-client-artefact.outputs.download-path }}/cleanroom-cluster-provider-client.json \
           cleanroom-cluster-provider-client-sbom.spdx.json
+
+      - name: Upload frontend-service assets
+        if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'frontend-service') }}
+        run: |
+          cp ${{ steps.download-frontend-service-artefact.outputs.download-path }}/frontend-service-sbom/_manifest/spdx_2.2/manifest.spdx.json frontend-service-sbom.spdx.json
+          gh release upload ${{ inputs.tag }} \
+          ${{ steps.download-frontend-service-artefact.outputs.download-path }}/frontend-service-${{ inputs.tag }}.tar \
+          ${{ steps.download-frontend-service-artefact.outputs.download-path }}/frontend-service.json \
+          frontend-service-sbom.spdx.json
 
       - name: Upload AZ CLI extension
         run: gh release upload ${{ inputs.tag }} \

@@ -43,7 +43,7 @@ public class ProposalsController : ClientControllerBase
     [HttpGet("/proposals/{proposalId}/votes")]
     public async Task<JsonArray> GetVotes([FromRoute] string proposalId)
     {
-        // TODO (gsinha): The old API (non api-version) returns member-wise ballot details
+        // Note (gsinha): The old API (non api-version) returns member-wise ballot details
         // which we can use to determine the voting status. A more direct way to know the votes
         // for a proposal is needed. See https://github.com/microsoft/CCF/issues/6107
         var ccfClient = await this.CcfClientManager.GetGovClient();
@@ -230,6 +230,6 @@ public class ProposalsController : ClientControllerBase
         await response.ValidateStatusCodeAsync(this.Logger);
         await response.WaitGovTransactionCommittedAsync(this.Logger, this.CcfClientManager);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
-        return this.Ok(jsonResponse!);
+        return this.Ok(jsonResponse);
     }
 }

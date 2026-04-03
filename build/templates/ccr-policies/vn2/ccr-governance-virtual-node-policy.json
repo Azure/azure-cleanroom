@@ -40,14 +40,6 @@
         "name": "TELEMETRY_MOUNT_PATH",
         "value": "$telemetryMountPath"
       }
-    ],
-    "volumeMounts": [
-      {
-        "name": "uds",
-        "mountPath": "/mnt/uds",
-        "mountType": "emptyDir",
-        "readOnly": false
-      }
     ]
   }
 }

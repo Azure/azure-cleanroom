@@ -1,7 +1,7 @@
 name: governance-test-roles
 services:
   ccf:
-    image: ccf/app/run-js/sandbox:$ccfImageTag
+    image: localhost:5000/ccf/app/run-js/sandbox:$ccfImageTag
     container_name: roletest-ccf
     ports:
       - "8480:8080"
@@ -9,39 +9,38 @@ services:
       - ./sandbox_common/${initialMemberName}_cert.pem:/app/member0_cert.pem
       - ./sandbox_common/${initialMemberName}_enc_pubk.pem:/app/member0_enc_pubk.pem
   cgs-client-member0:
-    image: cgs-client:latest
+    image: localhost:5000/cgs-client:latest
     container_name: roletest-cgs-client-member0
     ports:
       - "8490:8080"
   cgs-ui-member0:
-    image: cgs-ui:latest
+    image: localhost:5000/cgs-ui:latest
     container_name: roletest-cgs-ui-member0
     ports:
       - "0:6300"
     environment:
       - cgsclientEndpoint=http://cgs-client-member0:8080
   cgs-client-member1:
-    image: cgs-client:latest
+    image: localhost:5000/cgs-client:latest
     container_name: roletest-cgs-client-member1
     ports:
       - "8491:8080"
   cgs-ui-member1:
-    image: cgs-ui:latest
+    image: localhost:5000/cgs-ui:latest
     container_name: roletest-cgs-ui-member1
     ports:
       - "0:6300"
     environment:
       - cgsclientEndpoint=http://cgs-client-member1:8080
   cgs-client-member2:
-    image: cgs-client:latest
+    image: localhost:5000/cgs-client:latest
     container_name: roletest-cgs-client-member2
     ports:
       - "8492:8080"
   cgs-ui-member2:
-    image: cgs-ui:latest
+    image: localhost:5000/cgs-ui:latest
     container_name: roletest-cgs-ui-member2
     ports:
       - "0:6300"
     environment:
       - cgsclientEndpoint=http://cgs-client-member2:8080
-

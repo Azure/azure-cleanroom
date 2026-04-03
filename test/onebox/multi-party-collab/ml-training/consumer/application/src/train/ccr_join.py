@@ -19,7 +19,6 @@ from pathlib import Path
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
-from pyspark.sql.functions import col, column
 from pyspark.sql.types import *
 
 # Debug Enabled
@@ -262,7 +261,10 @@ def execute(query_config):
     dataset_info = generate_data_info(spark, tdp_config_list)
     model_output_folder = joined_dataset_config["model_output_folder"]
     # sandbox_joined_anon_simplified=ccr_prepare_joined_dataset_full(dataset_info,query,joined_dataset_config["model_file"],debug=True)
+    # Create directory for model output if not exists
+    os.makedirs(model_output_folder, exist_ok=True)
     model_file = "/tmp/model_file/" + joined_dataset_config["joined_dataset"]
+    os.makedirs(os.path.dirname(model_file), exist_ok=True)
     sandbox_joined_anon_simplified = ccr_prepare_joined_dataset_full(
         spark, dataset_info, joined_dataset_config, query, model_file, debug=True
     )

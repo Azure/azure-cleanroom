@@ -22,4 +22,5 @@ add_ccf_app(
     ${CMAKE_CURRENT_SOURCE_DIR}/crypto/openssl/key_pair.cpp
   INCLUDE_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/cpp-httplib
   )

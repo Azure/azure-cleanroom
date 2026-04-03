@@ -3,5 +3,137 @@
     ViewData["Title"] = "Members";
 }
 
-<h2>Members</h2>
-<pre>@Model.Members</pre>
+<div class="content-wrapper">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 text-gradient mb-1">
+                <i class="fas fa-users me-2"></i>Members
+            </h1>
+            <p class="text-muted mb-0">View and manage consortium members</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshMembers()">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Members Data Card -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-database me-2"></i>Members Data
+            </h5>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="formatJson()">
+                    <i class="fas fa-code me-1"></i>Format JSON
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard()">
+                    <i class="fas fa-copy me-1"></i>Copy
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            @if (!string.IsNullOrEmpty(Model.Members))
+            {
+                <div class="position-relative">
+                    <pre id="membersData" class="bg-light p-3 rounded border"
+                        style="max-height: 500px; overflow-y: auto;"><code class="language-json">@Model.Members</code></pre>
+                    <button type="button" class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-2"
+                        onclick="copyToClipboard()" title="Copy to clipboard">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-5">
+                    <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No Members Data</h5>
+                    <p class="text-muted mb-4">Member information will appear here once loaded.</p>
+                    <button type="button" class="btn btn-primary" onclick="refreshMembers()">
+                        <i class="fas fa-sync-alt me-1"></i>Load Members
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+
+
+</div>
+
+
+
+<script>
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function () {
+        // Page initialization if needed
+    });
+
+    function refreshMembers() {
+        const refreshBtn = document.querySelector('[onclick="refreshMembers()"]');
+        const icon = refreshBtn.querySelector('i');
+
+        icon.classList.add('fa-spin');
+        refreshBtn.disabled = true;
+
+        // Simulate refresh (in real app, this would reload the page or make an AJAX call)
+        setTimeout(() => {
+            icon.classList.remove('fa-spin');
+            refreshBtn.disabled = false;
+            location.reload();
+        }, 1000);
+    }
+
+    function formatJson() {
+        const membersDataElement = document.getElementById('membersData');
+        if (membersDataElement) {
+            try {
+                const jsonText = membersDataElement.textContent;
+                const parsed = JSON.parse(jsonText);
+                const formatted = JSON.stringify(parsed, null, 2);
+                membersDataElement.innerHTML = `<code class="language-json">${formatted}</code>`;
+
+                if (window.CleanroomUI) {
+                    window.CleanroomUI.showToast('JSON formatted successfully', 'success');
+                }
+            } catch (e) {
+                if (window.CleanroomUI) {
+                    window.CleanroomUI.showToast('Invalid JSON format', 'danger');
+                }
+            }
+        }
+    }
+
+    function copyToClipboard() {
+        const membersDataElement = document.getElementById('membersData');
+        if (membersDataElement) {
+            const textToCopy = membersDataElement.textContent;
+
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    if (window.CleanroomUI) {
+                        window.CleanroomUI.showToast('Copied to clipboard', 'success');
+                    }
+                });
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = textToCopy;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+
+                if (window.CleanroomUI) {
+                    window.CleanroomUI.showToast('Copied to clipboard', 'success');
+                }
+            }
+        }
+    }
+
+
+
+
+</script>

@@ -1,0 +1,1 @@
+docker build -f $PSScriptRoot/Dockerfile.tsp-codegen -t tsp-codegen $PSScriptRoot

@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-flex-node-hostnet
+  labels:
+    app: nginx-flex-node-hostnet
+spec:
+  hostNetwork: true
+  nodeSelector:
+    pod-policy: required
+  tolerations:
+    - key: "pod-policy"
+      operator: "Equal"
+      value: "required"
+      effect: "NoSchedule"
+  containers:
+    - name: nginx
+      image: nginx:latest
+      ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-flex-node-hostnet-service
+spec:
+  type: ClusterIP
+  selector:
+    app: nginx-flex-node-hostnet
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP

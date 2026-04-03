@@ -137,6 +137,14 @@ paths:
           - type: string
           - type: 'null'
           title: Iss
+      - name: preferred_username
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Preferred Username
       responses:
         '200':
           description: Successful Response

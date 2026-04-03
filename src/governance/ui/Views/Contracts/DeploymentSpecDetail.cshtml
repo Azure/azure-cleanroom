@@ -3,31 +3,186 @@
     ViewData["Title"] = "Deployment Spec Details";
 }
 
-<h2>Deployment Spec Details</h2>
-<table class="table table-hover">
-    <thead>
-        <tr>
-            <th>DeploymentSpec</th>
-            <th>Open Proposals</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td>
-                <pre>@Model.Data</pre>
-            </td>
-            <td>
-                @if (@Model.ProposalIds != null)
-                {
-                    @foreach (var proposalId in @Model.ProposalIds)
+<div class="content-wrapper">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 text-gradient mb-1">
+                <i class="fas fa-rocket me-2"></i>Deployment Specification
+            </h1>
+            <p class="text-muted mb-0">View deployment configuration and related proposals</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshSpec()">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+            <a href="/Contracts" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Contracts
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Deployment Spec Content Card -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-file-code me-2"></i>Deployment Configuration
+                    </h5>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copySpec()"
+                            title="Copy to clipboard">
+                            <i class="fas fa-copy me-1"></i>Copy
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="downloadSpec()"
+                            title="Download as file">
+                            <i class="fas fa-download me-1"></i>Download
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(Model.Data?.ToString()))
                     {
-                        <p>
-                            <a asp-controller="Proposals"
-                               asp-action="Detail" asp-route-proposalId="@proposalId">@proposalId</a>
-                        </p>
+                        <div class="spec-container">
+                            <pre class="bg-light p-3 rounded border" id="specContent"
+                                style="max-height: 600px; overflow-y: auto; white-space: pre-wrap;"><code>@Model.Data.ToString()</code></pre>
+                        </div>
+
+
                     }
-                }
-            </td>
-        </tr>
-    </tbody>
-</table>
+                    else
+                    {
+                        <div class="text-center py-5">
+                            <i class="fas fa-exclamation-triangle fa-2x text-warning mb-3"></i>
+                            <h5 class="text-muted">No Deployment Specification</h5>
+                            <p class="text-muted mb-0">No deployment configuration is currently available.</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Related Proposals Card -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-vote-yea me-2"></i>Related Proposals
+                        @if (Model.ProposalIds != null && Model.ProposalIds.Any())
+                        {
+                            <span class="badge bg-primary ms-2">@Model.ProposalIds.Count()</span>
+                        }
+                    </h6>
+                </div>
+                <div class="card-body">
+                    @if (Model.ProposalIds != null && Model.ProposalIds.Any())
+                    {
+                        <div class="list-group list-group-flush">
+                            @foreach (var proposalId in Model.ProposalIds)
+                            {
+                                <a asp-controller="Proposals" asp-action="Detail" asp-route-proposalId="@proposalId"
+                                    class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-file-alt me-2 text-primary"></i>
+                                        <span class="font-monospace">@proposalId</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right text-muted"></i>
+                                </a>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center py-3">
+                            <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
+                            <p class="text-muted mb-0">No open proposals</p>
+                            <small class="text-muted">There are currently no proposals for this deployment
+                                specification.</small>
+                        </div>
+                    }
+                </div>
+            </div>
+
+
+
+
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        updateLastUpdated();
+    });
+
+    function copySpec() {
+        const contentElement = document.getElementById('specContent');
+        const copyButton = document.querySelector('[onclick="copySpec()"]');
+        const originalText = copyButton.innerHTML;
+
+        if (contentElement) {
+            const textContent = contentElement.textContent || contentElement.innerText || '';
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(textContent).then(() => {
+                    copyButton.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+                    copyButton.classList.remove('btn-outline-secondary');
+                    copyButton.classList.add('btn-success');
+
+                    setTimeout(() => {
+                        copyButton.innerHTML = originalText;
+                        copyButton.classList.remove('btn-success');
+                        copyButton.classList.add('btn-outline-secondary');
+                    }, 2000);
+                });
+            }
+        }
+    }
+
+
+
+
+
+    function downloadSpec() {
+        const contentElement = document.getElementById('specContent');
+        if (contentElement) {
+            const content = contentElement.textContent || contentElement.innerText || '';
+            const blob = new Blob([content], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'deployment-spec.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    }
+
+    function refreshSpec() {
+        const refreshBtn = document.querySelector('[onclick="refreshSpec()"]');
+        const icon = refreshBtn.querySelector('i');
+
+        icon.classList.add('fa-spin');
+        refreshBtn.disabled = true;
+
+        setTimeout(() => {
+            icon.classList.remove('fa-spin');
+            refreshBtn.disabled = false;
+            updateLastUpdated();
+            location.reload();
+        }, 1000);
+    }
+
+
+
+    function updateLastUpdated() {
+        const lastUpdatedElement = document.getElementById('lastUpdated');
+        if (lastUpdatedElement) {
+            lastUpdatedElement.textContent = new Date().toLocaleString();
+        }
+    }
+
+
+</script>

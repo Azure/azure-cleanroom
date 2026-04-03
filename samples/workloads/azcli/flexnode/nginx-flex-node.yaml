@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-flex-node
+  labels:
+    app: nginx-flex-node
+spec:
+  nodeSelector:
+    pod-policy: required
+  tolerations:
+    - key: "pod-policy"
+      operator: "Equal"
+      value: "required"
+      effect: "NoSchedule"
+  containers:
+    - name: nginx
+      image: nginx:latest
+      ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-flex-node-service
+spec:
+  type: ClusterIP
+  selector:
+    app: nginx-flex-node
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP

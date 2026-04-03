@@ -59,7 +59,7 @@ public class ContractTests : TestBase
             Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
         }
 
-        using (HttpRequestMessage request = new(HttpMethod.Get, contractUrl))
+        using (HttpRequestMessage request = new(HttpMethod.Post, contractUrl))
         {
             using HttpResponseMessage response = await this.CcfClient.SendAsync(request);
             Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -494,7 +494,7 @@ public class ContractTests : TestBase
         var contract = (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(contractUrl))!;
         string currentVersion = contract[VersionKey]!.ToString();
         Assert.AreEqual(nameof(ContractState.Draft), contract[StateKey]!.ToString());
-        Assert.IsTrue(!string.IsNullOrEmpty(currentVersion));
+        Assert.IsFalse(string.IsNullOrEmpty(currentVersion));
 
         // Any subsequent updates with no Version should fail.
         using (HttpRequestMessage request = new(HttpMethod.Put, contractUrl))
@@ -547,7 +547,7 @@ public class ContractTests : TestBase
 
         contract = (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(contractUrl))!;
         string newVersion = contract[VersionKey]!.ToString();
-        Assert.IsTrue(!string.IsNullOrEmpty(newVersion));
+        Assert.IsFalse(string.IsNullOrEmpty(newVersion));
         Assert.AreEqual(nameof(ContractState.Draft), contract[StateKey]!.ToString());
         Assert.AreNotEqual(currentVersion, newVersion);
     }
@@ -1165,9 +1165,10 @@ public class ContractTests : TestBase
                 (await response.Content.ReadFromJsonAsync<StatusWithReasonResponse>())!;
             Assert.AreEqual("disabled", statusResponse.Status);
             Assert.AreEqual("ContractDisabled", statusResponse.Reason.Code);
-            Assert.IsTrue(
-                statusResponse.Reason.Message.StartsWith(
-                    $"Contract has been disabled by the following member(s): "));
+            Assert.StartsWith(
+                "Contract has been disabled by the following member(s): ",
+                statusResponse.Reason.Message,
+                statusResponse.Reason.Message);
         }
 
         // Consent check should now report a failure.
@@ -1179,9 +1180,10 @@ public class ContractTests : TestBase
                 (await response.Content.ReadFromJsonAsync<StatusWithReasonResponse>())!;
             Assert.AreEqual("disabled", statusResponse.Status);
             Assert.AreEqual("ContractDisabled", statusResponse.Reason.Code);
-            Assert.IsTrue(
-                statusResponse.Reason.Message.StartsWith(
-                    $"Contract has been disabled by the following member(s): "));
+            Assert.StartsWith(
+                "Contract has been disabled by the following member(s): ",
+                statusResponse.Reason.Message,
+                statusResponse.Reason.Message);
         }
 
         // Disabling the contract again as member0 should pass.
@@ -1209,9 +1211,10 @@ public class ContractTests : TestBase
                 (await response.Content.ReadFromJsonAsync<StatusWithReasonResponse>())!;
             Assert.AreEqual("disabled", statusResponse.Status);
             Assert.AreEqual("ContractDisabled", statusResponse.Reason.Code);
-            Assert.IsTrue(
-                statusResponse.Reason.Message.StartsWith(
-                    $"Contract has been disabled by the following member(s): "));
+            Assert.StartsWith(
+                "Contract has been disabled by the following member(s): ",
+                statusResponse.Reason.Message,
+                statusResponse.Reason.Message);
         }
 
         // Overall the contract remains disabled as member0 has it disabled so check should fail.
@@ -1223,9 +1226,10 @@ public class ContractTests : TestBase
                 (await response.Content.ReadFromJsonAsync<StatusWithReasonResponse>())!;
             Assert.AreEqual("disabled", statusResponse.Status);
             Assert.AreEqual("ContractDisabled", statusResponse.Reason.Code);
-            Assert.IsTrue(
-                statusResponse.Reason.Message.StartsWith(
-                    $"Contract has been disabled by the following member(s): "));
+            Assert.StartsWith(
+                $"Contract has been disabled by the following member(s): ",
+                statusResponse.Reason.Message,
+                statusResponse.Reason.Message);
         }
 
         // Disabling the contract as member1 should pass.
@@ -1329,10 +1333,12 @@ public class ContractTests : TestBase
             Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
             var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
             Assert.AreEqual("ProposalFailedToValidate", error.Code);
-            Assert.IsTrue(error.Message.StartsWith(
+            Assert.StartsWith(
                 $"Proposal failed to validate: set_contract_runtime_options_enable_{optionName} " +
                 $"at position 0 failed validation: Error: Action can only be proposed once " +
-                $"contract '{contractId}' has been accepted."));
+                $"contract '{contractId}' has been accepted.",
+                error.Message,
+                error.Message);
         }
 
         using (HttpRequestMessage request = new(HttpMethod.Post, disableUrl))
@@ -1341,10 +1347,12 @@ public class ContractTests : TestBase
             Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
             var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
             Assert.AreEqual("ProposalFailedToValidate", error.Code);
-            Assert.IsTrue(error.Message.StartsWith(
+            Assert.StartsWith(
                 $"Proposal failed to validate: set_contract_runtime_options_disable_{optionName} " +
                 $"at position 0 failed validation: Error: Action can only be proposed once " +
-                $"contract '{contractId}' has been accepted."));
+                $"contract '{contractId}' has been accepted.",
+                error.Message,
+                error.Message);
         }
 
         var contractContent = new JsonObject
@@ -1657,6 +1665,6 @@ public class ContractTests : TestBase
         public string MemberId { get; set; } = default!;
 
         [JsonPropertyName("vote")]
-        public bool Vote { get; set; } = default!;
+        public bool Vote { get; set; } = default;
     }
 }

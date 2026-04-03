@@ -3,13 +3,14 @@
 Test script for DataStore functionality in the Azure Cleanroom CLI extension.
 
 Tests DataStore models, configuration management, environment variable handling,
-and empty configuration file processing. This test file covers:
+empty configuration file processing, and schema helper functions. This test file covers:
 
 - DataStoreEntry and DataStoreSpecification model functionality
 - Configuration file read/write operations via configuration helpers
 - Empty file and comment-only configuration handling
 - DataStoreConfiguration class functionality (when Azure CLI deps available)
 - Environment variable override behavior (CLEANROOM_DATASTORE_CONFIG_FILE)
+- Schema helper functions (load_schema_from_file, generate_schema_from_fields)
 - Error handling, validation, and edge cases
 
 All tests are designed to work without Azure CLI dependencies where possible,
@@ -227,8 +228,7 @@ def test_datastore_environment_variables():
 
         # Create test datastore config with content
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write(
-                """
+            f.write("""
 datastores:
   - name: "env-test-datastore"
     secretstore_config: "/path/to/secrets.yaml"
@@ -237,8 +237,7 @@ datastores:
     storeType: "Azure_BlobStorage"
     storeProviderUrl: "https://envtest.blob.core.windows.net/"
     storeName: "env-container"
-"""
-            )
+""")
             env_datastore_file = f.name
 
         try:
@@ -286,6 +285,207 @@ datastores:
         )
 
 
+def test_datastore_schema_helpers():
+    """Test DataStore schema helper functions"""
+    print("\nTesting DataStore schema helper functions...")
+
+    try:
+        from azext_cleanroom.utilities._datastore_helpers import (
+            generate_schema_from_fields,
+            load_schema_from_file,
+        )
+        from cleanroom_common.azure_cleanroom_core.models.dataset import (
+            DataFieldType,
+            DataFormat,
+        )
+
+        # Test 1: generate_schema_from_fields with basic parameters
+        schema_format = "csv"
+        schema_fields = [
+            "name:string",
+            "age:integer",
+            "height:number",
+            "active:boolean",
+        ]
+
+        schema = generate_schema_from_fields(schema_format, schema_fields)
+
+        assert schema.format == DataFormat.csv
+        assert len(schema.fields) == 4
+        assert schema.fields[0].fieldName == "name"
+        assert schema.fields[0].fieldType == DataFieldType.string
+        assert schema.fields[1].fieldName == "age"
+        assert schema.fields[1].fieldType == DataFieldType.integer
+        print("✓ generate_schema_from_fields basic functionality working")
+
+        # Test 2: generate_schema_from_fields with different formats
+        for test_format in ["json", "parquet"]:
+            schema = generate_schema_from_fields(test_format, ["id:integer"])
+            assert schema.format.value == test_format
+        print("✓ generate_schema_from_fields supports all formats")
+
+        # Test 3: generate_schema_from_fields error handling
+        try:
+            generate_schema_from_fields("invalid_format", ["id:integer"])
+            assert False, "Should have raised error for invalid format"
+        except Exception as e:
+            assert "Invalid schema format" in str(e)
+
+        try:
+            generate_schema_from_fields("csv", ["invalid_field_def"])
+            assert False, "Should have raised error for invalid field definition"
+        except Exception as e:
+            assert "Field definition must be in format" in str(e)
+
+        try:
+            generate_schema_from_fields("csv", ["field:invalid_type"])
+            assert False, "Should have raised error for invalid field type"
+        except Exception as e:
+            assert "Invalid field type" in str(e)
+        print("✓ generate_schema_from_fields error handling working")
+
+        # Test 4: load_schema_from_file with JSON
+        test_schema_json = {
+            "format": "json",
+            "fields": [
+                {"fieldName": "user_id", "fieldType": "string"},
+                {"fieldName": "score", "fieldType": "number"},
+            ],
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            import json
+
+            json.dump(test_schema_json, f)
+            json_file = f.name
+
+        try:
+            schema = load_schema_from_file(json_file)
+            assert schema.format == DataFormat.json
+            assert len(schema.fields) == 2
+            assert schema.fields[0].fieldName == "user_id"
+            assert schema.fields[0].fieldType == DataFieldType.string
+            print("✓ load_schema_from_file JSON format working")
+        finally:
+            os.unlink(json_file)
+
+        # Test 5: load_schema_from_file with YAML
+        test_schema_yaml = """
+format: csv
+fields:
+  - fieldName: "product_name"
+    fieldType: "string"
+  - fieldName: "price"
+    fieldType: "number"
+  - fieldName: "in_stock"
+    fieldType: "boolean"
+"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(test_schema_yaml)
+            yaml_file = f.name
+
+        try:
+            schema = load_schema_from_file(yaml_file)
+            assert schema.format == DataFormat.csv
+            assert len(schema.fields) == 3
+            assert schema.fields[0].fieldName == "product_name"
+            assert schema.fields[1].fieldName == "price"
+            assert schema.fields[2].fieldType == DataFieldType.boolean
+            print("✓ load_schema_from_file YAML format working")
+        finally:
+            os.unlink(yaml_file)
+
+        # Test 6: load_schema_from_file with wrapped format
+        wrapped_schema = {
+            "datasetSchema": {
+                "format": "parquet",
+                "fields": [{"fieldName": "timestamp", "fieldType": "date"}],
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            import json
+
+            json.dump(wrapped_schema, f)
+            wrapped_file = f.name
+
+        try:
+            schema = load_schema_from_file(wrapped_file)
+            assert schema.format == DataFormat.parquet
+            assert len(schema.fields) == 1
+            assert schema.fields[0].fieldName == "timestamp"
+            assert schema.fields[0].fieldType == DataFieldType.date
+            print("✓ load_schema_from_file wrapped format working")
+        finally:
+            os.unlink(wrapped_file)
+
+        # Test 7: load_schema_from_file error handling
+        try:
+            load_schema_from_file("/nonexistent/file.json")
+            assert False, "Should have raised error for missing file"
+        except Exception as e:
+            assert "not found" in str(e)
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            f.write("invalid json content")
+            invalid_file = f.name
+
+        try:
+            load_schema_from_file(invalid_file)
+            assert False, "Should have raised error for invalid JSON"
+        except Exception as e:
+            assert "Failed to parse JSON" in str(e)
+        finally:
+            os.unlink(invalid_file)
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump({"invalid": "schema"}, f)
+            invalid_schema_file = f.name
+
+        try:
+            load_schema_from_file(invalid_schema_file)
+            assert False, "Should have raised error for invalid schema format"
+        except Exception as e:
+            assert "Invalid schema file format" in str(e)
+        finally:
+            os.unlink(invalid_schema_file)
+
+        print("✓ load_schema_from_file error handling working")
+
+        # Test 8: Edge cases and parameter validation
+        try:
+            generate_schema_from_fields("", ["field:string"])
+            assert False, "Should have raised error for empty format"
+        except Exception as e:
+            assert "Schema format must be specified" in str(e)
+
+        try:
+            generate_schema_from_fields("csv", [])
+            assert False, "Should have raised error for empty fields"
+        except Exception as e:
+            assert "Schema fields must be specified" in str(e)
+
+        try:
+            generate_schema_from_fields("csv", None)
+            assert False, "Should have raised error for None fields"
+        except Exception as e:
+            assert "Schema fields must be specified" in str(e)
+
+        # Test whitespace handling
+        schema = generate_schema_from_fields(
+            "  CSV  ", [" name : string ", "age: integer "]
+        )
+        assert schema.format == DataFormat.csv
+        assert schema.fields[0].fieldName == "name"
+        print("✓ Schema helper functions edge cases working")
+
+    except ImportError as e:
+        print(
+            f"⚠ DataStore schema helper tests skipped due to missing dependencies: {e}"
+        )
+
+
 def main():
     """Run all DataStore tests"""
     print("Running Azure Cleanroom DataStore Tests")
@@ -297,6 +497,7 @@ def main():
         test_datastore_empty_config_handling()
         test_datastore_configuration_classes()
         test_datastore_environment_variables()
+        test_datastore_schema_helpers()
 
         print("\n" + "=" * 50)
         print("✅ ALL DATASTORE TESTS PASSED!")

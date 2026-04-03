@@ -1,0 +1,29 @@
+[project]
+name = "cleanroom-spark-frontend"
+version = "0.1.0"
+description = "Spark Frontend service for cleanrooms"
+authors = [
+    {name = "hprabh",email = "hprabh@microsoft.com"}
+]
+requires-python = ">=3.12"
+dependencies = [
+    "uvicorn==0.35.0",
+    "fastapi==0.116.1",
+    "pydantic==2.11.7",
+    "pydantic_settings==2.10.1",
+    "kubernetes==34.1.0",
+    "oras==0.1.29",
+    "requests==2.32.4",
+    "tenacity==9.0.0",
+    "cleanroom-internal",
+    "cleanroom-sdk",
+    "analytics-contracts",
+    "frontend-internal"
+]
+
+[project.scripts]
+cleanroom_spark_frontend = "cleanroom_spark_frontend.main:main"
+
+[build-system]
+requires = ["uv_build>=0.9.3,<0.10.0"]
+build-backend = "uv_build"

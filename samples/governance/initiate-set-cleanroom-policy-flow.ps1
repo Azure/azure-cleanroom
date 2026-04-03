@@ -13,7 +13,7 @@ $root = git rev-parse --show-toplevel
 
 Import-Module $PSScriptRoot/scripts/cgs.psm1 -Force -DisableNameChecking
 
-# -allowAll below maps to the attestation report placed under samples/governance/insecure-virtual/attestation.
+# -allowAll below maps to the attestation report placed under samples/reports/insecure-virtual.
 Write-Output "Submitting clean room policy proposal under contract $contractId"
 $proposalId = (Propose-CleanRoom-Policy -contractId $contractId -allowAll -port $port | jq -r '.proposalId')
 

@@ -1,0 +1,164 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "frontend-service.fullname" . }}
+  labels:
+    {{- include "frontend-service.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "frontend-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "frontend-service.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "frontend-service.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.frontendImage }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.ports.frontend }}
+              protocol: TCP
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+          {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+            - mountPath: /app/service
+              name: shared
+              readOnly: true
+          env:
+            - name: CONSORTIUM_MANAGER_ENDPOINT
+              value: {{ .Values.frontendService.consortiumManagerEndpoint | quote }}
+            - name: MEMBERSHIP_MANAGER_ENDPOINT
+              value: {{ .Values.frontendService.membershipManagerEndpoint | quote }}
+            - name: CGS_CLIENT_ENDPOINT
+              value: "http://localhost:{{ .Values.ports.cgsClient }}"
+            - name: TENANT_ID
+              value: {{ .Values.frontendService.tenantId | quote }}
+            - name: ANALYTICS_WORKLOAD_ID
+              value: {{ .Values.frontendService.analyticsWorkloadId | quote }}
+            - name: FIRST_PARTY_APP_ID
+              value: {{ .Values.frontendService.firstPartyAppId | quote }}
+            - name: FIRST_PARTY_APP_CERTIFICATE_NAME
+              value: {{ .Values.frontendService.firstPartyAppCertificateName | quote }}
+            - name: KEY_VAULT_URL
+              value: {{ .Values.frontendService.keyVaultUrl | quote }}
+            - name: FIRST_PARTY_APP_TOKEN_SCOPE
+              value: {{ .Values.frontendService.firstPartyAppTokenScope | quote }}
+            - name: CCR_SERVICE_CERT_PATH
+              value: {{ .Values.ccrProxy.serviceCertOutputFile | quote }}
+            - name: SKR_PORT
+              value: {{ .Values.skr.port | quote }}
+        - name: cgs-client
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.cgsClient.image }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: cgs-http
+              containerPort: {{ .Values.ports.cgsClient }}
+              protocol: TCP
+          {{- with .Values.cgsClient.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.cgsClient.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.cgsClient.env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- if .Values.skr.enabled }}
+        - name: skr
+          image: {{ .Values.skr.image | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - "/skr.sh"
+          env:
+            - name: SkrSideCarArgs
+              value: "ewogICAiY2VydGNhY2hlIjogewogICAgICAiZW5kcG9pbnQiOiAiYW1lcmljYXMuYWNjY2FjaGUuYXp1cmUubmV0IiwKICAgICAgInRlZV90eXBlIjogIlNldlNucFZNIiwKICAgICAgImFwaV92ZXJzaW9uIjogImFwaS12ZXJzaW9uPTIwMjAtMTAtMTUtcHJldmlldyIKICAgfQp9"
+            - name: Port
+              value: {{ .Values.skr.port | quote }}
+            - name: LogLevel
+              value: "Info"
+            - name: LogFile
+              value: "skr.log"
+        {{- end }}
+        - name: ccr-proxy
+          image: "{{ .Values.ccrProxy.image }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - "/bin/bash"
+            - "https-http/bootstrap.sh"
+            - "--ca-type"
+            - {{ .Values.ccrProxy.caType | quote }}
+          env:
+            - name: CCR_ENVOY_DESTINATION_PORT
+              value: "8384"
+            {{- if .Values.ccrProxy.fqdn }}
+            - name: CCR_FQDN
+              value: {{ .Values.ccrProxy.fqdn | quote }}
+            {{- end }}
+            {{- if .Values.ccrProxy.serviceCertOutputFile }}
+            - name: CCR_ENVOY_SERVICE_CERT_OUTPUT_FILE
+              value: {{ .Values.ccrProxy.serviceCertOutputFile | quote }}
+            {{- end }}
+          ports:
+            - name: https
+              containerPort: 443
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /app/service
+              name: shared
+              readOnly: false
+      volumes:
+        - name: shared
+          emptyDir: {}
+      {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

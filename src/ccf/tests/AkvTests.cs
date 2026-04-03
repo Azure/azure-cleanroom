@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 using System.Text.Json;
-using CcfProviderClient;
-using Controllers;
+using CcfCommon;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+[assembly: DoNotParallelize]
 
 namespace CcfTests;
 

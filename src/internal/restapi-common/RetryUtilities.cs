@@ -4,7 +4,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
-using Microsoft.Rest;
 
 namespace HttpRetries;
 
@@ -64,14 +63,6 @@ public static class RetryUtilities
             if (re.InnerException is IOException ioe &&
                 ioe.Message.Contains("Received an unexpected EOF or 0 bytes from the " +
                 "transport stream"))
-            {
-                return true;
-            }
-        }
-
-        if (e is HttpOperationException he && he.Response != null)
-        {
-            if (IsRetryableHttpStatusCode(he.Response.StatusCode))
             {
                 return true;
             }

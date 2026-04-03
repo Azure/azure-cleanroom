@@ -1,0 +1,65 @@
+name: Setup environment
+description: Setup shared environment for workload tests
+inputs:
+  repo:
+    description: The registry URL
+    required: true
+  tag:
+    description: The tag for the built image
+    required: true
+  infraType:
+    description: Infrastructure type (virtual or aks)
+    required: false
+    default: virtual
+  outDir:
+    description: Output directory for deployment artifacts
+    required: false
+    default: ./test/onebox/workload-samples/generated
+runs:
+  using: composite
+  steps:
+    - name: Login to Azure and refresh token
+      uses: ./.github/actions/login-to-azure
+      env:
+        CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
+        TENANT_ID: ${{ env.AZURE_TENANT_ID }}
+        SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+    - shell: pwsh
+      run: Install-Module -Name powershell-yaml -Force
+
+    - name: Install az cleanroom extension
+      shell: bash
+      run: |
+        oras pull ${{ inputs.repo }}/cli/cleanroom-whl:${{ inputs.tag }}
+        az extension add --allow-preview true --source ./cleanroom-*-py2.py3-none-any.whl -y
+
+    - name: Setup environment
+      shell: pwsh
+      run: ./test/onebox/workloads/setup-env.ps1 `
+          -infraType ${{ inputs.infraType }} `
+          -registry acr `
+          -repo ${{ inputs.repo }} `
+          -tag ${{ inputs.tag }} `
+          -location ${{ inputs.location }} `
+          -outDir ${{ inputs.outDir }}
+
+    - name: Dump cleanroom-cluster-provider logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: docker compose -p ob-workload-cluster-provider logs
+
+    - name: Dump ccf-provider logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: docker compose -p ob-workload-ccf-provider logs
+
+    - name: Dump ccf logs (virtual only)
+      shell: pwsh
+      if: ${{ !cancelled() && inputs.infraType == 'virtual' }}
+      run: docker compose -p ob-workload-ccf logs
+
+    - name: Dump owner-client logs
+      if: ${{ !cancelled() }}
+      shell: pwsh
+      run: docker logs ob-workload-owner-client-cgs-client-1

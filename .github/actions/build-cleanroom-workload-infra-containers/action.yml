@@ -34,10 +34,16 @@ runs:
       with:
         name: cleanroom-spark-analytics-agent
         tag: ${{ inputs.tag }}
-        path: ${{ github.workspace }}/src/workloads/cleanroom-spark-analytics-agent/helm/chart
+        path: ${{ github.workspace }}/src/workloads/analytics/cleanroom-spark-analytics-agent/helm/chart
 
     - uses: ./.github/actions/build-helm-chart-and-artefacts
       with:
         name: cleanroom-spark-frontend
         tag: ${{ inputs.tag }}
-        path: ${{ github.workspace }}/src/workloads/cleanroom-spark-frontend/helm/chart
+        path: ${{ github.workspace }}/src/workloads/analytics/cleanroom-spark-frontend/helm/chart
+
+    - uses: ./.github/actions/build-helm-chart-and-artefacts
+      with:
+        name: frontend-service
+        tag: ${{ inputs.tag }}
+        path: ${{ github.workspace }}/src/workloads/frontend/helmchart

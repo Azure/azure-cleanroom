@@ -3,8 +3,7 @@
   "properties": {
     "image": "$containerRegistryUrl/code-launcher@$digest",
     "command": [
-      "python3",
-      "/app/code-launcher/code_launcher.py",
+      "code_launcher",
       "--application-name",
       "$applicationName"
     ],

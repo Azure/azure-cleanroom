@@ -109,7 +109,7 @@ docker run `
     --add-host=ccr.cleanroom.local:${ccrIP} `
     -p 10080:10080 `
     -e CA_CERT=$base64CaCert `
-    ccr-client-proxy `
+    localhost:5000/ccr-client-proxy `
     /bin/bash -c ./bootstrap.sh
 
 # Need to wait a bit for the proxy to start.

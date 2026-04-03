@@ -1,7 +1,7 @@
 images:
   frontendUrl: <SPARK_FRONTEND_IMAGE_URL>
   ccrproxyUrl: <CCR_PROXY_IMAGE_URL>
-  ccrattestationUrl: <CCR_ATTESTATION_IMAGE_URL>
+  ccrskrUrl: <CCR_SKR_IMAGE_URL>
   otelCollectorUrl: <OTEL_COLLECTOR_IMAGE_URL>
 
 telemetry:
@@ -9,6 +9,11 @@ telemetry:
   prometheusEndpoint: <PROMETHEUS_ENDPOINT>
   lokiEndpoint: <LOKI_ENDPOINT>
   tempoEndpoint: <TEMPO_ENDPOINT>
+
+optimizer:
+  enabled: true
+  endpoint: "http://workspace-llama-3point1-8b-instruct.kaito-workspace.svc"
+  timeout: 90
 
 settings:
   cleanroom:
@@ -22,7 +27,7 @@ settings:
       policyFile: <CLEANROOM_ANALYTICS_IMAGE_POLICY_DOCUMENT_URL>
       debugMode: <DEBUG_MODE>
       allowAll: <ALLOW_ALL>
-      applicationFile: "local:///app/src/run_query.py"
+      applicationFile: "local:///app/src/analytics_workload/run_query.py"
       sql:
         driver:
           cores: 2
@@ -31,5 +36,7 @@ settings:
         executor:
           cores: 4
           memory: "8g"
-          instances: 3
           deleteOnTermination: "false"
+          instances:
+            min: 1
+            max: 5

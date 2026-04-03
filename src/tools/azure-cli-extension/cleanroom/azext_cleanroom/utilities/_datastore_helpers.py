@@ -353,3 +353,128 @@ def generate_wrapped_dek(datastore_name, datastore_config_file, public_key, logg
             ),
         )
     ).decode()
+
+
+def load_schema_from_file(schema_file):
+    """
+    Load a DataSchema from a JSON or YAML file.
+
+    Args:
+        schema_file (str): Path to the schema file
+
+    Returns:
+        DataSchema: The loaded schema object
+
+    Raises:
+        CLIError: If the file cannot be found or parsed
+    """
+    import json
+    import os
+
+    import yaml
+    from cleanroom_common.azure_cleanroom_core.models.dataset import DataSchema
+
+    if not os.path.exists(schema_file):
+        raise CLIError(f"Schema file '{schema_file}' not found.")
+
+    try:
+        with open(schema_file, "r") as f:
+            if schema_file.endswith((".yaml", ".yml")):
+                data = yaml.safe_load(f)
+            else:
+                data = json.load(f)
+
+        # Convert the loaded data to DataSchema
+        if isinstance(data, dict):
+            # Handle direct schema format
+            if "format" in data and "fields" in data:
+                return DataSchema(**data)
+            else:
+                # Handle wrapped schema format
+                if "datasetSchema" in data:
+                    return DataSchema(**data["datasetSchema"])
+                else:
+                    raise CLIError(
+                        "Invalid schema file format. Expected 'format' and 'fields' properties."
+                    )
+        else:
+            raise CLIError("Schema file must contain a JSON object.")
+
+    except yaml.YAMLError as e:
+        raise CLIError(f"Failed to parse YAML schema file: {e}")
+    except json.JSONDecodeError as e:
+        raise CLIError(f"Failed to parse JSON schema file: {e}")
+    except Exception as e:
+        raise CLIError(f"Failed to load schema from file: {e}")
+
+
+def generate_schema_from_fields(schema_format, schema_fields):
+    """
+    Generate a DataSchema from provided field definitions.
+
+    Args:
+        schema_format (str): The data format (csv, json, parquet)
+        schema_fields (list): List of field definitions in format "fieldName:fieldType"
+
+    Returns:
+        DataSchema: The generated schema object
+
+    Raises:
+        CLIError: If the parameters are invalid
+    """
+    from cleanroom_common.azure_cleanroom_core.models.dataset import (
+        DataField,
+        DataFieldType,
+        DataFormat,
+        DataSchema,
+    )
+
+    if not schema_format:
+        raise CLIError(
+            "Schema format must be specified when generating schema from fields."
+        )
+
+    if not schema_fields:
+        raise CLIError(
+            "Schema fields must be specified when generating schema from fields."
+        )
+
+    # Validate and convert format
+    try:
+        data_format = DataFormat(schema_format.strip().lower())
+    except ValueError:
+        valid_formats = [fmt.value for fmt in DataFormat]
+        raise CLIError(
+            f"Invalid schema format '{schema_format}'. Valid formats are: {', '.join(valid_formats)}"
+        )
+
+    # Parse and validate fields
+    fields = []
+    for field_def in schema_fields:
+        try:
+            if ":" not in field_def:
+                raise ValueError(
+                    "Field definition must be in format 'fieldName:fieldType'"
+                )
+
+            field_name, field_type = field_def.split(":", 1)
+            field_name = field_name.strip()
+            field_type = field_type.strip().lower()
+
+            if not field_name:
+                raise ValueError("Field name cannot be empty")
+
+            try:
+                data_field_type = DataFieldType(field_type)
+            except ValueError:
+                valid_types = [ftype.value for ftype in DataFieldType]
+                raise ValueError(
+                    f"Invalid field type '{field_type}'. Valid types are: {', '.join(valid_types)}"
+                )
+
+            fields.append(DataField(fieldName=field_name, fieldType=data_field_type))
+
+        except ValueError as e:
+            raise CLIError(f"Invalid field definition '{field_def}': {e}")
+
+    return DataSchema(format=data_format, fields=fields)

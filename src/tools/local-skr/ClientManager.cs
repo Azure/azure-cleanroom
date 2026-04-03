@@ -10,8 +10,8 @@ public class ClientManager
 {
     private readonly ILogger logger;
     private readonly SemaphoreSlim semaphore = new(1, 1);
-    private WorkspaceConfiguration wsConfig = default!;
-    private HttpClient ccfAppClient = default!;
+    private WorkspaceConfiguration? wsConfigOnce;
+    private HttpClient? ccfAppClientOnce;
     private IConfiguration config;
 
     public ClientManager(
@@ -24,27 +24,25 @@ public class ClientManager
 
     public async Task<HttpClient> GetAppClient()
     {
-        await this.InitializeAppClient();
-        return this.ccfAppClient;
+        return await this.InitializeAppClient();
     }
 
     public async Task<WorkspaceConfiguration> GetWsConfig()
     {
-        await this.InitializeWsConfig();
-        return this.wsConfig;
+        return await this.InitializeWsConfig();
     }
 
-    private async Task InitializeAppClient()
+    private async Task<HttpClient> InitializeAppClient()
     {
         await this.InitializeWsConfig();
-        if (this.ccfAppClient == null)
+        if (this.ccfAppClientOnce == null)
         {
             try
             {
                 await this.semaphore.WaitAsync();
-                if (this.ccfAppClient == null)
+                if (this.ccfAppClientOnce == null)
                 {
-                    this.ccfAppClient = this.InitializeClient();
+                    this.ccfAppClientOnce = this.InitializeClient();
                 }
             }
             finally
@@ -52,6 +50,8 @@ public class ClientManager
                 this.semaphore.Release();
             }
         }
+
+        return this.ccfAppClientOnce;
     }
 
     private HttpClient InitializeClient()
@@ -60,16 +60,16 @@ public class ClientManager
         return client;
     }
 
-    private async Task InitializeWsConfig()
+    private async Task<WorkspaceConfiguration> InitializeWsConfig()
     {
-        if (this.wsConfig == null)
+        if (this.wsConfigOnce == null)
         {
             try
             {
                 await this.semaphore.WaitAsync();
-                if (this.wsConfig == null)
+                if (this.wsConfigOnce == null)
                 {
-                    this.wsConfig = await this.InitializeWsConfigFromEnvironment();
+                    this.wsConfigOnce = await this.InitializeWsConfigFromEnvironment();
                 }
             }
             finally
@@ -77,6 +77,8 @@ public class ClientManager
                 this.semaphore.Release();
             }
         }
+
+        return this.wsConfigOnce;
     }
 
     private async Task<WorkspaceConfiguration> InitializeWsConfigFromEnvironment()

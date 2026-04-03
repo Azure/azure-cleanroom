@@ -34,7 +34,7 @@ pwsh $root/test/onebox/multi-party-collab/deploy-virtual-cleanroom-governance.ps
 $ccfEndpoint = $(Get-Content $outDir/ccf/ccf.json | ConvertFrom-Json).endpoint
 
 $contractId = "collab1"
-pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 -registry $registry -repo $repo -tag $tag -outDir $outDir -ccfEndpoint $ccfEndpoint -datastoreOutDir $datastoreOutdir -contractId $contractId
+pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 -registry $registry -repo $repo -tag $tag -outDir $outDir -datastoreOutDir $datastoreOutdir -contractId $contractId
 
 $registry_local_endpoint = ""
 if ($registry -eq "local") {

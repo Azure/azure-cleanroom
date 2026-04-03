@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using HttpRetries;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Polly;
@@ -17,7 +18,7 @@ namespace Controllers;
 public class KeyReleaseController : ControllerBase
 {
     private static IAsyncPolicy retryPolicy =
-        Policy.Handle<Exception>((e) => Utilities.IsRetryableException(e))
+        Policy.Handle<Exception>((e) => RetryUtilities.IsRetryableException(e))
         .WaitAndRetryAsync(
             5,
             retryAttempt =>

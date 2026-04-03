@@ -1,6 +1,7 @@
 FROM mcr.microsoft.com/oss/envoyproxy/envoy:v1.33.0
 
-RUN apt-get update && apt-get install -y gettext jq python3 python3-distutils python3-pip
+RUN apt-get update && apt-get install -y --no-install-recommends gettext jq python3 python3-distutils python3-pip curl \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR "/home/envoy"
 
@@ -9,14 +10,12 @@ COPY src/proxy/cleanroom.cnf cleanroom.cnf
 COPY src/proxy/bootstrap.sh bootstrap.sh
 COPY src/proxy/templates templates
 COPY src/proxy/render-config render-config
-RUN pip install -r render-config/requirements.txt
-RUN chmod +x bootstrap.sh
+RUN pip install --no-cache-dir -r render-config/requirements.txt \
+    && chmod +x bootstrap.sh
 
 COPY src/proxy/https-http/ccr-https-http-proxy-config.yaml https-http/ccr-https-http-proxy-config.yaml
 COPY src/proxy/https-http/cert-config.cnf https-http/cert-config.cnf
 COPY src/proxy/https-http/bootstrap.sh https-http/bootstrap.sh
-RUN chmod +x https-http/bootstrap.sh
 COPY src/proxy/l4-lb/bootstrap.sh l4-lb/bootstrap.sh
-RUN chmod +x l4-lb/bootstrap.sh
 COPY src/scripts/wait-for-it.sh wait-for-it.sh
-RUN chmod +x wait-for-it.sh
+RUN chmod +x https-http/bootstrap.sh l4-lb/bootstrap.sh wait-for-it.sh

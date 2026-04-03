@@ -29,6 +29,14 @@
       {
         "name": "TEMPO_ENDPOINT",
         "value": "$tempoEndpoint"
+      },
+      {
+        "name": "SPARK_METRICS_ENDPOINT",
+        "value": "$sparkMetricsEndpoint"
+      },
+      {
+        "name": "RESOURCE_ATTRIBUTES",
+        "value": "$resourceAttributes"
       }
     ],
     "volumeMounts": [

@@ -64,7 +64,7 @@ public class SecretsController : ClientControllerBase
     {
         var appClient = this.CcfClientManager.GetAppClient();
         using (HttpRequestMessage request =
-            new(HttpMethod.Get, $"app/contracts/{contractId}/secrets/{secretId}/cleanroompolicy"))
+            new(HttpMethod.Post, $"app/contracts/{contractId}/secrets/{secretId}/cleanroompolicy"))
         {
             using HttpResponseMessage response = await appClient.SendAsync(request);
             this.Response.CopyHeaders(response.Headers);

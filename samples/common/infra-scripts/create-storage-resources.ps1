@@ -24,7 +24,7 @@ function Create-Storage-Resources {
                 --enable-hierarchical-namespace $enableHns)
         $storageAccountResult = $result | ConvertFrom-Json
 
-        $role = "Storage Blob Data Contributor"
+        $role = "Storage Blob Data Owner"
         $roleAssignment = (az role assignment list `
                 --assignee-object-id $objectId `
                 --scope $storageAccountResult.id `
@@ -67,14 +67,5 @@ function Create-Storage-Resources {
                 }
             }
         }
-    }
-}
-
-function Get-Assignee-Principal-Type {
-    if ($env:GITHUB_ACTIONS -eq "true") {
-        return "ServicePrincipal"
-    }
-    else {
-        return "User"
     }
 }

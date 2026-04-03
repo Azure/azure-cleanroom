@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using CgsUI.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -60,6 +61,16 @@ public class UserDocumentsController : Controller
             }
 
             var item = await response.Content.ReadFromJsonAsync<UserDocumentViewModel>();
+            if (item?.Labels != null)
+            {
+                item.LabelsView = item.Labels.Select(
+                    kvp => new UserDocumentViewModel.LabelsViewModel
+                    {
+                        Name = kvp.Key,
+                        Value = kvp.Value!.ToString()!
+                    }).ToList();
+            }
+
             var users = (await client.GetFromJsonAsync<ListUsers>(
                 $"{this.configuration.GetEndpoint()}/users"))!;
             var members = await client.GetFromJsonAsync<MembersController.ListMembers>(
@@ -227,31 +238,84 @@ public class UserDocumentsController : Controller
 
     // GET: UserDocuments/Create
     [Route("UserDocuments/Create")]
-    public IActionResult Create()
+    public async Task<IActionResult> Create()
     {
-        return this.View();
+        try
+        {
+            using var client = new HttpClient();
+            var contracts = await client.GetFromJsonAsync<ListContractsViewModel>(
+                $"{this.configuration.GetEndpoint()}/contracts");
+
+            var viewModel = new CreateUserDocumentViewModel
+            {
+                AvailableContracts = contracts?.Value.Select(c => c.Id).OrderBy(x => x).ToList()
+                ?? new List<string>()
+            };
+
+            return this.View(viewModel);
+        }
+        catch (HttpRequestException re)
+        {
+            return this.View("Error", new ErrorViewModel
+            {
+                Content = re.Message
+            });
+        }
     }
 
-    // POST: Contracts/Create
+    // POST: UserDocuments/Create
     // To protect from overposting attacks, enable the specific properties you want to bind to.
     // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
     [HttpPost]
     [ValidateAntiForgeryToken]
     [Route("UserDocuments/Create")]
     public async Task<IActionResult> Create(
-        [Bind("Id,ContractId,Data")] UserDocument doc)
+        CreateUserDocumentViewModel viewModel)
     {
+        // Validate label key/value pairs
+        if (viewModel.Labels != null && viewModel.Labels.Any())
+        {
+            foreach (var label in viewModel.Labels)
+            {
+                if (string.IsNullOrWhiteSpace(label.Key) && !string.IsNullOrWhiteSpace(label.Value))
+                {
+                    this.ModelState.AddModelError(
+                        "Labels",
+                        "Label key cannot be empty if value is provided.");
+                    break;
+                }
+            }
+        }
+
         if (this.ModelState.IsValid)
         {
             string documentUrl =
-                $"{this.configuration.GetEndpoint()}/userdocuments/{doc.Id}";
+                $"{this.configuration.GetEndpoint()}/userdocuments/{viewModel.Document.Id}";
             using (HttpRequestMessage request = new(HttpMethod.Put, documentUrl))
             {
                 var payload = new JsonObject
                 {
-                    ["contractId"] = doc.ContractId,
-                    ["data"] = doc.Data
+                    ["contractId"] = viewModel.Document.ContractId,
+                    ["data"] = viewModel.Document.Data
                 };
+
+                // Convert labels key/value pairs to JSON object
+                if (viewModel.Labels != null && viewModel.Labels.Any())
+                {
+                    var labelsObject = new JsonObject();
+                    foreach (var label in viewModel.Labels)
+                    {
+                        if (!string.IsNullOrWhiteSpace(label.Key))
+                        {
+                            labelsObject[label.Key] = label.Value;
+                        }
+                    }
+
+                    if (labelsObject.Count > 0)
+                    {
+                        payload["labels"] = labelsObject;
+                    }
+                }
 
                 request.Content = new StringContent(
                     payload.ToJsonString(),
@@ -273,7 +337,21 @@ public class UserDocumentsController : Controller
             }
         }
 
-        return this.View(doc);
+        // Reload contracts for the dropdown on validation failure
+        try
+        {
+            using var client = new HttpClient();
+            var contracts = await client.GetFromJsonAsync<ListContractsViewModel>(
+                $"{this.configuration.GetEndpoint()}/contracts");
+            viewModel.AvailableContracts =
+                contracts?.Value.Select(c => c.Id).OrderBy(x => x).ToList() ?? new List<string>();
+        }
+        catch
+        {
+            // If we can't load contracts, just return with empty list
+        }
+
+        return this.View(viewModel);
     }
 
     private async Task<IActionResult> PostAction(string url, string id)

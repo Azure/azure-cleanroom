@@ -1,37 +1,103 @@
 ﻿@model Contract
 @{
-    ViewData["Title"] = "Create";
+    ViewData["Title"] = "Create Contract";
 }
 
-<h1>Create</h1>
-<hr />
-<div class="row">
-    <div class="col-md-4">
-        <form asp-action="Create">
-            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
-            <div class="form-group">
-                <label asp-for="Id" class="control-label"></label>
-                <input asp-for="Id" class="form-control" />
-                <span asp-validation-for="Id" class="text-danger"></span>
-            </div>
-                <div class="form-group">
-                    <label asp-for="Data" class="control-label"></label>
-                    <textarea asp-for="Data" class="form-control" rows="4"></textarea>
+<div class="content-wrapper">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 text-gradient mb-1">
+                <i class="fas fa-plus-circle me-2"></i>Create New Contract
+            </h1>
+            <p class="text-muted mb-0">Create a new governance contract for the clean room</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearForm()">
+                <i class="fas fa-eraser me-1"></i>Clear Form
+            </button>
+            <a asp-action="Index" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Contracts
+            </a>
+        </div>
+    </div>
+
+    <!-- Help Alert -->
+    <div class="alert alert-info d-flex align-items-start" role="alert">
+        <i class="fas fa-info-circle me-3 mt-1"></i>
+        <div>
+            <h6 class="alert-heading mb-1">Contract Creation Guidelines</h6>
+            <small>
+                Provide a unique contract ID and valid data. The contract will be submitted for governance approval
+                and requires consensus from consortium members before activation.
+            </small>
+        </div>
+    </div>
+
+    <!-- Contract Form Card -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-file-contract me-2"></i>Contract Details
+            </h5>
+        </div>
+        <div class="card-body">
+            <form asp-action="Create" id="contractForm">
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+
+                <!-- Contract ID Field -->
+                <div class="mb-4">
+                    <label asp-for="Id" class="form-label fw-semibold">
+                        <i class="fas fa-tag me-1"></i>Contract ID
+                        <span class="text-danger">*</span>
+                    </label>
+                    <input asp-for="Id" class="form-control form-control-lg"
+                        placeholder="Enter a unique contract identifier" autocomplete="off" />
+                    <div class="form-text">
+                        <i class="fas fa-lightbulb me-1"></i>
+                        Use a descriptive, unique identifier (e.g., "member-onboarding-v1",
+                        "data-sharing-policy")
+                    </div>
+                    <span asp-validation-for="Id" class="text-danger"></span>
+                </div>
+
+                <!-- Contract Data Field -->
+                <div class="mb-4">
+                    <label asp-for="Data" class="form-label fw-semibold">
+                        <i class="fas fa-code me-1"></i>Contract Data
+                        <span class="text-danger">*</span>
+                    </label>
+                    <div>
+                        <textarea asp-for="Data" class="form-control font-monospace" rows="12"
+                            placeholder="Enter contract data..."
+                            style="resize: vertical; min-height: 300px;"></textarea>
+                    </div>
                     <span asp-validation-for="Data" class="text-danger"></span>
                 </div>
-            <div class="form-group">
-                <input type="submit" value="Create" class="btn btn-primary" />
-            </div>
-        </form>
+
+                <!-- Form Actions -->
+                <div class="d-flex justify-content-end">
+                    <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+                        <i class="fas fa-paper-plane me-1"></i>Create Contract
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
-<div>
-    <a asp-action="Index">Back to Contracts</a>
-</div>
+
 
 @section Scripts {
     @{
         await Html.RenderPartialAsync("_ValidationScriptsPartial");
     }
+
+    <script>
+        function clearForm() {
+            if (confirm('Are you sure you want to clear all form data?')) {
+                document.getElementById('contractForm').reset();
+            }
+        }
+    </script>
 }

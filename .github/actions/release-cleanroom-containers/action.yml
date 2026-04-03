@@ -103,18 +103,6 @@ runs:
 
     - uses: ./.github/actions/release-container
       with:
-        name: ccr-attestation
-        tag: ${{ inputs.tag }}
-        environment: ${{ inputs.environment }}
-        artefact-name: ccr-attestation
-        registry-name: ${{ inputs.registry-name }}
-        client-id: ${{ inputs.client-id }}
-        tenant-id: ${{ inputs.tenant-id }}
-        subscription-id: ${{ inputs.subscription-id}}
-        needs-attestation: ${{ inputs.needs-attestation }}
-
-    - uses: ./.github/actions/release-container
-      with:
         name: ccr-secrets
         tag: ${{ inputs.tag }}
         environment: ${{ inputs.environment }}
@@ -179,6 +167,18 @@ runs:
         tag: ${{ inputs.tag }}
         environment: ${{ inputs.environment }}
         artefact-name: skr
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}
+
+    - uses: ./.github/actions/release-container
+      with:
+        name: cvm/cvm-attestation-agent
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: cvm-attestation-agent
         registry-name: ${{ inputs.registry-name }}
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}

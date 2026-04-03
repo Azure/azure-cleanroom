@@ -24,11 +24,12 @@ if ($outDir -eq "") {
 # gets started via the ccf up command below.
 $env:AZCLI_CCF_PROVIDER_CLIENT_IMAGE = "$repo/ccf/ccf-provider-client:$tag"
 $env:AZCLI_CCF_PROVIDER_PROXY_IMAGE = "$repo/ccr-proxy:$tag"
-$env:AZCLI_CCF_PROVIDER_ATTESTATION_IMAGE = "$repo/ccr-attestation:$tag"
 $env:AZCLI_CCF_PROVIDER_SKR_IMAGE = "$repo/skr:$tag"
 $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_VIRTUAL_IMAGE = "$repo/ccf/app/run-js/virtual:$tag"
+$env:AZCLI_CCF_PROVIDER_LOCAL_SKR_IMAGE = "$repo/local-skr:$tag"
 $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_SNP_IMAGE = "$repo/ccf/app/run-js/snp:$tag"
 $env:AZCLI_CCF_PROVIDER_RECOVERY_AGENT_IMAGE = "$repo/ccf/ccf-recovery-agent:$tag"
+$env:AZCLI_CCF_PROVIDER_CVM_ATTESTATION_VERIFIER_IMAGE = "$repo/cvm/cvm-attestation-verifier:$tag"
 $env:AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_IMAGE = "$repo/ccf/ccf-recovery-service:$tag"
 $env:AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL = "$repo"
 $env:AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL = "$repo/policies/ccf/ccf-network-security-policy:$tag"

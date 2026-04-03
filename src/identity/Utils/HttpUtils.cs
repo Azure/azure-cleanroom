@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using Microsoft.Extensions.Logging;
-using Microsoft.Rest.TransientFaultHandling;
 
 namespace Microsoft.Azure.CleanRoomSidecar.Identity.Utils;
 
@@ -31,10 +30,7 @@ public static class HttpUtils
                 $"failed with statusCode {response.StatusCode}, " +
                 $"reasonPhrase: {response.ReasonPhrase} and content: {content}.");
 
-            throw new HttpRequestWithStatusException(content)
-            {
-                StatusCode = response.StatusCode
-            };
+            throw new Azure.RequestFailedException((int)response.StatusCode, content);
         }
     }
 }

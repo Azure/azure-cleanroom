@@ -4,6 +4,7 @@
 using System.Text;
 using System.Text.Json;
 using AttestationClient;
+using Azure.Core;
 using Microsoft.Extensions.Http;
 
 namespace Controllers;
@@ -12,8 +13,8 @@ public class CcfClientManager
 {
     private readonly ILogger logger;
     private readonly SemaphoreSlim semaphore = new(1, 1);
-    private WorkspaceConfiguration wsConfig = default!;
-    private HttpClient ccfAppClient = default!;
+    private WorkspaceConfiguration? wsConfigOnce;
+    private HttpClient? ccfAppClientOnce;
     private IConfiguration config;
 
     public CcfClientManager(
@@ -26,27 +27,25 @@ public class CcfClientManager
 
     public async Task<HttpClient> GetAppClient()
     {
-        await this.InitializeAppClient();
-        return this.ccfAppClient;
+        return await this.InitializeAppClient();
     }
 
     public async Task<WorkspaceConfiguration> GetWsConfig()
     {
-        await this.InitializeWsConfig();
-        return this.wsConfig;
+        return await this.InitializeWsConfig();
     }
 
-    private async Task InitializeAppClient()
+    private async Task<HttpClient> InitializeAppClient()
     {
-        await this.InitializeWsConfig();
-        if (this.ccfAppClient == null)
+        var wsConfig = await this.InitializeWsConfig();
+        if (this.ccfAppClientOnce == null)
         {
             try
             {
                 await this.semaphore.WaitAsync();
-                if (this.ccfAppClient == null)
+                if (this.ccfAppClientOnce == null)
                 {
-                    this.ccfAppClient = await this.InitializeClient();
+                    this.ccfAppClientOnce = await this.InitializeClient(wsConfig);
                 }
             }
             finally
@@ -54,11 +53,13 @@ public class CcfClientManager
                 this.semaphore.Release();
             }
         }
+
+        return this.ccfAppClientOnce;
     }
 
-    private async Task<HttpClient> InitializeClient()
+    private async Task<HttpClient> InitializeClient(WorkspaceConfiguration wsConfig)
     {
-        var ccrgovEndpoint = new Uri(this.wsConfig.CcrgovEndpoint);
+        var ccrgovEndpoint = new Uri(wsConfig.CcrgovEndpoint);
 
         ServerCertValidationHandler GetServerCertValidationHandler(string? serviceCertPem)
         {
@@ -71,27 +72,38 @@ public class CcfClientManager
         }
 
         HttpMessageHandler certValidationHandler;
-        if (this.wsConfig.ServiceCertLocator != null)
+        if (wsConfig.ServiceCertLocator != null)
         {
             var initialServiceCertPem =
-                await this.wsConfig.ServiceCertLocator.DownloadServiceCertificatePem();
+                await wsConfig.ServiceCertLocator.DownloadServiceCertificatePem();
 
             certValidationHandler = new AutoRenewingCertHandler(
                 this.logger,
-                this.wsConfig.ServiceCertLocator,
+                wsConfig.ServiceCertLocator,
                 GetServerCertValidationHandler(initialServiceCertPem),
                 onRenewal: (serviceCertPem) => { });
         }
         else
         {
-            certValidationHandler = GetServerCertValidationHandler(this.wsConfig.ServiceCert);
+            certValidationHandler = GetServerCertValidationHandler(wsConfig.ServiceCert);
         }
 
         var retryPolicyHandler = new PolicyHttpMessageHandler(
-            HttpRetries.Policies.DefaultRetryPolicy(this.logger))
+            HttpRetries.Policies.DefaultRetryPolicy(this.logger));
+        if (wsConfig.JwtTokenConfiguration != null)
         {
-            InnerHandler = certValidationHandler
-        };
+            // jwt based auth.
+            var authenticationHandler = new TokenCredentialDelegatingHandler(
+                wsConfig.JwtTokenConfiguration.TokenCredential,
+                wsConfig.JwtTokenConfiguration.TokenCredentialScope);
+            authenticationHandler.InnerHandler = certValidationHandler;
+            retryPolicyHandler.InnerHandler = authenticationHandler;
+        }
+        else
+        {
+            retryPolicyHandler.InnerHandler = certValidationHandler;
+        }
+
         var client = new HttpClient(retryPolicyHandler)
         {
             BaseAddress = ccrgovEndpoint
@@ -99,31 +111,66 @@ public class CcfClientManager
         return client;
     }
 
-    private async Task InitializeWsConfig()
+    private async Task<WorkspaceConfiguration> InitializeWsConfig()
     {
-        if (this.wsConfig == null)
+        if (this.wsConfigOnce == null)
         {
             try
             {
                 await this.semaphore.WaitAsync();
-                if (this.wsConfig == null)
+                if (this.wsConfigOnce == null)
                 {
-                    if (string.IsNullOrEmpty(this.config[SettingName.AttestationReport]))
+                    var authMode = this.config[SettingName.CcrGovAuthMode];
+                    if (string.IsNullOrEmpty(authMode))
                     {
-                        this.wsConfig = await this.InitializeWsConfigFetchAttestation();
+                        authMode = AuthMode.SnpAttestation;
+                    }
+
+                    if (authMode == AuthMode.SnpAttestation)
+                    {
+                        if (string.IsNullOrEmpty(this.config[SettingName.AttestationReport]))
+                        {
+                            this.wsConfigOnce = await this.InitializeWsConfigFetchAttestation();
+                        }
+                        else
+                        {
+                            this.wsConfigOnce = await this.InitializeWsConfigFromEnvironment();
+                        }
+                    }
+                    else if (authMode == AuthMode.AzureLogin)
+                    {
+                        var scope = "https://management.azure.com/.default";
+                        var ctx = new TokenRequestContext(new string[] { scope });
+                        var creds = new DefaultAzureCcfTokenCredential();
+                        this.wsConfigOnce = await this.InitializeWsConfigJwtConfiguration(
+                            scope,
+                            creds);
+                    }
+                    else if (authMode == AuthMode.LocalIdp)
+                    {
+                        string identityUrl = this.config["LOCAL_IDP_ENDPOINT"]!;
+                        var scope = "https://does.not.matter";
+                        var creds = new LocalIdpCachedTokenCredential(identityUrl);
+                        this.wsConfigOnce = await this.InitializeWsConfigJwtConfiguration(
+                            scope,
+                            creds);
                     }
                     else
                     {
-                        this.wsConfig = await this.InitializeWsConfigFromEnvironment();
+                        throw new ArgumentException(
+                            $"Unsupported AuthMode: '{this.config[SettingName.CcrGovAuthMode]}'.");
                     }
+
+                    this.wsConfigOnce.AuthMode = authMode;
                 }
 
-                string model = this.wsConfig.ServiceCertLocator?.Model != null ?
-                    JsonSerializer.Serialize(this.wsConfig.ServiceCertLocator.Model) : string.Empty;
+                string model = this.wsConfigOnce.ServiceCertLocator?.Model != null ?
+                    JsonSerializer.Serialize(this.wsConfigOnce.ServiceCertLocator.Model)
+                    : string.Empty;
                 this.logger.LogInformation($"ccr-governance initialized with " +
-                    $"ccrgovEndpoint: '{this.wsConfig.CcrgovEndpoint}', " +
+                    $"ccrgovEndpoint: '{this.wsConfigOnce.CcrgovEndpoint}', " +
                     $"ccrgovEndpointPathPrefix: '{this.config[SettingName.CcrGovApiPathPrefix]}', " +
-                    $"serviceCert: '{this.wsConfig.ServiceCert}', " +
+                    $"serviceCert: '{this.wsConfigOnce.ServiceCert}', " +
                     $"serviceCertDiscoveryModel: '{model}'.");
             }
             finally
@@ -131,6 +178,8 @@ public class CcfClientManager
                 this.semaphore.Release();
             }
         }
+
+        return this.wsConfigOnce;
     }
 
     private async Task<WorkspaceConfiguration> InitializeWsConfigFromEnvironment()
@@ -138,16 +187,6 @@ public class CcfClientManager
         if (string.IsNullOrEmpty(this.config[SettingName.CcrGovEndpoint]))
         {
             throw new ArgumentException("ccrgovEndpoint environment variable must be specified.");
-        }
-
-        if (string.IsNullOrEmpty(this.config[SettingName.CcrgovPrivKey]))
-        {
-            throw new ArgumentException($"{SettingName.CcrgovPrivKey} setting must be specified.");
-        }
-
-        if (string.IsNullOrEmpty(this.config[SettingName.CcrgovPubKey]))
-        {
-            throw new ArgumentException($"{SettingName.CcrgovPubKey} setting must be specified.");
         }
 
         if (string.IsNullOrEmpty(this.config[SettingName.AttestationReport]))
@@ -179,14 +218,10 @@ public class CcfClientManager
             ServiceCertLocator = certLocator
         };
 
-        var privateKey =
-            await File.ReadAllTextAsync(this.config[SettingName.CcrgovPrivKey]!);
-        var publicKey =
-            await File.ReadAllTextAsync(this.config[SettingName.CcrgovPubKey]!);
         var content = await File.ReadAllTextAsync(this.config[SettingName.AttestationReport]!);
-        var attestationReport = JsonSerializer.Deserialize<AttestationReport>(content)!;
-
-        wsConfig.Attestation = new AttestationReportKey(publicKey, privateKey, attestationReport);
+        var report = JsonSerializer.Deserialize<AttestationReportKey>(content)!;
+        wsConfig.KeyPair = new KeyPair(report.PublicKey, report.PrivateKey);
+        wsConfig.Report = report.Report;
         return wsConfig;
     }
 
@@ -227,7 +262,55 @@ public class CcfClientManager
             ServiceCertLocator = certLocator
         };
 
-        wsConfig.Attestation = await Attestation.GenerateRsaKeyPairAndReportAsync();
+        var keyPairAndReport = await Attestation.GenerateRsaKeyPairAndReportAsync();
+        wsConfig.KeyPair = new KeyPair(keyPairAndReport.PublicKey, keyPairAndReport.PrivateKey);
+        wsConfig.Report = keyPairAndReport.Report;
+        return wsConfig;
+    }
+
+    private async Task<WorkspaceConfiguration> InitializeWsConfigJwtConfiguration(
+        string tokenCredentialScope,
+        CcfTokenCredential tokenCredential)
+    {
+        if (string.IsNullOrEmpty(this.config[SettingName.CcrGovEndpoint]))
+        {
+            throw new ArgumentException("ccrgovEndpoint environment variable must be specified.");
+        }
+
+        string? serviceCert = await this.GetServiceCertAsync();
+        var serviceCertDiscovery = this.GetServiceCertDiscoveryModel();
+
+        if (string.IsNullOrEmpty(serviceCert) && serviceCertDiscovery == null)
+        {
+            throw new ArgumentException(
+                $"Either {SettingName.ServiceCert} or " +
+                $"{SettingName.ServiceCertDiscoveryEndpoint} must be specified.");
+        }
+
+        if (!string.IsNullOrEmpty(serviceCert) && serviceCertDiscovery != null)
+        {
+            throw new ArgumentException(
+                $"Both {SettingName.ServiceCert} and " +
+                $"{SettingName.ServiceCertDiscoveryEndpoint} cannot be specified.");
+        }
+
+        CcfServiceCertLocator? certLocator = null;
+        if (serviceCertDiscovery != null)
+        {
+            certLocator = new CcfServiceCertLocator(this.logger, serviceCertDiscovery);
+        }
+
+        var wsConfig = new WorkspaceConfiguration
+        {
+            CcrgovEndpoint = this.config[SettingName.CcrGovEndpoint]!,
+            ServiceCert = serviceCert,
+            ServiceCertLocator = certLocator
+        };
+
+        wsConfig.JwtTokenConfiguration = new JwtTokenConfiguration(
+            tokenCredentialScope,
+            tokenCredential);
+        wsConfig.KeyPair = Attestation.GenerateRsaKeyPair();
         return wsConfig;
     }
 

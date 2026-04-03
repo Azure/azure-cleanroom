@@ -270,7 +270,7 @@ In advanced scenarios the consortium might want to make one member's proposal fo
 | Role | Description |
 | --- | --- |
 | `cgsOperator` | Allows auto-approval for `set_constitution` and `set_js_app` proposals. |
-| `contractOperator` | Allows auto-approval for `set_deployment_spec` and `set_clean_room_policy` proposals. |
+| `contractOperator` | Allows auto-approval for `set_deployment_spec`, `set_deployment_info` and `set_clean_room_policy` proposals. |
 
 If a member has such role(s) enabled on them then their proposals can get auto-approved and not require any voting. Auto approval of these actions has to be enabled explicitly via the following runtime options:
 | Runtime Option | Affected Role |
@@ -278,6 +278,7 @@ If a member has such role(s) enabled on them then their proposals can get auto-a
 | `autoapprove-constitution-proposal` | `cgsOperator`|
 | `autoapprove-jsapp-proposal` | `cgsOperator`|
 | `autoapprove-deploymentspec-proposal` | `contractOperator`|
+| `autoapprove-deploymentinfo-proposal` | `contractOperator`|
 | `autoapprove-cleanroompolicy-proposal` | `contractOperator`|
 
 Below cmdlets showcase how to add/remove roles from a member and enable/disable the auto approval options.
@@ -373,7 +374,7 @@ In advanced scenarios the consortium might want to make one member's proposal fo
 | Role | Description |
 | --- | --- |
 | `cgsOperator` | Allows auto-approval for `set_constitution` and `set_js_app` proposals. |
-| `contractOperator` | Allows auto-approval for `set_deployment_spec` and `set_clean_room_policy` proposals. |
+| `contractOperator` | Allows auto-approval for `set_deployment_spec`, `set_deployment_info` and `set_clean_room_policy` proposals. |
 
 If a member has such role(s) enabled on them then their proposals can get auto-approved and not require any voting. Auto approval of these actions has to be enabled explicitly via the following runtime options:
 | Runtime Option | Affected Role |
@@ -381,6 +382,7 @@ If a member has such role(s) enabled on them then their proposals can get auto-a
 | `autoapprove-constitution-proposal` | `cgsOperator`|
 | `autoapprove-jsapp-proposal` | `cgsOperator`|
 | `autoapprove-deploymentspec-proposal` | `contractOperator`|
+| `autoapprove-deploymentinfo-proposal` | `contractOperator`|
 | `autoapprove-cleanroompolicy-proposal` | `contractOperator`|
 
 Below cmdlets showcase how to add/remove roles from a member and enable/disable the auto approval options.

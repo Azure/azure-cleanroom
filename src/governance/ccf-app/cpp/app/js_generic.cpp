@@ -59,9 +59,19 @@ namespace cleanroomapp
         // Number of arguments to this function
         8));
 
+    auto attestation_object = ctx.new_obj();
+
+    attestation_object.set(
+      "verifyCvmSnpAttestation",
+      ctx.new_c_function(
+        cleanroomapp::js::extensions::js_verify_cvm_snp_attestation,
+        "verifyCvmSnpAttestation",
+        1));
+
     auto cleanroom_object =
       ctx.get_or_create_global_property("cleanroom", ctx.new_obj());
     cleanroom_object.set("crypto", std::move(crypto_object));
+    cleanroom_object.set("attestation", std::move(attestation_object));
   }
 
   class CleanRoomHandlers : public ccf::js::GovernanceDrivenJSRegistry

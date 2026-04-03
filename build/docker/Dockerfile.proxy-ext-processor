@@ -19,6 +19,7 @@ RUN go mod download
 
 COPY .golangci.yml .
 
+
 # Copy the sidecar source.
 COPY src/internal src/internal
 COPY src/proxy-ext-processor src/proxy-ext-processor
@@ -40,10 +41,8 @@ FROM mcr.microsoft.com/mirror/docker/library/ubuntu:22.04
 # Install prerequisities.
 RUN apt-get -y update && \
     DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install \
-    software-properties-common build-essential ca-certificates \
-    libssl-dev pkg-config curl wget apt-transport-https jq
-# Upgrade packages.
-RUN apt upgrade -y
+    ca-certificates curl jq && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY --from=build-image /app/ccr-proxy-ext-processor ./ccr-proxy-ext-processor
 RUN chmod +x ./ccr-proxy-ext-processor

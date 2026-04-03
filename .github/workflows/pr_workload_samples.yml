@@ -1,0 +1,299 @@
+name: "PR Validation: Workload Samples"
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read  # This is required for actions/checkout
+  checks: write   # This is required to generate the test report
+  id-token: write # This is required for generating OIDC access token
+
+# When a new revision is pushed to a PR, cancel all in-progress CI runs for that
+# PR. See https://docs.github.com/en/actions/using-jobs/using-concurrency
+# concurrency:
+#   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+#   cancel-in-progress: true
+
+jobs:
+  pick-location:
+    runs-on: ubuntu-latest
+    outputs:
+      location: ${{ steps.pick.outputs.location }}
+    steps:
+      - name: Pick a random Azure location
+        id: pick
+        shell: bash
+        run: |
+          # These are the locations where DC4as_v5 SKU is available that we use in Flex Node tests.
+          # westus is removed as it is being used by another PR validation flow.
+          locations=("westeurope" "northeurope" "germanywestcentral" "centralindia" "eastasia" "southeastasia" )
+          index=$((RANDOM % ${#locations[@]}))
+          echo "location=${locations[$index]}" >> "$GITHUB_OUTPUT"
+          echo "Selected location: ${locations[$index]}"
+
+  # Virtual infrastructure tests
+  test-big-data-analytics-virtual:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=test-big-data-analytics-virtual-${{ github.run_id }}-${{ github.run_attempt }}"]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Setup environment
+        uses: ./.github/actions/test-workloads/setup-env
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+          infraType: virtual
+          location: centralindia
+          outDir: ${{ github.workspace }}/test/onebox/workload-samples/generated
+
+      - name: Run big data analytics tests
+        uses: ./.github/actions/test-workloads/test-big-data-analytics
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+          location: centralindia
+          deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples/generated
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: big-data-analytics-results-virtual
+          path: ./test/onebox/workload-samples/generated
+          overwrite: true
+        if: ${{ !cancelled() }}
+
+      - name: Delete AWS buckets
+        if: success()
+        shell: pwsh
+        run: |
+          pwsh ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-input-${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+          pwsh ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-output-${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+
+      - name: Delete resource groups
+        if: success()
+        shell: pwsh
+        run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+
+  test-kserve-inferencing-virtual:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=test-kserve-inferencing-virtual-${{ github.run_id }}-${{ github.run_attempt }}"]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Setup environment
+        uses: ./.github/actions/test-workloads/setup-env
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+          infraType: virtual
+          location: centralindia
+          outDir: ${{ github.workspace }}/test/onebox/workload-samples/generated
+
+      - name: Run kserve inferencing tests
+        uses: ./.github/actions/test-workloads/test-kserve-inferencing
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+          location: centralindia
+          deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples/generated
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: kserve-inferencing-results-virtual
+          path: ./test/onebox/workload-samples/generated
+          overwrite: true
+        if: ${{ !cancelled() }}
+
+      - name: Delete resource groups
+        if: success()
+        shell: pwsh
+        run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+
+  # AKS infrastructure tests
+  setup-env-aks:
+    needs: [pick-location]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=setup-env-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Setup environment
+        uses: ./.github/actions/test-workloads/setup-env
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+          infraType: aks
+          location: ${{ needs.pick-location.outputs.location }}
+          outDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
+
+      - name: Upload deployment artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanroom-deployment-artifacts-aks
+          path: ./test/onebox/workload-samples-aks/generated
+          overwrite: true
+        if: always()
+
+  test-big-data-analytics-aks:
+    needs: [pick-location, setup-env-aks]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=test-big-data-analytics-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Download deployment artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cleanroom-deployment-artifacts-aks
+          path: ./test/onebox/workload-samples-aks/generated
+
+      - name: Run big data analytics tests
+        uses: ./.github/actions/test-workloads/test-big-data-analytics
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+          location: ${{ needs.pick-location.outputs.location }}
+          deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: big-data-analytics-results-aks
+          path: ./test/onebox/workload-samples-aks/generated
+          overwrite: true
+        if: ${{ !cancelled() }}
+
+      - name: Delete AWS buckets
+        if: success()
+        shell: pwsh
+        run: |
+          pwsh ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-input-${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+          pwsh ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-output-${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+
+      - name: Delete resource groups
+        if: success()
+        shell: pwsh
+        run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+
+  test-kserve-inferencing-aks:
+    needs: [pick-location, setup-env-aks]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=test-kserve-inferencing-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Download deployment artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cleanroom-deployment-artifacts-aks
+          path: ./test/onebox/workload-samples-aks/generated
+
+      - name: Run kserve inferencing tests
+        uses: ./.github/actions/test-workloads/test-kserve-inferencing
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+          location: ${{ needs.pick-location.outputs.location }}
+          deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
+          models: gpt2
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: kserve-inferencing-results-aks
+          path: ./test/onebox/workload-samples-aks/generated
+          overwrite: true
+        if: ${{ !cancelled() }}
+
+      - name: Delete resource groups
+        if: success()
+        shell: pwsh
+        run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+
+  cleanup-aks:
+    needs: [test-big-data-analytics-aks, test-kserve-inferencing-aks]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=cleanup-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: setup-env-aks
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+    if: success()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ env.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Delete resource groups
+        shell: pwsh
+        run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}"

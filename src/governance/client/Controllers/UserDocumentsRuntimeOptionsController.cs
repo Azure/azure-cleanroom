@@ -22,10 +22,19 @@ public class UserDocumentsRuntimeOptionsController : ClientControllerBase
         [FromRoute] string runtimeOption)
     {
         var appClient = this.CcfClientManager.GetAppClient();
-        using HttpResponseMessage response =
-            await appClient.PostAsync(
-                $"app/userdocuments/{documentId}/runtimeoptions/{runtimeOption}/enable",
-                content: null);
+
+        // TODO (phanic): Temporary workaround to avoid breaking callers that would now need to pass
+        // in the contract ID.
+        using HttpResponseMessage fetchResponse =
+            await appClient.GetAsync($"app/userdocuments/{documentId}");
+        await fetchResponse.ValidateStatusCodeAsync(this.Logger);
+        var jsonResponse = await fetchResponse.Content.ReadFromJsonAsync<JsonObject>();
+        string contractId = jsonResponse!["contractId"]!.GetValue<string>();
+
+        using HttpResponseMessage response = await appClient.PostAsync(
+            $"app/contracts/{contractId}/userdocuments/{documentId}/" +
+            $"runtimeoptions/{runtimeOption}/enable",
+            content: null);
         await response.ValidateStatusCodeAsync(this.Logger);
         this.Response.CopyHeaders(response.Headers);
         await response.WaitAppTransactionCommittedAsync(this.Logger, this.CcfClientManager);
@@ -37,10 +46,19 @@ public class UserDocumentsRuntimeOptionsController : ClientControllerBase
         [FromRoute] string runtimeOption)
     {
         var appClient = this.CcfClientManager.GetAppClient();
-        using HttpResponseMessage response =
-            await appClient.PostAsync(
-                $"app/userdocuments/{documentId}/runtimeoptions/{runtimeOption}/disable",
-                content: null);
+
+        // TODO (phanic): Temporary workaround to avoid breaking callers that would now need to pass
+        // in the contract ID.
+        using HttpResponseMessage fetchResponse =
+            await appClient.GetAsync($"app/userdocuments/{documentId}");
+        await fetchResponse.ValidateStatusCodeAsync(this.Logger);
+        var jsonResponse = await fetchResponse.Content.ReadFromJsonAsync<JsonObject>();
+        string contractId = jsonResponse!["contractId"]!.GetValue<string>();
+
+        using HttpResponseMessage response = await appClient.PostAsync(
+            $"app/contracts/{contractId}/userdocuments/{documentId}/" +
+            $"runtimeoptions/{runtimeOption}/disable",
+            content: null);
         await response.ValidateStatusCodeAsync(this.Logger);
         this.Response.CopyHeaders(response.Headers);
         await response.WaitAppTransactionCommittedAsync(this.Logger, this.CcfClientManager);
@@ -52,12 +70,22 @@ public class UserDocumentsRuntimeOptionsController : ClientControllerBase
         [FromRoute] string runtimeOption)
     {
         var appClient = this.CcfClientManager.GetAppClient();
+
+        // TODO (phanic): Temporary workaround to avoid breaking callers that would now need to pass
+        // in the contract ID.
+        using HttpResponseMessage fetchResponse =
+            await appClient.GetAsync($"app/userdocuments/{documentId}");
+        await fetchResponse.ValidateStatusCodeAsync(this.Logger);
+        var jsonResponse = await fetchResponse.Content.ReadFromJsonAsync<JsonObject>();
+        string contractId = jsonResponse!["contractId"]!.GetValue<string>();
+
         using HttpResponseMessage response = await appClient.PostAsync(
-            $"app/userdocuments/{documentId}/checkstatus/{runtimeOption}",
+            $"app/contracts/{contractId}/userdocuments/{documentId}/" +
+            $"runtimeoptions/{runtimeOption}/status",
             content: null);
         await response.ValidateStatusCodeAsync(this.Logger);
         this.Response.CopyHeaders(response.Headers);
-        var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
+        jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
         return jsonResponse!;
     }
 }

@@ -3,37 +3,303 @@
     ViewData["Title"] = "Audit Events";
 }
 
-<h2>Audit Events</h2>
-<table class="table table-hover">
-    <thead>
-        <tr>
-            <th>#</th>
-            <th>Timestamp</th>
-            <th>Event</th>
-        </tr>
-    </thead>
-    <tbody>
-        @{if (@Model.Value != null && @Model.Value.Any())
-    {
-        int count = 0;
-        @foreach (Event item in @Model.Value)
-        {
-            count++;
-            <tr>
-                <td>@count</td>
-                <td>@item.Timestamp_Iso</td>
-                <td><pre>@item.Data</pre></td>
-            </tr>
-        }
-    } else
-    {
-            <tr>
-                <td></td>
-                <td></td>
-                <td><i>No events yet</i></td>
-            </tr>
+<div class="content-wrapper">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 text-gradient mb-1">
+                <i class="fas fa-history me-2"></i>Audit Events
+            </h1>
+            <p class="text-muted mb-0">Track and monitor all governance activities and events</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshEvents()">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+            <a href="/Contracts" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Contracts
+            </a>
+        </div>
+    </div>
 
+    <div class="row">
+        <div class="col-lg-9">
+            <!-- Events List Card -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-list-alt me-2"></i>Event Timeline
+                        @if (Model.Value != null && Model.Value.Any())
+                        {
+                            <span class="badge bg-primary ms-2">@Model.Value.Count()</span>
+                        }
+                    </h5>
+                    <div class="d-flex gap-2 align-items-center">
+                        <div class="input-group input-group-sm" style="width: 300px;">
+                            <span class="input-group-text">
+                                <i class="fas fa-search"></i>
+                            </span>
+                            <input type="text" class="form-control" placeholder="Search events..." 
+                                   id="eventSearch" onkeyup="filterEvents()">
+                        </div>
+                        <div class="dropdown" style="z-index: 1050;">
+                            <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" 
+                                    data-bs-toggle="dropdown">
+                                <i class="fas fa-filter me-1"></i>Filter
+                            </button>
+                            <ul class="dropdown-menu" style="z-index: 1051;">
+                                <li><a class="dropdown-item" href="#" onclick="filterByTimeRange('today')">Today</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="filterByTimeRange('week')">This Week</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="filterByTimeRange('month')">This Month</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#" onclick="clearFilters()">Clear Filters</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    @if (Model.Value != null && Model.Value.Any())
+                    {
+                        <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                            <table class="table table-hover mb-0" id="eventsTable">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th class="border-0" style="width: 80px;">
+                                            <i class="fas fa-hashtag me-1"></i>#
+                                        </th>
+                                        <th class="border-0" style="width: 200px;">
+                                            <i class="fas fa-clock me-1"></i>Timestamp
+                                        </th>
+                                        <th class="border-0">
+                                            <i class="fas fa-info-circle me-1"></i>Event Details
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{
+                                        int count = 0;
+                                        foreach (Event item in Model.Value)
+                                        {
+                                            count++;
+                                            <tr class="event-row" data-event-id="@count" data-timestamp="@item.Timestamp_Iso">
+                                                <td>
+                                                    <span class="badge bg-secondary">#@count</span>
+                                                </td>
+                                                <td>
+                                                    <div class="d-flex flex-column">
+                                                        <small class="fw-semibold text-primary">@DateTime.Parse(item.Timestamp_Iso).ToString("MMM dd, yyyy")</small>
+                                                        <small class="text-muted">@DateTime.Parse(item.Timestamp_Iso).ToString("HH:mm:ss")</small>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div class="event-data-container">
+                                                        <pre class="bg-light p-2 rounded" style="max-height: 300px; overflow-y: auto;"><code>@item.Data</code></pre>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center py-5">
+                            <i class="fas fa-clipboard-list fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No Events Found</h5>
+                            <p class="text-muted mb-4">No audit events have been recorded yet. Events will appear here as activities occur.</p>
+                            <button type="button" class="btn btn-primary" onclick="refreshEvents()">
+                                <i class="fas fa-sync-alt me-1"></i>Check for Events
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3">
+            <!-- Events Summary Card -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-chart-line me-2"></i>Event Summary
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="text-center mb-3">
+                        <h3 class="text-primary mb-0">@(Model.Value?.Count() ?? 0)</h3>
+                        <small class="text-muted">Total Events</small>
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Latest Event:</small>
+                        @if (Model.Value != null && Model.Value.Any())
+                        {
+                            <small class="text-muted">@DateTime.Parse(Model.Value.First().Timestamp_Iso).ToString("MM/dd HH:mm")</small>
+                        }
+                        else
+                        {
+                            <small class="text-muted">None</small>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter Information Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-info-circle me-2"></i>Filter Info
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="filterInfo">
+                        <small class="text-muted">
+                            <i class="fas fa-eye me-1"></i>Showing all events
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let originalRows = [];
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        // Store original rows for filtering
+        originalRows = Array.from(document.querySelectorAll('.event-row'));
+    });
+
+
+
+    function filterEvents() {
+        const searchTerm = document.getElementById('eventSearch').value.toLowerCase();
+        const rows = document.querySelectorAll('.event-row');
+        let visibleCount = 0;
+        
+        rows.forEach(row => {
+            const eventData = row.querySelector('code').textContent.toLowerCase();
+            if (eventData.includes(searchTerm)) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        updateFilterInfo(`Showing ${visibleCount} events matching "${searchTerm}"`);
     }
+
+    function filterByTimeRange(range) {
+        const now = new Date();
+        const rows = document.querySelectorAll('.event-row');
+        let visibleCount = 0;
+        
+        rows.forEach(row => {
+            const timestamp = new Date(row.dataset.timestamp);
+            let showRow = false;
+            
+            switch(range) {
+                case 'today':
+                    showRow = timestamp.toDateString() === now.toDateString();
+                    break;
+                case 'week':
+                    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    showRow = timestamp >= weekAgo;
+                    break;
+                case 'month':
+                    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    showRow = timestamp >= monthAgo;
+                    break;
+            }
+            
+            if (showRow) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        updateFilterInfo(`Showing ${visibleCount} events from ${range}`);
     }
-    </tbody>
-</table>
+
+    function clearFilters() {
+        const rows = document.querySelectorAll('.event-row');
+        rows.forEach(row => row.style.display = '');
+        document.getElementById('eventSearch').value = '';
+        updateFilterInfo('Showing all events');
+    }
+
+    function updateFilterInfo(message) {
+        document.getElementById('filterInfo').innerHTML = `
+            <small class="text-muted">
+                <i class="fas fa-filter me-1"></i>${message}
+            </small>
+        `;
+    }
+
+    function refreshEvents() {
+        const refreshBtn = document.querySelector('[onclick="refreshEvents()"]');
+        const icon = refreshBtn.querySelector('i');
+
+        icon.classList.add('fa-spin');
+        refreshBtn.disabled = true;
+
+        setTimeout(() => {
+            icon.classList.remove('fa-spin');
+            refreshBtn.disabled = false;
+            location.reload();
+        }, 1000);
+    }
+
+
+
+
+</script>
+
+<style>
+    .event-row:hover {
+        background-color: rgba(0, 0, 0, 0.02);
+    }
+
+    .event-data-container {
+        max-width: 500px;
+    }
+
+    .sticky-top {
+        position: sticky;
+        top: 0;
+        z-index: 1020;
+    }
+
+    /* Fix dropdown z-index issues */
+    .dropdown-menu {
+        z-index: 1051 !important;
+    }
+    
+    .dropdown {
+        position: relative;
+        z-index: 1050;
+    }
+    
+    /* Ensure card headers allow dropdown visibility */
+    .card-header {
+        position: relative;
+        z-index: 1;
+    }
+    
+    /* Override Bootstrap dropdown positioning if needed */
+    .dropdown-menu.show {
+        z-index: 1051 !important;
+    }
+    
+    /* Ensure table doesn't interfere with dropdown */
+    .table-responsive {
+        position: relative;
+        z-index: 1;
+    }
+</style>

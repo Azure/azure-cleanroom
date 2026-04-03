@@ -1,0 +1,1791 @@
+openapi: 3.0.3
+info:
+  title: Analytics Frontend API
+  description: Analytics Frontend API. Use following command to generate the typescript client - npx openapi-typescript ./openapi.yaml --output ./typescript.ts
+  version: 2026-03-01-preview
+paths:
+  /collaborations:
+    get:
+      summary: List all collaborations
+      operationId: collaboration_list_get
+      parameters:
+        - name: activeOnly
+          in: query
+          required: false
+          description: >
+            When true, returns only active collaborations (email-only lookup).
+            When false or omitted, returns all collaborations.
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CollaborationOutput'
+  /collaborations/{collaborationId}:
+    get:
+      summary: Get collaboration by id
+      operationId: collaboration_id_get
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: activeOnly
+          in: query
+          required: false
+          description: >
+            When true, queries only the email-based table (active
+            collaborations). When false or omitted, queries all tables.
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollaborationOutput'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/report:
+    get:
+      summary: Get collaboration report
+      operationId: collaboration_report_get
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollaborationReportResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/analytics:
+    get:
+      summary: Get collaboration analytics workload
+      operationId: collaboration_analytics_get
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/analytics/datasets/{datasetId}/skrpolicy:
+    get:
+      summary: Get collaboration analytics skr policy for a dataset
+      operationId: collaboration_analytics_skr_policy_get
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: datasetId
+          in: path
+          required: true
+          schema:
+            type: string    
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkrPolicy'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/oidc/issuerInfo:
+    get:
+      summary: Get collaboration OIDC issuer info
+      operationId: collaboration_oidc_issuerInfo_get
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OidcIssuer'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/oidc/setIssuerUrl:
+    post:
+      summary: Set collaboration oidc issuer url
+      operationId: collaboration_oidc_setIssuerUrl_post
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+               $ref: '#/components/schemas/SetIssuerUrlInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetIssuerUrlResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/oidc/keys:
+    get:
+      summary: Get collaboration oidc signing keys (JWKS)
+      operationId: collaboration_oidc_keys_get
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OidcKeys'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/invitations:
+    get:
+      summary: List all invitations
+      operationId: collaboration_invitations_get
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: pendingOnly
+          in: query
+          required: false
+          description: >
+            When true, returns only invitations where the user's status is not
+            Active. When false or omitted, returns all matching invitations.
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/ApiVersion'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListInvitationsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/invitations/{invitationId}:
+    get:
+      summary: Get invitation by id
+      operationId: collaboration_invitation_invitation_id_get
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/invitations/{invitationId}/accept:
+    post:
+      summary: Accept invitation by id
+      operationId: collaboration_invitation_invitation_id_accept_post
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/analytics/datasets:
+    get:
+      summary: List all datasets
+      operationId: collaboration_analytics_datasets_list_get
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListDocumentResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/analytics/datasets/{documentId}:
+    get:
+      summary: Get dataset by id
+      operationId: collaboration_analytics_datasets_document_id_get
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetDatasetDocument'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/analytics/datasets/{documentId}/publish:
+    post:
+      summary: Publish dataset by id
+      operationId: collaboration_analytics_datasets_document_id_publish_post
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+             schema:
+               $ref: '#/components/schemas/DatasetDetails'
+        required: true
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/consent/{documentId}:
+    get:
+      summary: Check execution consent by ID of the Query or the Dataset
+      operationId: collaboration_consent_document_id_get
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentStatus'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+    put:
+      summary: Set execution consent (enable / disable) by ID of the Query or the Dataset
+      operationId: collaboration_consent_document_id_put
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentActionRequest'
+        required: true
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/analytics/queries/{documentId}/publish:
+    post:
+      summary: Publish query by id
+      operationId: collaboration_analytics_queries_document_id_publish_post
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryDetails'
+        required: true
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/analytics/queries:
+    get:
+      summary: List all queries
+      operationId: collaboration_analytics_queries_list_get
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListDocumentResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/analytics/queries/{documentId}:
+    get:
+      summary: Get query by id
+      operationId: collaboration_analytics_queries_document_id_get
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetQueryDocument'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/analytics/queries/{documentId}/vote:
+    post:
+      summary: Vote on query by id
+      operationId: collaboration_analytics_queries_document_id_vote_post
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoteRequest'
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/analytics/queries/{documentId}/run:
+    post:
+      summary: Run query by id
+      operationId: collaboration_analytics_queries_document_id_run_post
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRunInput'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: 
+                $ref : '#/components/schemas/QueryRunOutput'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/analytics/runs/{jobId}:
+    get:
+      summary: Get query run result by job id
+      operationId: collaboration_analytics_runs_job_id_get
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryRunResult'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/analytics/queries/{documentId}/runs:
+    get:
+      summary: Get query run history by query id
+      operationId: collaboration_analytics_queries_document_id_runs_get
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QueryRunHistory'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/analytics/datasets/{documentId}/queries:
+    get:
+      summary: Get queries by dataset id
+      operationId: collaboration_analytics_datasets_document_id_queries_get
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/analytics/secrets/{secretName}:
+    put:
+      summary: Set secret for analytics workload
+      operationId: collaboration_analytics_secrets_secret_name_put
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: secretName
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecretValueRequest'
+            example:
+              secretValue: "eyJhd3NBY2Nlc3NLZXlJZCI6ICJBS0lBLi4uIiwgImF3c1NlY3JldEFjY2Vzc0tleSI6ICIuLi4ifQ=="
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetSecretResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  /collaborations/{collaborationId}/analytics/auditevents:
+    get:
+      summary: Get audit events for analytics workload
+      operationId: collaboration_analytics_auditevents_get
+      parameters:
+        - name: collaborationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: scope
+          in: query
+          required: false
+          schema:
+            type: string
+          description: The event scope to query.
+        - name: from_seqno
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Start of the ledger sequence number range.
+        - name: to_seqno
+          in: query
+          required: false
+          schema:
+            type: string
+          description: End of the ledger sequence number range.
+        - $ref: '#/components/parameters/ApiVersion'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetAuditEventsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    ApiVersion:
+      name: api-version
+      in: query
+      required: true
+      description: The API version to use for this request.
+      schema:
+        type: string
+        enum:
+          - '2026-03-01-preview'
+        default: '2026-03-01-preview'
+  schemas:
+    ValidationError:
+      title: ValidationError
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+    UserStatus:
+      title: userStatus
+      type: string
+      enum:
+      - invited
+      - active
+    UserInfo:
+      title: UserInfo
+      type: object
+      properties:
+        userId:
+          type: string
+        data:
+          $ref: '#/components/schemas/UserData'
+          type: object
+    UserData:
+      title: UserData
+      type: object
+      properties:
+        tenantId:
+          type: string
+    CollaborationOutput:
+      type: object
+      properties:
+        collaborationId:
+          type: string
+        collaborationName:
+          type: string
+        userStatus:
+          $ref: '#/components/schemas/UserStatus'
+      title: CollaborationOutput
+    Contract:
+      type: object
+      properties:
+        id:
+          type: string
+        version:
+          type: string
+        data:
+          type: string
+          description: >
+            JSON string matching the ContractData structure.
+        state:
+          type: string
+      title: Contract
+    ContractData:
+      type: object
+      properties:
+        ccrgovEndpoint:
+          type: string
+        ccrgovApiPathPrefix:
+          type: string
+        ccrgovServiceCertDiscovery:
+          $ref: '#/components/schemas/CcrgovServiceCertDiscovery'
+        ccfNetworkRecoveryMembers:
+          type: array
+          items:
+            type: object
+      title: ContractData
+    CcrgovServiceCertDiscovery:
+      type: object
+      properties:
+        endpoint:
+          type: string
+        snpHostData:
+          type: string
+        constitutionDigest:
+          type: string
+        jsappBundleDigest:
+          type: string
+      title: CcrgovServiceCertDiscovery
+    DeploymentInfo:
+      type: object
+      properties:
+        data:
+          type: object
+      title: DeploymentInfo
+    SkrPolicy:
+      type: object
+      required:
+        - anyOf
+        - version
+      properties:
+        anyOf:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkrPolicyAnyOf'
+          description: Array of SKR policy conditions
+        version:
+          type: string
+          description: SKR policy version
+          example: "1.0.0"
+      title: SkrPolicy
+      description: SKR (Secure Key Release) policy structure for cleanroom attestation
+    SkrPolicyAnyOf:
+      type: object
+      required:
+        - allOf
+        - authority
+      properties:
+        allOf:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkrPolicyClaim'
+          description: Array of claims that must all be satisfied
+        authority:
+          type: string
+          description: MAA (Microsoft Azure Attestation) endpoint URL
+          example: "https://sharedeus2.eus2.test.attest.azure.net"
+      title: SkrPolicyAnyOf
+    SkrPolicyClaim:
+      type: object
+      required:
+        - claim
+        - equals
+      properties:
+        claim:
+          type: string
+          description: Name of the attestation claim
+          example: "x-ms-sevsnpvm-hostdata"
+        equals:
+          type: string
+          description: Expected value of the claim
+      title: SkrPolicyClaim
+    OidcIssuer:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        issuerUrl:
+          type: string
+          nullable: true
+        tenantData:
+          $ref: '#/components/schemas/TenantData'
+          nullable: true
+      title: OidcIssuer
+    TenantData:
+      type: object
+      properties:
+        tenantId:
+          type: string
+        issuerUrl:
+          type: string
+      required:
+        - tenantId
+        - issuerUrl
+      title: TenantData
+    SetIssuerUrlInput:
+      type: object
+      properties:
+        url:
+          type: string
+      required:
+        - url
+      title: SetIssuerUrlInput
+    SetIssuerUrlResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          description: The OIDC issuer URL that was set
+        message:
+          type: string
+          description: Success message
+      required:
+        - url
+        - message
+      title: SetIssuerUrlResponse
+    OidcKeys:
+      type: object
+      description: JSON Web Key Set (JWKS) containing OIDC signing keys
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/JsonWebKey'
+      required:
+        - keys
+      title: OidcKeys
+    JsonWebKey:
+      type: object
+      description: JSON Web Key (JWK) as defined in RFC 7517
+      properties:
+        kty:
+          type: string
+          description: Key type (e.g., RSA, EC)
+        kid:
+          type: string
+          description: Key ID
+          nullable: true
+        use:
+          type: string
+          description: Public key use (e.g., sig, enc)
+          nullable: true
+        alg:
+          type: string
+          description: Algorithm (e.g., RS256)
+          nullable: true
+        n:
+          type: string
+          description: RSA modulus (Base64urlUInt-encoded)
+          nullable: true
+        e:
+          type: string
+          description: RSA exponent (Base64urlUInt-encoded)
+          nullable: true
+        x5c:
+          type: array
+          items:
+            type: string
+          description: X.509 certificate chain
+          nullable: true
+        x5t:
+          type: string
+          description: X.509 certificate SHA-1 thumbprint
+          nullable: true
+        x5t#S256:
+          type: string
+          description: X.509 certificate SHA-256 thumbprint
+          nullable: true
+      required:
+        - kty
+      title: JsonWebKey
+    Invitation:
+      type: object
+      properties:
+        invitationId:
+          type: string
+        status:
+          type: string
+        accountType:
+          type: string
+        userInfo:
+          $ref: '#/components/schemas/UserInfo'
+      title: Invitation
+    UserProposalApprover:
+      type: object
+      properties:
+        approverId:
+          type: string
+        approverIdType:
+          type: string          
+      title: UserProposalApprover
+    GetDatasetDocument:
+      type: object
+      properties:
+        id:
+          type: string
+        version:
+          type: string
+        data:
+          $ref: '#/components/schemas/DatasetDetails'
+        state:
+          type: string
+        proposerId:
+          type: string
+      title: User Dataset Document
+    GetQueryDocument:
+      type: object
+      properties:
+        id:
+          type: string
+        version:
+          type: string
+        proposalId:
+          type: string
+        approvers:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserProposalApprover'
+        data:
+          $ref: '#/components/schemas/QueryDetails'
+        state:
+          type: string
+        proposerId:
+          type: string
+      title: User Query Document
+    QueryDetails:
+      type: object
+      properties:
+        queryData:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryData'
+        inputDatasets:
+          type: string
+        outputDataset:
+          type: string
+      title: QueryDetails
+      required:
+      - queryData
+      - inputDatasets
+      - outputDataset
+    QueryData:
+      type: object
+      properties:
+        postFilters:
+          type: string
+        preConditions:
+          type: string
+        executionSequence:
+          type: integer
+        data:
+          type: string
+      title: QueryData
+      required:
+      - executionSequence
+      - data
+    DatasetDetails:
+      type: object
+      properties:
+        name:
+          type: string
+        store:
+          $ref: '#/components/schemas/DatasetStore'
+        identity:
+          $ref: '#/components/schemas/DatasetIdentity'
+        dek:
+          $ref: '#/components/schemas/DatasetEncryptionSecret'
+        kek:
+          $ref: '#/components/schemas/DatasetEncryptionSecret'
+        datasetSchema:
+          $ref: '../dataset.yaml#/components/schemas/DataSchema'
+        datasetAccessPolicy:
+          $ref: '../dataset.yaml#/components/schemas/DataAccessPolicy'
+      required:
+      - name
+      - store
+      - datasetSchema
+      - datasetAccessPolicy
+    DatasetStore:
+      type: object
+      properties:
+        containerName:
+          type: string
+        storageAccountUrl:
+          type: string
+        storageAccountType:
+          $ref: '../cleanroom.yaml#/components/schemas/ResourceType'
+        awsCgsSecretId:
+          type: string
+        encryptionMode:
+          type: string
+          enum:
+            - CSE
+            - CPK
+            - SSE
+      required:
+        - containerName
+        - storageAccountUrl
+        - storageAccountType
+        - encryptionMode
+    DatasetIdentity:
+      type: object
+      properties:
+        clientId:
+          type: string
+        issuerUrl:
+          type: string
+        tenantId:
+          type: string
+        name:
+          type: string
+      required:
+        - clientId
+        - issuerUrl
+        - tenantId
+        - name
+    DatasetEncryptionSecret:
+      type: object
+      properties:
+        secretId:
+          type: string
+        keyVaultUrl:
+          type: string
+        maaUrl:
+          type: string
+      required:
+        - secretId
+        - keyVaultUrl
+    ConsentStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - enabled
+            - disabled
+        reason:
+          $ref: '#/components/schemas/ConsentStatusReason'
+          nullable: true
+      required:
+        - status
+      title: ConsentStatus
+    ConsentStatusReason:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      required:
+        - code
+        - message
+      title: ConsentStatusReason
+    ConsentActionRequest:
+      type: object
+      properties:
+        consentAction:
+          type: string
+          enum:
+            - enable
+            - disable
+          description: The consent action to perform (enable or disable)
+      required:
+        - consentAction
+      title: ConsentActionRequest
+    QueryRunInput:
+      type: object
+      properties:
+        runId:
+          type: string
+        startDate:
+          type: string
+        endDate:
+          type: string
+        dryRun:
+          type: boolean
+        useOptimizer:
+          type: boolean
+      title: QueryRunInput
+      required:
+      - runId
+    QueryRunOutput:
+      type: object
+      properties:
+        jobId:
+          type: string
+        status:
+          type: string
+        dryRun:
+          type: boolean
+          nullable: true
+        jobIdField:
+          type: string
+          nullable: true
+        optimizationUsed:
+          type: boolean
+          nullable: true
+        reasoning:
+          type: string
+          nullable: true
+        skuSettings:
+          $ref: '#/components/schemas/SkuSettingsResponse'
+          nullable: true
+        x-ms-correlation-id:
+          type: string
+          nullable: true
+        x-ms-client-request-id:
+          type: string
+          nullable: true
+      required:
+        - jobId
+        - status
+    SkuSettingsResponse:
+      type: object
+      properties:
+        driver:
+          $ref: '#/components/schemas/DriverSettingsResponse'
+        executor:
+          $ref: '#/components/schemas/ExecutorSettingsResponse'
+      required:
+        - driver
+        - executor
+      title: SkuSettingsResponse
+    DriverSettingsResponse:
+      type: object
+      properties:
+        cores:
+          type: integer
+        memory:
+          type: string
+        serviceAccount:
+          type: string
+      required:
+        - cores
+        - memory
+        - serviceAccount
+      title: DriverSettingsResponse
+    ExecutorSettingsResponse:
+      type: object
+      properties:
+        cores:
+          type: integer
+        memory:
+          type: string
+        instances:
+          $ref: '#/components/schemas/ExecutorInstancesResponse'
+        deleteOnTermination:
+          type: boolean
+      required:
+        - cores
+        - memory
+        - instances
+        - deleteOnTermination
+      title: ExecutorSettingsResponse
+    ExecutorInstancesResponse:
+      type: object
+      properties:
+        min:
+          type: integer
+        max:
+          type: integer
+      required:
+        - min
+        - max
+      title: ExecutorInstancesResponse
+    QueryRunResult:
+      type: object
+      properties:
+        jobId:
+          type: string
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobEvent'
+      required:
+        - jobId
+        - status
+        - events
+      title: QueryRunResult
+    JobStatus:
+      type: object
+      properties:
+        applicationState:
+          $ref: '#/components/schemas/ApplicationState'
+        terminationTime:
+          type: string
+          format: date-time
+          nullable: true
+      title: JobStatus
+    ApplicationState:
+      type: object
+      properties:
+        state:
+          type: string
+          enum:
+            - ""
+            - SUBMITTED
+            - RUNNING
+            - COMPLETED
+            - FAILED
+            - SUBMISSION_FAILED
+            - PENDING_RERUN
+            - INVALIDATING
+            - SUCCEEDING
+            - FAILING
+            - SUSPENDING
+            - SUSPENDED
+            - RESUMING
+            - UNKNOWN
+      required:
+        - state
+      title: ApplicationState
+    JobEvent:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        reason:
+          type: string
+        message:
+          type: string
+        type:
+          type: string
+        firstTimestamp:
+          type: string
+          format: date-time
+          nullable: true
+        lastTimestamp:
+          type: string
+          format: date-time
+          nullable: true
+        count:
+          type: integer
+          nullable: true
+      required:
+        - reason
+        - message
+        - type
+      title: JobEvent
+    QueryRunHistory:
+      type: object
+      properties:
+        queryId:
+          type: string
+          description: The unique identifier for the query.
+        latestRun:
+          $ref: '#/components/schemas/JobRun'
+          nullable: true
+          description: The most recent job run for this query.
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobRun'
+          description: List of all job runs for this query.
+        summary:
+          $ref: '#/components/schemas/JobRecordSummary'
+          nullable: true
+          description: Summary statistics for all runs of this query.
+      required:
+        - queryId
+        - runs
+    JobRun:
+      type: object
+      properties:
+        runId:
+          type: string
+          description: Unique identifier for this job run.
+        startTime:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the job started execution.
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the job completed execution.
+        isSuccessful:
+          type: boolean
+          description: Indicates whether the job run completed successfully.
+        error:
+          $ref: '#/components/schemas/JobRunError'
+          nullable: true
+          description: Error details if the job run failed.
+        stats:
+          $ref: '#/components/schemas/JobRunStats'
+          nullable: true
+          description: Statistics about data processed during the job run.
+        durationSeconds:
+          type: number
+          format: double
+          readOnly: true
+          description:
+            Duration of the job run in seconds. Calculated from startTime and
+            endTime.
+      required:
+        - runId
+        - isSuccessful
+    JobRunError:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Error code identifying the type of error.
+        message:
+          type: string
+          description: Human-readable error message describing the failure.
+      required:
+        - code
+        - message
+    JobRunStats:
+      type: object
+      properties:
+        rowsRead:
+          type: integer
+          format: int32
+          description: Number of rows read during the job execution.
+        rowsWritten:
+          type: integer
+          format: int32
+          description: Number of rows written during the job execution.
+      required:
+        - rowsRead
+        - rowsWritten
+    JobRecordSummary:
+      type: object
+      properties:
+        totalRuns:
+          type: integer
+          format: int32
+          description: Total number of job runs for this query.
+        successfulRuns:
+          type: integer
+          format: int32
+          description: Number of job runs that completed successfully.
+        failedRuns:
+          type: integer
+          format: int32
+          description: Number of job runs that failed.
+        totalRuntimeSeconds:
+          type: number
+          format: double
+          description: Total execution time across all runs in seconds.
+        avgDurationSeconds:
+          type: number
+          format: double
+          description: Average execution time per run in seconds.
+        totalRowsRead:
+          type: integer
+          format: int32
+          description: Total number of rows read across all runs.
+        totalRowsWritten:
+          type: integer
+          format: int32
+          description: Total number of rows written across all runs.
+      required:
+        - totalRuns
+        - successfulRuns
+        - failedRuns
+        - totalRuntimeSeconds
+        - avgDurationSeconds
+        - totalRowsRead
+        - totalRowsWritten
+    SecretValueRequest:
+      type: object
+      properties:
+        secretValue:
+          type: string
+          description: >
+            Base64-encoded JSON object containing secret configuration.
+            For AWS S3 datastore secrets, the JSON should contain:
+            - awsAccessKeyId: AWS access key ID
+            - awsSecretAccessKey: AWS secret access key
+      required:
+        - secretValue
+      title: SecretValueRequest
+    SetSecretResponse:
+      type: object
+      properties:
+        secretId:
+          type: string
+      required:
+        - secretId
+      title: SetSecretResponse
+    GetAuditEventsResponse:
+      type: object
+      properties:
+        value:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEvent'
+        nextLink:
+          type: string
+          nullable: true
+          description: Link to the next page of results, if available.
+      title: GetAuditEventsResponse
+    AuditEvent:
+      type: object
+      properties:
+        scope:
+          type: string
+        id:
+          type: string
+        timestamp:
+          type: string
+        timestampIso:
+          type: string
+        data:
+          $ref: '#/components/schemas/AuditEventData'
+          nullable: true
+      title: AuditEvent
+    AuditEventData:
+      type: object
+      properties:
+        source:
+          type: string
+          nullable: true
+        message:
+          type: string
+          nullable: true
+      title: AuditEventData
+    CcfAttestationReportResponse:
+      type: object
+      properties:
+        platform:
+          type: string
+          enum:
+            - snp
+            - virtual
+        report:
+          $ref: '#/components/schemas/AttestationReport'
+          nullable: true
+        reportDataPayload:
+          type: string
+      required:
+        - platform
+        - reportDataPayload
+      title: CcfAttestationReportResponse
+    ConsortiumManagerReport:
+      type: object
+      properties:
+        platform:
+          type: string
+        report:
+          $ref: '#/components/schemas/AttestationReport'
+          nullable: true
+        serviceCert:
+          type: string
+        hostData:
+          type: string
+          nullable: true
+      required:
+        - platform
+        - serviceCert
+      title: ConsortiumManagerReport
+    AttestationReport:
+      type: object
+      properties:
+        attestation:
+          type: string
+        platformCertificates:
+          type: string
+          nullable: true
+        uvmEndorsements:
+          type: string
+          nullable: true
+        serviceCert:
+          type: string
+          nullable: true
+      title: AttestationReport
+    ReportDataContent:
+      type: object
+      properties:
+        serviceCert:
+          type: string
+        constitutionDigest:
+          type: string
+          nullable: true
+        jsAppBundleDigest:
+          type: string
+          nullable: true
+      required:
+        - serviceCert
+      title: ReportDataContent
+    VoteRequest:
+      type: object
+      properties:
+        proposalId:
+          type: string
+        voteAction:
+          type: string
+          enum:
+            - accept
+            - reject
+          description: The vote action to perform (accept or reject)
+      title: VoteRequest
+    CollaborationReportResponse:
+      type: object
+      properties:
+        cgs:
+          $ref: '#/components/schemas/CgsReportInfo'
+        consortiumManager:
+          $ref: '#/components/schemas/ConsortiumManagerReportInfo'
+      required:
+        - cgs
+        - consortiumManager
+      title: CollaborationReportResponse
+    CgsReportInfo:
+      type: object
+      properties:
+        cgsEndpoint:
+          type: string
+        recoveryAgentEndpoint:
+          type: string
+        report:
+          $ref: '#/components/schemas/CcfAttestationReportResponse'
+      required:
+        - cgsEndpoint
+        - recoveryAgentEndpoint
+        - report
+      title: CgsReportInfo
+    ConsortiumManagerReportInfo:
+      type: object
+      properties:
+        endpoint:
+          type: string
+        report:
+          $ref: '#/components/schemas/ConsortiumManagerReport'
+      required:
+        - endpoint
+        - report
+      title: ConsortiumManagerReportInfo
+    ListInvitationsResponse:
+      type: object
+      properties:
+        invitationId:
+          type: string
+        accountType:
+          type: string
+        status:
+          type: string
+      required:
+        - invitationId
+        - accountType
+        - status
+      title: ListInvitationsResponse
+    ListDocumentResponse:
+      type: object
+      properties:
+        value:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentItem'
+      required:
+        - value
+      title: ListDocumentResponse
+    DocumentItem:
+      type: object
+      properties:
+        id:
+          type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+      required:
+        - id
+        - labels
+      title: DocumentItem

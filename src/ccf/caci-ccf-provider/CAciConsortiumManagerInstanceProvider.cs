@@ -6,16 +6,17 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Azure;
 using Azure.Core;
-using Azure.Identity;
 using Azure.ResourceManager;
 using Azure.ResourceManager.ContainerInstance;
 using Azure.ResourceManager.ContainerInstance.Models;
+using Azure.ResourceManager.Models;
 using Azure.ResourceManager.Resources;
 using CcfCommon;
 using CcfConsortiumMgrProvider;
 using CcfProvider;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using TokenCredentials;
 
 namespace CAciCcfProvider;
 
@@ -37,6 +38,9 @@ public class CAciConsortiumManagerInstanceProvider : ICcfConsortiumManagerInstan
     public async Task<CcfConsortiumManagerEndpoint> CreateConsortiumManager(
         string instanceName,
         string consortiumManagerName,
+        string akvEndpoint,
+        string maaEndpoint,
+        string? managedIdentityId,
         SecurityPolicyConfiguration policyOption,
         JsonObject? providerConfig)
     {
@@ -55,6 +59,9 @@ public class CAciConsortiumManagerInstanceProvider : ICcfConsortiumManagerInstan
             await this.CreateContainerGroup(
                 instanceName,
                 consortiumManagerName,
+                akvEndpoint,
+                maaEndpoint,
+                managedIdentityId!,
                 policyOption,
                 providerConfig!,
                 dnsNameLabel);
@@ -77,6 +84,26 @@ public class CAciConsortiumManagerInstanceProvider : ICcfConsortiumManagerInstan
         }
 
         return null;
+    }
+
+    public async Task<ConsortiumManagerHealth> GetConsortiumManagerHealth(
+        string consortiumManagerName,
+        JsonObject? providerConfig)
+    {
+        List<ContainerGroupResource> lbContainerGroups =
+            await AciUtils.GetConsortiumManagerContainerGroups(
+                consortiumManagerName,
+                "consortium-manager",
+                providerConfig);
+
+        var lbContainerGroup = lbContainerGroups.FirstOrDefault();
+        if (lbContainerGroup == null)
+        {
+            throw new Exception(
+                $"No consortium manager endpoint found for {consortiumManagerName}.");
+        }
+
+        return this.ToConsortiumManagerHealth(lbContainerGroup.Data);
     }
 
     private void ValidateCreateInput(JsonObject? providerConfig)
@@ -105,11 +132,14 @@ public class CAciConsortiumManagerInstanceProvider : ICcfConsortiumManagerInstan
     private async Task<ContainerGroupData> CreateContainerGroup(
         string instanceName,
         string consortiumManagerName,
+        string akvEndpoint,
+        string maaEndpoint,
+        string managedIdentityId,
         SecurityPolicyConfiguration policyOption,
         JsonObject providerConfig,
         string dnsNameLabel)
     {
-        var armClient = new ArmClient(new DefaultAzureCredential());
+        var armClient = new ArmClient(TokenCredentialFactory.GetTenantCredential(providerConfig));
         string location = providerConfig["location"]!.ToString();
         string subscriptionId = providerConfig["subscriptionId"]!.ToString();
         string resourceGroupName = providerConfig["resourceGroupName"]!.ToString();
@@ -127,8 +157,12 @@ public class CAciConsortiumManagerInstanceProvider : ICcfConsortiumManagerInstan
                 location,
                 instanceName,
                 consortiumManagerName,
+                akvEndpoint,
+                maaEndpoint,
+                managedIdentityId,
                 dnsNameLabel,
-                containerGroupSecurityPolicy);
+                containerGroupSecurityPolicy,
+                providerConfig);
 
         this.logger.LogInformation(
             $"Starting container group creation for consortium manager: {instanceName}.");
@@ -220,36 +254,70 @@ public class CAciConsortiumManagerInstanceProvider : ICcfConsortiumManagerInstan
             string location,
             string instanceName,
             string consortiumManagerName,
+            string akvEndpoint,
+            string maaEndpoint,
+            string managedIdentityId,
             string dnsNameLabel,
-            ContainerGroupSecurityPolicy containerGroupSecurityPolicy)
+            ContainerGroupSecurityPolicy containerGroupSecurityPolicy,
+            JsonObject providerConfig)
         {
+            // Create the environment variables.
+            var envVars = new List<ContainerEnvironmentVariable>
+            {
+                new("ASPNETCORE_URLS")
+                {
+                    Value = $"http://+:{Ports.ConsortiumManagerPort}"
+                },
+                new("AKV_ENDPOINT")
+                {
+                    Value = akvEndpoint
+                },
+                new("MAA_ENDPOINT")
+                {
+                    Value = maaEndpoint
+                },
+                new("SKR_ENDPOINT")
+                {
+                    Value = $"http://localhost:{Ports.SkrPort}"
+                },
+                new("SERVICE_CERT_LOCATION")
+                {
+                    Value = MountPaths.ConsortiumManagerCertPemFile
+                },
+                new("AUTH_CONFIGURATIONS")
+                {
+                    Value = providerConfig["AUTH_CONFIGURATIONS"]?.ToString()
+                        .Replace(Environment.NewLine, string.Empty) ?? @"[]"
+                },
+                new("SERVICE_ENDPOINT")
+                {
+                    Value = $"https://{dnsNameLabel}:{Ports.EnvoyPort}"
+                }
+            };
+            this.AddSparkUrlOverrides(envVars, providerConfig);
+
+            ContainerInstanceContainer consortiumManagerContainerInstance =
+                new(
+                AciConstants.ContainerName.CcfConsortiumManager,
+                containerGroupSecurityPolicy.Images[AciConstants.ContainerName.CcfConsortiumManager],
+                new ContainerResourceRequirements(new ContainerResourceRequestsContent(1.5, 1)))
+                {
+                    EnvironmentVariables =
+                    {
+                    },
+                    VolumeMounts =
+                    {
+                        new ContainerVolumeMount("certs", MountPaths.CertsFolderMountPath)
+                    }
+                };
+            envVars.ForEach(x => consortiumManagerContainerInstance.EnvironmentVariables.Add(x));
+
 #pragma warning disable MEN002 // Line is too long
             return new ContainerGroupData(
                 new AzureLocation(location),
                 new ContainerInstanceContainer[]
                 {
-                    new(
-                        AciConstants.ContainerName.CcfConsortiumManager,
-                        containerGroupSecurityPolicy.Images[AciConstants.ContainerName.CcfConsortiumManager],
-                        new ContainerResourceRequirements(new ContainerResourceRequestsContent(1.5, 1)))
-                    {
-                        EnvironmentVariables =
-                        {
-                            new ContainerEnvironmentVariable("ASPNETCORE_URLS")
-                            {
-                                Value = $"http://+:{Ports.ConsortiumManagerPort}"
-                            },
-                            new ContainerEnvironmentVariable("SKR_ENDPOINT")
-                            {
-                                Value = $"http://localhost:{Ports.SkrPort}"
-                            },
-                        },
-                        VolumeMounts =
-                        {
-                            new ContainerVolumeMount("uds", "/mnt/uds"),
-                            new ContainerVolumeMount("certs", MountPaths.CertsFolderMountPath)
-                        }
-                    },
+                    consortiumManagerContainerInstance,
                     new(
                         AciConstants.ContainerName.Skr,
                         containerGroupSecurityPolicy.Images[AciConstants.ContainerName.Skr],
@@ -319,6 +387,16 @@ public class CAciConsortiumManagerInstanceProvider : ICcfConsortiumManagerInstan
                 Sku = ContainerGroupSku.Confidential,
                 ConfidentialComputeCcePolicy =
                     containerGroupSecurityPolicy.ConfidentialComputeCcePolicy,
+                Identity = new ManagedServiceIdentity(ManagedServiceIdentityType.UserAssigned)
+                {
+                    UserAssignedIdentities =
+                    {
+                        {
+                            new ResourceIdentifier(managedIdentityId),
+                            new UserAssignedIdentity()
+                        }
+                    }
+                },
                 Tags =
                 {
                     {
@@ -349,10 +427,6 @@ public class CAciConsortiumManagerInstanceProvider : ICcfConsortiumManagerInstan
                 },
                 Volumes =
                 {
-                    new ContainerVolume("uds")
-                    {
-                        EmptyDir = BinaryData.FromObjectAsJson(new Dictionary<string, object>())
-                    },
                     new ContainerVolume("certs")
                     {
                         EmptyDir = BinaryData.FromObjectAsJson(new Dictionary<string, object>())
@@ -413,6 +487,99 @@ public class CAciConsortiumManagerInstanceProvider : ICcfConsortiumManagerInstan
         {
             Name = nameTagValue,
             Endpoint = $"https://{cgData.IPAddress.Fqdn}:{Ports.EnvoyPort}",
+        };
+    }
+
+    private void AddSparkUrlOverrides(
+        List<ContainerEnvironmentVariable> envVars,
+        JsonObject providerConfig)
+    {
+        string? sparkContainerRegistryUrl =
+            providerConfig["SPARK_CONTAINER_REGISTRY_URL"]?.ToString();
+        if (sparkContainerRegistryUrl != null)
+        {
+            envVars.Add(new ContainerEnvironmentVariable("SPARK_CONTAINER_REGISTRY_URL")
+            {
+                Value = sparkContainerRegistryUrl
+            });
+        }
+
+        string? sparkAnalyticsAgentChartUrl =
+            providerConfig["SPARK_ANALYTICS_AGENT_CHART_URL"]?.ToString();
+        if (sparkAnalyticsAgentChartUrl != null)
+        {
+            envVars.Add(new ContainerEnvironmentVariable("SPARK_ANALYTICS_AGENT_CHART_URL")
+            {
+                Value = sparkAnalyticsAgentChartUrl
+            });
+        }
+
+        string? sparkAnalyticsAgentSecurityPolicyDocumentUrl =
+            providerConfig["SPARK_ANALYTICS_AGENT_SECURITY_POLICY_DOCUMENT_URL"]?.ToString();
+        if (sparkAnalyticsAgentSecurityPolicyDocumentUrl != null)
+        {
+            envVars.Add(new ContainerEnvironmentVariable(
+                "SPARK_ANALYTICS_AGENT_SECURITY_POLICY_DOCUMENT_URL")
+            {
+                Value = sparkAnalyticsAgentSecurityPolicyDocumentUrl
+            });
+        }
+
+        string? sparkFrontendSecurityPolicyDocumentUrl =
+            providerConfig["SPARK_FRONTEND_SECURITY_POLICY_DOCUMENT_URL"]?.ToString();
+        if (sparkFrontendSecurityPolicyDocumentUrl != null)
+        {
+            envVars.Add(new ContainerEnvironmentVariable(
+                "SPARK_FRONTEND_SECURITY_POLICY_DOCUMENT_URL")
+            {
+                Value = sparkFrontendSecurityPolicyDocumentUrl
+            });
+        }
+    }
+
+    private ConsortiumManagerHealth ToConsortiumManagerHealth(ContainerGroupData data)
+    {
+        ServiceStatus status = ServiceStatus.Ok;
+        var reasons = new List<CcfConsortiumMgrProvider.Reason>();
+        var terminatedContainers = data.Containers.Where(
+            c => c.InstanceView?.CurrentState?.State == "Terminated");
+
+        if (terminatedContainers.Any())
+        {
+            status = ServiceStatus.Unhealthy;
+            var code = "ContainerTerminated";
+            var message = "Following container(s) are reporting as terminated.";
+            foreach (var c in terminatedContainers)
+            {
+                message += $" {c.Name}.";
+            }
+
+            reasons.Add(new() { Code = code, Message = message });
+        }
+
+        if (data.ProvisioningState == "Failed")
+        {
+            status = ServiceStatus.Unhealthy;
+            var code = "ProvisioningFailed";
+            var message = $"The container group {data.Name} is reporting provisioning failure.";
+            reasons.Add(new() { Code = code, Message = message });
+        }
+
+        if (data.InstanceView?.State == "Stopped")
+        {
+            status = ServiceStatus.Unhealthy;
+            var code = "ContainerGroupStopped";
+            var message = $"The container group {data.Name} is reporting state as stopped.";
+            reasons.Add(new() { Code = code, Message = message });
+        }
+
+        var ep = this.ToConsortiumManagerEndpoint(data);
+        return new ConsortiumManagerHealth
+        {
+            Name = ep.Name,
+            Endpoint = ep.Endpoint,
+            Status = status,
+            Reasons = reasons
         };
     }
 }

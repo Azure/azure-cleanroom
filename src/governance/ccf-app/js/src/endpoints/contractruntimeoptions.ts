@@ -1,5 +1,5 @@
 import * as ccfapp from "@microsoft/ccf-app";
-import { ErrorResponse } from "../models/errorresponse";
+import { ErrorResponse } from "../utils/ErrorResponse";
 import {
   ContractStoreItem,
   ContractExecutionStatusStoreItem,
@@ -16,7 +16,7 @@ import {
 import {
   ConsentCheckRequest,
   GetRuntimeOptionResponse
-} from "../models/contractruntimeoptionsmodel";
+} from "../models";
 import { verifySnpAttestation } from "../attestation/snpattestation";
 
 const acceptedContractsStore = ccfapp.typedKv(
@@ -40,32 +40,102 @@ const contractsTelemetryStatusStore = ccfapp.typedKv(
   ccfapp.json<ContractTelemetryStatusStoreItem>()
 );
 
-export function enableContract(
+export function enableContractRuntimeOption(
   request: ccfapp.Request
 ): ccfapp.Response | ccfapp.Response<ErrorResponse> {
+  if (request.params.option !== "execution") {
+    return {
+      statusCode: 400,
+      body: new ErrorResponse(
+        "InvalidOption",
+        `The option value ${request.params.option} is invalid. Use proposals for options other than 'execution'.`
+      )
+    };
+  }
+
   return setContractExecutionStatus(request, "enabled");
 }
 
-export function disableContract(
+export function disableContractRuntimeOption(
   request: ccfapp.Request
 ): ccfapp.Response | ccfapp.Response<ErrorResponse> {
+  if (request.params.option !== "execution") {
+    return {
+      statusCode: 400,
+      body: new ErrorResponse(
+        "InvalidOption",
+        `The option value ${request.params.option} is invalid. Use proposals for options other than 'execution'.`
+      )
+    };
+  }
+
   return setContractExecutionStatus(request, "disabled");
 }
 
-export function checkContractExecutionStatus(
-  request: ccfapp.Request
-): ccfapp.Response | ccfapp.Response<ErrorResponse> {
-  const error = validateCallerAuthorized(request);
-  if (error !== undefined) {
-    return error;
+export function checkContractRuntimeOption(
+  request: ccfapp.Request | ccfapp.Request<ConsentCheckRequest>
+): ccfapp.Response | ccfapp.Response<GetRuntimeOptionResponse> | ccfapp.Response<ErrorResponse> {
+
+  const contractId = request.params.contractId;
+
+  if (request.caller.policy === "no_auth") {
+    // If the caller is not authenticated, we expect a consent check coming from a clean room that
+    // presents an attestation report.
+    const body = (request as ccfapp.Request<ConsentCheckRequest>).body.json();
+    if (!body.attestation) {
+      return {
+        statusCode: 400,
+        body: new ErrorResponse(
+          "AttestationMissing",
+          "Attestation payload must be supplied."
+        )
+      };
+    }
+
+    // Validate attestation report.
+    try {
+      verifySnpAttestation(contractId, body.attestation);
+    } catch (e) {
+      return {
+        statusCode: 400,
+        body: new ErrorResponse("VerifySnpAttestationFailed", e.message)
+      };
+    }
+  } else {
+    // For authenticated callers, validate authorization.
+    const error = validateCallerAuthorized(request);
+    if (error !== undefined) {
+      return error;
+    }
   }
-  return checkContractExecutionStatusInternal(request);
+
+  let response: ccfapp.Response | ccfapp.Response<GetRuntimeOptionResponse> | ccfapp.Response<ErrorResponse>;
+
+  if (request.params.option === "execution") {
+    response = checkContractExecutionStatusInternal(contractId);
+  } else if (request.params.option === "logging") {
+    response = checkContractLoggingStatusInternal(contractId);
+  } else if (request.params.option === "telemetry") {
+    response = checkContractTelemetryStatusInternal(contractId);
+  } else {
+    return {
+      statusCode: 400,
+      body: new ErrorResponse(
+        "InvalidOption",
+        `The option value ${request.params.option} is invalid. Valid values are 'execution', 'logging' and 'telemetry'.`
+      )
+    };
+  }
+
+  // A valid attestation report is sufficient to return consent status. Not seeing a requirement
+  // to encrypt the response so only a clean room could decrypt it as we allow all users to check
+  // this anyway.
+  return response;
 }
 
 function checkContractExecutionStatusInternal(
-  request: ccfapp.Request
+  contractId: string
 ): ccfapp.Response | ccfapp.Response<ErrorResponse> {
-  const contractId = request.params.contractId;
   if (!acceptedContractsStore.has(contractId)) {
     return {
       statusCode: 200,
@@ -120,21 +190,9 @@ function checkContractExecutionStatusInternal(
   };
 }
 
-export function checkContractLoggingStatus(
-  request: ccfapp.Request
+function checkContractLoggingStatusInternal(
+  contractId: string
 ): ccfapp.Response<GetRuntimeOptionResponse> | ccfapp.Response<ErrorResponse> {
-  const error = validateCallerAuthorized(request);
-  if (error !== undefined) {
-    return error;
-  }
-  return checkContractLoggingStatusInternal(request);
-}
-
-export function checkContractLoggingStatusInternal(
-  request: ccfapp.Request
-): ccfapp.Response<GetRuntimeOptionResponse> | ccfapp.Response<ErrorResponse> {
-  const contractId = request.params.contractId;
-
   if (!acceptedContractsStore.has(contractId)) {
     return {
       statusCode: 200,
@@ -172,21 +230,9 @@ export function checkContractLoggingStatusInternal(
   };
 }
 
-export function checkContractTelemetryStatus(
-  request: ccfapp.Request
-): ccfapp.Response<GetRuntimeOptionResponse> | ccfapp.Response<ErrorResponse> {
-  const error = validateCallerAuthorized(request);
-  if (error !== undefined) {
-    return error;
-  }
-  return checkContractTelemetryStatusInternal(request);
-}
-
 function checkContractTelemetryStatusInternal(
-  request: ccfapp.Request
+  contractId: string
 ): ccfapp.Response<GetRuntimeOptionResponse> | ccfapp.Response<ErrorResponse> {
-  const contractId = request.params.contractId;
-
   if (!acceptedContractsStore.has(contractId)) {
     return {
       statusCode: 200,
@@ -222,96 +268,6 @@ function checkContractTelemetryStatusInternal(
       proposalIds: proposalIds
     }
   };
-}
-
-export function consentCheckExecution(
-  request: ccfapp.Request<ConsentCheckRequest>
-): ccfapp.Response | ccfapp.Response<ErrorResponse> {
-  const contractId = request.params.contractId;
-  const body = request.body.json();
-  if (!body.attestation) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse(
-        "AttestationMissing",
-        "Attestation payload must be supplied."
-      )
-    };
-  }
-
-  // Validate attestation report.
-  try {
-    verifySnpAttestation(contractId, body.attestation);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("VerifySnpAttestationFailed", e.message)
-    };
-  }
-
-  // A valid attestation report is sufficient to return consent status. Not seeing a requirement
-  // to encrypt the response so only a clean room could decrypt it.
-  return checkContractExecutionStatusInternal(request);
-}
-
-export function consentCheckLogging(
-  request: ccfapp.Request<ConsentCheckRequest>
-): ccfapp.Response | ccfapp.Response<ErrorResponse> {
-  const contractId = request.params.contractId;
-  const body = request.body.json();
-  if (!body.attestation) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse(
-        "AttestationMissing",
-        "Attestation payload must be supplied."
-      )
-    };
-  }
-
-  // Validate attestation report.
-  try {
-    verifySnpAttestation(contractId, body.attestation);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("VerifySnpAttestationFailed", e.message)
-    };
-  }
-
-  // A valid attestation report is sufficient to return consent status. Not seeing a requirement
-  // to encrypt the response so only a clean room could decrypt it.
-  return checkContractLoggingStatusInternal(request);
-}
-
-export function consentCheckTelemetry(
-  request: ccfapp.Request<ConsentCheckRequest>
-): ccfapp.Response | ccfapp.Response<ErrorResponse> {
-  const contractId = request.params.contractId;
-  const body = request.body.json();
-  if (!body.attestation) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse(
-        "AttestationMissing",
-        "Attestation payload must be supplied."
-      )
-    };
-  }
-
-  // Validate attestation report.
-  try {
-    verifySnpAttestation(contractId, body.attestation);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("VerifySnpAttestationFailed", e.message)
-    };
-  }
-
-  // A valid attestation report is sufficient to return consent status. Not seeing a requirement
-  // to encrypt the response so only a clean room could decrypt it.
-  return checkContractTelemetryStatusInternal(request);
 }
 
 function setContractExecutionStatus(

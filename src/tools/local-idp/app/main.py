@@ -143,6 +143,9 @@ async def getToken(
     aud: str | None = None,
     oid: str | None = None,
     iss: str | None = None,
+    preferred_username: str | None = None,
+    azp: str | None = None,
+    appId: str | None = None,
 ):
     # return a token
     if app.signing_pub_pem is None:
@@ -170,6 +173,12 @@ async def getToken(
         claims["aud"] = aud
     if oid is not None:
         claims["oid"] = oid
+    if preferred_username is not None:
+        claims["preferred_username"] = preferred_username
+    if azp is not None:
+        claims["azp"] = azp
+    if appId is not None:
+        claims["appId"] = appId
 
     token = jwt.encode(
         claims,

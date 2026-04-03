@@ -102,10 +102,10 @@ public abstract class UserProposalControllerBase : ClientControllerBase
     internal class MemberData
     {
         [JsonPropertyName("isOperator")]
-        public bool IsOperator { get; set; } = default!;
+        public bool IsOperator { get; set; } = default;
 
         [JsonPropertyName("isRecoveryOperator")]
-        public bool IsRecoveryOperator { get; set; } = default!;
+        public bool IsRecoveryOperator { get; set; } = default;
 
         [JsonPropertyName("cgsRoles")]
         public CgsRoles CgsRoles { get; set; } = default!;
@@ -132,10 +132,10 @@ public abstract class UserProposalControllerBase : ClientControllerBase
     internal class CgsRoles
     {
         [JsonPropertyName("cgsOperator")]
-        public bool CgsOperator { get; set; } = default!;
+        public bool CgsOperator { get; set; } = default;
 
         [JsonPropertyName("contractOperator")]
-        public bool ContractOperator { get; set; } = default!;
+        public bool ContractOperator { get; set; } = default;
     }
 
     internal class MemberList

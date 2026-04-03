@@ -139,13 +139,22 @@ else {
 
 az cleanroom governance proposal vote --proposal-id $proposalId --action accept --governance-client $projectName
 
+if ($outDir -eq "") {
+    $sandbox_common = "$PSScriptRoot/sandbox_common"
+}
+else {
+    $sandbox_common = $outDir
+}
+
+$envFilePath = "$sandbox_common/governance-client.env"
 Write-Output "Starting cgs-client for the logged in user/service principal and checking API output"
 $userProjectName = "ccf-invite-azure-user"
 az cleanroom governance client deploy `
     --ccf-endpoint $ccfEndpoint `
     --use-azlogin-identity `
-    --service-cert $outDir/service_cert.pem `
-    --name $userProjectName
+    --service-cert $sandbox_common/service_cert.pem `
+    --name $userProjectName `
+    --env-file $envFilePath
 
 Write-Output "Accepting invitation $invitationId via $userProjectName..."
 az cleanroom governance user-identity invitation accept `

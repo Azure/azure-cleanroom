@@ -14,6 +14,8 @@ internal class Startup : ApiStartup
     {
     }
 
+    public override bool EnableOpenTelemetry => false;
+
     public override void OnConfigureServices(IServiceCollection services)
     {
         var env = JsonSerializer.Serialize(

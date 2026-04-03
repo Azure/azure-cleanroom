@@ -1,7 +1,9 @@
 from typing import Any
 
+from ..models.cleanroom import *
+from ..models.collaboration import CollaborationSpecification
 from ..models.datastore import *
-from ..models.model import *
+from ..models.query import Query
 from ..models.secretstore import *
 
 # TODO (HPrabh): Model a Configuration class that wraps the below methods.
@@ -20,6 +22,16 @@ def read_datastore_config(config_file, logger) -> DataStoreSpecification:
 def read_secretstore_config(config_file, logger) -> SecretStoreSpecification:
     spec = _read_configuration_file(config_file, logger)
     return SecretStoreSpecification(**spec)
+
+
+def read_collaboration_config(config_file, logger) -> CollaborationSpecification:
+    spec = _read_configuration_file(config_file, logger)
+    return CollaborationSpecification(**spec)
+
+
+def read_querysegment_file_config(config_file, logger) -> Query:
+    spec = _read_configuration_file(config_file, logger)
+    return Query(**spec)
 
 
 def _read_configuration_file(config_file, logger) -> dict[str, Any]:
@@ -43,6 +55,16 @@ def write_secretstore_config(
     config_file, secretstore: SecretStoreSpecification, logger
 ):
     _write_configuration_file(config_file, secretstore, logger)
+
+
+def write_collaboration_config(
+    config_file, collaboration: CollaborationSpecification, logger
+):
+    _write_configuration_file(config_file, collaboration, logger)
+
+
+def write_querysegment_file_config(config_file, config: Query, logger):
+    _write_configuration_file(config_file, config, logger)
 
 
 def _write_configuration_file(config_file, config: BaseModel, logger):

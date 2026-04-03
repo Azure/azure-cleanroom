@@ -3,9 +3,9 @@
 
 using System.Collections;
 
-namespace CcfConsortiumMgr;
+namespace CcfConsortiumMgr.Models;
 
 public class WorkspaceConfiguration
 {
-    public IDictionary EnvironmentVariables { get; set; } = default!;
+    public required IDictionary EnvironmentVariables { get; set; }
 }

@@ -3,7 +3,7 @@ param(
     [string]$tag = "latest",
 
     [parameter(Mandatory = $false)]
-    [string]$repo = "docker.io",
+    [string]$repo = "localhost:5000",
 
     [parameter(Mandatory = $false)]
     [switch]$push,
@@ -32,8 +32,12 @@ $clientContainers = @(
 
 $ccrContainers = @(
     "ccr-proxy",
-    "ccr-attestation",
-    "skr"
+    "skr",
+    "local-skr"
+)
+
+$cvmContainers = @(
+    "cvm-attestation-verifier"
 )
 
 $govClientContainers = @(
@@ -59,6 +63,19 @@ foreach ($container in $ccrContainers) {
     }
     else {
         Write-Host -ForegroundColor DarkBlue "Skipping building $container container ($index/$($ccrContainers.Count))"
+    }
+    Write-Host -ForegroundColor DarkGray "================================================================="
+}
+
+$index = 0
+foreach ($container in $cvmContainers) {
+    $index++
+    if ($null -eq $containers -or $containers.Contains($container)) {
+        Write-Host -ForegroundColor DarkGreen "Building $container container ($index/$($cvmContainers.Count))"
+        pwsh $buildroot/cvm/build-$container.ps1 -tag $tag -repo $repo -push:$push
+    }
+    else {
+        Write-Host -ForegroundColor DarkBlue "Skipping building $container container ($index/$($cvmContainers.Count))"
     }
     Write-Host -ForegroundColor DarkGray "================================================================="
 }

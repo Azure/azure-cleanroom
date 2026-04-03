@@ -38,10 +38,6 @@ param
     [string]
     $location = "westeurope",
 
-    [string]
-    [ValidateSet("default", "azurefiles", "dockerhostfs")]
-    $nodeStorageType = "default",
-
     [ValidateSet('mcr', 'local', 'acr')]
     [string]$registry = "local",
 
@@ -100,32 +96,7 @@ if (!$noDelete) {
 }
 mkdir -p $sandbox_common
 
-if ($registry -eq "acr") {
-    $whlPath = "$repo/cli/cleanroom-whl:$tag"
-    Write-Host "Downloading and installing az cleanroom cli from ${whlPath}"
-    if ($env:GITHUB_ACTIONS -eq "true") {
-        oras pull $whlPath --output $sandbox_common
-    }
-    else {
-        $orasImage = "ghcr.io/oras-project/oras:v1.2.0"
-        docker run --rm --network host -v ${sandbox_common}:/workspace -w /workspace `
-            $orasImage pull $whlPath
-    }
-
-    & {
-        # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
-        $PSNativeCommandUseErrorActionPreference = $false
-        az extension remove --name cleanroom 2>$null
-    }
-    az extension add `
-        --allow-preview true `
-        --source ${sandbox_common}/cleanroom-*-py2.py3-none-any.whl -y
-}
-elseif (!$NoBuild) {
-    pwsh $build/build-azcliext-cleanroom.ps1
-}
-
-if ($infraType -eq "caci" -and $repo -eq "") {
+if ($infraType -eq "caci" -and ($repo -eq "" -or $repo.StartsWith("localhost"))) {
     Write-Host -ForegroundColor Red "-repo must be specified for caci. " `
         "To build and push containers to an acr do:`n" `
         "az acr login -n <youracrname>`n" `
@@ -134,16 +105,58 @@ if ($infraType -eq "caci" -and $repo -eq "") {
     exit 1
 }
 
-if ($nodeStorageType -eq "default") {
-    if ($infraType -eq "caci") {
-        $nodeStorageType = "azurefiles"
+if ($registry -eq "local" -and $repo.EndsWith("azurecr.io")) {
+    $registry = "acr"
+}
+
+if ($registry -ne "mcr") {
+    if ($registry -eq "local") {
+        if (!$NoBuild) {
+            pwsh $build/build-azcliext-cleanroom.ps1
+        }
     }
-    elseif ($infraType -eq "virtual") {
-        $nodeStorageType = "dockerhostfs"
+
+    $script:installWhl = $false
+    & {
+        # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
+        $PSNativeCommandUseErrorActionPreference = $false
+        az cleanroom -h 2>$null 1>$null
+        if ($LASTEXITCODE -gt 0) {
+            Write-Host -ForegroundColor Red "az cli cleanroom extension not found. Installing..."
+            $script:installWhl = $true
+        }
     }
-    else {
-        throw "infraType: $infraType not handled for nodeStorageType: $nodeStorageType value. Update script."
+    if ($script:installWhl) {
+        $whlPath = "$repo/cli/cleanroom-whl:$tag"
+        Write-Host "Downloading and installing az cleanroom cli from ${whlPath}"
+        if ($env:GITHUB_ACTIONS -eq "true") {
+            oras pull $whlPath --output $sandbox_common
+        }
+        else {
+            $orasImage = "ghcr.io/oras-project/oras:v1.2.0"
+            docker run --rm --network host -v ${sandbox_common}:/workspace -w /workspace `
+                $orasImage pull $whlPath
+        }
+
+        & {
+            # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
+            $PSNativeCommandUseErrorActionPreference = $false
+            az extension remove --name cleanroom 2>$null
+        }
+        az extension add `
+            --allow-preview true `
+            --source ${sandbox_common}/cleanroom-*-py2.py3-none-any.whl -y
     }
+}
+
+if ($infraType -eq "caci") {
+    $nodeStorageType = "azurefiles"
+}
+elseif ($infraType -eq "virtual") {
+    $nodeStorageType = "dockerhostfs"
+}
+else {
+    throw "infraType: $infraType not handled for nodeStorageType: $nodeStorageType value. Update script."
 }
 
 if ($oneStepConfigureConfidentialRecovery -and !$confidentialRecovery) {
@@ -174,7 +187,6 @@ if ($registry -ne "mcr") {
         }
 
         $localTag = "100.$(Get-Date -UFormat %s)"
-        $localTag | Out-File $sandbox_common/local-registry-tag.txt
 
         if (!$NoBuild) {
             pwsh $build/ccf/build-ccf-infra-containers.ps1 -repo $repo -tag latest
@@ -190,10 +202,16 @@ if ($registry -ne "mcr") {
         docker push $repo/ccf/app/run-js/snp:$localTag
         docker tag $repo/ccf/ccf-recovery-agent:latest $repo/ccf/ccf-recovery-agent:$localTag
         docker push $repo/ccf/ccf-recovery-agent:$localTag
+        docker tag $repo/cvm/cvm-attestation-verifier:latest $repo/cvm/cvm-attestation-verifier:$localTag
+        docker push $repo/cvm/cvm-attestation-verifier:$localTag
         docker tag $repo/ccf/ccf-recovery-service:latest $repo/ccf/ccf-recovery-service:$localTag
         docker push $repo/ccf/ccf-recovery-service:$localTag
         docker tag $repo/ccf/ccf-consortium-manager:latest $repo/ccf/ccf-consortium-manager:$localTag
         docker push $repo/ccf/ccf-consortium-manager:$localTag
+        docker tag $repo/local-skr:latest $repo/local-skr:$localTag
+        docker push $repo/local-skr:$localTag
+        docker tag $repo/skr:latest $repo/skr:$localTag
+        docker push $repo/skr:$localTag
 
         docker tag $repo/cgs-client:latest $repo/cgs-client:$localTag
         docker push $repo/cgs-client:$localTag
@@ -204,13 +222,24 @@ if ($registry -ne "mcr") {
         $localTag = $tag
     }
 }
-$subscriptionId = ""
 $CCF_RESOURCE_GROUP_LOCATION = ""
 $CCF_RESOURCE_GROUP = ""
 $STORAGE_ACCOUNT_NAME = ""
 $KEYSTORE_KV_NAME = ""
 $storageAccountId = ""
 $subscriptionId = az account show --query "id" -o tsv
+$tenantId = az account show --query "tenantId" -o tsv
+
+$objectId = ""
+$userType = az account show --query "user.type" -o tsv
+$userName = az account show --query "user.name" -o tsv
+if ($userType -eq "servicePrincipal") {
+    $objectId = az ad sp show --id $userName --query "id" -o tsv
+}
+else {
+    $objectId = az ad user show --id $userName --query "id" -o tsv
+}
+
 $resourceGroupTags = ""
 if ($resourceGroup -ne "") {
     $CCF_RESOURCE_GROUP = $resourceGroup
@@ -229,7 +258,6 @@ $CCF_RESOURCE_GROUP_LOCATION = $location
 
 # Create an RG either for ACI intances and/or the storage account for azure file share.
 if ($nodeStorageType -eq "azurefiles" -or $infraType -ne "virtual" -or $confidentialRecovery -or $keyStoreType -eq "akv") {
-    $subscriptionId = az account show --query "id" -o tsv
     Write-Output "Creating resource group $CCF_RESOURCE_GROUP in $CCF_RESOURCE_GROUP_LOCATION"
     az group create `
         --location $CCF_RESOURCE_GROUP_LOCATION `
@@ -286,49 +314,65 @@ else {
 $recoveryServiceName = $networkName
 $consortiumManagerName = "$networkName-cm"
 
-if ($registry -ne "mcr") {
-    $env:AZCLI_CCF_PROVIDER_CLIENT_IMAGE = "$repo/ccf/ccf-provider-client:$localTag"
-    $env:AZCLI_CCF_PROVIDER_PROXY_IMAGE = "$repo/ccr-proxy:$localTag"
-    $env:AZCLI_CCF_PROVIDER_ATTESTATION_IMAGE = "$repo/ccr-attestation:$localTag"
-    $env:AZCLI_CCF_PROVIDER_SKR_IMAGE = "$repo/skr:$localTag"
-    $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_VIRTUAL_IMAGE = "$repo/ccf/app/run-js/virtual:$localTag"
-    $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_SNP_IMAGE = "$repo/ccf/app/run-js/snp:$localTag"
-    $env:AZCLI_CCF_PROVIDER_RECOVERY_AGENT_IMAGE = "$repo/ccf/ccf-recovery-agent:$localTag"
-    $env:AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_IMAGE = "$repo/ccf/ccf-recovery-service:$localTag"
-    $env:AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_IMAGE = "$repo/ccf/ccf-consortium-manager:$localTag"
-    $env:AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL = "$repo"
-    $env:AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL = "$repo/policies/ccf/ccf-network-security-policy:$localTag"
-    $env:AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_SECURITY_POLICY_DOCUMENT_URL = "$repo/policies/ccf/ccf-recovery-service-security-policy:$localTag"
-    $env:AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_SECURITY_POLICY_DOCUMENT_URL = "$repo/policies/ccf/ccf-consortium-manager-security-policy:$localTag"
+# Create environment variables dictionary
+$envVars = @{}
+$envVarCgsClient = @{}
 
-    $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$localTag"
-    $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$localTag"
+if ($registry -ne "mcr") {
+    $envVars["AZCLI_CCF_PROVIDER_CLIENT_IMAGE"] = "$repo/ccf/ccf-provider-client:$localTag"
+    $envVars["AZCLI_CCF_PROVIDER_PROXY_IMAGE"] = "$repo/ccr-proxy:$localTag"
+    $envVars["AZCLI_CCF_PROVIDER_SKR_IMAGE"] = "$repo/skr:$localTag"
+    $envVars["AZCLI_CCF_PROVIDER_LOCAL_SKR_IMAGE"] = "$repo/local-skr:$localTag"
+    $envVars["AZCLI_CCF_PROVIDER_RUN_JS_APP_VIRTUAL_IMAGE"] = "$repo/ccf/app/run-js/virtual:$localTag"
+    $envVars["AZCLI_CCF_PROVIDER_RUN_JS_APP_SNP_IMAGE"] = "$repo/ccf/app/run-js/snp:$localTag"
+    $envVars["AZCLI_CCF_PROVIDER_RECOVERY_AGENT_IMAGE"] = "$repo/ccf/ccf-recovery-agent:$localTag"
+    $envVars["AZCLI_CCF_PROVIDER_CVM_ATTESTATION_VERIFIER_IMAGE"] = "$repo/cvm/cvm-attestation-verifier:$localTag"
+    $envVars["AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_IMAGE"] = "$repo/ccf/ccf-recovery-service:$localTag"
+    $envVars["AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_IMAGE"] = "$repo/ccf/ccf-consortium-manager:$localTag"
+    $envVars["AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL"] = "$repo"
+    $envVars["AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL"] = "$repo/policies/ccf/ccf-network-security-policy:$localTag"
+    $envVars["AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_SECURITY_POLICY_DOCUMENT_URL"] = "$repo/policies/ccf/ccf-recovery-service-security-policy:$localTag"
+    $envVars["AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_SECURITY_POLICY_DOCUMENT_URL"] = "$repo/policies/ccf/ccf-consortium-manager-security-policy:$localTag"
+
+    $envVarCgsClient["AZCLI_CGS_CLIENT_IMAGE"] = "$repo/cgs-client:$localTag"
+    $envVarCgsClient["AZCLI_CGS_UI_IMAGE"] = "$repo/cgs-ui:$localTag"
 }
 else {
-    # Unset these so that default azurecr.io paths baked in the AZCLI_CCF_PROVIDER_CLIENT_IMAGE get used.
-    $env:AZCLI_CCF_PROVIDER_CLIENT_IMAGE = ""
-    $env:AZCLI_CCF_PROVIDER_PROXY_IMAGE = ""
-    $env:AZCLI_CCF_PROVIDER_ATTESTATION_IMAGE = ""
-    $env:AZCLI_CCF_PROVIDER_SKR_IMAGE = ""
-    $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_VIRTUAL_IMAGE = ""
-    $env:AZCLI_CCF_PROVIDER_RUN_JS_APP_SNP_IMAGE = ""
-    $env:AZCLI_CCF_PROVIDER_RECOVERY_AGENT_IMAGE = ""
-    $env:AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_IMAGE = ""
-    $env:AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_IMAGE = ""
-    $env:AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL = ""
-    $env:AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL = ""
-    $env:AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_SECURITY_POLICY_DOCUMENT_URL = ""
-    $env:AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_SECURITY_POLICY_DOCUMENT_URL = ""
+    # Empty values so that default azurecr.io paths baked in the AZCLI_CCF_PROVIDER_CLIENT_IMAGE get used.
+    $envVars["AZCLI_CCF_PROVIDER_CLIENT_IMAGE"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_PROXY_IMAGE"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_SKR_IMAGE"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_LOCAL_SKR_IMAGE"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_RUN_JS_APP_VIRTUAL_IMAGE"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_RUN_JS_APP_SNP_IMAGE"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_RECOVERY_AGENT_IMAGE"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_CVM_ATTESTATION_VERIFIER_IMAGE"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_IMAGE"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_IMAGE"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_SECURITY_POLICY_DOCUMENT_URL"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_SECURITY_POLICY_DOCUMENT_URL"] = ""
 
-    $env:AZCLI_CGS_CLIENT_IMAGE = ""
-    $env:AZCLI_CGS_UI_IMAGE = ""
+    $envVarCgsClient["AZCLI_CGS_CLIENT_IMAGE"] = ""
+    $envVarCgsClient["AZCLI_CGS_UI_IMAGE"] = ""
 }
-az cleanroom ccf provider deploy --name $ccfProviderProjectName
+
+# Write environment variables to file
+$envFilePathCcfProvider = "$sandbox_common/ccf-provider.env"
+$envFileContent = $envVars.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }
+$envFileContent | Out-File -FilePath $envFilePathCcfProvider -Encoding utf8
+$envFilePathCgsClient = "$sandbox_common/governance-client.env"
+$envFileContent = $envVarCgsClient.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }
+$envFileContent | Out-File -FilePath $envFilePathCgsClient -Encoding utf8
+
+az cleanroom ccf provider deploy --name $ccfProviderProjectName --env-file $envFilePathCcfProvider
 
 $providerConfig = @{}
 if ($infraType -eq "caci") {
     $providerConfig.location = $CCF_RESOURCE_GROUP_LOCATION
     $providerConfig.subscriptionId = $subscriptionId
+    $providerConfig.tenantId = $tenantId
     $providerConfig.resourceGroupName = $CCF_RESOURCE_GROUP
 }
 
@@ -480,7 +524,8 @@ if (Test-Path $sandbox_common/${operatorName}_cert.id) {
         --ccf-endpoint $ccfEndpoint `
         --signing-cert-id $sandbox_common/${operatorName}_cert.id `
         --service-cert $sandbox_common/service_cert.pem `
-        --name $cgsProjectName
+        --name $cgsProjectName `
+        --env-file $envFilePathCgsClient
 }
 else {
     if ($useServiceCertDiscovery) {
@@ -500,7 +545,8 @@ else {
             --service-cert-discovery-snp-host-data $hostData `
             --service-cert-discovery-constitution-digest $reportDataContent.constitutionDigest `
             --service-cert-discovery-jsapp-bundle-digest $reportDataContent.jsappBundleDigest `
-            --name $cgsProjectName
+            --name $cgsProjectName `
+            --env-file $envFilePathCgsClient
         $settings = (az cleanroom governance client show --name $cgsProjectName | ConvertFrom-Json)
         $discoveredCert = $settings.serviceCert.TrimEnd("`n")
         if ($discoveredCert -ne $serviceCertStr) {
@@ -527,7 +573,8 @@ else {
             --signing-key $sandbox_common/${operatorName}_privk.pem `
             --signing-cert $sandbox_common/${operatorName}_cert.pem `
             --service-cert $sandbox_common/service_cert.pem `
-            --name $cgsProjectName
+            --name $cgsProjectName `
+            --env-file $envFilePathCgsClient
     }
 }
 
@@ -712,7 +759,8 @@ if ($confidentialRecovery) {
                     --ccf-endpoint $ccfEndpoint `
                     --signing-cert-id $sandbox_common/${initialMemberName}_cert.id `
                     --service-cert $sandbox_common/service_cert.pem `
-                    --name $initialMemberProjectName
+                    --name $initialMemberProjectName `
+                    --env-file $envFilePathCgsClient
             }
             else {
                 az cleanroom governance client deploy `
@@ -720,7 +768,8 @@ if ($confidentialRecovery) {
                     --signing-key $sandbox_common/${initialMemberName}_privk.pem `
                     --signing-cert $sandbox_common/${initialMemberName}_cert.pem `
                     --service-cert $sandbox_common/service_cert.pem `
-                    --name $initialMemberProjectName
+                    --name $initialMemberProjectName `
+                    --env-file $envFilePathCgsClient
             }
             $proposal = (az cleanroom governance proposal vote `
                     --proposal-id $proposal.proposalId `
@@ -754,6 +803,50 @@ if ($confidentialRecovery) {
         -governanceClient $cgsProjectName
 }
 
+# For SNP (caci) deployments, configure the join policy before opening the network
+# so that nodes can join. This includes setting minimum TCB versions for all known
+# AMD SEV-SNP platforms and adding the Azure Confidential ACI UVM endorsement.
+if ($infraType -eq "caci") {
+    # Set minimum TCB versions for Milan, Genoa and Turin platforms.
+    $platforms = @(
+        @{ cpuid = "00a00f11"; tcbVersion = "0300000000000003" },  # Milan.
+        @{ cpuid = "00a10f11"; tcbVersion = "0300000000000003" },  # Genoa.
+        @{ cpuid = "00b00f21"; tcbVersion = "0300000000000003" }   # Turin.
+    )
+    foreach ($platform in $platforms) {
+        try {
+            Write-Output "Setting minimum TCB version for CPUID $($platform.cpuid)."
+            az cleanroom ccf network join-policy set-snp-minimum-tcb-version `
+                --name $networkName `
+                --infra-type $infraType `
+                --cpuid $platform.cpuid `
+                --tcb-version $platform.tcbVersion `
+                --provider-config $sandbox_common/providerConfig.json
+        }
+        catch {
+            # The CCF version in use may not support all CPUID families (e.g. Turin).
+            # Log a warning and continue so that supported platforms are still configured.
+            Write-Warning "Failed to set minimum TCB version for CPUID $($platform.cpuid). The CCF version may not support this platform yet: $_"
+        }
+    }
+
+    # Add Azure Confidential ACI UVM endorsement.
+    try {
+        Write-Output "Adding Azure UVM endorsement."
+        az cleanroom ccf network join-policy add-snp-uvm-endorsement `
+            --name $networkName `
+            --infra-type $infraType `
+            --did "did:x509:0:sha256:I__iuL25oXEVFdTP_aBLx_eT1RPHbCQ_ECBQfYZpt9s::eku:1.3.6.1.4.1.311.76.59.1.2" `
+            --feed "ContainerPlat-AMD-UVM" `
+            --svn "0" `
+            --provider-config $sandbox_common/providerConfig.json
+    }
+    catch {
+        # The CCF version may not support UVM endorsements. Log a warning and continue.
+        Write-Warning "Failed to add Azure UVM endorsement. The CCF version may not support this feature: $_"
+    }
+}
+
 # Open the network as the operator.
 az cleanroom ccf network transition-to-open `
     --name $networkName `
@@ -762,17 +855,43 @@ az cleanroom ccf network transition-to-open `
 
 # Create a consortium manager if requested.
 if ($useConsortiumManager) {
+    # Re-use the same resources created for the recovery service.
+    $recovery = $(Get-Content $sandbox_common/recoveryResources.json | ConvertFrom-Json)
+
+    $cmProviderConfig = @{}
+    if ($infraType -eq "caci") {
+        $cmProviderConfig.tenantId = $tenantId
+        $cmProviderConfig.subscriptionId = $subscriptionId
+        $cmProviderConfig.resourceGroupName = $CCF_RESOURCE_GROUP
+        $cmProviderConfig.location = $CCF_RESOURCE_GROUP_LOCATION
+
+        $authConfig = @{}
+        $authConfig.tenantId = "$tenantId"
+        $authConfig.objectId = "$objectId"
+        $authConfig.audience = "https://management.core.windows.net"; #Using ARM audience for now.
+        $authConfig.validIssuers = @("https://login.microsoftonline.com/$tenantId/v2.0/", "https://sts.windows.net/$tenantId/")
+        $authConfig.openIdConfigEndpoint = "https://login.microsoftonline.com/$tenantId/v2.0/.well-known/openid-configuration"
+
+        $cmProviderConfig | add-member -Name "AUTH_CONFIGURATIONS" -Value @($authConfig) -MemberType NoteProperty
+    }
+
+    $cmProviderConfig | ConvertTo-Json -Depth 100 > $sandbox_common/cmProviderConfig.json
+
     az cleanroom ccf consortium-manager create `
         --name $consortiumManagerName `
         --infra-type $infraType `
-        --provider-config $sandbox_common/providerConfig.json
-
+        --key-vault $recovery.kvId `
+        --maa-endpoint $recovery.maaEndpoint `
+        --identity $recovery.miId `
+        --provider-config $sandbox_common/cmProviderConfig.json
     Write-Output "Consortium manager deployed."
+
     $response = az cleanroom ccf consortium-manager show `
         --name $consortiumManagerName `
         --infra-type $infraType `
-        --provider-config $sandbox_common/providerConfig.json
+        --provider-config $sandbox_common/cmProviderConfig.json
     $response | Out-File $sandbox_common/consortiumManager.json
+    Write-Output "Consortium manager show response: $response."
 }
 
 if (!$NoTest) {

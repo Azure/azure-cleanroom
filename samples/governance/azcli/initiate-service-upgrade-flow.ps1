@@ -16,6 +16,7 @@ $root = git rev-parse --show-toplevel
 
 . $root/build/helpers.ps1
 
+$env:AZCLI_CLEANROOM_VERSIONS_REGISTRY = $repo
 Write-Output "Versions pre upgrade:"
 az cleanroom governance service version --governance-client $projectName
 
@@ -38,7 +39,7 @@ if ($env:GITHUB_ACTIONS -eq "true") {
 }
 $upgrades = (az cleanroom governance service get-upgrades --governance-client $projectName | ConvertFrom-Json)
 if ($upgrades.upgrades.Count -ne 0) {
-    Write-Error "Not expecting any updates but seeing: $($upgrades.upgrades)"
+    Write-Error "Not expecting any updates but seeing: $($upgrades.upgrades | ConvertTo-Json)"
     exit 1
 }
 

@@ -3,140 +3,260 @@
     ViewData["Title"] = "Runtime Options";
 }
 
-<h2>Runtime Options</h2>
-<h3>Logging</h3>
-<table class="table table-hover">
-    <thead>
-        <tr>
-            <th>Status</th>
-            <th>Action</th>
-            <th>Open Proposals</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td>
-                <pre>@Model.Logging.Status</pre>
-            </td>
-            <td>
-                @if (@Model.Logging.ProposalIds != null && @Model.Logging.ProposalIds.Any())
-                {
-                    <p><i>Proposals pending</i></p>
-                }
-                else if (@Model.Logging.Status == "enabled")
-                {
-                    <p>
-                        <a asp-controller="Contracts"
-                           asp-action="DisableLogging" asp-route-id="@Model.Id">Propose Disable Logging</a>
-                    </p>
-                }
-                else if (@Model.Telemetry.Status == "disabled")
-                {
-                    <p>
-                        <a asp-controller="Contracts"
-                           asp-action="EnableLogging" asp-route-id="@Model.Id">Propose Enable Logging</a>
-                    </p>
-                }
-            </td>
-            <td>
-                @if (@Model.Logging.ProposalIds != null)
-                {
-                    @foreach (var proposalId in @Model.Logging.ProposalIds)
-                    {
-                        <p>
-                            <a asp-controller="Proposals"
-                               asp-action="Detail" asp-route-proposalId="@proposalId">@proposalId</a>
-                        </p>
-                    }
-                }
-            </td>
-        </tr>
-    </tbody>
-</table>
+<div class="content-wrapper">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 text-gradient mb-1">
+                <i class="fas fa-cogs me-2"></i>Runtime Options
+            </h1>
+            <p class="text-muted mb-0">Configure runtime settings and execution parameters</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshOptions()">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+            <a href="/Contracts" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Contracts
+            </a>
+        </div>
+    </div>
 
-<h3>Telemetry</h3>
-<table class="table table-hover">
-    <thead>
-        <tr>
-            <th>Status</th>
-            <th>Action</th>
-            <th>Open Proposals</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td>
-                <pre>@Model.Telemetry.Status</pre>
-            </td>
-            <td>
-                @if (@Model.Telemetry.ProposalIds != null && @Model.Telemetry.ProposalIds.Any())
-                {
-                    <p><i>Proposals pending</i></p>
-                }
-                else if (@Model.Telemetry.Status == "enabled")
-                {
-                    <p>
-                        <a asp-controller="Contracts"
-                           asp-action="DisableTelemetry" asp-route-id="@Model.Id">Propose Disable Telemetry</a>
-                    </p>
-                }
-                else if (@Model.Telemetry.Status == "disabled")
-                {
-                    <p>
-                        <a asp-controller="Contracts"
-                           asp-action="EnableTelemetry" asp-route-id="@Model.Id">Propose Enable Telemetry</a>
-                    </p>
-                }
-            </td>
-            <td>
-                @if (@Model.Telemetry.ProposalIds != null)
-                {
-                    @foreach (var proposalId in @Model.Telemetry.ProposalIds)
+    <div class="row">
+        <!-- Logging Configuration Card -->
+        <div class="col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-file-alt me-2"></i>Logging
+                    </h5>
+                    @if (@Model.Logging.Status == "enabled")
                     {
-                        <p>
-                            <a asp-controller="Proposals"
-                               asp-action="Detail" asp-route-proposalId="@proposalId">@proposalId</a>
-                        </p>
+                        <span class="badge bg-success">
+                            <i class="fas fa-check-circle me-1"></i>Enabled
+                        </span>
                     }
-                }
-            </td>
-        </tr>
-    </tbody>
-</table>
-
-<h3>Execution</h3>
-<table class="table table-hover">
-    <thead>
-        <tr>
-            <th>Status</th>
-            <th>Action</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td>
-                <pre>@Model.Execution.Status</pre>
-            </td>
-            <td>
-                @if (@Model.Execution.Status == "enabled")
-                {
-                    <p>
-                        <a asp-controller="Contracts"
-                           asp-action="DisableExecution" asp-route-id="@Model.Id">Disable Execution</a>
-                    </p>
-                } else if (@Model.Execution.Status == "disabled")
-                {
-                    <p>
-                        <a asp-controller="Contracts"
-                           asp-action="EnableExecution" asp-route-id="@Model.Id">Enable Execution</a>
-                    </p>
-                    if (@Model.Execution.Reason?.Message != null)
+                    else
                     {
-                        <p><i>@Model.Execution.Reason.Message</i></p>
+                        <span class="badge bg-secondary">
+                            <i class="fas fa-pause-circle me-1"></i>Disabled
+                        </span>
+                    }
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted">Current Status:</small>
+                        <div class="mt-1">
+                            <code class="bg-light p-2 rounded d-block">@Model.Logging.Status</code>
+                        </div>
+                    </div>
+
+                    @if (@Model.Logging.ProposalIds != null && @Model.Logging.ProposalIds.Any())
+                    {
+                        <div class="alert alert-info d-flex align-items-center mb-3">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <small>Proposals pending approval</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <small class="text-muted">Open Proposals:</small>
+                            <div class="mt-2">
+                                @foreach (var proposalId in @Model.Logging.ProposalIds)
+                                {
+                                    <div class="mb-2">
+                                        <a asp-controller="Proposals" asp-action="Detail" asp-route-proposalId="@proposalId"
+                                           class="btn btn-outline-primary btn-sm">
+                                            <i class="fas fa-external-link-alt me-1"></i>@proposalId
+                                        </a>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="d-grid">
+                            @if (@Model.Logging.Status == "enabled")
+                            {
+                                <a asp-controller="Contracts" asp-action="DisableLogging" asp-route-id="@Model.Id"
+                                   class="btn btn-outline-warning">
+                                    <i class="fas fa-pause me-1"></i>Propose Disable Logging
+                                </a>
+                            }
+                            else if (@Model.Logging.Status == "disabled")
+                            {
+                                <a asp-controller="Contracts" asp-action="EnableLogging" asp-route-id="@Model.Id"
+                                   class="btn btn-outline-success">
+                                    <i class="fas fa-play me-1"></i>Propose Enable Logging
+                                </a>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Telemetry Configuration Card -->
+        <div class="col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-line me-2"></i>Telemetry
+                    </h5>
+                    @if (@Model.Telemetry.Status == "enabled")
+                    {
+                        <span class="badge bg-success">
+                            <i class="fas fa-check-circle me-1"></i>Enabled
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary">
+                            <i class="fas fa-pause-circle me-1"></i>Disabled
+                        </span>
+                    }
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted">Current Status:</small>
+                        <div class="mt-1">
+                            <code class="bg-light p-2 rounded d-block">@Model.Telemetry.Status</code>
+                        </div>
+                    </div>
+
+                    @if (@Model.Telemetry.ProposalIds != null && @Model.Telemetry.ProposalIds.Any())
+                    {
+                        <div class="alert alert-info d-flex align-items-center mb-3">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <small>Proposals pending approval</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <small class="text-muted">Open Proposals:</small>
+                            <div class="mt-2">
+                                @foreach (var proposalId in @Model.Telemetry.ProposalIds)
+                                {
+                                    <div class="mb-2">
+                                        <a asp-controller="Proposals" asp-action="Detail" asp-route-proposalId="@proposalId"
+                                           class="btn btn-outline-primary btn-sm">
+                                            <i class="fas fa-external-link-alt me-1"></i>@proposalId
+                                        </a>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="d-grid">
+                            @if (@Model.Telemetry.Status == "enabled")
+                            {
+                                <a asp-controller="Contracts" asp-action="DisableTelemetry" asp-route-id="@Model.Id"
+                                   class="btn btn-outline-warning">
+                                    <i class="fas fa-pause me-1"></i>Propose Disable Telemetry
+                                </a>
+                            }
+                            else if (@Model.Telemetry.Status == "disabled")
+                            {
+                                <a asp-controller="Contracts" asp-action="EnableTelemetry" asp-route-id="@Model.Id"
+                                   class="btn btn-outline-success">
+                                    <i class="fas fa-play me-1"></i>Propose Enable Telemetry
+                                </a>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Execution Configuration Card -->
+        <div class="col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-play-circle me-2"></i>Execution
+                    </h5>
+                    @if (@Model.Execution.Status == "enabled")
+                    {
+                        <span class="badge bg-success">
+                            <i class="fas fa-check-circle me-1"></i>Enabled
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary">
+                            <i class="fas fa-pause-circle me-1"></i>Disabled
+                        </span>
+                    }
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted">Current Status:</small>
+                        <div class="mt-1">
+                            <code class="bg-light p-2 rounded d-block">@Model.Execution.Status</code>
+                        </div>
+                    </div>
+
+                    @if (@Model.Execution.Status == "disabled" && @Model.Execution.Reason?.Message != null)
+                    {
+                        <div class="alert alert-warning d-flex align-items-start mb-3">
+                            <i class="fas fa-exclamation-triangle me-2 mt-1"></i>
+                            <small>@Model.Execution.Reason.Message</small>
+                        </div>
                     }
 
-                }
-            </td>
-        </tr>
-    </tbody>
-</table>
+                    <div class="d-grid">
+                        @if (@Model.Execution.Status == "enabled")
+                        {
+                            <a asp-controller="Contracts" asp-action="DisableExecution" asp-route-id="@Model.Id"
+                               class="btn btn-outline-danger">
+                                <i class="fas fa-stop me-1"></i>Disable Execution
+                            </a>
+                        }
+                        else if (@Model.Execution.Status == "disabled")
+                        {
+                            <a asp-controller="Contracts" asp-action="EnableExecution" asp-route-id="@Model.Id"
+                               class="btn btn-outline-success">
+                                <i class="fas fa-play me-1"></i>Enable Execution
+                            </a>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function refreshOptions() {
+        const refreshBtn = document.querySelector('[onclick="refreshOptions()"]');
+        const icon = refreshBtn.querySelector('i');
+
+        icon.classList.add('fa-spin');
+        refreshBtn.disabled = true;
+
+        setTimeout(() => {
+            icon.classList.remove('fa-spin');
+            refreshBtn.disabled = false;
+            location.reload();
+        }, 1000);
+    }
+</script>
+
+<style>
+    .card {
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    }
+
+    .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .text-gradient {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+</style>

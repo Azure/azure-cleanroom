@@ -40,12 +40,12 @@ public class EventsController : ControllerBase
         var paddingMode = RSASignaturePaddingMode.Pss;
 
         var dataBytes = Encoding.UTF8.GetBytes(data.ToJsonString());
-        var signature = Signing.SignData(dataBytes, wsConfig.Attestation.PrivateKey, paddingMode);
+        var signature = Signing.SignData(dataBytes, wsConfig.KeyPair.PrivateKey, paddingMode);
         var content = Attestation.PrepareSignedDataRequestContent(
             dataBytes,
             signature,
-            wsConfig.Attestation.PublicKey,
-            wsConfig.Attestation.Report);
+            wsConfig.KeyPair.PublicKey,
+            wsConfig.Report);
 
         string? query = this.Request.QueryString.Value;
         using (HttpRequestMessage request = new(

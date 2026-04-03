@@ -1,0 +1,11 @@
+[
+  {
+    "name": "test",
+    "properties": {
+      "image": "nginx:latest",
+      "command": [],
+      "environmentVariables": [],
+      "volumeMounts": []
+    }
+  }
+]

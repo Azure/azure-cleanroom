@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Collections.Concurrent;
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using Polly;
@@ -52,7 +53,8 @@ public class HttpClientManager
         IAsyncPolicy<HttpResponseMessage> retryPolicy,
         string? endpointCert = null,
         string? endpointName = null,
-        bool skipTlsVerify = false)
+        bool skipTlsVerify = false,
+        X509Certificate2? clientCert = null)
     {
         var endpointCerts = new List<string>();
         if (!string.IsNullOrEmpty(endpointCert))
@@ -65,7 +67,8 @@ public class HttpClientManager
             endpointCerts,
             retryPolicy,
             endpointName,
-            skipTlsVerify);
+            skipTlsVerify,
+            clientCert);
     }
 
     public HttpClient GetOrAddClient(
@@ -73,7 +76,8 @@ public class HttpClientManager
         List<string> endpointCerts,
         IAsyncPolicy<HttpResponseMessage> retryPolicy,
         string? endpointName = null,
-        bool skipTlsVerify = false)
+        bool skipTlsVerify = false,
+        X509Certificate2? clientCert = null)
     {
         string key = ToKey(endpoint, endpointCerts, retryPolicy.PolicyKey);
 
@@ -87,7 +91,8 @@ public class HttpClientManager
             endpointCerts,
             endpointName,
             skipTlsVerify,
-            retryPolicy);
+            retryPolicy,
+            clientCert);
         if (!this.clients.TryAdd(key, client))
         {
             client.Dispose();
@@ -151,13 +156,15 @@ public class HttpClientManager
         List<string> endpointCerts,
         string? endpointName,
         bool skipTlsVerify,
-        IAsyncPolicy<HttpResponseMessage> retryPolicy)
+        IAsyncPolicy<HttpResponseMessage> retryPolicy,
+        X509Certificate2? clientCert = null)
     {
         var sslVerifyHandler =
             new ServerCertValidationHandler(
                 this.logger,
                 endpointCerts,
                 skipTlsVerify,
+                clientCert: clientCert,
                 endpointName: endpointName);
 
         if (!endpoint.StartsWith("http"))

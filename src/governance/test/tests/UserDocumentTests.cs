@@ -206,7 +206,8 @@ public class UserDocumentTests : TestBase
     {
         // Create 3 user identities and set them as approvers for a userdocument. Then vote
         // on the userdocument proposal using JWT tokens for each user.
-        List<(string id, HttpClient userClient)> users = await this.CreateAndAcceptUsers(3);
+        List<(string userId, string tenantId, HttpClient userClient)> users =
+            await this.CreateAndAcceptUsers(3);
 
         string contractId = this.ContractId;
         await this.ProposeAndAcceptContract(contractId);
@@ -227,7 +228,7 @@ public class UserDocumentTests : TestBase
         }
 
         var approvers = new JsonArray();
-        foreach (var (id, userClient) in users)
+        foreach (var (id, _, userClient) in users)
         {
             approvers.Add(new JsonObject
             {
@@ -292,7 +293,7 @@ public class UserDocumentTests : TestBase
                 $"users/proposals/{proposalId}"))!;
             var proposedApprovers = JsonSerializer.Deserialize<List<Approver>>(
                 proposal["approvers"]?.AsArray())!;
-            foreach (var (id, _) in users)
+            foreach (var (id, _, _) in users)
             {
                 var vote = proposedApprovers.Find(v => v.ApproverId == id);
                 Assert.IsNotNull(vote);
@@ -322,7 +323,7 @@ public class UserDocumentTests : TestBase
             userdocument["contractId"]!.ToString());
 
         // All remaining users vote on the above userdocument by accepting it.
-        foreach (var (id, userClient) in users[1..])
+        foreach (var (id, tenantId, userClient) in users[1..])
         {
             await SubmitUserVote(
                 userClient,
@@ -341,7 +342,7 @@ public class UserDocumentTests : TestBase
         var finalVotes = userdocument["finalVotes"]?.AsArray();
 
         var fv = JsonSerializer.Deserialize<List<FinalVote>>(finalVotes)!;
-        foreach (var (id, _) in users)
+        foreach (var (id, _, _) in users)
         {
             var vote = fv.Find(v => v.ApproverId == id);
             Assert.IsNotNull(vote);
@@ -368,6 +369,36 @@ public class UserDocumentTests : TestBase
         using (HttpRequestMessage request = new(HttpMethod.Post, $"userdocuments/{documentId}"))
         {
             using HttpResponseMessage response = await this.GovSidecarClient.SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+            Assert.AreEqual(userdocument.ToJsonString(), responseBody.ToJsonString());
+        }
+
+        // Fetching the accepted user document via a cgs-client with explicit CCF and user
+        // authorization header should also succeed. This is for a scenario where cgs client
+        // is started in an env where buth the CCF details and the user token are supplied as
+        // part of each API invocation. This does not require any /configure call to be made
+        // to the cgs-client.
+        using (HttpRequestMessage request = new(HttpMethod.Get, $"userdocuments/{documentId}"))
+        {
+            string serviceCertPemBase64 = await this.GetServiceCertificateAsync();
+            using var tokenResponse = await this.IdpClient.PostAsync(
+                $"oauth/token?oid={users[0].userId}&tid={users[0].tenantId}",
+                content: null);
+            Assert.AreEqual(HttpStatusCode.OK, tokenResponse.StatusCode);
+            var ccfEndpoint = this.CcfClient.BaseAddress!.ToString().Replace(
+                "localhost",
+                (this.IsGitHubActionsEnv() || this.IsCodespacesEnv()) ?
+                    "172.17.0.1" : "host.docker.internal");
+            var token = (await tokenResponse.Content.ReadFromJsonAsync<JsonObject>())!;
+            request.Headers.Add(CcfEndpointHeaderKey, ccfEndpoint);
+            request.Headers.Add(ServiceCertHeaderKey, serviceCertPemBase64);
+            request.Headers.Add(AuthModeHeaderKey, "FromAuthHeader");
+            request.Headers.Authorization =
+                new AuthenticationHeaderValue("Bearer", token["accessToken"]!.ToString());
+
+            using HttpResponseMessage response =
+                await this.CgsClient_UserFromAuthHeader.SendAsync(request);
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
             var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
             Assert.AreEqual(userdocument.ToJsonString(), responseBody.ToJsonString());
@@ -728,7 +759,7 @@ public class UserDocumentTests : TestBase
             (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(userdocumentUrl))!;
         string currentVersion = userdocument[VersionKey]!.ToString();
         Assert.AreEqual(nameof(UserDocumentState.Draft), userdocument[StateKey]!.ToString());
-        Assert.IsTrue(!string.IsNullOrEmpty(currentVersion));
+        Assert.IsFalse(string.IsNullOrEmpty(currentVersion));
 
         // Any subsequent updates with no Version should fail.
         using (HttpRequestMessage request = new(HttpMethod.Put, userdocumentUrl))
@@ -781,7 +812,7 @@ public class UserDocumentTests : TestBase
 
         userdocument = (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(userdocumentUrl))!;
         string newVersion = userdocument[VersionKey]!.ToString();
-        Assert.IsTrue(!string.IsNullOrEmpty(newVersion));
+        Assert.IsFalse(string.IsNullOrEmpty(newVersion));
         Assert.AreEqual(nameof(UserDocumentState.Draft), userdocument[StateKey]!.ToString());
         Assert.AreNotEqual(currentVersion, newVersion);
     }
@@ -1074,6 +1105,147 @@ public class UserDocumentTests : TestBase
         await this.EnableDisableUserDocumentRuntimeOption("telemetry");
     }
 
+    [TestMethod]
+    public async Task ListUserDocumentsWithQueryParameter()
+    {
+        string contractId = this.ContractId;
+        await this.ProposeAndAcceptContract(contractId);
+
+        List<string> userdocumentsId = new();
+        for (int i = 0; i < 5; i++)
+        {
+            userdocumentsId.Add($"ludwqp-{contractId}-{Guid.NewGuid().ToString().Substring(0, 8)}");
+        }
+
+        // Add a few userdocuments to start with.
+        foreach (var documentId in userdocumentsId)
+        {
+            string userdocumentUrl = $"userdocuments/{documentId}";
+            var labels = new JsonObject
+            {
+                ["unique"] = $"unique-{documentId}",
+                ["shared"] = $"shared-{contractId}"
+            };
+            var userdocumentContent = new JsonObject
+            {
+                ["contractId"] = contractId,
+                ["data"] = "hello world",
+                ["labels"] = labels
+            };
+
+            using (HttpRequestMessage request = new(HttpMethod.Put, userdocumentUrl))
+            {
+                request.Content = new StringContent(
+                    userdocumentContent.ToJsonString(),
+                    Encoding.UTF8,
+                    "application/json");
+
+                using HttpResponseMessage response = await this.CgsClient_Member0.SendAsync(request);
+                Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            }
+        }
+
+        await this.ProposeAndAcceptUserDocument(contractId, userdocumentsId[0]);
+        await this.ProposeUserDocument(contractId, userdocumentsId[1]);
+
+        // List without query parameters.
+        var userdocumentsJson =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>("userdocuments"))!;
+        var userdocuments = userdocumentsJson["value"]?.AsArray() ?? new JsonArray();
+        foreach (var documentId in userdocumentsId)
+        {
+            Assert.IsTrue(
+                userdocuments.Any(item => item!["id"]!.ToString() == documentId),
+                $"Did not find userdocument {documentId} in the incoming " +
+                $"userdocument list {userdocuments}");
+        }
+
+        // Query with the shared label.
+        userdocumentsJson =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
+                $"userdocuments?labelSelector=shared:shared-{contractId}"))!;
+        userdocuments = userdocumentsJson["value"]?.AsArray() ?? new JsonArray();
+        Assert.AreEqual(5, userdocuments.Count);
+        foreach (var documentId in userdocumentsId)
+        {
+            Assert.IsTrue(
+                userdocuments.Any(item => item!["id"]!.ToString() == documentId),
+                $"Did not find userdocument {documentId} in the incoming " +
+                $"userdocument list {userdocuments}");
+        }
+
+        // Query with a unique label.
+        string uniqueDocumentId = userdocumentsId[2];
+        userdocumentsJson =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
+                $"userdocuments?labelSelector=unique:unique-{uniqueDocumentId}"))!;
+        userdocuments = userdocumentsJson["value"]?.AsArray() ?? new JsonArray();
+        Assert.AreEqual(1, userdocuments.Count);
+        Assert.AreEqual(uniqueDocumentId, userdocuments[0]!["id"]!.ToString());
+        Assert.AreEqual(
+            $"unique-{uniqueDocumentId}",
+            ((JsonObject)userdocuments[0]!["labels"]!)["unique"]!.ToString());
+        Assert.AreEqual(
+            $"shared-{contractId}",
+            ((JsonObject)userdocuments[0]!["labels"]!)["shared"]!.ToString());
+
+        // Query with two labels - both are present.
+        userdocumentsJson =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
+                $"userdocuments?" +
+                $"labelSelector=unique:unique-{uniqueDocumentId},shared:shared-{contractId}"))!;
+        userdocuments = userdocumentsJson["value"]?.AsArray() ?? new JsonArray();
+        Assert.AreEqual(1, userdocuments.Count);
+        Assert.AreEqual(uniqueDocumentId, userdocuments[0]!["id"]!.ToString());
+        Assert.AreEqual(
+            $"unique-{uniqueDocumentId}",
+            ((JsonObject)userdocuments[0]!["labels"]!)["unique"]!.ToString());
+        Assert.AreEqual(
+            $"shared-{contractId}",
+            ((JsonObject)userdocuments[0]!["labels"]!)["shared"]!.ToString());
+
+        // Query with a label name that is not present.
+        userdocumentsJson =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
+                $"userdocuments?labelSelector=anakin:unique-{uniqueDocumentId}"))!;
+        userdocuments = userdocumentsJson["value"]?.AsArray() ?? new JsonArray();
+        Assert.AreEqual(0, userdocuments.Count);
+
+        // Query with a label value that is not present.
+        userdocumentsJson =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
+                $"userdocuments?labelSelector=unique:yoda"))!;
+        userdocuments = userdocumentsJson["value"]?.AsArray() ?? new JsonArray();
+        Assert.AreEqual(0, userdocuments.Count);
+
+        // Query with multiple labels, where one or more are not present.
+        userdocumentsJson =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
+                $"userdocuments?labelSelector=" +
+                $"unique:unique-{uniqueDocumentId},shared:shared-{contractId},anakin:vader"))!;
+        userdocuments = userdocumentsJson["value"]?.AsArray() ?? new JsonArray();
+        Assert.AreEqual(0, userdocuments.Count);
+
+        // Malformed query - missing value.
+        using (HttpRequestMessage request = new(HttpMethod.Get, "userdocuments?labelSelector=name"))
+        {
+            using HttpResponseMessage response = await this.CgsClient_Member0.SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+            var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
+            Assert.AreEqual("InvalidParameter", error.Code);
+        }
+
+        // Malformed query - missing name.
+        using (HttpRequestMessage request =
+            new(HttpMethod.Get, "userdocuments?labelSelector=:value"))
+        {
+            using HttpResponseMessage response = await this.CgsClient_Member0.SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+            var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
+            Assert.AreEqual("InvalidParameter", error.Code);
+        }
+    }
+
     private async Task EnableDisableUserDocumentRuntimeOption(string option)
     {
         string contractId = this.ContractId;
@@ -1088,14 +1260,7 @@ public class UserDocumentTests : TestBase
         using (HttpRequestMessage request = new(HttpMethod.Post, checkStatusUrl))
         {
             using HttpResponseMessage response = await this.CgsClient_Member0.SendAsync(request);
-            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-            var statusResponse =
-                (await response.Content.ReadFromJsonAsync<StatusWithReasonResponse>())!;
-            Assert.AreEqual("disabled", statusResponse.Status);
-            Assert.AreEqual("UserDocumentNotAccepted", statusResponse.Reason.Code);
-            Assert.AreEqual(
-                "UserDocument does not exist or has not been accepted.",
-                statusResponse.Reason.Message);
+            Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
         }
 
         // Check consent for a non-existent userdocument.
@@ -1115,23 +1280,13 @@ public class UserDocumentTests : TestBase
         using (HttpRequestMessage request = new(HttpMethod.Post, enableUrl))
         {
             using HttpResponseMessage response = await this.CgsClient_Member0.SendAsync(request);
-            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
-            var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
-            Assert.AreEqual("UserDocumentNotAccepted", error.Code);
-            Assert.AreEqual(
-                "UserDocument does not exist or has not been accepted.",
-                error.Message);
+            Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
         }
 
         using (HttpRequestMessage request = new(HttpMethod.Post, disableUrl))
         {
             using HttpResponseMessage response = await this.CgsClient_Member0.SendAsync(request);
-            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
-            var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
-            Assert.AreEqual("UserDocumentNotAccepted", error.Code);
-            Assert.AreEqual(
-                "UserDocument does not exist or has not been accepted.",
-                error.Message);
+            Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
         }
 
         await this.ProposeAndAcceptContract(contractId);
@@ -1151,7 +1306,7 @@ public class UserDocumentTests : TestBase
 
         await this.ProposeAndAcceptAllowAllCleanRoomPolicy(contractId);
 
-        await this.ProposeAndAcceptUserDocument(contractId, documentId);
+        await this.ProposeAndAcceptUserDocument(contractId, documentId, createDocument: true);
 
         // As all members voted accepted the consent check api should now succeed.
         using (HttpRequestMessage request = new(HttpMethod.Post, govSidecarConsentCheckUrl))
@@ -1180,10 +1335,10 @@ public class UserDocumentTests : TestBase
                 (await response.Content.ReadFromJsonAsync<StatusWithReasonResponse>())!;
             Assert.AreEqual("disabled", statusResponse.Status);
             Assert.AreEqual("UserDocumentRuntimeOptionDisabled", statusResponse.Reason.Code);
-            Assert.IsTrue(
-                statusResponse.Reason.Message.StartsWith(
-                    $"UserDocument runtime option '{option}' has been disabled by the " +
-                    $"following approver(s): "),
+            Assert.StartsWith(
+                $"UserDocument runtime option '{option}' for document {documentId} has been " +
+                $"disabled by the following approver(s): ",
+                statusResponse.Reason.Message,
                 statusResponse.Reason.Message);
         }
 
@@ -1196,10 +1351,10 @@ public class UserDocumentTests : TestBase
                 (await response.Content.ReadFromJsonAsync<StatusWithReasonResponse>())!;
             Assert.AreEqual("disabled", statusResponse.Status);
             Assert.AreEqual("UserDocumentRuntimeOptionDisabled", statusResponse.Reason.Code);
-            Assert.IsTrue(
-                statusResponse.Reason.Message.StartsWith(
-                    $"UserDocument runtime option '{option}' has been disabled by the " +
-                    $"following approver(s): "),
+            Assert.StartsWith(
+                $"UserDocument runtime option '{option}' for document {documentId} has been " +
+                $"disabled by the following approver(s): ",
+                statusResponse.Reason.Message,
                 statusResponse.Reason.Message);
         }
 
@@ -1229,10 +1384,10 @@ public class UserDocumentTests : TestBase
                 (await response.Content.ReadFromJsonAsync<StatusWithReasonResponse>())!;
             Assert.AreEqual("disabled", statusResponse.Status);
             Assert.AreEqual("UserDocumentRuntimeOptionDisabled", statusResponse.Reason.Code);
-            Assert.IsTrue(
-                statusResponse.Reason.Message.StartsWith(
-                    $"UserDocument runtime option '{option}' has been disabled by the " +
-                    $"following approver(s): "),
+            Assert.StartsWith(
+                $"UserDocument runtime option '{option}' for document {documentId} has been " +
+                $"disabled by the following approver(s): ",
+                statusResponse.Reason.Message,
                 statusResponse.Reason.Message);
         }
 
@@ -1246,10 +1401,10 @@ public class UserDocumentTests : TestBase
                 (await response.Content.ReadFromJsonAsync<StatusWithReasonResponse>())!;
             Assert.AreEqual("disabled", statusResponse.Status);
             Assert.AreEqual("UserDocumentRuntimeOptionDisabled", statusResponse.Reason.Code);
-            Assert.IsTrue(
-                statusResponse.Reason.Message.StartsWith(
-                    $"UserDocument runtime option '{option}' has been disabled by the " +
-                    $"following approver(s): "),
+            Assert.StartsWith(
+                $"UserDocument runtime option '{option}' for document {documentId} has been " +
+                $"disabled by the following approver(s): ",
+                statusResponse.Reason.Message,
                 statusResponse.Reason.Message);
         }
 

@@ -6,5 +6,4 @@
 # files
 Dockerfile*
 **/*.trx
-**/*.md
 **/*.cmd

@@ -1,7 +1,7 @@
 import * as ccfapp from "@microsoft/ccf-app";
-import { ErrorResponse } from "../models/errorresponse";
+import { ErrorResponse } from "../utils/ErrorResponse";
 import { DeploymentSpecItem } from "../models";
-import { GetDeploymentSpecResponse } from "../models/deploymentspecmodels";
+import { GetDeploymentSpecResponse } from "../models";
 import { findOpenProposals, validateCallerAuthorized } from "../utils/utils";
 
 const deploymentSpecsStore = ccfapp.typedKv(

@@ -7,21 +7,41 @@ using System.Text.Json.Serialization;
 
 namespace CleanRoomProvider;
 
-public class DeploymentSpec
+public class DeploymentSpec<T>
+    where T : DeploymentTemplateBase
 {
     [JsonPropertyName("data")]
-    public DeploymentTemplate? Data { get; set; }
+    public T? Data { get; set; }
 }
 
-public class DeploymentTemplate
+public abstract class DeploymentTemplateBase
+{
+    public abstract void Validate();
+}
+
+public class AnalyticsDeploymentTemplate : DeploymentTemplateBase
 {
     [JsonPropertyName("chartMetadata")]
     public ChartMetadata ChartMetadata { get; set; } = default!;
 
     [JsonPropertyName("values")]
-    public AgentChartValues Values { get; set; } = default!;
+    public AnalyticsAgentChartValues Values { get; set; } = default!;
 
-    public void Validate()
+    public override void Validate()
+    {
+        this.Values.Validate();
+    }
+}
+
+public class KServeInferencingDeploymentTemplate : DeploymentTemplateBase
+{
+    [JsonPropertyName("chartMetadata")]
+    public ChartMetadata ChartMetadata { get; set; } = default!;
+
+    [JsonPropertyName("values")]
+    public KServeInferencingAgentChartValues Values { get; set; } = default!;
+
+    public override void Validate()
     {
         this.Values.Validate();
     }
@@ -42,7 +62,7 @@ public class ChartMetadata
     public string Namespace { get; set; } = default!;
 }
 
-public class AgentChartValues
+public abstract class AgentChartValuesBase
 {
     [JsonPropertyName("ccrgovEndpoint")]
     public string CcrgovEndpoint { get; set; } = default!;
@@ -55,12 +75,6 @@ public class AgentChartValues
 
     [JsonPropertyName("ccrgovServiceCertDiscovery")]
     public ServiceCertDiscoveryInput? CcrgovServiceCertDiscovery { get; set; }
-
-    [JsonPropertyName("sparkFrontendEndpoint")]
-    public string SparkFrontendEndpoint { get; set; } = default!;
-
-    [JsonPropertyName("sparkFrontendSnpHostData")]
-    public string SparkFrontendSnpHostData { get; set; } = default!;
 
     [JsonPropertyName("ccfNetworkRecoveryMembers")]
     public string? CcfNetworkRecoveryMembers { get; set; }
@@ -77,40 +91,9 @@ public class AgentChartValues
     [JsonPropertyName("tempoEndpoint")]
     public string TempoEndpoint { get; set; } = string.Empty;
 
-    public static AgentChartValues ToAgentChartValues(
-        ContractData contractData,
-        bool telemetryCollectionEnabled,
-        string sparkFrontendEndpoint,
-        string sparkFrontendSnpHostData)
-    {
-        var values = new AgentChartValues()
-        {
-            CcrgovApiPathPrefix = contractData.CcrgovApiPathPrefix,
-            CcrgovEndpoint = contractData.CcrgovEndpoint,
-            CcrgovServiceCert = contractData.CcrgovServiceCert,
-            CcrgovServiceCertDiscovery = contractData.CcrgovServiceCertDiscovery,
-            SparkFrontendEndpoint = sparkFrontendEndpoint,
-            SparkFrontendSnpHostData = sparkFrontendSnpHostData,
-            CcfNetworkRecoveryMembers = contractData.CcfNetworkRecoveryMembers != null ?
-                Convert.ToBase64String(Encoding.UTF8.GetBytes(
-                JsonSerializer.Serialize(contractData.CcfNetworkRecoveryMembers))) : null
-        };
+    public abstract void Validate();
 
-        if (telemetryCollectionEnabled)
-        {
-            values.TelemetryCollectionEnabled = true;
-            values.PrometheusEndpoint =
-                $"{Constants.PrometheusServiceEndpoint}:9090/api/v1/write";
-            values.LokiEndpoint =
-                $"{Constants.LokiServiceEndpoint}:3100/otlp";
-            values.TempoEndpoint =
-                $"{Constants.TempoServiceEndpoint}:4317";
-        }
-
-        return values;
-    }
-
-    public void Validate()
+    protected void ValidateCommon()
     {
         if (!string.IsNullOrEmpty(this.CcrgovEndpoint))
         {
@@ -145,18 +128,65 @@ public class AgentChartValues
                 if (!this.CcrgovServiceCertDiscovery.SkipDigestCheck &&
                     string.IsNullOrEmpty(this.CcrgovServiceCertDiscovery.ConstitutionDigest))
                 {
-                    throw new ArgumentException("BadInput: constitutionDigest cannot be " +
+                    throw new ArgumentException("BadInput: constitutionDigest must be " +
                         "specified as chart input.");
                 }
 
                 if (!this.CcrgovServiceCertDiscovery.SkipDigestCheck &&
                     string.IsNullOrEmpty(this.CcrgovServiceCertDiscovery.JsappBundleDigest))
                 {
-                    throw new ArgumentException("BadInput: jsappBundleDigest cannot be specified " +
+                    throw new ArgumentException("BadInput: jsappBundleDigest must be specified " +
                         "as chart input.");
                 }
             }
         }
+    }
+}
+
+public class AnalyticsAgentChartValues : AgentChartValuesBase
+{
+    [JsonPropertyName("sparkFrontendEndpoint")]
+    public string SparkFrontendEndpoint { get; set; } = default!;
+
+    [JsonPropertyName("sparkFrontendSnpHostData")]
+    public string SparkFrontendSnpHostData { get; set; } = default!;
+
+    public static AnalyticsAgentChartValues ToAgentChartValues(
+        ContractData contractData,
+        bool telemetryCollectionEnabled,
+        string sparkFrontendEndpoint,
+        string sparkFrontendSnpHostData)
+    {
+        var values = new AnalyticsAgentChartValues()
+        {
+            CcrgovApiPathPrefix = contractData.CcrgovApiPathPrefix,
+            CcrgovEndpoint = contractData.CcrgovEndpoint,
+            CcrgovServiceCert = contractData.CcrgovServiceCert,
+            CcrgovServiceCertDiscovery = contractData.CcrgovServiceCertDiscovery,
+            SparkFrontendEndpoint = sparkFrontendEndpoint,
+            SparkFrontendSnpHostData = sparkFrontendSnpHostData,
+            CcfNetworkRecoveryMembers = contractData.CcfNetworkRecoveryMembers != null ?
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(
+                JsonSerializer.Serialize(contractData.CcfNetworkRecoveryMembers))) : null
+        };
+
+        if (telemetryCollectionEnabled)
+        {
+            values.TelemetryCollectionEnabled = true;
+            values.PrometheusEndpoint =
+                $"{Constants.PrometheusServiceEndpoint}:9090/api/v1/write";
+            values.LokiEndpoint =
+                $"{Constants.LokiServiceEndpoint}:3100/otlp";
+            values.TempoEndpoint =
+                $"{Constants.TempoServiceEndpoint}:4317";
+        }
+
+        return values;
+    }
+
+    public override void Validate()
+    {
+        this.ValidateCommon();
 
         if (string.IsNullOrEmpty(this.SparkFrontendEndpoint))
         {
@@ -168,6 +198,65 @@ public class AgentChartValues
         {
             throw new ArgumentException("BadInput: sparkFrontendSnpHostData must be specified " +
                 "as chart input.");
+        }
+    }
+}
+
+public class KServeInferencingAgentChartValues : AgentChartValuesBase
+{
+    [JsonPropertyName("inferencingFrontendEndpoint")]
+    public string InferencingFrontendEndpoint { get; set; } = default!;
+
+    [JsonPropertyName("inferencingFrontendSnpHostData")]
+    public string InferencingFrontendSnpHostData { get; set; } = default!;
+
+    public static KServeInferencingAgentChartValues ToAgentChartValues(
+        ContractData contractData,
+        bool telemetryCollectionEnabled,
+        string inferencingFrontendEndpoint,
+        string inferencingFrontendSnpHostData)
+    {
+        var values = new KServeInferencingAgentChartValues()
+        {
+            CcrgovApiPathPrefix = contractData.CcrgovApiPathPrefix,
+            CcrgovEndpoint = contractData.CcrgovEndpoint,
+            CcrgovServiceCert = contractData.CcrgovServiceCert,
+            CcrgovServiceCertDiscovery = contractData.CcrgovServiceCertDiscovery,
+            InferencingFrontendEndpoint = inferencingFrontendEndpoint,
+            InferencingFrontendSnpHostData = inferencingFrontendSnpHostData,
+            CcfNetworkRecoveryMembers = contractData.CcfNetworkRecoveryMembers != null ?
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(
+                JsonSerializer.Serialize(contractData.CcfNetworkRecoveryMembers))) : null
+        };
+
+        if (telemetryCollectionEnabled)
+        {
+            values.TelemetryCollectionEnabled = true;
+            values.PrometheusEndpoint =
+                $"{Constants.PrometheusServiceEndpoint}:9090/api/v1/write";
+            values.LokiEndpoint =
+                $"{Constants.LokiServiceEndpoint}:3100/otlp";
+            values.TempoEndpoint =
+                $"{Constants.TempoServiceEndpoint}:4317";
+        }
+
+        return values;
+    }
+
+    public override void Validate()
+    {
+        this.ValidateCommon();
+
+        if (string.IsNullOrEmpty(this.InferencingFrontendEndpoint))
+        {
+            throw new ArgumentException("BadInput: inferencingFrontendEndpoint must be specified " +
+                "as chart input.");
+        }
+
+        if (string.IsNullOrEmpty(this.InferencingFrontendSnpHostData))
+        {
+            throw new ArgumentException("BadInput: inferencingFrontendSnpHostData must be " +
+                "specified as chart input.");
         }
     }
 }

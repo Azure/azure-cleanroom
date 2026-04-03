@@ -40,7 +40,7 @@ runs:
       run: az acr login --name ${{ inputs.registry-name }}
 
     - shell: pwsh
-      run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
+      run: Install-Module -Name powershell-yaml -Force
 
     - name: Install confcom extension
       shell: pwsh
@@ -50,7 +50,7 @@ runs:
 
     - shell: pwsh
       run: |
-        ./build/build-ccf-consortium-manager-security-policy.ps1 `
+        ./build/ccf/build-ccf-consortium-manager-security-policy.ps1 `
           -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom `
           -tag ${{ inputs.tag }} `
           -push

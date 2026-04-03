@@ -25,13 +25,6 @@ runs:
 
     - uses: ./.github/actions/build-container-and-artefacts
       with:
-        name: ccr-attestation
-        tag: ${{ inputs.tag }}
-        dockerfile: build/docker/Dockerfile.ccr-attestation
-        context: ${{ github.workspace }}
-
-    - uses: ./.github/actions/build-container-and-artefacts
-      with:
         name: skr
         tag: ${{ inputs.tag }}
         dockerfile: build/docker/Dockerfile.skr

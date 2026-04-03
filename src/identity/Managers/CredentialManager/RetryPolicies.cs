@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Microsoft.Azure.CleanRoomSidecar.Identity.Utils;
+using HttpRetries;
 using Microsoft.Extensions.Logging;
 using Polly;
 

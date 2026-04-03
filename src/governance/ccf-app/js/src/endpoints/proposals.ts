@@ -1,9 +1,9 @@
 import * as ccfapp from "@microsoft/ccf-app";
 import { ccf } from "@microsoft/ccf-app/global";
-import { ProposalInfoItem } from "../models/kvstoremodels";
-import { GetProposalResponse, Proposal } from "../models/proposalmodels";
+import { ProposalInfoItem } from "../models";
+import { GetProposalResponse, Proposal } from "../models";
 import { parseRequestQuery, validateCallerAuthorized } from "../utils/utils";
-import { ErrorResponse } from "../models/errorresponse";
+import { ErrorResponse } from "../utils/ErrorResponse";
 
 // Code adapted from https://raw.githubusercontent.com/microsoft/ccf-app-samples/main/auditable-logging-app/src/endpoints/log.ts
 

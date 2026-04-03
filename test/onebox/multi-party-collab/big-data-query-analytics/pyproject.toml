@@ -1,0 +1,12 @@
+[project]
+name = "test-big-data-query-analytics"
+version = "0.1.0"
+description = "Test workload for big data query analytics using Azure Cleanroom"
+requires-python = ">=3.12"
+dependencies = [
+    "pandas>=2.0.0",
+    "pyarrow>=10.0.0",
+    "requests>=2.28.0",
+    "pyyaml>=6.0.0",
+    "cryptography>=41.0.0",
+]

@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webserver-config
+  namespace: {{ .Release.Namespace }}
+data:
+  settings: |
+    service:
+      name: {{ include "webserver.fullname" . | quote}}
+      namespace: {{ .Release.Namespace | quote }}
+      telemetry:
+        telemetryCollectionEnabled: {{ .Values.telemetry.telemetryCollectionEnabled | quote }}
+        prometheusEndpoint: {{ .Values.telemetry.prometheusEndpoint | quote }}
+        lokiEndpoint: {{ .Values.telemetry.lokiEndpoint | quote }}
+        tempoEndpoint: {{ .Values.telemetry.tempoEndpoint | quote }}
+    kserve:
+      computeProvider: {{ .Values.settings.kserve.computeProvider | quote }}
+    applications:
+      inferencing:
+        namespace: {{ .Values.settings.applications.inferencing.namespace | quote }}
+        applicationFile: {{ .Values.settings.applications.inferencing.applicationFile | quote }}
+        allowAll: {{ .Values.settings.applications.inferencing.allowAll | quote }}
+        debugMode: {{ .Values.settings.applications.inferencing.debugMode | quote }}
+        kserve:
+          predictor:
+            cores: {{ .Values.settings.applications.inferencing.kserve.predictor.cores | quote }}
+            memory: {{ .Values.settings.applications.inferencing.kserve.predictor.memory | quote }}
+            serviceAccount: {{ .Values.settings.applications.inferencing.kserve.predictor.serviceAccount | quote }}

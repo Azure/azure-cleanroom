@@ -6,13 +6,15 @@ param location string = resourceGroup().location
 
 @description('Container image with confidential computing support')
 param containerImage string = 'gsinhadev.azurecr.io/attestation-report-generator:latest'
-param attestationContainerImage string = 'gsinhadev.azurecr.io/ccr-attestation:latest'
+param skrContainerImage string = 'mcr.microsoft.com/aci/skr:2.12'
+#disable-next-line no-unused-params
+param ccePolicy string = 'cGFja2FnZSBwb2xpY3kKCmFwaV9zdm4gOj0gIjAuMTAuMCIKCm1vdW50X2RldmljZSA6PSB7ImFsbG93ZWQiOiB0cnVlfQptb3VudF9vdmVybGF5IDo9IHsiYWxsb3dlZCI6IHRydWV9CmNyZWF0ZV9jb250YWluZXIgOj0geyJhbGxvd2VkIjogdHJ1ZSwgImVudl9saXN0IjogbnVsbCwgImFsbG93X3N0ZGlvX2FjY2VzcyI6IHRydWV9CnVubW91bnRfZGV2aWNlIDo9IHsiYWxsb3dlZCI6IHRydWV9IAp1bm1vdW50X292ZXJsYXkgOj0geyJhbGxvd2VkIjogdHJ1ZX0KZXhlY19pbl9jb250YWluZXIgOj0geyJhbGxvd2VkIjogdHJ1ZSwgImVudl9saXN0IjogbnVsbH0KZXhlY19leHRlcm5hbCA6PSB7ImFsbG93ZWQiOiB0cnVlLCAiZW52X2xpc3QiOiBudWxsLCAiYWxsb3dfc3RkaW9fYWNjZXNzIjogdHJ1ZX0Kc2h1dGRvd25fY29udGFpbmVyIDo9IHsiYWxsb3dlZCI6IHRydWV9CnNpZ25hbF9jb250YWluZXJfcHJvY2VzcyA6PSB7ImFsbG93ZWQiOiB0cnVlfQpwbGFuOV9tb3VudCA6PSB7ImFsbG93ZWQiOiB0cnVlfQpwbGFuOV91bm1vdW50IDo9IHsiYWxsb3dlZCI6IHRydWV9CmdldF9wcm9wZXJ0aWVzIDo9IHsiYWxsb3dlZCI6IHRydWV9CmR1bXBfc3RhY2tzIDo9IHsiYWxsb3dlZCI6IHRydWV9CnJ1bnRpbWVfbG9nZ2luZyA6PSB7ImFsbG93ZWQiOiB0cnVlfQpsb2FkX2ZyYWdtZW50IDo9IHsiYWxsb3dlZCI6IHRydWV9CnNjcmF0Y2hfbW91bnQgOj0geyJhbGxvd2VkIjogdHJ1ZX0Kc2NyYXRjaF91bm1vdW50IDo9IHsiYWxsb3dlZCI6IHRydWV9Cg=='
 
 @description('CPU cores for the container')
 param cpuCores int = 1
 
 @description('Memory in GB')
-param memoryGb int = 2
+param memoryGb int = 1
 
 resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2024-10-01-preview' = {
   name: containerGroupName
@@ -21,7 +23,7 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2024-10-01-
     osType: 'Linux'
     sku: 'Confidential' // This enables confidential computing mode
     confidentialComputeProperties: {
-      ccePolicy: 'cGFja2FnZSBwb2xpY3kKCmFwaV9zdm4gOj0gIjAuMTAuMCIKCm1vdW50X2RldmljZSA6PSB7ImFsbG93ZWQiOiB0cnVlfQptb3VudF9vdmVybGF5IDo9IHsiYWxsb3dlZCI6IHRydWV9CmNyZWF0ZV9jb250YWluZXIgOj0geyJhbGxvd2VkIjogdHJ1ZSwgImVudl9saXN0IjogbnVsbCwgImFsbG93X3N0ZGlvX2FjY2VzcyI6IHRydWV9CnVubW91bnRfZGV2aWNlIDo9IHsiYWxsb3dlZCI6IHRydWV9IAp1bm1vdW50X292ZXJsYXkgOj0geyJhbGxvd2VkIjogdHJ1ZX0KZXhlY19pbl9jb250YWluZXIgOj0geyJhbGxvd2VkIjogdHJ1ZSwgImVudl9saXN0IjogbnVsbH0KZXhlY19leHRlcm5hbCA6PSB7ImFsbG93ZWQiOiB0cnVlLCAiZW52X2xpc3QiOiBudWxsLCAiYWxsb3dfc3RkaW9fYWNjZXNzIjogdHJ1ZX0Kc2h1dGRvd25fY29udGFpbmVyIDo9IHsiYWxsb3dlZCI6IHRydWV9CnNpZ25hbF9jb250YWluZXJfcHJvY2VzcyA6PSB7ImFsbG93ZWQiOiB0cnVlfQpwbGFuOV9tb3VudCA6PSB7ImFsbG93ZWQiOiB0cnVlfQpwbGFuOV91bm1vdW50IDo9IHsiYWxsb3dlZCI6IHRydWV9CmdldF9wcm9wZXJ0aWVzIDo9IHsiYWxsb3dlZCI6IHRydWV9CmR1bXBfc3RhY2tzIDo9IHsiYWxsb3dlZCI6IHRydWV9CnJ1bnRpbWVfbG9nZ2luZyA6PSB7ImFsbG93ZWQiOiB0cnVlfQpsb2FkX2ZyYWdtZW50IDo9IHsiYWxsb3dlZCI6IHRydWV9CnNjcmF0Y2hfbW91bnQgOj0geyJhbGxvd2VkIjogdHJ1ZX0Kc2NyYXRjaF91bm1vdW50IDo9IHsiYWxsb3dlZCI6IHRydWV9CgoK'
+      ccePolicy: ccePolicy
     }
     containers: [
       {
@@ -41,16 +43,16 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2024-10-01-
           }
           volumeMounts: [
             {
-              name: 'uds'
-              mountPath: '/mnt/uds'
+              name: 'shared'
+              mountPath: '/shared'
             }
           ]
         }
       }
       {
-        name: 'ccr-attestation'
+        name: 'skr'
         properties: {
-          image: attestationContainerImage
+          image: skrContainerImage
           resources: {
             requests: {
               cpu: cpuCores
@@ -58,32 +60,48 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2024-10-01-
             }
           }
           command: [
-            'app'
-            '-socket-address'
-            '/mnt/uds/sock' // Keep the container running
+            '/skr.sh'
           ]
           volumeMounts: [
             {
-              name: 'uds'
-              mountPath: '/mnt/uds'
+              name: 'shared'
+              mountPath: '/shared'
+            }
+          ]
+          environmentVariables: [
+            {
+              name: 'SkrSideCarArgs'
+              value: 'ewogICAiY2VydGNhY2hlIjogewogICAgICAiZW5kcG9pbnQiOiAiYW1lcmljYXMuYWNjY2FjaGUuYXp1cmUubmV0IiwKICAgICAgInRlZV90eXBlIjogIlNldlNucFZNIiwKICAgICAgImFwaV92ZXJzaW9uIjogImFwaS12ZXJzaW9uPTIwMjAtMTAtMTUtcHJldmlldyIKICAgfQp9'
+            }
+            {
+              name: 'Port'
+              value: '8284'
+            }
+            {
+              name: 'LogFile'
+              value: '/shared/skr.log'
+            }
+            {
+              name: 'LogLevel'
+              value: 'Debug'
             }
           ]
         }
       }
     ]
-    ipAddress:{
-        ports: [
-          {
-            port: 9300
-            protocol: 'TCP'
-          }
-        ]
-        type: 'Public'
+    ipAddress: {
+      ports: [
+        {
+          port: 9300
+          protocol: 'TCP'
+        }
+      ]
+      type: 'Public'
     }
     volumes: [
       {
-        name: 'uds'
-        emptyDir: {} // Use an empty directory for the Unix domain socket
+        name: 'shared'
+        emptyDir: {}
       }
     ]
   }

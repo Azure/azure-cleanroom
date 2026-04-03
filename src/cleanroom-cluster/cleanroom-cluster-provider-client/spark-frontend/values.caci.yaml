@@ -15,3 +15,11 @@ service:
   headless: true
   labels:
     service: external-dns
+
+settings:
+  service:
+    scheduler:
+      nodeSelector:
+        "microsoft.containerinstance.virtualnode": "true"
+      constraints:
+        "POD_COUNT": "25"

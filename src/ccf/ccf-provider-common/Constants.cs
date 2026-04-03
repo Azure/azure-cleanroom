@@ -9,6 +9,7 @@ public class Ports
     public const int RpcMainPort = 8080;
     public const int RpcDebugPort = 8082;
     public const int RecoveryAgentPort = 9080;
+    public const int CvmAttestationVerifierPort = 8901;
     public const int RecoveryServicePort = 10080;
     public const int ConsortiumManagerPort = 11080;
     public const int LbMainPort = 443;

@@ -90,7 +90,8 @@ public class RecoverServicesApiController : CCfClientController
             {
                 if (report != null)
                 {
-                    var attestationReport = JsonSerializer.Deserialize<AttestationReport>(report)!;
+                    var attestationReport =
+                        JsonSerializer.Deserialize<SnpCACIAttestationReport>(report)!;
                     SnpReport.VerifySnpAttestation(
                         attestationReport.Attestation,
                         attestationReport.PlatformCertificates,

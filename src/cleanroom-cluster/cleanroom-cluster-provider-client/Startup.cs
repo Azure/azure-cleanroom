@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Reflection;
-using CAciCleanRoomProvider;
+using AksCleanRoomProvider;
 using Controllers;
 using VirtualCleanRoomProvider;
 
@@ -15,11 +15,13 @@ internal class Startup : ApiStartup
     {
     }
 
+    public override bool EnableOpenTelemetry => false;
+
     public override void OnConfigureServices(IServiceCollection services)
     {
         // Add cluster providers
         services.AddSingleton<VirtualClusterProvider>();
-        services.AddSingleton<CAciClusterProvider>();
+        services.AddSingleton<AksClusterProvider>();
 
         services.AddSingleton<ProvidersRegistry>();
 

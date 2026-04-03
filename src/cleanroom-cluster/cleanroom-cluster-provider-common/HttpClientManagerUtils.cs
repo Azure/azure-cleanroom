@@ -14,7 +14,8 @@ public static class HttpClientManagerUtils
         this HttpClientManager httpClientManager,
         ILogger logger,
         string contractUrl,
-        string? contractUrlCaCert)
+        string? contractUrlCaCert,
+        Dictionary<string, string>? contractUrlHeaders)
     {
         var configUri = new Uri(contractUrl);
         string baseAddress = configUri.GetLeftPart(UriPartial.Authority);
@@ -31,8 +32,19 @@ public static class HttpClientManagerUtils
             "contract-client");
 
         logger.LogInformation($"Fetching contract configuration from: {configUri}");
-        var contract =
-            (await httpClient.GetFromJsonAsync<Contract>(configUri.AbsolutePath))!;
+        using HttpRequestMessage request = new(HttpMethod.Get, configUri.AbsolutePath);
+
+        if (contractUrlHeaders != null)
+        {
+            foreach (var header in contractUrlHeaders)
+            {
+                request.Headers.Add(header.Key, header.Value);
+            }
+        }
+
+        using HttpResponseMessage response = await httpClient.SendAsync(request);
+        await response.ValidateStatusCodeAsync(logger);
+        var contract = (await response.Content.ReadFromJsonAsync<Contract>())!;
 
         logger.LogInformation(
             $"Contract configuration: {JsonSerializer.Serialize(contract)}");
@@ -51,11 +63,13 @@ public static class HttpClientManagerUtils
         return data;
     }
 
-    public static async Task<DeploymentTemplate> GetDeploymentTemplate(
+    public static async Task<T> GetDeploymentTemplate<T>(
         this HttpClientManager httpClientManager,
         ILogger logger,
         string configurationUrl,
-        string? configurationUrlCaCert)
+        string? configurationUrlCaCert,
+        Dictionary<string, string>? contractUrlHeaders)
+        where T : DeploymentTemplateBase
     {
         var configUri = new Uri(configurationUrl!);
         string baseAddress = configUri.GetLeftPart(UriPartial.Authority);
@@ -72,8 +86,19 @@ public static class HttpClientManagerUtils
             "helm-config-client");
 
         logger.LogInformation($"Fetching helm chart configuration from: {configUri}");
-        var deploymentSpec =
-            (await httpClient.GetFromJsonAsync<DeploymentSpec>(configUri.AbsolutePath))!;
+        using HttpRequestMessage request = new(HttpMethod.Post, configUri.AbsolutePath);
+
+        if (contractUrlHeaders != null)
+        {
+            foreach (var header in contractUrlHeaders)
+            {
+                request.Headers.Add(header.Key, header.Value);
+            }
+        }
+
+        using HttpResponseMessage response = await httpClient.SendAsync(request);
+        await response.ValidateStatusCodeAsync(logger);
+        var deploymentSpec = (await response.Content.ReadFromJsonAsync<DeploymentSpec<T>>())!;
 
         logger.LogInformation(
             $"Chart configuration: {JsonSerializer.Serialize(deploymentSpec)}");

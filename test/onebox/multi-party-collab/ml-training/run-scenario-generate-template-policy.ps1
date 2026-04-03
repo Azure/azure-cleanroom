@@ -122,30 +122,22 @@ az cleanroom governance proposal vote `
     --governance-client "ob-isv-client"
 
 # tdp/tdc deploys client-side containers to interact with the governance service as the new member.
-# Set overrides if local registry is to be used for CGS images.
-if ($registry -eq "local") {
-    $localTag = cat "$ccfOutDir/local-registry-tag.txt"
-    $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$localTag"
-    $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$localTag"
-}
-elseif ($registry -eq "acr") {
-    $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$tag"
-    $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$tag"
-}
-
+$envFilePath = "$ccfOutDir/governance-client.env"
 az cleanroom governance client deploy `
     --ccf-endpoint $ccfEndpoint `
     --signing-cert $ccfOutDir/tdp_cert.pem `
     --signing-key $ccfOutDir/tdp_privk.pem `
     --service-cert $ccfOutDir/service_cert.pem `
-    --name "ob-tdp-client"
+    --name "ob-tdp-client" `
+    --env-file $envFilePath
 
 az cleanroom governance client deploy `
     --ccf-endpoint $ccfEndpoint `
     --signing-cert $ccfOutDir/tdc_cert.pem `
     --signing-key $ccfOutDir/tdc_privk.pem `
     --service-cert $ccfOutDir/service_cert.pem `
-    --name "ob-tdc-client"
+    --name "ob-tdc-client" `
+    --env-file $envFilePath
 
 # tdp/tdc accepts the invitation and becomes an active member in the consortium.
 az cleanroom governance member activate --governance-client "ob-tdp-client"
@@ -494,7 +486,7 @@ az cleanroom config add-datasink `
 az cleanroom config add-application `
     --cleanroom-config $tdcConfig `
     --name depa-training `
-    --image "cleanroomsamples.azurecr.io/depa-training@sha256:3a9b8d8d165bbc1867e23bba7b87d852025d96bd3cb2bb167a6cfc965134ba79" `
+    --image "cleanroomsamples.azurecr.io/depa-training@sha256:58cc4180bbfac4fd6f981b476c5cad6702ac3474b09424d6305bbd62c40a37fb" `
     --command "/bin/bash run.sh" `
     --datasources "config=/mnt/remote/config" `
     "cowin=/mnt/remote/cowin" `
@@ -624,8 +616,7 @@ az cleanroom governance ca propose-enable `
 
 $clientName = "ob-tdp-client"
 pwsh $PSScriptRoot/../verify-deployment-proposals.ps1 `
-    -cleanroomConfig $tdpConfig `
-    -governanceClient $clientName
+    -cleanroomConfig $tdpConfig
 
 # Vote on the proposed deployment template.
 $proposalId = az cleanroom governance deployment template show `
@@ -691,8 +682,7 @@ az cleanroom governance proposal vote `
 
 $clientName = "ob-tdc-client"
 pwsh $PSScriptRoot/../verify-deployment-proposals.ps1 `
-    -cleanroomConfig $tdcConfig `
-    -governanceClient $clientName
+    -cleanroomConfig $tdcConfig
 
 # Vote on the proposed deployment template.
 $proposalId = az cleanroom governance deployment template show `
@@ -758,8 +748,7 @@ az cleanroom governance proposal vote `
 
 $clientName = "ob-isv-client"
 pwsh $PSScriptRoot/../verify-deployment-proposals.ps1 `
-    -cleanroomConfig $tdcConfig `
-    -governanceClient $clientName
+    -cleanroomConfig $tdcConfig
     
 # Vote on the proposed deployment template.
 $proposalId = az cleanroom governance deployment template show `
@@ -853,8 +842,7 @@ pwsh $PSScriptRoot/../setup-access.ps1 `
     -subject $contractId `
     -issuerUrl $issuerUrl `
     -outDir $outDir `
-    -kvType $kvType `
-    -governanceClient "ob-tdp-client"
+    -kvType $kvType
 
 # Creates a KEK with SKR policy, wraps DEKs with the KEK and put in kv.
 az cleanroom config wrap-deks `
@@ -876,5 +864,4 @@ pwsh $PSScriptRoot/../setup-access.ps1 `
     -subject $contractId `
     -issuerUrl $issuerUrl `
     -outDir $outDir `
-    -kvType $kvType `
-    -governanceClient "ob-tdc-client"
+    -kvType $kvType

@@ -397,6 +397,12 @@ launchSettings.json
 *.msm
 *.msp
 
+
+# VS Code specific
+.metals/
+.bloop/
+.scala-build/
+
 # JetBrains Rider
 *.sln.iml
 
@@ -416,4 +422,10 @@ src/tools/aes_encryptor/aes_encryptor.so
 
 .venv*
 sidecar-digests.yaml
+inf-runtime-digests.yaml
 .policies
+
+src/azure_cleanroom.egg-info
+.bsp
+
+generated*/

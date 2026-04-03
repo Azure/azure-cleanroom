@@ -42,14 +42,25 @@ def ccf_consortium_manager_create(
     cmd,
     consortium_manager_name,
     infra_type,
+    key_vault,
+    maa_endpoint,
+    identity,
     provider_config,
     provider_client_name,
 ):
     provider_endpoint = get_provider_client_endpoint(cmd, provider_client_name)
     provider_config = parse_provider_config(provider_config, infra_type)
 
+    from .utilities._azcli_helpers import az_cli
+
+    key_vault_url = az_cli(
+        f"resource show --id {key_vault} --query properties.vaultUri"
+    )
     content = {
         "infraType": infra_type,
+        "akvEndpoint": key_vault_url,
+        "maaEndpoint": maa_endpoint,
+        "managedIdentityId": identity,
         "providerConfig": provider_config,
     }
 

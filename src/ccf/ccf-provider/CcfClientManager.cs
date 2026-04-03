@@ -9,7 +9,7 @@ namespace CcfProvider;
 public class CcfClientManager
 {
     private readonly ILogger logger;
-    private SigningConfiguration signingConfig = default!;
+    private SigningConfiguration? signingConfig;
     private HttpClientManager httpClientManager;
 
     public CcfClientManager(ILogger logger)
@@ -25,18 +25,23 @@ public class CcfClientManager
 
     public async Task<SigningConfiguration> GetSigningConfig()
     {
-        await this.InitializeSigningConfig();
-        return this.signingConfig;
+        await this.CheckSigningConfig();
+        return this.signingConfig!;
     }
 
-    public SigningConfiguration TryGetSigningConfig()
+    public SigningConfiguration? TryGetSigningConfig()
     {
         return this.signingConfig;
     }
 
     public async Task CheckSigningConfig()
     {
-        await this.InitializeSigningConfig();
+        if (this.signingConfig == null)
+        {
+            throw new Exception("Invoke /configure first to setup signing cert and key details");
+        }
+
+        await Task.CompletedTask;
     }
 
     public Task<HttpClient> GetGovClient(string ccfEndpoint, string serviceCert)
@@ -52,15 +57,5 @@ public class CcfClientManager
     public string GetGovApiVersion()
     {
         return "2024-07-01";
-    }
-
-    private async Task InitializeSigningConfig()
-    {
-        if (this.signingConfig == null)
-        {
-            throw new Exception("Invoke /configure first to setup signing cert and key details");
-        }
-
-        await Task.CompletedTask;
     }
 }

@@ -43,6 +43,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ccf-consortium-manager", "c
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ccf-consortium-manager-provider", "consortium-manager\ccf-consortium-manager-provider\ccf-consortium-manager-provider.csproj", "{29B74ADF-4592-ABFC-827F-DEEA4F4FD9A4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "clientauth-common", "..\internal\clientauth-common\clientauth-common.csproj", "{78DCFFC0-E0B1-2C34-517B-8268C83393F9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -113,6 +115,10 @@ Global
 		{29B74ADF-4592-ABFC-827F-DEEA4F4FD9A4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{29B74ADF-4592-ABFC-827F-DEEA4F4FD9A4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{29B74ADF-4592-ABFC-827F-DEEA4F4FD9A4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{78DCFFC0-E0B1-2C34-517B-8268C83393F9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{78DCFFC0-E0B1-2C34-517B-8268C83393F9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{78DCFFC0-E0B1-2C34-517B-8268C83393F9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{78DCFFC0-E0B1-2C34-517B-8268C83393F9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -127,6 +133,7 @@ Global
 		{B876306A-1A3B-4BCC-93AD-A7A9E60AFABC} = {BEAD463C-FB66-4B5B-A98F-FE409CF662D2}
 		{0767CFA3-FA86-D18E-41E9-5A037E436052} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{29B74ADF-4592-ABFC-827F-DEEA4F4FD9A4} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{78DCFFC0-E0B1-2C34-517B-8268C83393F9} = {AFB4828D-E067-453F-B15F-D84F7706C079}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {85CD1BAE-1F8C-4303-B51E-34E6AA4AB89C}

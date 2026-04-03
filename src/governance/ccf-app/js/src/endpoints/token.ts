@@ -6,31 +6,16 @@ import {
   ccf
 } from "@microsoft/ccf-app/global";
 import { Base64 } from "js-base64";
-import { getSigningKey } from "./oidc/signingkey";
+import { getIssuerSigningKey } from "./oidc/signingkey";
+import { GetTokenRequest, GetTokenResponse } from "../models";
+import { ErrorResponse } from "../utils/ErrorResponse";
+import { parseRequestQuery, toDelegatePolicyKey } from "../utils/utils";
+import { verifyAttestationAndReportData } from "../attestation/attestationVerifierFactory";
 import {
-  GetTokenRequest,
-  GetTokenResponse,
-  SetSubjectPolicyRequest,
-  SetSubjectPolicyRequestData
-} from "../models/tokenmodels";
-import { ErrorResponse } from "../models/errorresponse";
-import {
-  b64ToBuf,
-  getContractCleanRoomPolicyProps,
-  getCustomCleanRoomPolicyProps,
-  isEmpty,
-  parseRequestQuery,
-  setCustomCleanRoomPolicy,
-  validateCallerAuthorized,
-  verifyReportData,
-  verifySignature
-} from "../utils/utils";
-import {
-  SnpAttestationResult,
-  verifySnpAttestationViaCustomPolicy,
-  verifySnpAttestation
-} from "../attestation/snpattestation";
-import { getGovIssuerUrl, getTenantIdIssuerUrl } from "./oidc/issuer";
+  getGovIssuerUrl,
+  getMemberTenantIdIssuerUrl,
+  getUserTenantIdIssuerUrl
+} from "./oidc/issuer";
 
 export function getToken(
   request: ccfapp.Request<GetTokenRequest>
@@ -69,36 +54,25 @@ export function getToken(
   }
   const { nbf, exp, iat, jti, sub, tid, aud, iss } = params;
 
-  const policyKey = toSubjectPolicyKey(contractId, sub);
-  const subjectLevelPolicy = getCustomCleanRoomPolicyProps(policyKey);
-  const isSubjectPolicyPresent = !isEmpty(subjectLevelPolicy);
+  const delegatePolicyKey = toSubjectPolicyKey(contractId, sub);
 
-  // First validate attestation report.
-  let snpAttestationResult: SnpAttestationResult;
-  try {
-    snpAttestationResult = isSubjectPolicyPresent
-      ? verifySnpAttestationViaCustomPolicy(policyKey, body.attestation)
-      : verifySnpAttestation(contractId, body.attestation);
-  } catch (e) {
+  // First validate attestation report and report data.
+  const { error } = verifyAttestationAndReportData(
+    contractId,
+    body,
+    () => Base64.decode(body.encrypt.publicKey),
+    [delegatePolicyKey]
+  );
+  if (error) {
     return {
       statusCode: 400,
-      body: new ErrorResponse("VerifySnpAttestationFailed", e.message)
-    };
-  }
-
-  //  Then validate the report data value.
-  try {
-    verifyReportData(snpAttestationResult, body.encrypt.publicKey);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("ReportDataMismatch", e.message)
+      body: error
     };
   }
 
   // Attestation report and report data values are verified.
   // Now generate the token and wrap it with the encryption key before returning it.
-  const signingKey = getSigningKey();
+  const signingKey = getIssuerSigningKey();
   if (!signingKey) {
     return {
       statusCode: 405,
@@ -109,7 +83,11 @@ export function getToken(
     };
   }
 
-  const issValue = iss ?? getTenantIdIssuerUrl(tid) ?? getGovIssuerUrl();
+  const issValue =
+    iss ??
+    getMemberTenantIdIssuerUrl(tid) ??
+    getUserTenantIdIssuerUrl(tid) ??
+    getGovIssuerUrl();
   if (!issValue) {
     return {
       statusCode: 405,
@@ -174,85 +152,6 @@ export function getToken(
   return { body: { value: wrappedBase64 } };
 }
 
-export function setTokenSubjectCleanRoomPolicy(
-  request: ccfapp.Request<SetSubjectPolicyRequest>
-): ccfapp.Response | ccfapp.Response<ErrorResponse> {
-  const contractId = request.params.contractId;
-  const body = request.body.json();
-  if (!body.attestation) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse(
-        "AttestationMissing",
-        "Attestation payload must be supplied."
-      )
-    };
-  }
-
-  // First validate attestation report.
-  let snpAttestationResult: SnpAttestationResult;
-  try {
-    snpAttestationResult = verifySnpAttestation(contractId, body.attestation);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("VerifySnpAttestationFailed", e.message)
-    };
-  }
-
-  //  Then validate the report data value.
-  try {
-    verifyReportData(snpAttestationResult, body.encrypt.publicKey);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("ReportDataMismatch", e.message)
-    };
-  }
-
-  // Attestation report and report data values are verified. Now check the signature.
-  const data: ArrayBuffer = b64ToBuf(body.data);
-  try {
-    verifySignature(body.sign, data);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("SignatureMismatch", e.message)
-    };
-  }
-
-  // Attestation report, report data and payload signature are verified.
-  // Now save the cleanroom policy under the specified subject name.
-  const requestData: SetSubjectPolicyRequestData = JSON.parse(
-    ccf.bufToStr(data)
-  );
-  const subjectName = request.params.subjectName;
-  const policyKey = toSubjectPolicyKey(contractId, subjectName);
-  setCustomCleanRoomPolicy(policyKey, requestData);
-  return { statusCode: 200 };
-}
-
-export function getTokenSubjectCleanRoomPolicy(
-  request: ccfapp.Request
-): ccfapp.Response | ccfapp.Response<ErrorResponse> {
-  const error = validateCallerAuthorized(request);
-  if (error !== undefined) {
-    return error;
-  }
-
-  const contractId = request.params.contractId;
-  const subjectName: string = request.params.subjectName;
-
-  const policyKey = toSubjectPolicyKey(contractId, subjectName);
-  const subjectLevelPolicy = getCustomCleanRoomPolicyProps(policyKey);
-  const isSubjectPolicyPresent = !isEmpty(subjectLevelPolicy);
-  const effectivePolicy = isSubjectPolicyPresent
-    ? subjectLevelPolicy
-    : getContractCleanRoomPolicyProps(contractId);
-
-  return { statusCode: 200, body: { claims: effectivePolicy } };
-}
-
 interface GetTokenParams {
   nbf: string;
   exp: string;
@@ -311,12 +210,6 @@ function extractParams(parsedQuery): GetTokenParams {
   return { nbf, exp, iat, jti, sub, tid, aud, iss };
 }
 
-function toSubjectPolicyKey(contractId: string, subjectName: string): string {
-  if (contractId === undefined || contractId === "") {
-    throw new Error("contractId must be specified.");
-  }
-  if (subjectName === undefined || subjectName === "") {
-    throw new Error("subjectName must be specified.");
-  }
-  return `subjects_${contractId}_${subjectName}`;
+function toSubjectPolicyKey(contractId: string, sub: string): string {
+  return toDelegatePolicyKey(contractId, "oauth-federation-subjects", sub);
 }

@@ -39,7 +39,7 @@ public class CcfRecoveryService
             SigningCert = signingKeyInfo.SigningCert,
             RecoveryService = new()
             {
-                HostData = await Attestation.GetHostData()
+                HostData = await Attestation.GetCACIHostData()
             }
         };
 
@@ -59,7 +59,7 @@ public class CcfRecoveryService
                 SigningCert = signingKeyInfo.SigningCert,
                 RecoveryService = new()
                 {
-                    HostData = await Attestation.GetHostData()
+                    HostData = await Attestation.GetCACIHostData()
                 }
             };
         }
@@ -194,20 +194,19 @@ public class CcfRecoveryService
         var serviceCert = await File.ReadAllTextAsync(this.serviceCertLocation);
 
         string platform;
-        AttestationReport? report = null;
-        if (Attestation.IsSevSnp())
+        SnpCACIAttestationReport? report = null;
+        if (Attestation.IsSnpCACI())
         {
             platform = "snp";
             var bytes = Encoding.UTF8.GetBytes(serviceCert);
-            var hash = SHA256.HashData(bytes);
-            report = await Attestation.GetReportAsync(hash);
+            report = (await Attestation.GetCACIReportAsync(bytes)).SnpCaci;
         }
         else
         {
             platform = "virtual";
         }
 
-        string hostData = await Attestation.GetHostData();
+        string hostData = await Attestation.GetCACIHostData();
         return new RecoveryServiceReport
         {
             Platform = platform,

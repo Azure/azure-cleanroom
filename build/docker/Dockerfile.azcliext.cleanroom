@@ -7,7 +7,7 @@ WORKDIR /app
 WORKDIR /app/azure-cli-extension/cleanroom
 COPY src/tools/azure-cli-extension/cleanroom/requirements.txt requirements.txt
 
-RUN pip install -r requirements.txt 
+RUN pip install --no-cache-dir -r requirements.txt 
 
 # copy everything else and build app
 WORKDIR /app

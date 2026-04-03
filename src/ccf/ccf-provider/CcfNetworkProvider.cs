@@ -618,6 +618,71 @@ public class CcfNetworkProvider
             }
         };
 
+        var result = await this.CreateProposal(ccfClient, proposalContent);
+        return result;
+    }
+
+    public async Task<JsonObject> AddSnpUvmEndorsement(
+        string networkName,
+        string did,
+        string feed,
+        string svn,
+        JsonObject? providerConfig)
+    {
+        var lbEndpoint =
+            await this.lbProvider.GetLoadBalancerEndpoint(networkName, providerConfig);
+        var serviceCert = await this.GetServiceCert(lbEndpoint.Name, lbEndpoint.Endpoint);
+        var ccfClient = await this.ccfClientManager.GetGovClient(lbEndpoint.Endpoint, serviceCert);
+        var args = new JsonObject
+        {
+            ["did"] = did,
+            ["feed"] = feed,
+            ["svn"] = svn
+        };
+
+        var proposalContent = new JsonObject
+        {
+            ["actions"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["name"] = "add_snp_uvm_endorsement",
+                    ["args"] = args
+                }
+            }
+        };
+
+        return await this.CreateProposal(ccfClient, proposalContent);
+    }
+
+    public async Task<JsonObject> RemoveSnpUvmEndorsement(
+        string networkName,
+        string did,
+        string feed,
+        JsonObject? providerConfig)
+    {
+        var lbEndpoint =
+            await this.lbProvider.GetLoadBalancerEndpoint(networkName, providerConfig);
+        var serviceCert = await this.GetServiceCert(lbEndpoint.Name, lbEndpoint.Endpoint);
+        var ccfClient = await this.ccfClientManager.GetGovClient(lbEndpoint.Endpoint, serviceCert);
+        var args = new JsonObject
+        {
+            ["did"] = did,
+            ["feed"] = feed
+        };
+
+        var proposalContent = new JsonObject
+        {
+            ["actions"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["name"] = "remove_snp_uvm_endorsement",
+                    ["args"] = args
+                }
+            }
+        };
+
         return await this.CreateProposal(ccfClient, proposalContent);
     }
 
@@ -728,6 +793,66 @@ public class CcfNetworkProvider
                 new JsonObject
                 {
                     ["name"] = "remove_snp_host_data",
+                    ["args"] = args
+                }
+            }
+        };
+
+        return await this.CreateProposal(ccfClient, proposalContent);
+    }
+
+    public async Task<JsonObject> SetSnpMinimumTcbVersion(
+        string networkName,
+        string cpuid,
+        string tcbVersion,
+        JsonObject? providerConfig)
+    {
+        var lbEndpoint =
+            await this.lbProvider.GetLoadBalancerEndpoint(networkName, providerConfig);
+        var serviceCert = await this.GetServiceCert(lbEndpoint.Name, lbEndpoint.Endpoint);
+        var ccfClient = await this.ccfClientManager.GetGovClient(lbEndpoint.Endpoint, serviceCert);
+        var args = new JsonObject
+        {
+            ["cpuid"] = cpuid,
+            ["tcb_version"] = tcbVersion
+        };
+
+        var proposalContent = new JsonObject
+        {
+            ["actions"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["name"] = "set_snp_minimum_tcb_version_hex",
+                    ["args"] = args
+                }
+            }
+        };
+
+        return await this.CreateProposal(ccfClient, proposalContent);
+    }
+
+    public async Task<JsonObject> RemoveSnpMinimumTcbVersion(
+        string networkName,
+        string cpuid,
+        JsonObject? providerConfig)
+    {
+        var lbEndpoint =
+            await this.lbProvider.GetLoadBalancerEndpoint(networkName, providerConfig);
+        var serviceCert = await this.GetServiceCert(lbEndpoint.Name, lbEndpoint.Endpoint);
+        var ccfClient = await this.ccfClientManager.GetGovClient(lbEndpoint.Endpoint, serviceCert);
+        var args = new JsonObject
+        {
+            ["cpuid"] = cpuid
+        };
+
+        var proposalContent = new JsonObject
+        {
+            ["actions"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["name"] = "remove_snp_minimum_tcb_version",
                     ["args"] = args
                 }
             }
@@ -1580,17 +1705,16 @@ public class CcfNetworkProvider
         string serviceCertPem)
     {
         TimeSpan readyTimeout = TimeSpan.FromSeconds(300);
-        var stopwatch = Stopwatch.StartNew();
         var lbName = lbEndpoint.Name;
-        var endpoint = lbEndpoint.Endpoint;
 
         // Wait for the CCF service to respond via the load balancer.
         // No retry policy is specified as retries are handled in the loop below.
-        var lbClient = this.GetOrAddServiceClient(
+        var ccfClient = this.GetOrAddServiceClient(
             lbEndpoint,
             serviceCertPem,
             HttpRetries.Policies.NoRetries);
-
+        var stopwatch = Stopwatch.StartNew();
+        var endpoint = lbEndpoint.Endpoint;
         while (true)
         {
             try
@@ -1602,7 +1726,7 @@ public class CcfNetworkProvider
                 // https://stackoverflow.com/questions/51478525/httpclient-this-instance-has-already-started-one-or-more-requests-properties-ca
                 using var cts = new CancellationTokenSource();
                 cts.CancelAfter(TimeSpan.FromSeconds(30));
-                using var response = await lbClient.GetAsync("/node/network", cts.Token);
+                using var response = await ccfClient.GetAsync("/node/network", cts.Token);
                 if (response.StatusCode == HttpStatusCode.OK)
                 {
                     break;
@@ -1631,6 +1755,59 @@ public class CcfNetworkProvider
             {
                 throw new TimeoutException(
                     "Hit timeout waiting for /node/network to respond via the load balancer.");
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
+
+        // Wait for the recovery agent endpoint to respond via the load balancer.
+        // No retry policy is specified as retries are handled in the loop below.
+        using var raClient = HttpClientManager.NewInsecureClient(
+            lbEndpoint.AgentEndpoint,
+            this.logger,
+            HttpRetries.Policies.NoRetries);
+        stopwatch = Stopwatch.StartNew();
+        endpoint = lbEndpoint.AgentEndpoint;
+        while (true)
+        {
+            try
+            {
+                // Use a shorter timeout than the default (100s) so that we retry faster to connect
+                // to the LB endpoint that is warming up.
+                // https://stackoverflow.com/questions/51478525/httpclient-this-instance-has-already-started-one-or-more-requests-properties-ca
+                using var cts = new CancellationTokenSource();
+                cts.CancelAfter(TimeSpan.FromSeconds(30));
+                using var response = await raClient.GetAsync("/report", cts.Token);
+                if (response.StatusCode == HttpStatusCode.OK)
+                {
+                    break;
+                }
+
+                this.logger.LogInformation(
+                    $"Waiting for recovery agent {endpoint}/report to report " +
+                    $"200 via the load balancer endpoint. Current status: {response.StatusCode}");
+            }
+            catch (TaskCanceledException te)
+            {
+                this.logger.LogInformation(
+                    $"{lbName}: Hit HttpClient timeout waiting for recovery agent " +
+                    $"{endpoint}/report to " +
+                    $"report success via the load balancer endpoint. Current " +
+                    $"error: {te.Message}.");
+            }
+            catch (HttpRequestException re)
+            {
+                this.logger.LogInformation(
+                    $"{lbName}: Waiting for recovery agent {endpoint}/report to report " +
+                    $"success via the load balancer endpoint. Current " +
+                    $"statusCode: {re.StatusCode}, error: {re.Message}.");
+            }
+
+            if (stopwatch.Elapsed > readyTimeout)
+            {
+                throw new TimeoutException(
+                    "Hit timeout waiting for recovery agent /report to respond via the " +
+                    "load balancer.");
             }
 
             await Task.Delay(TimeSpan.FromSeconds(1));

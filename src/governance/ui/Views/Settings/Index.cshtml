@@ -3,89 +3,272 @@
     ViewData["Title"] = "Settings";
 }
 
-<h2>Settings</h2>
-@if (!Model.Connected)
-{
-    <div class="alert alert-warning" role="alert">
-        <strong>cgs-client not responding</strong>: Check that the container is running and inspect the container logs.
+<div class="content-wrapper">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 text-gradient mb-1">
+                <i class="fas fa-cog me-2"></i>Settings
+            </h1>
+            <p class="text-muted mb-0">Configure and manage system settings</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshSettings()">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+        </div>
     </div>
-}
-else if (!Model.Configured)
-{
-    <div class="alert alert-warning" role="alert">
-        <strong>cgs-client not configured</strong>:
-        <a class="alert-link" asp-controller="Workspaces"
-           asp-action="Configure">Configure it now</a> or re-deploy the client.
-    </div>
-}
-else
-{
-    <p>
-        <a asp-controller="Workspaces" asp-action="Configure">Change <code>cgs-client</code> Configuration</a>
-        <a asp-controller="Settings" asp-action="ConstitutionDetail">Inspect Constitution</a>
-        <a asp-controller="Settings" asp-action="JSAppDetail">Inspect JS App</a>
-    </p>
-    <table class="table">
-        <thead>
-            <tr>
-                <th scope="col">Property</th>
-                <th scope="col">Value</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <th scope="row">name</th>
-                <td>@Model.Name</td>
-            </tr>
-            <tr>
-                <th scope="row">endpoint</th>
-                <td>@Model.CcfEndpoint</td>
-            </tr>
-            <tr>
-                <th scope="row">memberId</th>
-                <td><pre>@Model.MemberId</pre></td>
-            </tr>
-            <tr>
-                <th scope="row">signingCert</th>
-                <td><pre>@Model.SigningCert</pre></td>
-            </tr>
-        </tbody>
-        </table>
 
-    @if (Model.Updates?.Proposals != null)
+    <!-- Connection Status -->
+    @if (!Model.Connected)
     {
-        if (Model.Updates.Proposals.Count == 0)
-        {
-            <p><i>No updates available.</i></p>
-        }
-        else
-        {
-            <h4>Updates available</h4>
+        <div class="alert alert-danger d-flex align-items-center mb-4" role="alert">
+            <i class="fas fa-exclamation-triangle me-3"></i>
+            <div>
+                <strong>CGS Client Not Responding</strong><br>
+                <small>Check that the container is running and inspect the container logs.</small>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-danger ms-auto" onclick="location.reload()">
+                <i class="fas fa-redo me-1"></i>Retry Connection
+            </button>
+        </div>
+    }
+    else if (!Model.Configured)
+    {
+        <div class="alert alert-warning d-flex align-items-center mb-4" role="alert">
+            <i class="fas fa-cog me-3"></i>
+            <div>
+                <strong>CGS Client Not Configured</strong><br>
+                <small>Configure the client now or re-deploy with proper configuration.</small>
+            </div>
+            <a class="btn btn-sm btn-warning ms-auto" asp-controller="Workspaces" asp-action="Configure">
+                <i class="fas fa-wrench me-1"></i>Configure Now
+            </a>
+        </div>
+    }
+    else
+    {
+        <!-- System Status -->
+        <div class="alert alert-success d-flex align-items-center mb-4" role="alert">
+            <i class="fas fa-check-circle me-3"></i>
+            <div>
+                <strong>System Ready</strong><br>
+                <small>CGS client is connected and properly configured.</small>
+            </div>
+        </div>
 
-            <table class="table table-hover">
-                <thead>
-                    <tr>
-                        <th>Type</th>
-                        <th>Proposal</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var proposal in @Model.Updates.Proposals)
+        <!-- Quick Actions -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-tools me-2"></i>
+                    Quick Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <a asp-controller="Workspaces" asp-action="Configure"
+                            class="btn btn-outline-primary w-100 text-start">
+                            <i class="fas fa-wrench me-2"></i>
+                            <div>
+                                <strong>Configure Client</strong>
+                                <small class="d-block text-muted">Change cgs-client configuration</small>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="col-md-4">
+                        <a asp-controller="Settings" asp-action="ConstitutionDetail"
+                            class="btn btn-outline-primary w-100 text-start">
+                            <i class="fas fa-gavel me-2"></i>
+                            <div>
+                                <strong>Constitution</strong>
+                                <small class="d-block text-muted">Inspect system constitution</small>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="col-md-4">
+                        <a asp-controller="Settings" asp-action="JSAppDetail"
+                            class="btn btn-outline-primary w-100 text-start">
+                            <i class="fas fa-code me-2"></i>
+                            <div>
+                                <strong>JS Application</strong>
+                                <small class="d-block text-muted">Inspect JavaScript app details</small>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- System Configuration -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-server me-2"></i>
+                    System Configuration
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="info-item">
+                            <label class="form-label fw-semibold text-muted">Service Name</label>
+                            <div>@Model.Name</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-item">
+                            <label class="form-label fw-semibold text-muted">CCF Endpoint</label>
+                            <div class="font-monospace">@Model.CcfEndpoint</div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="info-item">
+                            <label class="form-label fw-semibold text-muted">Member ID</label>
+                            <div class="code-container">
+                                <pre class="bg-light p-2 rounded font-monospace small">@Model.MemberId</pre>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="info-item">
+                            <label
+                                class="form-label fw-semibold text-muted d-flex justify-content-between align-items-center">
+                                <span>Signing Certificate</span>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copySigningCert()"
+                                    title="Copy certificate to clipboard">
+                                    <i class="fas fa-copy me-1"></i>Copy
+                                </button>
+                            </label>
+                            <div class="code-container">
+                                <pre class="bg-light p-2 rounded font-monospace small"
+                                    id="signingCert">@Model.SigningCert</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (Model.Updates?.Proposals != null)
+        {
+            <!-- System Updates -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-download me-2"></i>
+                        System Updates
+                    </h5>
+                    @if (Model.Updates.Proposals.Count > 0)
                     {
-                    <tr>
-                        <td>
-                            <pre>@proposal.ActionName</pre>
-                        </td>
-                        <td>
-                            <p>
-                                <a asp-controller="Proposals"
-                                    asp-action="Detail" asp-route-proposalId="@proposal.ProposalId">@proposal.ProposalId</a>
-                            </p>
-                        </td>
-                    </tr>
+                        <span class="badge bg-warning text-dark">
+                            @Model.Updates.Proposals.Count Available
+                        </span>
                     }
-                </tbody>
-            </table>
+                    else
+                    {
+                        <span class="badge bg-success">
+                            Up to Date
+                        </span>
+                    }
+                </div>
+                <div class="card-body p-0">
+                    @if (Model.Updates.Proposals.Count == 0)
+                    {
+                        <div class="text-center py-4">
+                            <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                            <p class="text-muted mb-0">No updates available. Your system is up to date.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-container">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th width="30%">
+                                            <i class="fas fa-tag me-1"></i>Update Type
+                                        </th>
+                                        <th width="50%">
+                                            <i class="fas fa-file-alt me-1"></i>Proposal
+                                        </th>
+                                        <th width="20%">
+                                            <i class="fas fa-external-link-alt me-1"></i>Action
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var proposal in Model.Updates.Proposals)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <span class="badge bg-primary">
+                                                    @proposal.ActionName
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="font-monospace">@proposal.ProposalId</span>
+                                            </td>
+                                            <td>
+                                                <a asp-controller="Proposals" asp-action="Detail"
+                                                    asp-route-proposalId="@proposal.ProposalId" class="btn btn-outline-primary btn-sm">
+                                                    <i class="fas fa-eye me-1"></i>View Details
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
         }
     }
-}
+</div>
+
+<script>
+    // Copy signing certificate functionality
+    function copySigningCert() {
+        const contentElement = document.getElementById('signingCert');
+        const copyButton = document.querySelector('[onclick="copySigningCert()"]');
+        const originalText = copyButton.innerHTML;
+
+        if (contentElement) {
+            const textContent = contentElement.textContent || contentElement.innerText || '';
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(textContent).then(() => {
+                    copyButton.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+                    copyButton.classList.remove('btn-outline-secondary');
+                    copyButton.classList.add('btn-success');
+
+                    setTimeout(() => {
+                        copyButton.innerHTML = originalText;
+                        copyButton.classList.remove('btn-success');
+                        copyButton.classList.add('btn-outline-secondary');
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy certificate: ', err);
+                });
+            }
+        }
+    }
+
+    function refreshSettings() {
+        const refreshBtn = document.querySelector('[onclick="refreshSettings()"]');
+        const icon = refreshBtn.querySelector('i');
+
+        icon.classList.add('fa-spin');
+        refreshBtn.disabled = true;
+
+        setTimeout(() => {
+            icon.classList.remove('fa-spin');
+            refreshBtn.disabled = false;
+
+            if (window.CleanroomUI) {
+                window.CleanroomUI.showToast('Settings refreshed successfully.', 'success');
+            }
+        }, 1000);
+    }
+</script>

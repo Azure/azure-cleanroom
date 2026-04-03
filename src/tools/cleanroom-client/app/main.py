@@ -8,7 +8,9 @@ from typing import Optional
 
 import yaml
 from azure.cli.core import CLIError, get_default_cli
-from cleanroom_common.azure_cleanroom_core.models.model import CleanRoomSpecification
+from cleanroom_common.azure_cleanroom_core.models.cleanroom import (
+    CleanRoomSpecification,
+)
 from cleanroom_common.azure_cleanroom_core.utilities.helpers import (
     get_deployment_template,
     validate_config,

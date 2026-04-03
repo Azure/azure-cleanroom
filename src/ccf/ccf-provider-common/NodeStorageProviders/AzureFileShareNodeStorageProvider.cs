@@ -44,7 +44,7 @@ internal class AzureFilesNodeStorageProvider : INodeStorageProvider
     {
         return await AzFileShare.FileShareExists(
             ShareName(nodeName),
-            this.providerConfig!);
+            this.providerConfig);
     }
 
     public async Task CreateNodeStorageDirectory(string nodeName)
@@ -53,7 +53,7 @@ internal class AzureFilesNodeStorageProvider : INodeStorageProvider
             ShareName(nodeName),
             nodeName,
             this.networkName,
-            this.providerConfig!,
+            this.providerConfig,
             this.logger.ProgressReporter());
     }
 
@@ -64,7 +64,7 @@ internal class AzureFilesNodeStorageProvider : INodeStorageProvider
         await AzFileShare.DeleteFileShare(
             shareName,
             this.networkName,
-            this.providerConfig!);
+            this.providerConfig);
     }
 
     public async Task DeleteUncommittedLedgerFiles(string nodeName)
@@ -72,7 +72,7 @@ internal class AzureFilesNodeStorageProvider : INodeStorageProvider
         await AzFileShare.DeleteUncommittedLedgerFiles(
             this.networkName,
             ShareName(nodeName),
-            this.providerConfig!,
+            this.providerConfig,
             this.logger.ProgressReporter());
     }
 
@@ -117,7 +117,7 @@ internal class AzureFilesNodeStorageProvider : INodeStorageProvider
         string? latestSnapshotShareName;
         latestSnapshotShareName = await AzFileShare.FindShareWithLatestSnapshot(
             targetNetworkName,
-            this.providerConfig!,
+            this.providerConfig,
             this.logger.ProgressReporter());
         if (latestSnapshotShareName != null)
         {
@@ -134,7 +134,7 @@ internal class AzureFilesNodeStorageProvider : INodeStorageProvider
             await AzFileShare.FindSharesWithLedgers(
                 targetNetworkName,
                 committedLedgerFilesOnly: true,
-                this.providerConfig!,
+                this.providerConfig,
                 this.logger.ProgressReporter());
         int index = 0;
         foreach ((string _, string shareName) in ledgerShares)
@@ -156,7 +156,7 @@ internal class AzureFilesNodeStorageProvider : INodeStorageProvider
             await AzFileShare.FindSharesWithLedgers(
                 this.networkName,
                 committedLedgerFilesOnly: false,
-                this.providerConfig!,
+                this.providerConfig,
                 this.logger.ProgressReporter());
         return ledgerShares.ConvertAll(s => s.nodeName);
     }
@@ -259,7 +259,9 @@ internal class AzureFilesNodeStorageProvider : INodeStorageProvider
         string accountName = AzStorage.GetStorageAccountName(
             this.providerConfig.AzureFilesStorageAccountId());
         string accountKey =
-            await AzStorage.GetStorageAccountKey(this.providerConfig.AzureFilesStorageAccountId());
+            await AzStorage.GetStorageAccountKey(
+                this.providerConfig.AzureFilesStorageAccountId(),
+                this.providerConfig);
 
         string rwShareName = rwLedgerShare.ShareName;
         string rwVolumeMountPath = rwLedgerShare.VolumeMountPath;

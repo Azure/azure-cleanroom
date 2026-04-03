@@ -21,9 +21,6 @@ namespace Test;
 [TestClass]
 public class HeaderBasedTests : TestBase
 {
-    private const string CcfEndpointHeaderKey = "x-ms-ccf-endpoint";
-    private const string ServiceCertHeaderKey = "x-ms-service-cert";
-
     private string ccfEndpoint = string.Empty;
 
     /// <summary>
@@ -192,17 +189,5 @@ public class HeaderBasedTests : TestBase
             // TODO (anrdesai): Add support for a better error here.
             Assert.AreEqual(HttpStatusCode.InternalServerError, response.StatusCode);
         }
-    }
-
-    private async Task<string> GetServiceCertificateAsync()
-    {
-        using HttpRequestMessage request = new(HttpMethod.Get, "/node/network");
-        using HttpResponseMessage response = await this.CcfClient.SendAsync(request);
-        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-
-        var responseObj = await response.Content.ReadFromJsonAsync<JsonObject>();
-        var serviceCertPem = responseObj!["service_certificate"]!.ToString();
-        byte[] serviceCertBytes = Encoding.UTF8.GetBytes(serviceCertPem);
-        return Convert.ToBase64String(serviceCertBytes);
     }
 }

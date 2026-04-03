@@ -1,14 +1,17 @@
 # Building the CCR infrastructure
 
 ## Table of Contents
-1. [Prerequisites](#Prerequisites)
-1. [Building the CCR init container](#Building-the-CCR-init-container)
-1. [Building the CCR sidecar container](#Building-the-ccr-proxy-ext-processor-container)
-1. [Building the CCR secure key release (SKR) sidecar container](#Building-the-CCR-secure-key-release-SKR-sidecar-container)
-1. [Building the OPA policy bundle](#Building-the-OPA-policy-bundle)
-1. [Publishing the CCR container images to a container registry](#Publishing-the-CCR-container-images-to-a-container-registry)
-1. [Deploying a CCR to a Kubernetes cluster](#Deploying-a-CCR-to-a-Kubernetes-cluster)
-1. [Policy enforcement through the Open Policy Agent (OPA)](#Policy-enforcement-through-the-Open-Policy-Agent-OPA)
+- [Building the CCR infrastructure](#building-the-ccr-infrastructure)
+  - [Table of Contents](#table-of-contents)
+  - [Prerequisites](#prerequisites)
+  - [Building the CCR init container](#building-the-ccr-init-container)
+  - [Building the CCR proxy container](#building-the-ccr-proxy-container)
+  - [Building the CCR sidecar container](#building-the-ccr-sidecar-container)
+  - [Building the CCR secure key release (SKR) sidecar container](#building-the-ccr-secure-key-release-skr-sidecar-container)
+  - [Building the CCR podman container](#building-the-ccr-podman-container)
+  - [Building the OPA policy bundle](#building-the-opa-policy-bundle)
+  - [Publishing the CCR container images to a container registry](#publishing-the-ccr-container-images-to-a-container-registry)
+  - [Policy enforcement through the Open Policy Agent (OPA)](#policy-enforcement-through-the-open-policy-agent-opa)
 
 ## Prerequisites
 

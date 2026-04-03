@@ -3,7 +3,7 @@
 
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using Microsoft.Azure.CleanRoomSidecar.Identity.Utils;
+using Controllers;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Azure.CleanRoomSidecar.Identity.CredentialStore;

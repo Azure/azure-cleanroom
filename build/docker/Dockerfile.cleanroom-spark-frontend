@@ -1,15 +1,48 @@
-FROM mcr.microsoft.com/mirror/docker/library/python:3.11
+FROM cleanroombuild.azurecr.io/mirror/docker/library/python:3.12 AS builder
 
-WORKDIR /app
+WORKDIR /build
 
-COPY src/workloads/cleanroom-spark-frontend/requirements.txt .
+RUN apt-get update && apt-get install -y curl build-essential && rm -rf /var/lib/apt/lists/*
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
 
-RUN pip install --no-cache-dir -r requirements.txt
+COPY pyproject.toml .
+COPY uv.lock .
 
-COPY src/internal/Attestation/protobuf/AttestationContainer.proto attestation-container.proto
-RUN python3 -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. attestation-container.proto
+# Build each package separately so that only changed packages are rebuilt.
+COPY src/sdk src/sdk
+RUN uv build --package cleanroom-sdk --wheel
 
-COPY src/workloads/cleanroom-spark-frontend/src src
+COPY src/internal/cleanroom-internal src/internal/cleanroom-internal
+RUN uv build --package cleanroom-internal --wheel
+
+COPY src/internal/frontend-internal src/internal/frontend-internal
+RUN uv build --package frontend-internal --wheel
+
+COPY src/workloads/analytics/contracts src/workloads/analytics/contracts
+RUN uv build --package analytics-contracts --wheel
+
+COPY src/workloads/analytics/cleanroom-spark-frontend src/workloads/analytics/cleanroom-spark-frontend
+RUN uv build --package cleanroom-spark-frontend --wheel
+
+FROM cleanroombuild.azurecr.io/mirror/docker/library/python:3.12
+
+WORKDIR /setup
+
+COPY --from=builder /build/dist/cleanroom_sdk*.whl /setup/
+RUN pip install cleanroom_sdk*.whl && rm -f cleanroom_sdk*.whl
+
+COPY --from=builder /build/dist/cleanroom_internal*.whl /setup/
+RUN pip install cleanroom_internal*.whl && rm -f cleanroom_internal*.whl
+
+COPY --from=builder /build/dist/frontend_internal*.whl /setup/
+RUN pip install frontend_internal*.whl && rm -f frontend_internal*.whl
+
+COPY --from=builder /build/dist/analytics_contracts*.whl /setup/
+RUN pip install analytics_contracts*.whl && rm -f analytics_contracts*.whl
+
+COPY --from=builder /build/dist/cleanroom_spark_frontend*.whl /setup/
+RUN pip install cleanroom_spark_frontend*.whl && rm -f cleanroom_spark_frontend*.whl
 
 EXPOSE 8000
 

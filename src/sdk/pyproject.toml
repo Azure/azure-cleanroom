@@ -1,0 +1,17 @@
+[project]
+name = "cleanroom-sdk"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "hprabh",email = "hprabh@microsoft.com"}
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.8.2,<=2.11.7"
+]
+
+[build-system]
+requires = ["uv_build>=0.9.3,<0.10.0"]
+build-backend = "uv_build"
+

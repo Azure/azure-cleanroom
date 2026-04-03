@@ -1,6 +1,6 @@
 import * as ccfapp from "@microsoft/ccf-app";
 import { RsaOaepAesKwpParams, ccf } from "@microsoft/ccf-app/global";
-import { ErrorResponse } from "../models/errorresponse";
+import { ErrorResponse } from "../utils/ErrorResponse";
 import {
   GetSecretRequest,
   GetSecretResponse,
@@ -10,26 +10,16 @@ import {
   PutSecretByCleanRoomRequestData,
   PutSecretByMemberUserRequest,
   PutSecretResponse,
-  SecretStoreItem,
-  SetSecretPolicyRequest,
-  SetSecretPolicyRequestData
+  SecretStoreItem
 } from "../models";
 import {
   b64ToBuf,
   getCallerId,
-  getContractCleanRoomPolicyProps,
-  getCustomCleanRoomPolicyProps,
-  isEmpty,
-  setCustomCleanRoomPolicy,
+  toDelegatePolicyKey,
   validateCallerAuthorized,
-  verifyReportData,
   verifySignature
 } from "../utils/utils";
-import {
-  SnpAttestationResult,
-  verifySnpAttestation,
-  verifySnpAttestationViaCustomPolicy
-} from "../attestation/snpattestation";
+import { verifyAttestationAndReportData } from "../attestation/attestationVerifierFactory";
 import { Base64 } from "js-base64";
 
 export function putSecret(
@@ -48,100 +38,6 @@ export function putSecret(
       request as ccfapp.Request<PutSecretByMemberUserRequest>
     );
   }
-}
-
-export function setSecretCleanRoomPolicy(
-  request: ccfapp.Request<SetSecretPolicyRequest>
-): ccfapp.Response | ccfapp.Response<ErrorResponse> {
-  const contractId = request.params.contractId;
-  const body = request.body.json();
-  if (!body.attestation) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse(
-        "AttestationMissing",
-        "Attestation payload must be supplied."
-      )
-    };
-  }
-
-  // First validate attestation report.
-  let snpAttestationResult: SnpAttestationResult;
-  try {
-    snpAttestationResult = verifySnpAttestation(contractId, body.attestation);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("VerifySnpAttestationFailed", e.message)
-    };
-  }
-
-  //  Then validate the report data value.
-  try {
-    verifyReportData(snpAttestationResult, body.encrypt.publicKey);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("ReportDataMismatch", e.message)
-    };
-  }
-
-  // Attestation report and report data values are verified. Now check the signature.
-  const data: ArrayBuffer = b64ToBuf(body.data);
-  try {
-    verifySignature(body.sign, data);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("SignatureMismatch", e.message)
-    };
-  }
-
-  // Attestation report, report data and payload signature are verified.
-  // Now save the cleanroom policy under the secretId.
-  const requestData: SetSecretPolicyRequestData = JSON.parse(
-    ccf.bufToStr(data)
-  );
-  const secretId = request.params.secretName;
-  const policyKey = toSecretPolicyKey(contractId, secretId);
-  setCustomCleanRoomPolicy(policyKey, requestData);
-  return { statusCode: 200 };
-}
-
-export function getSecretCleanRoomPolicy(
-  request: ccfapp.Request
-): ccfapp.Response | ccfapp.Response<ErrorResponse> {
-  const error = validateCallerAuthorized(request);
-  if (error !== undefined) {
-    return error;
-  }
-
-  const contractId = request.params.contractId;
-  const secretId: string = request.params.secretName;
-
-  const secretsStore = ccfapp.typedKv(
-    `secrets-${contractId}`,
-    ccfapp.string,
-    ccfapp.json<SecretStoreItem>()
-  );
-  if (!secretsStore.has(secretId)) {
-    return {
-      statusCode: 404,
-      body: new ErrorResponse(
-        "SecretNotFound",
-        `A secret with the specified id '${secretId}' was not found.`
-      )
-    };
-  }
-
-  const policyKey = toSecretPolicyKey(contractId, secretId);
-  const secretLevelPolicy = getCustomCleanRoomPolicyProps(policyKey);
-  const isSecretPolicyPresent = !isEmpty(secretLevelPolicy);
-  const effectivePolicy = isSecretPolicyPresent
-    ? secretLevelPolicy
-    : getContractCleanRoomPolicyProps(contractId);
-
-  return { statusCode: 200, body: { claims: effectivePolicy } };
 }
 
 export function getSecret(
@@ -168,33 +64,21 @@ export function getSecret(
     };
   }
 
-  // First validate attestation report.
+  // First validate attestation report and report data.
   const contractId = request.params.contractId;
   const secretId: string = request.params.secretName;
 
-  const policyKey = toSecretPolicyKey(contractId, secretId);
-  const secretLevelPolicy = getCustomCleanRoomPolicyProps(policyKey);
-  const isSecretPolicyPresent = !isEmpty(secretLevelPolicy);
-
-  let snpAttestationResult: SnpAttestationResult;
-  try {
-    snpAttestationResult = isSecretPolicyPresent
-      ? verifySnpAttestationViaCustomPolicy(policyKey, body.attestation)
-      : verifySnpAttestation(contractId, body.attestation);
-  } catch (e) {
+  const policyKey = toSecretDelegatePolicyKey(contractId, secretId);
+  const { error } = verifyAttestationAndReportData(
+    contractId,
+    body,
+    () => Base64.decode(body.encrypt.publicKey),
+    [policyKey]
+  );
+  if (error) {
     return {
       statusCode: 400,
-      body: new ErrorResponse("VerifySnpAttestationFailed", e.message)
-    };
-  }
-
-  //  Then validate the report data value.
-  try {
-    verifyReportData(snpAttestationResult, body.encrypt.publicKey);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("ReportDataMismatch", e.message)
+      body: error
     };
   }
 
@@ -282,24 +166,16 @@ function putSecretByCleanRoom(
     };
   }
 
-  // Validate attestation report.
-  let snpAttestationResult: SnpAttestationResult;
-  try {
-    snpAttestationResult = verifySnpAttestation(contractId, body.attestation);
-  } catch (e) {
+  // Validate attestation report and report data.
+  const { error: attestError } = verifyAttestationAndReportData(
+    contractId,
+    body,
+    () => Base64.decode(body.encrypt.publicKey)
+  );
+  if (attestError) {
     return {
       statusCode: 400,
-      body: new ErrorResponse("VerifySnpAttestationFailed", e.message)
-    };
-  }
-
-  //  Then validate the report data value.
-  try {
-    verifyReportData(snpAttestationResult, body.encrypt.publicKey);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("ReportDataMismatch", e.message)
+      body: attestError
     };
   }
 
@@ -386,13 +262,9 @@ function putSecretInternal(
   };
 }
 
-function toSecretPolicyKey(contractId: string, secretId: string): string {
-  if (contractId === undefined || contractId === "") {
-    throw new Error("contractId must be specified.");
-  }
-  if (secretId === undefined || secretId === "") {
-    throw new Error("SecretId must be specified.");
-  }
-
-  return `secrets_${contractId}_${secretId}`;
+function toSecretDelegatePolicyKey(
+  contractId: string,
+  secretId: string
+): string {
+  return toDelegatePolicyKey(contractId, "secrets", secretId);
 }

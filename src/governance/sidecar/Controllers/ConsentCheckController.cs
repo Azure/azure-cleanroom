@@ -68,7 +68,7 @@ public class ConsentCheckController : ControllerBase
     {
         var appClient = await this.ccfClientManager.GetAppClient();
         var wsConfig = await this.ccfClientManager.GetWsConfig();
-        var content = Attestation.PrepareRequestContent(wsConfig.Attestation.Report);
+        var content = Attestation.PrepareRequestContent(wsConfig.Report);
 
         using (HttpRequestMessage request = new(HttpMethod.Post, url))
         {

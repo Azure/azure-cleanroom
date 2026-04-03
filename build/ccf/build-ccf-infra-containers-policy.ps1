@@ -3,7 +3,7 @@ param(
     [string]$tag = "latest",
 
     [parameter(Mandatory = $false)]
-    [string]$repo = "docker.io",
+    [string]$repo = "localhost:5000",
 
     [parameter(Mandatory = $false)]
     [string[]]
@@ -13,6 +13,9 @@ param(
     [switch]$push
 )
 . $PSScriptRoot/../helpers.ps1
+
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
 
 $root = git rev-parse --show-toplevel
 $buildRoot = "$root/build"
@@ -28,6 +31,6 @@ foreach ($container in $ccfContainers) {
     $index++
     if ($null -eq $containers -or $containers.Contains($container)) {
         Write-Host -ForegroundColor DarkGreen "Building $container security policy ($index/$($ccfContainers.Count))"
-        pwsh $buildroot/build-$container-security-policy.ps1 -tag $tag -repo $repo -push:$push
+        pwsh $buildroot/ccf/build-$container-security-policy.ps1 -tag $tag -repo $repo -push:$push
     }
 }

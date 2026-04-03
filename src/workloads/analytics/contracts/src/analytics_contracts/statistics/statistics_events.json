@@ -1,0 +1,10 @@
+{
+    "QUERY_STATISTICS": {
+        "id": 2001,
+        "properties": {
+            "duration_sec": "float",
+            "num_rows_read": "integer",
+            "num_rows_written": "integer"
+        }
+    }
+}

@@ -196,6 +196,29 @@ public class ContractsController : Controller
         return this.View(item);
     }
 
+    [Route("Contracts/{id}/DelegatePolicies")]
+    public async Task<IActionResult> DelegatePoliciesDetail(string id)
+    {
+        using var client = new HttpClient();
+        var items = (await client.GetFromJsonAsync<ListDelegatePoliciesViewModel>(
+            $"{this.configuration.GetEndpoint()}/contracts/{id}/cleanroompolicy/delegates"))!;
+        items.ContractId = id;
+        return this.View(items);
+    }
+
+    [Route("Contracts/{id}/DelegatePolicies/{delegateType}/{delegateId}")]
+    public async Task<IActionResult> DelegatePolicyDetail(
+        string id,
+        string delegateType,
+        string delegateId)
+    {
+        using var client = new HttpClient();
+        var items = await client.GetFromJsonAsync<DelegatePolicyViewModel>(
+            $"{this.configuration.GetEndpoint()}/contracts/{id}/cleanroompolicy/" +
+            $"delegates/{delegateType}/{delegateId}")!;
+        return this.View(items);
+    }
+
     [Route("Contracts/{id}/Secrets")]
     public async Task<IActionResult> SecretsDetail(string id)
     {

@@ -40,18 +40,6 @@ runs:
 
     - uses: ./.github/actions/release-container
       with:
-        name: ccr-attestation
-        tag: ${{ inputs.tag }}
-        environment: ${{ inputs.environment }}
-        artefact-name: ccr-attestation
-        registry-name: ${{ inputs.registry-name }}
-        client-id: ${{ inputs.client-id }}
-        tenant-id: ${{ inputs.tenant-id }}
-        subscription-id: ${{ inputs.subscription-id}}
-        needs-attestation: ${{ inputs.needs-attestation }}
-
-    - uses: ./.github/actions/release-container
-      with:
         name: ccf/ccf-recovery-service
         tag: ${{ inputs.tag }}
         environment: ${{ inputs.environment }}

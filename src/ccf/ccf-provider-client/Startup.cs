@@ -17,6 +17,8 @@ internal class Startup : ApiStartup
     {
     }
 
+    public override bool EnableOpenTelemetry => false;
+
     public override void OnConfigureServices(IServiceCollection services)
     {
         services.AddSingleton<CcfClientManager>();

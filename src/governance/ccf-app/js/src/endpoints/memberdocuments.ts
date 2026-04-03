@@ -1,6 +1,6 @@
 import * as ccfapp from "@microsoft/ccf-app";
 import { RsaOaepAesKwpParams, ccf } from "@microsoft/ccf-app/global";
-import { ErrorResponse } from "../models/errorresponse";
+import { ErrorResponse } from "../utils/ErrorResponse";
 import {
   DocumentStoreItem,
   PutMemberDocumentRequest,
@@ -14,11 +14,8 @@ import {
   GetAcceptedMemberDocumentRequest,
   GetAcceptedMemberDocumentResponse
 } from "../models";
-import {
-  SnpAttestationResult,
-  verifySnpAttestation
-} from "../attestation/snpattestation";
-import { validateCallerAuthorized, verifyReportData } from "../utils/utils";
+import { validateCallerAuthorized } from "../utils/utils";
+import { verifyAttestationAndReportData } from "../attestation/attestationVerifierFactory";
 import { Base64 } from "js-base64";
 
 const documentsStore = ccfapp.typedKv(
@@ -297,28 +294,17 @@ export function getAcceptedMemberDocument(
     };
   }
 
-  // Validate attestation report.
+  // Validate attestation report and report data.
   const contractId = request.params.contractId;
-  let snpAttestationResult: SnpAttestationResult;
-  try {
-    snpAttestationResult = verifySnpAttestation(
-      contractId,
-      requestBody.attestation
-    );
-  } catch (e) {
+  const { error } = verifyAttestationAndReportData(
+    contractId,
+    requestBody,
+    () => Base64.decode(requestBody.encrypt.publicKey)
+  );
+  if (error) {
     return {
       statusCode: 400,
-      body: new ErrorResponse("VerifySnpAttestationFailed", e.message)
-    };
-  }
-
-  // Then validate the report data value.
-  try {
-    verifyReportData(snpAttestationResult, requestBody.encrypt.publicKey);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("ReportDataMismatch", e.message)
+      body: error
     };
   }
 

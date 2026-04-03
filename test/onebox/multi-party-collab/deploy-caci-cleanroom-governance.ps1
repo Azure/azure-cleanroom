@@ -44,11 +44,6 @@ $root = git rev-parse --show-toplevel
 $outDir = "$outDir/ccf"
 mkdir -p $outDir
 
-function Get-UniqueString ([string]$id, $length = 13) {
-    $hashArray = (new-object System.Security.Cryptography.SHA512Managed).ComputeHash($id.ToCharArray())
-    -join ($hashArray[1..$length] | ForEach-Object { [char]($_ % 26 + [byte][char]'a') })
-}
-
 $ISV_RESOURCE_GROUP = $resourceGroup
 $CCF_NAME = $ccfName
 

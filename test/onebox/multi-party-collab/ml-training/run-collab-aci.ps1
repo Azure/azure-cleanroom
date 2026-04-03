@@ -19,7 +19,6 @@ param
     $allowAll
 )
 
-$registryArg
 if ($repo -eq "" -and $registry -eq "acr") {
     throw "-repo must be specified for acr option."
 }

@@ -1,21 +1,177 @@
 ﻿@model WorkspaceConfigurationViewModel
+@{
+    ViewData["Title"] = "Configure Workspace";
+}
 
-<form asp-action="Configure" enctype="multipart/form-data">
-    <div class="mb-3">
-        <label for="ccfEndpoint" class="form-label">CcfEndpoint</label>
-        <input type="text" class="form-control" id="CcfEndpoint" required="true" asp-for="CcfEndpoint">
+<div class="content-wrapper">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 text-gradient mb-1">
+                <i class="fas fa-cogs me-2"></i>Configure Workspace
+            </h1>
+            <p class="text-muted mb-0">Set up your CGS client configuration and certificates</p>
+        </div>
+        <div>
+            <a href="/Settings" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Settings
+            </a>
+        </div>
     </div>
-    <div class="mb-3">
-        <label for="formFile" class="form-label">Signing Cert PEM File</label>
-        <input class="form-control" type="file" id="SigningCertPemFile" required="true" asp-for="SigningCertPemFile">
+
+    <!-- Configuration Form -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-server me-2"></i>Client Configuration
+            </h5>
+        </div>
+        <div class="card-body">
+            <form asp-action="Configure" enctype="multipart/form-data" id="configureForm">
+
+                <!-- CCF Endpoint -->
+                <div class="mb-4">
+                    <label for="CcfEndpoint" class="form-label fw-semibold">
+                        <i class="fas fa-globe me-1"></i>CCF Endpoint
+                    </label>
+                    <input type="text" class="form-control" id="CcfEndpoint" required="true" asp-for="CcfEndpoint"
+                        placeholder="https://your-ccf-endpoint.com">
+                    <div class="form-text">
+                        <i class="fas fa-info-circle me-1"></i>
+                        The URL endpoint for your Confidential Consortium Framework instance
+                    </div>
+                </div>
+
+                <!-- Certificate Files Section -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-4">
+                            <label for="SigningCertPemFile" class="form-label fw-semibold">
+                                <i class="fas fa-certificate me-1"></i>Signing Certificate
+                                <span class="text-danger">*</span>
+                            </label>
+                            <input class="form-control" type="file" id="SigningCertPemFile" required="true"
+                                asp-for="SigningCertPemFile" accept=".pem,.crt">
+                            <div class="form-text">
+                                <i class="fas fa-file-alt me-1"></i>
+                                PEM format signing certificate file
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="mb-4">
+                            <label for="SigningKeyPemFile" class="form-label fw-semibold">
+                                <i class="fas fa-key me-1"></i>Signing Private Key
+                                <span class="text-danger">*</span>
+                            </label>
+                            <input class="form-control" type="file" id="SigningKeyPemFile" required="true"
+                                asp-for="SigningKeyPemFile" accept=".pem,.key">
+                            <div class="form-text">
+                                <i class="fas fa-lock me-1"></i>
+                                PEM format private key file (keep secure!)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="ServiceCertPemFile" class="form-label fw-semibold">
+                        <i class="fas fa-shield-alt me-1"></i>Service Certificate
+                        <span class="text-muted">(Optional)</span>
+                    </label>
+                    <input class="form-control" type="file" id="ServiceCertPemFile" asp-for="ServiceCertPemFile"
+                        accept=".pem,.crt">
+                    <div class="form-text">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Optional service certificate for additional authentication
+                    </div>
+                </div>
+
+                <!-- Security Notice -->
+                <div class="alert alert-warning">
+                    <div class="d-flex">
+                        <i class="fas fa-exclamation-triangle me-3 mt-1"></i>
+                        <div>
+                            <strong>Security Notice:</strong>
+                            <p class="mb-0">Your private key and certificates will be securely stored and encrypted.
+                                Never share your private key files with unauthorized parties.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="d-flex justify-content-end gap-2">
+                    <a href="/Settings" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i>Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <i class="fas fa-save me-1"></i>Save Configuration
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
-    <div class="mb-3">
-        <label for="formFile" class="form-label">Signing Private Key PEM File</label>
-        <input class="form-control" type="file" id="SigningKeyPemFile" required="true" asp-for="SigningKeyPemFile">
+
+    <!-- Configuration Help -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-question-circle me-2"></i>Configuration Help
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="fw-semibold">
+                        <i class="fas fa-globe me-1"></i>CCF Endpoint
+                    </h6>
+                    <p class="text-muted small">
+                        This should be the full HTTPS URL to your CCF network endpoint.
+                        Contact your network administrator if you're unsure about this value.
+                    </p>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-semibold">
+                        <i class="fas fa-certificate me-1"></i>Certificates
+                    </h6>
+                    <p class="text-muted small">
+                        Upload your PEM-formatted certificate and private key files.
+                        These are used to authenticate your client with the CCF network.
+                    </p>
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="mb-3">
-        <label for="formFile" class="form-label">Service Cert PEM File</label>
-        <input class="form-control" type="file" id="ServiceCertPemFile" asp-for="ServiceCertPemFile">
-    </div>
-    <button type="submit" class="btn btn-primary">Submit</button>
-</form>
+</div>
+
+<script>
+    document.getElementById('configureForm').addEventListener('submit', function (e) {
+        const submitBtn = document.getElementById('submitBtn');
+        const icon = submitBtn.querySelector('i');
+
+        // Show loading state
+        icon.classList.remove('fa-save');
+        icon.classList.add('fa-spinner', 'fa-spin');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
+    });
+
+    // File input validation
+    document.querySelectorAll('input[type="file"]').forEach(input => {
+        input.addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                const fileSize = (file.size / 1024 / 1024).toFixed(2); // MB
+                const formText = this.parentElement.querySelector('.form-text');
+
+                if (fileSize > 5) {
+                    formText.innerHTML = '<i class="fas fa-exclamation-triangle text-warning me-1"></i>File size is ' + fileSize + 'MB. Large files may take longer to upload.';
+                } else {
+                    formText.innerHTML = formText.innerHTML.replace(/File size.*/, '') +
+                        ' <span class="text-success">(' + fileSize + 'MB selected)</span>';
+                }
+            }
+        });
+    });
+</script>

@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 
-def run_test_file(test_file, python_cmd):
+def run_test_file(test_file, python_cmd="python3"):
     """Run a specific test file"""
     print(f"🧪 Running {test_file}...")
     try:
@@ -57,29 +57,21 @@ def main():
     print("Azure Cleanroom CLI Extension - Test Runner")
     print("=" * 50)
 
-    # Find Python executable
-    venv_python = (
-        Path(__file__).parent.parent.parent.parent.parent.parent
-        / ".venv"
-        / "bin"
-        / "python"
-    )
-    if venv_python.exists():
-        python_cmd = str(venv_python)
-    else:
-        python_cmd = "python3"
-
-    print(f"Using Python: {python_cmd}")
-    print()
-
     # Find all test files
-    test_files = ["test_datastore.py", "test_secretstore.py", "test_errorcode.py"]
+    test_files = [
+        "test_datastore.py",
+        "test_secretstore.py",
+        "test_errorcode.py",
+        "test_collaboration.py",
+        "test_identity_manager.py",
+        "test_querysegment.py",
+    ]
 
     passed = 0
     total = len(test_files)
 
     for test_file in test_files:
-        if run_test_file(test_file, python_cmd):
+        if run_test_file(test_file):
             passed += 1
         print()
 

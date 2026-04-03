@@ -5,7 +5,7 @@ param(
   [string]$tag = "latest",
 
   [parameter(Mandatory = $false)]
-  [string]$repo = "docker.io",
+  [string]$repo = "localhost:5000",
 
   [parameter(Mandatory = $false)]
   [switch]$push

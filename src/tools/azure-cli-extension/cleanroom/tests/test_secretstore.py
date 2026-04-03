@@ -236,16 +236,14 @@ def test_secretstore_environment_variables():
 
         # Create test secretstore config with content
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write(
-                """
+            f.write("""
 secretstores:
   - name: "env-test-secretstore"
     secretStoreType: "Local_File"
     storeProviderUrl: "/tmp/env-secrets"
     configuration: "env-config"
     supportedSecretTypes: ["Secret"]
-"""
-            )
+""")
             env_secretstore_file = f.name
 
         try:

@@ -1,19 +1,18 @@
 import * as ccfapp from "@microsoft/ccf-app";
 import { ccf } from "@microsoft/ccf-app/global";
-import {
-  SnpAttestationResult,
-  verifySnpAttestation
-} from "../attestation/snpattestation";
-import { ErrorResponse } from "../models/errorresponse";
+import { ErrorResponse } from "../utils/ErrorResponse";
 import {
   b64ToBuf,
   parseRequestQuery,
+  toDelegatePolicyKey,
   validateCallerAuthorized,
-  verifyReportData,
   verifySignature
 } from "../utils/utils";
 import { Event, GetEventsResponse, PutEventRequest } from "../models";
-import { EventStoreItem } from "../models/kvstoremodels";
+import { EventStoreItem } from "../models";
+import { Base64 } from "js-base64";
+import { verifyJwtClaims } from "../attestation/jwtclaims";
+import { verifyAttestationAndReportData } from "../attestation/attestationVerifierFactory";
 
 // Code adapted from https://raw.githubusercontent.com/microsoft/ccf-app-samples/main/auditable-logging-app/src/endpoints/log.ts
 
@@ -33,7 +32,7 @@ function getEventsMapName(contractId: string, scope: string): string {
   return "public:events-" + contractId + "-" + scope;
 }
 
-export function getEvent(
+export function listEvents(
   request: ccfapp.Request
 ): ccfapp.Response<GetEventsResponse> | ccfapp.Response<ErrorResponse> {
   const error = validateCallerAuthorized(request);
@@ -181,7 +180,7 @@ export function getEvent(
         id: id,
         seqno: parseInt(state.transactionId.split(".")[1]),
         timestamp: item.timestamp,
-        timestamp_iso: new Date(Number(item.timestamp)).toISOString(),
+        timestampIso: new Date(Number(item.timestamp)).toISOString(),
         data: item.data
       });
     }
@@ -234,14 +233,16 @@ export function putEvent(
   request: ccfapp.Request<PutEventRequest>
 ): ccfapp.Response {
   const body = request.body.json();
-  if (!body.attestation) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse(
-        "AttestationMissing",
-        "Attestation payload must be supplied."
-      )
-    };
+  if (request.caller.policy == "no_auth") {
+    if (!body.attestation) {
+      return {
+        statusCode: 400,
+        body: new ErrorResponse(
+          "AttestationMissing",
+          "Attestation payload must be supplied."
+        )
+      };
+    }
   }
 
   if (!body.sign) {
@@ -283,29 +284,47 @@ export function putEvent(
     };
   }
 
-  // First validate attestation report.
   const contractId = request.params.contractId;
-  let snpAttestationResult: SnpAttestationResult;
-  try {
-    snpAttestationResult = verifySnpAttestation(contractId, body.attestation);
-  } catch (e) {
+  const delegatePolicyKey = toEventsPolicyKey(contractId);
+
+  if (request.caller.policy == "no_auth") {
+    // Validate attestation report and report data.
+    const { error } = verifyAttestationAndReportData(
+      contractId,
+      body,
+      () => Base64.decode(body.sign.publicKey),
+      [delegatePolicyKey]
+    );
+    if (error) {
+      return {
+        statusCode: 400,
+        body: error
+      };
+    }
+
+    // Attestation report and report data values are verified.
+  } else if (request.caller.policy == "jwt") {
+    try {
+      verifyJwtClaims(contractId, request.caller.jwt.payload, [
+        delegatePolicyKey
+      ]);
+    } catch (e) {
+      return {
+        statusCode: 400,
+        body: new ErrorResponse("VerifyJwtAttestationFailed", e.message)
+      };
+    }
+  } else {
     return {
       statusCode: 400,
-      body: new ErrorResponse("VerifySnpAttestationFailed", e.message)
+      body: new ErrorResponse(
+        "UnsupportedAuthPolicy",
+        `Auth policy type ${request.caller.policy} is not supported.`
+      )
     };
   }
 
-  //  Then validate the report data value.
-  try {
-    verifyReportData(snpAttestationResult, body.sign.publicKey);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("ReportDataMismatch", e.message)
-    };
-  }
-
-  // Attestation report and report data values are verified. Now check the signature.
+  // Now check the signature.
   const data: ArrayBuffer = b64ToBuf(body.data);
   try {
     verifySignature(body.sign, data);
@@ -332,4 +351,8 @@ export function putEvent(
   return {
     statusCode: 204
   };
+}
+
+function toEventsPolicyKey(contractId: string): string {
+  return toDelegatePolicyKey(contractId, "events", "writer");
 }

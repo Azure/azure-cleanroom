@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36705.20
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "mock-server", "mock-server.csproj", "{D00A57F7-AE14-646E-C193-FC673FC7FE10}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "restapi-common", "..\..\..\..\src\internal\restapi-common\restapi-common.csproj", "{2370CD9C-C343-4C3E-8078-595B084FAE58}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D00A57F7-AE14-646E-C193-FC673FC7FE10}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D00A57F7-AE14-646E-C193-FC673FC7FE10}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D00A57F7-AE14-646E-C193-FC673FC7FE10}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D00A57F7-AE14-646E-C193-FC673FC7FE10}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2370CD9C-C343-4C3E-8078-595B084FAE58}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2370CD9C-C343-4C3E-8078-595B084FAE58}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2370CD9C-C343-4C3E-8078-595B084FAE58}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2370CD9C-C343-4C3E-8078-595B084FAE58}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {DBD6026E-E383-497F-A99B-7C8CA609E7EA}
+	EndGlobalSection
+EndGlobal

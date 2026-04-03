@@ -3,8 +3,7 @@
   "properties": {
     "image": "$containerRegistryUrl/s3fs-launcher@$digest",
     "command": [
-      "python3.10",
-      "./s3fs-launcher.py",
+      "s3fs_launcher",
       "$readOnly",
       "--mount-path",
       "$mountPath/$datasetName"

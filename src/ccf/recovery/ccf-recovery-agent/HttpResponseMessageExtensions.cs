@@ -51,7 +51,7 @@ internal static class HttpResponseMessageExtensions
         string? transactionId = null;
         if (response.Headers.TryGetValues(TransactionIdHeader, out var values))
         {
-            transactionId = values!.First();
+            transactionId = values.First();
         }
 
         return transactionId;
