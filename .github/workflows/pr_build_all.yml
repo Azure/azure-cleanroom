@@ -559,7 +559,7 @@ jobs:
         container: [frontend-service]
       # Prevent Github from cancelling other jobs of the matrix if one of them fails.
       fail-fast: false
-    needs: [build-frontend-service-containers, build-shared-containers, build-cgs-containers, build-ccr-proxy-containers, build-ccr-governance-containers, build-ccr-skr-containers, build-ccf-containers]
+    needs: [build-frontend-service-containers, build-shared-containers, build-cgs-containers, build-ccr-containers, build-ccf-containers]
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
