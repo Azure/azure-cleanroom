@@ -19,7 +19,7 @@ param (
 if ($environment -eq "pr") {
     $mhsms = @(
         "prcovidtrainingmhsm4",
-        "azcleanroomemuhsm2"
+        "azcleanroompublichsm"
     )
 }
 else {

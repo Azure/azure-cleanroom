@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param
 (
-    [string]$resourceGroup = "azcleanroom-emu-pr-rg",
+    [string]$resourceGroup = "azcleanroom-public-pr-rg",
 
     [string]$subscriptionName = "AzureCleanRoom-NonProd",
 
