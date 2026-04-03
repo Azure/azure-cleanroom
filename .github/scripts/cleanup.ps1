@@ -25,7 +25,7 @@ if ($environment -eq "pr") {
 else {
     $mhsms = @(
         "bvthsm2sea",
-        "azcleanroomemubvthsm"
+        "azcleanroombvthsm2"
     )
 }
 

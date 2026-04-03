@@ -33,7 +33,7 @@ jobs:
 
   # Virtual infrastructure tests
   test-big-data-analytics-virtual:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=test-big-data-analytics-virtual-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=test-big-data-analytics-virtual-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -88,7 +88,7 @@ jobs:
         run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}"
 
   test-kserve-inferencing-virtual:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=test-kserve-inferencing-virtual-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=test-kserve-inferencing-virtual-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -138,7 +138,7 @@ jobs:
   # AKS infrastructure tests
   setup-env-aks:
     needs: [pick-location]
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=setup-env-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=setup-env-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -174,7 +174,7 @@ jobs:
 
   test-big-data-analytics-aks:
     needs: [pick-location, setup-env-aks]
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=test-big-data-analytics-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=test-big-data-analytics-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -227,7 +227,7 @@ jobs:
 
   test-kserve-inferencing-aks:
     needs: [pick-location, setup-env-aks]
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=test-kserve-inferencing-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=test-kserve-inferencing-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -274,7 +274,7 @@ jobs:
 
   cleanup-aks:
     needs: [test-big-data-analytics-aks, test-kserve-inferencing-aks]
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=cleanup-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=cleanup-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}

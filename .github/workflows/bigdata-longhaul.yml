@@ -33,7 +33,7 @@ jobs:
     uses: ./.github/workflows/pr_build_all.yml
 
   longhaul-test:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
     needs: [build]
     environment: pr
     env:

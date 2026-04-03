@@ -24,7 +24,7 @@ permissions:
 jobs:
   build-shared-containers:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-shared-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-shared-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-shared-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -66,7 +66,7 @@ jobs:
 
   build-ccf-containers:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-ccf-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-ccf-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-ccf-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -108,7 +108,7 @@ jobs:
 
   build-cgs-containers:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-cgs-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-cgs-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-cgs-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -150,7 +150,7 @@ jobs:
 
   build-ccr-containers:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-ccr-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-ccr-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-ccr-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -192,7 +192,7 @@ jobs:
 
   build-ccf-container-policies:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-ccf-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-ccf-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-ccf-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -240,7 +240,7 @@ jobs:
 
   build-ccr-container-policies:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-ccr-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-ccr-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-ccr-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     needs: [build-ccr-containers, build-shared-containers]
     env:
@@ -289,7 +289,7 @@ jobs:
 
   build-cleanroom-cluster-containers:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-cleanroom-cluster-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-cleanroom-cluster-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-cleanroom-cluster-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -327,7 +327,7 @@ jobs:
 
   build-analytics-workload-containers:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-analytics-workload-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-analytics-workload-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-analytics-workload-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -369,7 +369,7 @@ jobs:
 
   build-analytics-workload-container-policies:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-analytics-workload-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-analytics-workload-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-analytics-workload-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -417,7 +417,7 @@ jobs:
 
   build-kserve-inferencing-workload-containers:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-kserve-inferencing-workload-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-kserve-inferencing-workload-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-kserve-inferencing-workload-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -459,7 +459,7 @@ jobs:
 
   build-kserve-inferencing-workload-container-policies:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-kserve-inferencing-workload-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-kserve-inferencing-workload-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-kserve-inferencing-workload-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -507,7 +507,7 @@ jobs:
 
   build-frontend-service-containers:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-frontend-service-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-frontend-service-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-frontend-service-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -552,7 +552,7 @@ jobs:
 
   build-frontend-service-container-policies:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-frontend-service-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-frontend-service-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-frontend-service-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -600,7 +600,7 @@ jobs:
 
   build-azcliext-cleanroom:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-azcliext-cleanroom') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-azcliext-cleanroom-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-azcliext-cleanroom-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
