@@ -26,4 +26,22 @@ public class NetworksController : ClientControllerBase
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
         return jsonResponse!;
     }
+
+    [HttpGet("/node/ready/app")]
+    public async Task<IActionResult> AppReady()
+    {
+        var ccfClient = await this.CcfClientManager.GetGovClient();
+        using HttpResponseMessage response = await ccfClient.GetAsync("node/ready/app");
+        await response.ValidateStatusCodeAsync(this.Logger);
+        return this.StatusCode((int)response.StatusCode);
+    }
+
+    [HttpGet("/node/ready/gov")]
+    public async Task<IActionResult> GovReady()
+    {
+        var ccfClient = await this.CcfClientManager.GetGovClient();
+        using HttpResponseMessage response = await ccfClient.GetAsync("node/ready/gov");
+        await response.ValidateStatusCodeAsync(this.Logger);
+        return this.StatusCode((int)response.StatusCode);
+    }
 }

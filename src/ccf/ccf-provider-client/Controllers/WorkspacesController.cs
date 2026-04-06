@@ -7,6 +7,7 @@ using Azure.Identity;
 using CcfProvider;
 using CoseUtils;
 using Microsoft.AspNetCore.Mvc;
+using TokenCredentials;
 
 namespace Controllers;
 
@@ -86,7 +87,7 @@ public class WorkspacesController : ControllerBase
                 return this.BadRequest($"Invalid signingKid value: {e.Message}.");
             }
 
-            var creds = new DefaultAzureCredential();
+            var creds = TokenCredentialFactory.GetAzureCredential();
             coseSignKey = await CoseSignKey.FromKeyVault(signingCertId, creds);
         }
 

@@ -4,6 +4,21 @@ nodes:
   - role: control-plane
   - role: worker
   - role: worker
+  - role: worker
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          taints:
+            - key: "for-flex-node"
+              value: "true"
+              effect: "NoSchedule"
+  - role: worker
+    labels:
+      apps: llama-3point1-8b-instruct
+    extraMounts:
+      - hostPath: <HOST_SHARED_DIR>
+        containerPath: /shared
 kubeadmConfigPatches:
   - |
     kind: InitConfiguration

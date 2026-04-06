@@ -1,0 +1,146 @@
+﻿@model DelegatePolicyViewModel
+@{
+    ViewData["Title"] = "Delegate Policy Details";
+}
+
+<div class="content-wrapper">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 text-gradient mb-1">
+                <i class="fas fa-shield-alt me-2"></i>Policy Details
+            </h1>
+            <p class="text-muted mb-0">View governance policy configuration</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshPolicy()">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+            <a href="/Contracts" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Contracts
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Policy Content Card -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-file-code me-2"></i>Policy Configuration
+                    </h5>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="formatPolicy()"
+                            title="Format policy content">
+                            <i class="fas fa-magic me-1"></i>Format
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copyPolicy()"
+                            title="Copy policy to clipboard">
+                            <i class="fas fa-copy me-1"></i>Copy
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(Model.Claims?.ToString()))
+                    {
+                        <div class="policy-container">
+                            <pre class="bg-light p-3 rounded border" id="policyContent"
+                                style="max-height: 600px; overflow-y: auto; white-space: pre-wrap;"><code>@Model.Claims.ToString()</code></pre>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center py-5">
+                            <i class="fas fa-exclamation-triangle fa-2x text-warning mb-3"></i>
+                            <h5 class="text-muted">No Policy Data</h5>
+                            <p class="text-muted mb-0">No policy configuration is currently available.</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Initialize page
+        });
+
+        function copyPolicy() {
+            const contentElement = document.getElementById('policyContent');
+            const copyButton = document.querySelector('[onclick="copyPolicy()"]');
+            const originalText = copyButton.innerHTML;
+
+            if (contentElement) {
+                const textContent = contentElement.textContent || contentElement.innerText || '';
+
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(textContent).then(() => {
+                        copyButton.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+                        copyButton.classList.remove('btn-outline-secondary');
+                        copyButton.classList.add('btn-success');
+
+                        setTimeout(() => {
+                            copyButton.innerHTML = originalText;
+                            copyButton.classList.remove('btn-success');
+                            copyButton.classList.add('btn-outline-secondary');
+                        }, 2000);
+                    });
+                }
+            }
+        }
+
+        function formatPolicy() {
+            const contentElement = document.getElementById('policyContent');
+            const formatButton = document.querySelector('[onclick="formatPolicy()"]');
+            const originalText = formatButton.innerHTML;
+
+            if (contentElement) {
+                try {
+                    const content = contentElement.textContent || contentElement.innerText || '';
+
+                    // Try to parse and format as JSON
+                    const parsed = JSON.parse(content);
+                    const formatted = JSON.stringify(parsed, null, 2);
+                    contentElement.innerHTML = '<code>' + formatted + '</code>';
+
+                    formatButton.innerHTML = '<i class="fas fa-check me-1"></i>Formatted!';
+                    formatButton.classList.remove('btn-outline-secondary');
+                    formatButton.classList.add('btn-success');
+
+                    setTimeout(() => {
+                        formatButton.innerHTML = originalText;
+                        formatButton.classList.remove('btn-success');
+                        formatButton.classList.add('btn-outline-secondary');
+                    }, 2000);
+
+                } catch (e) {
+                    // Not JSON, just show as-is
+                    formatButton.innerHTML = '<i class="fas fa-exclamation me-1"></i>Not JSON';
+                    formatButton.classList.remove('btn-outline-secondary');
+                    formatButton.classList.add('btn-warning');
+
+                    setTimeout(() => {
+                        formatButton.innerHTML = originalText;
+                        formatButton.classList.remove('btn-warning');
+                        formatButton.classList.add('btn-outline-secondary');
+                    }, 2000);
+                }
+            }
+        }
+
+        function refreshPolicy() {
+            const refreshBtn = document.querySelector('[onclick="refreshPolicy()"]');
+            const icon = refreshBtn.querySelector('i');
+
+            icon.classList.add('fa-spin');
+            refreshBtn.disabled = true;
+
+            setTimeout(() => {
+                icon.classList.remove('fa-spin');
+                refreshBtn.disabled = false;
+                location.reload();
+            }, 1000);
+        }
+    </script>

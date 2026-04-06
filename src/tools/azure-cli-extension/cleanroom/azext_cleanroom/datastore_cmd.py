@@ -19,6 +19,9 @@ def datastore_add_cmd(
     datastore_secret_store="",
     backingstore_id="",
     aws_config_cgs_secret_id: str = "",
+    schema_file: str = "",
+    schema_format: str = "",
+    schema_fields: str = "",
     datastore_config_file=DataStoreConfiguration.default_datastore_config_file(),
     secretstore_config_file: str = "",
     container_name="",
@@ -44,7 +47,11 @@ def datastore_add_cmd(
                 f"Datastore secret store must be specified for encryption mode '{encryption_mode}'."
             )
     from .utilities._azcli_helpers import az_cli, logger
-    from .utilities._datastore_helpers import DataStoreConfiguration
+    from .utilities._datastore_helpers import (
+        DataStoreConfiguration,
+        generate_schema_from_fields,
+        load_schema_from_file,
+    )
     from .utilities._secretstore_helpers import SecretStoreConfiguration
 
     container_name = container_name or datastore_name
@@ -61,10 +68,11 @@ def datastore_add_cmd(
         )
         return
 
-    if (
-        backingstore_type == DataStoreEntry.StoreType.Azure_BlobStorage
-        or backingstore_type == DataStoreEntry.StoreType.Azure_OneLake
-    ):
+    if backingstore_type in [
+        DataStoreEntry.StoreType.Azure_BlobStorage,
+        DataStoreEntry.StoreType.Azure_OneLake,
+        DataStoreEntry.StoreType.Azure_BlobStorage_DataLakeGen2,
+    ]:
         if encryption_mode in [
             DataStoreEntry.EncryptionMode.CSE,
             DataStoreEntry.EncryptionMode.SSE_CPK,
@@ -90,7 +98,10 @@ def datastore_add_cmd(
 
             _ = secret_store.add_secret(datastore_name, generate_secret=generate_key)
 
-    if backingstore_type == DataStoreEntry.StoreType.Azure_BlobStorage:
+    if (
+        backingstore_type == DataStoreEntry.StoreType.Azure_BlobStorage
+        or backingstore_type == DataStoreEntry.StoreType.Azure_BlobStorage_DataLakeGen2
+    ):
         assert backingstore_id != "", "backingstore_id is required."
         storage_account_name = az_cli(
             f"storage account show --ids {backingstore_id} --query name"
@@ -121,6 +132,19 @@ def datastore_add_cmd(
         storeProviderConfig = base64.b64encode(
             json.dumps({"secretId": aws_config_cgs_secret_id}).encode()
         ).decode()
+    else:
+        raise CLIError(
+            f"Unsupported backing store type {backingstore_type}. Supported types are Azure_BlobStorage, Azure_BlobStorage_DataLakeGen2 and Azure_OneLake."
+        )
+
+    assert storeProviderUrl is not None, "Store provider URL cannot be None."
+
+    # Attach a schema to the datastore (if provided).
+    schema = None
+    if schema_file != "":
+        schema = load_schema_from_file(schema_file)
+    elif schema_format != "":
+        schema = generate_schema_from_fields(schema_format, schema_fields.split(","))
 
     datastore_entry = DataStoreEntry(
         name=datastore_name,
@@ -131,6 +155,7 @@ def datastore_add_cmd(
         storeProviderUrl=storeProviderUrl,
         storeProviderConfiguration=storeProviderConfig,
         storeName=storeName,
+        datasetSchema=schema,
     )
     datastore_config.add_datastore_entry(datastore_entry)
 
@@ -147,7 +172,6 @@ def datastore_upload_cmd(
     import os
 
     from .utilities._datastore_helpers import azcopy
-    from .utilities._secretstore_helpers import SecretStoreConfiguration
 
     datastore = DataStoreConfiguration.get_datastore(
         datastore_name, datastore_config_file
@@ -157,7 +181,10 @@ def datastore_upload_cmd(
     container_url = datastore.storeProviderUrl + datastore.storeName
     source_path = source_path + f"{os.path.sep}*"
 
-    if datastore.storeType == DataStoreEntry.StoreType.Azure_BlobStorage:
+    if datastore.storeType in [
+        DataStoreEntry.StoreType.Azure_BlobStorage,
+        DataStoreEntry.StoreType.Azure_BlobStorage_DataLakeGen2,
+    ]:
         use_cpk = (
             True
             if datastore.encryptionMode == DataStoreEntry.EncryptionMode.SSE_CPK
@@ -184,7 +211,6 @@ def datastore_download_cmd(
 
     from .utilities._azcli_helpers import az_cli, logger
     from .utilities._datastore_helpers import azcopy
-    from .utilities._secretstore_helpers import SecretStoreConfiguration
 
     datastore = DataStoreConfiguration.get_datastore(
         datastore_name, datastore_config_file
@@ -197,8 +223,9 @@ def datastore_download_cmd(
 
     assert datastore.storeType in [
         DataStoreEntry.StoreType.Azure_BlobStorage,
+        DataStoreEntry.StoreType.Azure_BlobStorage_DataLakeGen2,
         DataStoreEntry.StoreType.Azure_OneLake,
-    ], f"Download is only supported for Azure Blob or Azure Onelake Storage datastores. Datastore '{datastore_name}' has type '{datastore.storeType}'."
+    ], f"Download is only supported for Azure Blob, Azure Blob Storage DataLakeGen2, or Azure Onelake Storage datastores. Datastore '{datastore_name}' has type '{datastore.storeType}'."
 
     use_cpk = (
         True
@@ -218,7 +245,10 @@ def datastore_download_cmd(
         azcopy(container_url, datastore_path, use_cpk, encryption_key)
         return
 
-    assert datastore.storeType == DataStoreEntry.StoreType.Azure_BlobStorage
+    assert datastore.storeType in [
+        DataStoreEntry.StoreType.Azure_BlobStorage,
+        DataStoreEntry.StoreType.Azure_BlobStorage_DataLakeGen2,
+    ]
 
     # Find the folders to download as the container may also contain marker files to indicate directories.
     # Downloading these marker files results in errors as the file system tries to create a file
@@ -230,7 +260,7 @@ def datastore_download_cmd(
     result = az_cli(
         f"storage blob list --container-name {datastore.storeName} "
         f"--account-name {storage_account_name} "
-        f"--auth-mode login --delimiter '/' --output json"
+        f"--auth-mode login --delimiter / --output json"
     )
 
     if len(result) > 0:

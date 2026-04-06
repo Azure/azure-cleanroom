@@ -8,7 +8,6 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Azure;
 using Azure.Core;
-using Azure.Identity;
 using Azure.ResourceManager;
 using Azure.ResourceManager.ContainerInstance;
 using Azure.ResourceManager.ContainerInstance.Models;
@@ -17,6 +16,7 @@ using CcfCommon;
 using CcfProvider;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using TokenCredentials;
 
 namespace CAciCcfProvider;
 
@@ -500,7 +500,7 @@ public class CAciNodeProvider : ICcfNodeProvider
     {
         this.ValidateDeleteInput(providerConfig);
 
-        var client = new ArmClient(new DefaultAzureCredential());
+        var client = new ArmClient(TokenCredentialFactory.GetTenantCredential(providerConfig));
         string subscriptionId = providerConfig!["subscriptionId"]!.ToString();
         string resourceGroupName = providerConfig["resourceGroupName"]!.ToString();
         ResourceIdentifier resourceGroupResourceId =
@@ -783,7 +783,7 @@ public class CAciNodeProvider : ICcfNodeProvider
         string type,
         JsonObject? providerConfig)
     {
-        var client = new ArmClient(new DefaultAzureCredential());
+        var client = new ArmClient(TokenCredentialFactory.GetTenantCredential(providerConfig));
         string subscriptionId = providerConfig!["subscriptionId"]!.ToString();
         string resourceGroupName = providerConfig["resourceGroupName"]!.ToString();
         ResourceIdentifier resourceGroupResourceId =
@@ -812,7 +812,7 @@ public class CAciNodeProvider : ICcfNodeProvider
         ContainerGroupData data,
         JsonObject? providerConfig)
     {
-        var client = new ArmClient(new DefaultAzureCredential());
+        var client = new ArmClient(TokenCredentialFactory.GetTenantCredential(providerConfig));
         string subscriptionId = providerConfig!["subscriptionId"]!.ToString();
         string resourceGroupName = providerConfig["resourceGroupName"]!.ToString();
         ResourceIdentifier resourceGroupResourceId =
@@ -862,12 +862,17 @@ public class CAciNodeProvider : ICcfNodeProvider
                         $"{ImageUtils.CcfRunJsAppSnpImage()}:{ImageUtils.CcfRunJsAppSnpTag()}"
                     },
                     {
-                        AciConstants.ContainerName.CcrAttestation,
-                        $"{ImageUtils.CcrAttestationImage()}:{ImageUtils.CcrAttestationTag()}"
+                        AciConstants.ContainerName.Skr,
+                        $"{ImageUtils.SkrImage()}:{ImageUtils.SkrTag()}"
                     },
                     {
                         AciConstants.ContainerName.CcfRecoveryAgent,
                         $"{ImageUtils.CcfRecoveryAgentImage()}:{ImageUtils.CcfRecoveryAgentTag()}"
+                    },
+                    {
+                        AciConstants.ContainerName.CvmAttestationVerifier,
+                        $"{ImageUtils.CvmAttestationVerifierImage()}:" +
+                        $"{ImageUtils.CvmAttestationVerifierTag()}"
                     },
                     {
                         AciConstants.ContainerName.CcrProxy,
@@ -885,8 +890,9 @@ public class CAciNodeProvider : ICcfNodeProvider
         List<string> requiredContainers =
             [
                 AciConstants.ContainerName.CcHost,
-                AciConstants.ContainerName.CcrAttestation,
+                AciConstants.ContainerName.Skr,
                 AciConstants.ContainerName.CcfRecoveryAgent,
+                AciConstants.ContainerName.CvmAttestationVerifier,
                 AciConstants.ContainerName.CcrProxy
             ];
         var missingContainers = requiredContainers.Where(r => !policyContainers.ContainsKey(r));
@@ -922,6 +928,7 @@ public class CAciNodeProvider : ICcfNodeProvider
         string instanceId,
         ContainerGroupSecurityPolicy securityPolicy)
     {
+#pragma warning disable MEN002 // Line is too long
         return new ContainerGroupData(
             new AzureLocation(location),
             new ContainerInstanceContainer[]
@@ -951,20 +958,33 @@ public class CAciNodeProvider : ICcfNodeProvider
                     }
                 },
                 new(
-                    AciConstants.ContainerName.CcrAttestation,
-                    securityPolicy.Images[AciConstants.ContainerName.CcrAttestation],
+                    AciConstants.ContainerName.Skr,
+                    securityPolicy.Images[AciConstants.ContainerName.Skr],
                     new ContainerResourceRequirements(
                         new ContainerResourceRequestsContent(0.5, 0.2)))
                 {
                     Command =
                     {
-                        "app",
-                        "-socket-address",
-                        "/mnt/uds/sock"
+                        "/skr.sh"
                     },
-                    VolumeMounts =
+                    EnvironmentVariables =
                     {
-                        new ContainerVolumeMount("uds", "/mnt/uds")
+                        new ContainerEnvironmentVariable("SkrSideCarArgs")
+                        {
+                            Value = "ewogICAiY2VydGNhY2hlIjogewogICAgICAiZW5kcG9pbnQiOiAiYW1lcmljYXMuYWNjY2FjaGUuYXp1cmUubmV0IiwKICAgICAgInRlZV90eXBlIjogIlNldlNucFZNIiwKICAgICAgImFwaV92ZXJzaW9uIjogImFwaS12ZXJzaW9uPTIwMjAtMTAtMTUtcHJldmlldyIKICAgfQp9"
+                        },
+                        new ContainerEnvironmentVariable("Port")
+                        {
+                            Value = $"{Ports.SkrPort}"
+                        },
+                        new ContainerEnvironmentVariable("LogLevel")
+                        {
+                            Value = "Info"
+                        },
+                        new ContainerEnvironmentVariable("LogFile")
+                        {
+                            Value = "skr.log"
+                        }
                     }
                 },
                 new(
@@ -994,9 +1014,15 @@ public class CAciNodeProvider : ICcfNodeProvider
                     },
                     VolumeMounts =
                     {
-                        new ContainerVolumeMount("uds", "/mnt/uds"),
                         new ContainerVolumeMount("certs", MountPaths.CertsFolderMountPath)
                     }
+                },
+                new(
+                    AciConstants.ContainerName.CvmAttestationVerifier,
+                    securityPolicy.Images[AciConstants.ContainerName.CvmAttestationVerifier],
+                    new ContainerResourceRequirements(
+                        new ContainerResourceRequestsContent(0.5, 0.2)))
+                {
                 },
                 new(
                     AciConstants.ContainerName.CcrProxy,
@@ -1083,16 +1109,13 @@ public class CAciNodeProvider : ICcfNodeProvider
             },
             Volumes =
             {
-                new ContainerVolume("uds")
-                {
-                    EmptyDir = BinaryData.FromObjectAsJson(new Dictionary<string, object>())
-                },
                 new ContainerVolume("certs")
                 {
                     EmptyDir = BinaryData.FromObjectAsJson(new Dictionary<string, object>())
                 }
             }
         };
+#pragma warning restore MEN002 // Line is too long
     }
 
     private string GenerateDnsName(string nodeName, string networkName, JsonObject providerConfig)

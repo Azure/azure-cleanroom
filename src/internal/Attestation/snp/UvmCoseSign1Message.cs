@@ -122,14 +122,14 @@ public class UvmCoseSign1Message
 
                 for (int i = 0; i < arrayLength; i++)
                 {
-                    var cert = reader.ReadByteString();
-                    certCollection.Import(cert);
+                    var cert = X509CertificateLoader.LoadCertificate(reader.ReadByteString());
+                    certCollection.Add(cert);
                 }
             }
             else if (reader.PeekState() == CborReaderState.ByteString)
             {
-                var cert = reader.ReadByteString();
-                certCollection.Import(cert);
+                var cert = X509CertificateLoader.LoadCertificate(reader.ReadByteString());
+                certCollection.Add(cert);
             }
             else
             {

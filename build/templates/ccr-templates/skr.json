@@ -1,5 +1,5 @@
 {
-  "name": "skr-sidecar",
+  "name": "skr",
   "properties": {
     "command": [
       "/skr.sh"

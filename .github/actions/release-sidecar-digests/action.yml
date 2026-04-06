@@ -39,7 +39,7 @@ runs:
       run: az acr login --name ${{ inputs.registry-name }}
 
     - shell: pwsh
-      run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
+      run: Install-Module -Name powershell-yaml -Force
 
     - name: Install confcom extension
       shell: pwsh
@@ -49,7 +49,7 @@ runs:
 
     - shell: pwsh
       run: |
-        ./build/build-ccr-digests.ps1 -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom -tag ${{ inputs.tag }} -push
+        ./build/ccr/build-ccr-digests.ps1 -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom -tag ${{ inputs.tag }} -push
 
     - uses: actions/upload-artifact@v4
       with:
@@ -69,14 +69,6 @@ runs:
       if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/s3fs-launcher-policy
-        tag: ${{ inputs.tag }}
-        environment: ${{ inputs.environment }}
-        registry-name: ${{ inputs.registry-name }}
-
-    - uses: ./.github/actions/attest-artefact
-      if: ${{ inputs.needs-attestation == 'true' }}
-      with:
-        name: policies/ccr-attestation-policy
         tag: ${{ inputs.tag }}
         environment: ${{ inputs.environment }}
         registry-name: ${{ inputs.registry-name }}
@@ -149,6 +141,14 @@ runs:
       if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/skr-policy
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        registry-name: ${{ inputs.registry-name }}
+
+    - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
+      with:
+        name: policies/cvm-attestation-agent-policy
         tag: ${{ inputs.tag }}
         environment: ${{ inputs.environment }}
         registry-name: ${{ inputs.registry-name }}

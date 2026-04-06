@@ -36,10 +36,17 @@ public class UserDocumentsController : UserProposalControllerBase
     }
 
     [HttpGet("/userdocuments")]
-    public async Task<JsonObject> ListUserDocuments()
+    public async Task<JsonObject> ListUserDocuments(
+        [FromQuery] string? labelSelector = null)
     {
         var appClient = this.CcfClientManager.GetAppClient();
-        using HttpResponseMessage response = await appClient.GetAsync($"app/userdocuments");
+        string path = "app/userdocuments";
+        if (!string.IsNullOrEmpty(labelSelector))
+        {
+            path += $"?labelSelector={labelSelector}";
+        }
+
+        using HttpResponseMessage response = await appClient.GetAsync(path);
         this.Response.CopyHeaders(response.Headers);
         await response.ValidateStatusCodeAsync(this.Logger);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();

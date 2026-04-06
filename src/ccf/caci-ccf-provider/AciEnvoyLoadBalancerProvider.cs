@@ -4,7 +4,6 @@
 using System.Text.Json.Nodes;
 using Azure;
 using Azure.Core;
-using Azure.Identity;
 using Azure.ResourceManager;
 using Azure.ResourceManager.ContainerInstance;
 using Azure.ResourceManager.ContainerInstance.Models;
@@ -13,6 +12,7 @@ using CcfProvider;
 using LoadBalancerProvider;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using TokenCredentials;
 
 namespace AciLoadBalancer;
 
@@ -94,7 +94,7 @@ public class AciEnvoyLoadBalancerProvider : AciLoadBalancerProvider, ICcfLoadBal
         string tgzConfigData,
         string dnsNameLabel)
     {
-        var client = new ArmClient(new DefaultAzureCredential());
+        var client = new ArmClient(TokenCredentialFactory.GetTenantCredential(providerConfig));
         string location = providerConfig["location"]!.ToString();
         string subscriptionId = providerConfig["subscriptionId"]!.ToString();
         string resourceGroupName = providerConfig["resourceGroupName"]!.ToString();

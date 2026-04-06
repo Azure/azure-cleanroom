@@ -5,8 +5,8 @@ using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Azure.Core;
 using Azure.Identity;
+using Controllers;
 using Identity.CredentialManager;
-using Microsoft.Azure.CleanRoomSidecar.Identity.Utils;
 using Microsoft.Extensions.Logging;
 using Polly;
 
@@ -17,24 +17,6 @@ namespace Microsoft.Azure.CleanRoomSidecar.Identity.CredentialProviders;
 /// </summary>
 internal class FederatedCredentialProvider : ITokenCredentialProvider
 {
-    private static IAsyncPolicy retryPolicy =
-        Policy.Handle<Exception>((e) => RetryUtilities.IsRetryableException(e))
-        .WaitAndRetryAsync(
-            5,
-            retryAttempt =>
-            {
-                Random jitterer = new();
-                return TimeSpan.FromSeconds(10) + TimeSpan.FromSeconds(jitterer.Next(0, 20));
-            },
-            (exception, timeSpan, retryCount, context) =>
-            {
-                ILogger logger = (ILogger)context["logger"];
-                logger.LogWarning(
-                    $"Hit retryable exception while performing operation: " +
-                    $"{context.OperationKey}. Retrying after " +
-                    $"{timeSpan}. RetryCount: {retryCount}. Exception: {exception}.");
-            });
-
     private static HttpClient httpClient = new();
     private readonly ILogger logger;
     private readonly string audience;

@@ -1,0 +1,164 @@
+# Default values for frontend-service.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+replicaCount: 1
+
+# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
+image:
+  frontendImage: "frontend-service"
+  # This sets the pull policy for images.
+  pullPolicy: IfNotPresent
+
+# Port configuration for containers.
+ports:
+  # Port for the frontend service container.
+  frontend: 8384
+  # Port for the CGS client sidecar container.
+  cgsClient: 8080
+
+# CGS client sidecar container configuration.
+cgsClient:
+  image: "cgs-client"
+  resources: {}
+  volumeMounts: []
+  env: []
+
+# This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+imagePullSecrets: []
+# This is to override the chart name.
+nameOverride: ""
+fullnameOverride: ""
+
+# This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# This is for setting Kubernetes Annotations to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+podAnnotations:
+  microsoft.containerinstance.virtualnode.injectdns: "false"
+  kubernetes.azure.com/set-kube-service-host-fqdn: "true"
+  microsoft.containerinstance.virtualnode.ccepolicy: ""
+
+# This is for setting Kubernetes Labels to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+podLabels:
+  azure.workload.identity/use: "true"
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+# This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
+service:
+  # Service type: LoadBalancer for L4 TCP passthrough (TLS terminates in TEE pod).
+  # ClusterIP if using an ingress controller.
+  type: ClusterIP
+  # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+  port: 80
+  # Static IP for the LoadBalancer. Set this to pin the LB to a pre-created public IP.
+  loadBalancerIP: ""
+  # Annotations for the service (e.g., azure-load-balancer-resource-group).
+  annotations: {}
+
+# Frontend service application settings.
+frontendService:
+  # Endpoint for the consortium manager service.
+  consortiumManagerEndpoint: "CONSORTIUM_MANAGER_ENDPOINT"
+  # Endpoint for the membership manager service.
+  membershipManagerEndpoint: "MEMBERSHIP_MANAGER_ENDPOINT"
+  # Endpoint for the CGS client sidecar.
+  cgsClientEndpoint: "CGS_CLIENT_ENDPOINT"
+  # Azure AD application ID for the first-party app.
+  firstPartyAppId: "FIRST_PARTY_APP_ID"
+  # Analytics workload identifier.
+  analyticsWorkloadId: "Analytics"
+  # Azure Key Vault URL for certificate retrieval.
+  keyVaultUrl: "KEY_VAULT_URL"
+  # Name of the certificate in Key Vault for the first-party app.
+  firstPartyAppCertificateName: "FIRST_PARTY_APP_CERTIFICATE_NAME"
+  # Token scope for the first-party app credential.
+  firstPartyAppTokenScope: "FIRST_PARTY_APP_TOKEN_SCOPE"
+  # Azure AD tenant ID.
+  tenantId: "TENANT_ID"
+
+# SKR (Secure Key Release) sidecar configuration for attestation.
+skr:
+  enabled: true
+  # SKR container image (defaults to {image.repo}/skr:{image.tag} in the template).
+  image: ""
+  # Port for the SKR sidecar.
+  port: 8284
+
+# ccr-proxy sidecar configuration for TLS termination.
+# When enabled, Envoy handles HTTPS on port 443 and forwards HTTP to the app on port 8384.
+ccrProxy:
+  enabled: true
+  # ccr-proxy container image.
+  image: ""
+  # CA type: "local" (self-signed) or "cgs" (governance CA).
+  caType: "local"
+  # FQDN to include as a SAN in the self-signed cert (for App Gateway hostname match).
+  fqdn: ""
+  # Path to write the service cert for the app container (shared volume).
+  serviceCertOutputFile: "/app/service/frontend-service-cert.pem"
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Additional volumes on the output Deployment definition.
+volumes: []
+# - name: foo
+#   secret:
+#     secretName: mysecret
+#     optional: false
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts: []
+# - name: foo
+#   mountPath: "/etc/foo"
+#   readOnly: true
+
+nodeSelector:
+  virtualization: "virtualnode2"
+
+tolerations:
+  - effect: "NoSchedule"
+    key: "virtual-kubelet.io/provider"
+    operator: "Exists"
+
+affinity: {}

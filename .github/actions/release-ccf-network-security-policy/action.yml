@@ -50,7 +50,7 @@ runs:
 
     - shell: pwsh
       run: |
-        ./build/build-ccf-network-security-policy.ps1 `
+        ./build/ccf/build-ccf-network-security-policy.ps1 `
           -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom `
           -tag ${{ inputs.tag }} `
           -push

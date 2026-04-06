@@ -1,18 +1,35 @@
-FROM quay.io/podman/stable:v5.4.0 AS build
+FROM cleanroombuild.azurecr.io/mirror/docker/library/python:3.12 AS wheel-builder
 
-# Install prerequisities.
-RUN dnf install -y python3-pip
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y curl build-essential && rm -rf /var/lib/apt/lists/*
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+COPY src/code-launcher src/code-launcher
+COPY src/internal/cleanroom-internal src/internal/cleanroom-internal
+COPY src/sdk src/sdk
+COPY pyproject.toml .
+COPY uv.lock .
+RUN uv sync --frozen
+
+RUN uv build --all-packages --wheel
+
+FROM quay.io/podman/stable:v5.4.0
 
 # Enable this so that container can get launched in ACI. Without this podman run fails with:
 # "Error: OCI runtime error: crun: pivot_root: Invalid argument"
 RUN echo "no_pivot_root = true" >> /etc/containers/containers.conf
 
+WORKDIR /setup
+
+COPY --from=wheel-builder /build/dist/cleanroom_internal*.whl /setup/
+COPY --from=wheel-builder /build/dist/cleanroom_sdk*.whl /setup/
+COPY --from=wheel-builder /build/dist/code_launcher*.whl /setup/
+
+# Install prerequisities and pip
+RUN dnf install -y python3-pip curl
+
+RUN python3 -m pip install --break-system-packages *.whl && rm -f *.whl
+
 WORKDIR /app
-COPY src/code-launcher/requirements.txt .
-RUN pip install --no-cache-dir --upgrade -r requirements.txt
-
-COPY src/code-launcher/ ./code-launcher
-COPY src/cleanroomspec/ ./cleanroomspec
-COPY src/code-launcher/__init__.py .
-
-ENV PYTHONPATH="${PYTHONPATH}:/app"

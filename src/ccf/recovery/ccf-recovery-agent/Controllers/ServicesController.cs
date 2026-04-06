@@ -63,13 +63,12 @@ public class ServicesController : BaseController
             var serviceCert = await System.IO.File.ReadAllTextAsync(serviceCertLocation);
 
             string platform;
-            AttestationReport? report = null;
-            if (Attestation.IsSevSnp())
+            SnpCACIAttestationReport? report = null;
+            if (Attestation.IsSnpCACI())
             {
                 platform = "snp";
                 var bytes = Encoding.UTF8.GetBytes(serviceCert);
-                var hash = SHA256.HashData(bytes);
-                report = await Attestation.GetReportAsync(hash);
+                report = (await Attestation.GetCACIReportAsync(bytes)).SnpCaci;
             }
             else
             {
@@ -117,12 +116,11 @@ public class ServicesController : BaseController
                 });
             var reportDataPayloadBytes = Encoding.UTF8.GetBytes(reportDataPayload);
             string platform;
-            AttestationReport? report = null;
-            if (Attestation.IsSevSnp())
+            SnpCACIAttestationReport? report = null;
+            if (Attestation.IsSnpCACI())
             {
                 platform = "snp";
-                var hash = SHA256.HashData(reportDataPayloadBytes);
-                report = await Attestation.GetReportAsync(hash);
+                report = (await Attestation.GetCACIReportAsync(reportDataPayloadBytes)).SnpCaci;
             }
             else
             {
@@ -136,6 +134,16 @@ public class ServicesController : BaseController
                 ReportDataPayload = Convert.ToBase64String(reportDataPayloadBytes),
             };
         }
+    }
+
+    [HttpGet("/jsapp/bundle/canonical")]
+    public async Task<IActionResult> GetCanonicalBundle()
+    {
+        string govApiVersion = "2024-07-01";
+        var ccfClient = await this.clientManager.GetCcfClient();
+        var bundle = await ccfClient.GetJSAppBundle(this.logger, govApiVersion);
+        var canonicalBundle = ToCanonicalBundle(bundle);
+        return this.Ok(canonicalBundle);
     }
 
     // Logic in this method matches the
@@ -195,7 +203,9 @@ public class ServicesController : BaseController
         {
             case JsonValueKind.Object:
                 writer.WriteStartObject();
-                foreach (var property in element.EnumerateObject().OrderBy(p => p.Name))
+                foreach (var property in element.EnumerateObject().OrderBy(
+                    p => p.Name,
+                    StringComparer.Ordinal))
                 {
                     writer.WritePropertyName(property.Name);
                     WriteSortedElement(

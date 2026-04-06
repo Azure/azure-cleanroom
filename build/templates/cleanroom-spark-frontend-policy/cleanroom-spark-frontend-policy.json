@@ -4,11 +4,10 @@
     "properties": {
       "image": "$containerRegistryUrl/workloads/cleanroom-spark-frontend@$digest",
       "command": [
-        "python",
-        "-m",
-        "src.main",
+        "cleanroom_spark_frontend",
         "--config",
-        "/app/config/settings.yaml"],
+        "/app/config/settings.yaml"
+      ],
       "environmentVariables": [
         {
           "name": "SERVICE_CERT_LOCATION",
@@ -56,12 +55,6 @@
         {
           "name": "shared",
           "mountPath": "/app/service",
-          "mountType": "emptyDir",
-          "readOnly": false
-        },
-        {
-          "name": "uds",
-          "mountPath": "/mnt/uds",
           "mountType": "emptyDir",
           "readOnly": false
         }
@@ -141,21 +134,34 @@
     }
   },
   {
-    "name": "ccr-attestation",
+    "name": "skr",
     "properties": {
-      "image": "$containerRegistryUrl/ccr-attestation@$digest",
+      "image": "$containerRegistryUrl/skr@$digest",
       "command": [
-        "app",
-        "-socket-address",
-        "/mnt/uds/sock"
+        "/skr.sh"
       ],
-      "environmentVariables": [],
-      "volumeMounts": [
+      "environmentVariables": [
         {
-          "name": "uds",
-          "mountPath": "/mnt/uds",
-          "mountType": "emptyDir",
-          "readOnly": false
+          "name": "SkrSideCarArgs",
+          "value": "ewogICAiY2VydGNhY2hlIjogewogICAgICAiZW5kcG9pbnQiOiAiYW1lcmljYXMuYWNjY2FjaGUuYXp1cmUubmV0IiwKICAgICAgInRlZV90eXBlIjogIlNldlNucFZNIiwKICAgICAgImFwaV92ZXJzaW9uIjogImFwaS12ZXJzaW9uPTIwMjAtMTAtMTUtcHJldmlldyIKICAgfQp9"
+        },
+        {
+          "name": "Port",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "LogFile",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "LogLevel",
+          "value": "Info"
+        },
+        {
+          "name": "TELEMETRY_MOUNT_PATH",
+          "value": "$telemetryMountPath"
         }
       ]
     }

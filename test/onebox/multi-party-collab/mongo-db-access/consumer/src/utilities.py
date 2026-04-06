@@ -1,11 +1,9 @@
 import base64 as b64
 import json
 import logging
-import os
 
 import requests
 from pydantic import BaseModel
-from requests.exceptions import RequestException
 from rich import print
 
 logger = logging.getLogger("utilities")

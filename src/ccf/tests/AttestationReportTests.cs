@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text;
 using System.Text.Json;
 using AttestationClient;
 using Microsoft.Extensions.Configuration;
@@ -49,20 +50,22 @@ public class AttestationReportTests
     public async Task TestReportParsing()
     {
         var attestationJson = await File.ReadAllTextAsync(
-            "insecure-virtual/signing_key_attestation.json");
+            "insecure-virtual/signing/attestation.json");
         var attestation = JsonSerializer.Deserialize<AttestationReportKeyCert>(attestationJson)!;
 
+        var snpReport = attestation.Report.SnpCaci!;
         var report = SnpReport.VerifySnpAttestation(
-            attestation.Report.Attestation,
-            attestation.Report.PlatformCertificates,
-            attestation.Report.UvmEndorsements);
+            snpReport.Attestation,
+            snpReport.PlatformCertificates,
+            snpReport.UvmEndorsements);
         var hostData = report.HostData;
         var expectedValue =
             "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20".ToUpper();
 
         Assert.AreEqual(expectedValue, hostData);
 
-        var publicKeyReportData = Attestation.AsReportData(attestation.PublicKey);
+        var publicKeyReportData = Attestation.ToReportDataHashValue(
+            Encoding.UTF8.GetBytes(attestation.PublicKey));
         var reportData = report.ReportData;
 
         // A sha256 returns 32 bytes of data while attestation.report_data is 64 bytes

@@ -1,0 +1,4 @@
+env:
+  insecureVirtualEnv: true
+  identityEndpoint: "http://host.docker.internal:5050/token"
+  identityHeader: "dummy_required_value"

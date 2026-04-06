@@ -1,13 +1,13 @@
 import * as ccfapp from "@microsoft/ccf-app";
-import { JwksResponse } from "../../models/openidmodels";
+import { JwksResponse } from "../../models";
 import { ccf } from "@microsoft/ccf-app/global";
-import { getSigningKey } from "./signingkey";
-import { ErrorResponse } from "../../models/errorresponse";
+import { getIssuerSigningKey } from "./signingkey";
+import { ErrorResponse } from "../../utils/ErrorResponse";
 
 export function getJwks():
   | ccfapp.Response<JwksResponse>
   | ccfapp.Response<ErrorResponse> {
-  const signingKey = getSigningKey();
+  const signingKey = getIssuerSigningKey();
   if (!signingKey) {
     return {
       statusCode: 405,

@@ -3,7 +3,9 @@ param
 (
     [string] $projectName = "governance-sample-azcli",
 
-    [string] $version = "1.0.8"
+    [string] $version = "1.0.8",
+
+    [string] $repo = "localhost:5000"
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +14,7 @@ $root = git rev-parse --show-toplevel
 
 . $root/build/helpers.ps1
 
+$env:AZCLI_CLEANROOM_VERSIONS_REGISTRY = $repo
 $versions = (az cleanroom governance client version --name $projectName) | ConvertFrom-Json
 if ($versions."cgs-client".version -cne $version) {
     $x = $versions."cgs-client".version
@@ -25,7 +28,7 @@ if ($env:GITHUB_ACTIONS -eq "true") {
 }
 $upgrades = (az cleanroom governance client get-upgrades --name $projectName | ConvertFrom-Json)
 if ($upgrades.upgrades.Count -ne 0) {
-    Write-Error "Not expecting any updates but seeing: $($upgrades.upgrades)"
+    Write-Error "Not expecting any updates but seeing: $($upgrades.upgrades | ConvertTo-Json)"
     exit 1
 }
 

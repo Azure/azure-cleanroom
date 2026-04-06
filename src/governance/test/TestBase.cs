@@ -15,6 +15,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+[assembly: DoNotParallelize]
+
 namespace Test;
 
 public class TestBase
@@ -23,6 +25,9 @@ public class TestBase
     public const string VersionKey = "version";
     public const string StateKey = "state";
     public const string MsTenantId = "72f988bf-86f1-41af-91ab-2d7cd011db47";
+    public const string CcfEndpointHeaderKey = "x-ms-ccf-endpoint";
+    public const string ServiceCertHeaderKey = "x-ms-service-cert";
+    public const string AuthModeHeaderKey = "x-ms-auth-mode";
 
     protected IConfiguration Configuration { get; set; } = default!;
 
@@ -32,10 +37,14 @@ public class TestBase
 
     protected HttpClient IdpClient { get; set; } = default!;
 
+    protected HttpClient CredsProxyClient { get; set; } = default!;
+
     protected List<HttpClient> CgsClients { get; set; } = default!;
 
     // Keep an easy reference to member0 as its used often.
     protected HttpClient CgsClient_Member0 { get; set; } = default!;
+
+    protected HttpClient CgsClient_UserFromAuthHeader { get; set; } = default!;
 
     protected HttpClient GovSidecarClient { get; set; } = default!;
 
@@ -44,8 +53,14 @@ public class TestBase
 
     protected HttpClient GovSidecar2Client { get; set; } = default!;
 
+    protected HttpClient GovSidecarCvmClient { get; set; } = default!;
+
     protected string GovSidecar2HostData { get; set; } =
         "7ec5120f0f497e22b18e59ed702ed82e2732562245c9a944f54cd41db4f491af";
+
+    protected HttpClient GovSidecarJwtLocalIdpClient { get; set; } = default!;
+
+    protected HttpClient GovSidecarJwtAzureLoginClient { get; set; } = default!;
 
     protected string ContractId { get; set; } = default!;
 
@@ -99,6 +114,11 @@ public class TestBase
             BaseAddress = new Uri(this.Configuration["idpEndpoint"]!)
         };
 
+        this.CredsProxyClient = new HttpClient
+        {
+            BaseAddress = new Uri(this.Configuration["credsProxyEndpoint"]!)
+        };
+
         this.CgsClients = new List<HttpClient>();
         this.CgsClient_Member0 = new HttpClient(handler)
         {
@@ -116,6 +136,11 @@ public class TestBase
             BaseAddress = new Uri(this.Configuration["cgsClientEndpoint_member2"]!)
         });
 
+        this.CgsClient_UserFromAuthHeader = new HttpClient(handler)
+        {
+            BaseAddress = new Uri(this.Configuration["cgsClientEndpoint_userFromHeader"]!)
+        };
+
         this.GovSidecarClient = new HttpClient
         {
             BaseAddress = new Uri(this.Configuration["govSidecarEndpoint"]!)
@@ -124,6 +149,21 @@ public class TestBase
         this.GovSidecar2Client = new HttpClient
         {
             BaseAddress = new Uri(this.Configuration["govSidecar2Endpoint"]!)
+        };
+
+        this.GovSidecarCvmClient = new HttpClient
+        {
+            BaseAddress = new Uri(this.Configuration["govSidecarCvmEndpoint"]!)
+        };
+
+        this.GovSidecarJwtLocalIdpClient = new HttpClient
+        {
+            BaseAddress = new Uri(this.Configuration["govSidecarJwtLocalIdpEndpoint"]!)
+        };
+
+        this.GovSidecarJwtAzureLoginClient = new HttpClient
+        {
+            BaseAddress = new Uri(this.Configuration["govSidecarJwtAzureLoginEndpoint"]!)
         };
 
         // Set the governance API path prefix for the ccr-governance sidecar as each
@@ -136,6 +176,18 @@ public class TestBase
         this.GovSidecar2Client.DefaultRequestHeaders.Add(
             "x-ms-ccr-governance-api-path-prefix",
             $"app/contracts/{this.ContractId}");
+
+        this.GovSidecarCvmClient.DefaultRequestHeaders.Add(
+            "x-ms-ccr-governance-api-path-prefix",
+            $"app/contracts/{this.ContractId}");
+
+        this.GovSidecarJwtLocalIdpClient.DefaultRequestHeaders.Add(
+            "x-ms-ccr-governance-api-path-prefix",
+            $"app/contracts/{this.ContractId}");
+
+        this.GovSidecarJwtAzureLoginClient.DefaultRequestHeaders.Add(
+            "x-ms-ccr-governance-api-path-prefix",
+            $"app/contracts/{this.ContractId}");
     }
 
     protected async Task ProposeContractAndAcceptCleanRoomPolicy(string contractId, string hostData)
@@ -144,10 +196,33 @@ public class TestBase
         await this.ProposeAndAcceptCleanRoomPolicy(contractId, hostData);
     }
 
+    protected async Task ProposeContractAndAcceptJwtCleanRoomPolicy(
+        string contractId,
+        string oid,
+        string tid)
+    {
+        await this.ProposeAndAcceptContract(contractId);
+        await this.ProposeAndAcceptJwtCleanRoomPolicy(contractId, oid, tid);
+    }
+
     protected async Task ProposeContractAndAcceptAllowAllCleanRoomPolicy(string contractId)
     {
         string allowAllValue = "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20";
         await this.ProposeContractAndAcceptCleanRoomPolicy(contractId, allowAllValue);
+    }
+
+    protected async Task ProposeContractAndAcceptLocalIdpJwtCleanRoomPolicy(string contractId)
+    {
+        string oid = "22222222-2222-2222-2222-222222222222";
+        string tid = "33333333-3333-3333-3333-333333333333";
+        await this.ProposeContractAndAcceptJwtCleanRoomPolicy(contractId, oid, tid);
+    }
+
+    protected async Task ProposeAndAcceptRemoveLocalIdpJwtCleanRoomPolicy(string contractId)
+    {
+        string oid = "22222222-2222-2222-2222-222222222222";
+        string tid = "33333333-3333-3333-3333-333333333333";
+        await this.ProposeAndAcceptRemoveJwtCleanRoomPolicy(contractId, oid, tid);
     }
 
     protected async Task<string> ProposeContract(string contractId)
@@ -203,25 +278,32 @@ public class TestBase
         await this.AllMembersAcceptContract(contractId, proposalId);
     }
 
-    protected async Task<string> ProposeUserDocument(string contractId, string documentId)
+    protected async Task<string> ProposeUserDocument(
+        string contractId,
+        string documentId,
+        bool createDocument = false)
     {
         string userdocumentUrl = $"userdocuments/{documentId}";
-        var contractContent = new JsonObject
-        {
-            ["contractId"] = contractId,
-            ["data"] = "hello world"
-        };
 
-        // Add a userdocument to start with.
-        using (HttpRequestMessage request = new(HttpMethod.Put, userdocumentUrl))
+        if (createDocument)
         {
-            request.Content = new StringContent(
-                contractContent.ToJsonString(),
-                Encoding.UTF8,
-                "application/json");
+            var contractContent = new JsonObject
+            {
+                ["contractId"] = contractId,
+                ["data"] = "hello world"
+            };
 
-            using HttpResponseMessage response = await this.CgsClient_Member0.SendAsync(request);
-            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            // Add a userdocument to start with.
+            using (HttpRequestMessage request = new(HttpMethod.Put, userdocumentUrl))
+            {
+                request.Content = new StringContent(
+                    contractContent.ToJsonString(),
+                    Encoding.UTF8,
+                    "application/json");
+
+                using HttpResponseMessage response = await this.CgsClient_Member0.SendAsync(request);
+                Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            }
         }
 
         var userdocument =
@@ -251,9 +333,12 @@ public class TestBase
         }
     }
 
-    protected async Task ProposeAndAcceptUserDocument(string contractId, string documentId)
+    protected async Task ProposeAndAcceptUserDocument(
+        string contractId,
+        string documentId,
+        bool createDocument = false)
     {
-        string proposalId = await this.ProposeUserDocument(contractId, documentId);
+        string proposalId = await this.ProposeUserDocument(contractId, documentId, createDocument);
 
         // All members vote on the above proposal by accepting it.
         await this.AllMembersAcceptUserDocument(documentId, proposalId);
@@ -308,12 +393,25 @@ public class TestBase
         JsonObject spec,
         int asMember = Members.Member0)
     {
+        return await this.ProposeContractProposal(
+            contractId,
+            "deploymentspec",
+            spec,
+            asMember);
+    }
+
+    protected async Task<string> ProposeContractProposal(
+        string contractId,
+        string proposalType,
+        JsonObject proposalData,
+        int asMember = Members.Member0)
+    {
         string proposalId;
         using (HttpRequestMessage request =
-            new(HttpMethod.Post, $"contracts/{contractId}/deploymentspec/propose"))
+            new(HttpMethod.Post, $"contracts/{contractId}/{proposalType}/propose"))
         {
             request.Content = new StringContent(
-                spec.ToJsonString(),
+                proposalData.ToJsonString(),
                 Encoding.UTF8,
                 "application/json");
 
@@ -326,9 +424,13 @@ public class TestBase
         return proposalId;
     }
 
-    protected async Task ProposeAndAcceptDeploymentSpec(string contractId, JsonObject spec)
+    protected async Task ProposeAndAcceptContractProposal(
+        string contractId,
+        string proposalType,
+        JsonObject proposalData)
     {
-        string proposalId = await this.ProposeDeploymentSpec(contractId, spec);
+        string proposalId =
+            await this.ProposeContractProposal(contractId, proposalType, proposalData);
 
         // All members vote on the above proposal by accepting it.
         await this.AllMembersAcceptProposal(proposalId);
@@ -354,11 +456,84 @@ public class TestBase
             var proposalContent = new JsonObject
             {
                 ["type"] = "add",
+                ["policyType"] = "snp-caci",
                 ["contractId"] = contractId,
                 ["claims"] = new JsonObject
                 {
                     ["x-ms-sevsnpvm-is-debuggable"] = false,
                     ["x-ms-sevsnpvm-hostdata"] = hostData
+                }
+            };
+
+            request.Content = new StringContent(
+                proposalContent.ToJsonString(),
+                Encoding.UTF8,
+                "application/json");
+
+            using HttpResponseMessage response = await this.CgsClients[asMember].SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+            proposalId = responseBody[ProposalIdKey]!.ToString();
+        }
+
+        return proposalId;
+    }
+
+    protected async Task<string> ProposeJwtCleanRoomPolicy(
+        string contractId,
+        string oid,
+        string tid,
+        int asMember = Members.Member0)
+    {
+        string proposalId;
+        using (HttpRequestMessage request =
+            new(HttpMethod.Post, $"contracts/{contractId}/cleanroompolicy/propose"))
+        {
+            var proposalContent = new JsonObject
+            {
+                ["type"] = "add",
+                ["policyType"] = "jwt",
+                ["contractId"] = contractId,
+                ["claims"] = new JsonObject
+                {
+                    ["oid"] = oid,
+                    ["tid"] = tid
+                }
+            };
+
+            request.Content = new StringContent(
+                proposalContent.ToJsonString(),
+                Encoding.UTF8,
+                "application/json");
+
+            using HttpResponseMessage response = await this.CgsClients[asMember].SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+            proposalId = responseBody[ProposalIdKey]!.ToString();
+        }
+
+        return proposalId;
+    }
+
+    protected async Task<string> ProposeRemoveJwtCleanRoomPolicy(
+        string contractId,
+        string oid,
+        string tid,
+        int asMember = Members.Member0)
+    {
+        string proposalId;
+        using (HttpRequestMessage request =
+            new(HttpMethod.Post, $"contracts/{contractId}/cleanroompolicy/propose"))
+        {
+            var proposalContent = new JsonObject
+            {
+                ["type"] = "remove",
+                ["policyType"] = "jwt",
+                ["contractId"] = contractId,
+                ["claims"] = new JsonObject
+                {
+                    ["oid"] = oid,
+                    ["tid"] = tid
                 }
             };
 
@@ -391,6 +566,130 @@ public class TestBase
 
         // All members vote on the above proposal by accepting it.
         await this.AllMembersAcceptProposal(proposalId);
+    }
+
+    protected async Task ProposeAndAcceptJwtCleanRoomPolicy(
+        string contractId,
+        string oid,
+        string tid)
+    {
+        string proposalId = await this.ProposeJwtCleanRoomPolicy(contractId, oid, tid);
+
+        // All members vote on the above proposal by accepting it.
+        await this.AllMembersAcceptProposal(proposalId);
+    }
+
+    protected async Task ProposeAndAcceptRemoveJwtCleanRoomPolicy(
+        string contractId,
+        string oid,
+        string tid)
+    {
+        string proposalId = await this.ProposeRemoveJwtCleanRoomPolicy(contractId, oid, tid);
+
+        // All members vote on the above proposal by accepting it.
+        await this.AllMembersAcceptProposal(proposalId);
+    }
+
+    protected async Task<string> ProposeCvmSnpCleanRoomPolicy(
+        string contractId,
+        int asMember = Members.Member0)
+    {
+        var attestationJson = JsonNode.Parse(
+            await File.ReadAllTextAsync("data/cvm/encryption/attestation.json"))!;
+        var pcrs = attestationJson["report"]!["snpCvm"]!["evidence"]!["pcrs"]!.AsObject();
+        var pcrClaims = new JsonObject
+        {
+            ["pcr4"] = pcrs["4"]!.GetValue<string>(),
+            ["pcr7"] = pcrs["7"]!.GetValue<string>()
+        };
+
+        string proposalId;
+        using (HttpRequestMessage request =
+            new(HttpMethod.Post, $"contracts/{contractId}/cleanroompolicy/propose"))
+        {
+            var proposalContent = new JsonObject
+            {
+                ["type"] = "add",
+                ["policyType"] = "snp-cvm",
+                ["contractId"] = contractId,
+                ["claims"] = pcrClaims
+            };
+
+            request.Content = new StringContent(
+                proposalContent.ToJsonString(),
+                Encoding.UTF8,
+                "application/json");
+
+            using HttpResponseMessage response =
+                await this.CgsClients[asMember].SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+            proposalId = responseBody[ProposalIdKey]!.ToString();
+        }
+
+        return proposalId;
+    }
+
+    protected async Task ProposeAndAcceptCvmSnpCleanRoomPolicy(string contractId)
+    {
+        string proposalId = await this.ProposeCvmSnpCleanRoomPolicy(contractId);
+
+        // All members vote on the above proposal by accepting it.
+        await this.AllMembersAcceptProposal(proposalId);
+    }
+
+    protected async Task<string> ProposeRemoveCvmSnpCleanRoomPolicy(
+        string contractId,
+        int asMember = Members.Member0)
+    {
+        var attestationJson = JsonNode.Parse(
+            await File.ReadAllTextAsync("data/cvm/encryption/attestation.json"))!;
+        var pcrs = attestationJson["report"]!["snpCvm"]!["evidence"]!["pcrs"]!.AsObject();
+        var pcrClaims = new JsonObject
+        {
+            ["pcr4"] = pcrs["4"]!.GetValue<string>(),
+            ["pcr7"] = pcrs["7"]!.GetValue<string>()
+        };
+
+        string proposalId;
+        using (HttpRequestMessage request =
+            new(HttpMethod.Post, $"contracts/{contractId}/cleanroompolicy/propose"))
+        {
+            var proposalContent = new JsonObject
+            {
+                ["type"] = "remove",
+                ["policyType"] = "snp-cvm",
+                ["contractId"] = contractId,
+                ["claims"] = pcrClaims
+            };
+
+            request.Content = new StringContent(
+                proposalContent.ToJsonString(),
+                Encoding.UTF8,
+                "application/json");
+
+            using HttpResponseMessage response =
+                await this.CgsClients[asMember].SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+            proposalId = responseBody[ProposalIdKey]!.ToString();
+        }
+
+        return proposalId;
+    }
+
+    protected async Task ProposeAndAcceptRemoveCvmSnpCleanRoomPolicy(string contractId)
+    {
+        string proposalId = await this.ProposeRemoveCvmSnpCleanRoomPolicy(contractId);
+
+        // All members vote on the above proposal by accepting it.
+        await this.AllMembersAcceptProposal(proposalId);
+    }
+
+    protected async Task ProposeContractAndAcceptCvmSnpCleanRoomPolicy(string contractId)
+    {
+        await this.ProposeAndAcceptContract(contractId);
+        await this.ProposeAndAcceptCvmSnpCleanRoomPolicy(contractId);
     }
 
     protected async Task ProposeAndAcceptEnableOidcIssuer()
@@ -435,10 +734,104 @@ public class TestBase
             using HttpResponseMessage response = await this.CgsClient_Member0.SendAsync(request);
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
             var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
-            Assert.IsTrue(!string.IsNullOrEmpty(responseBody["reqid"]!.ToString()));
+            Assert.IsFalse(string.IsNullOrEmpty(responseBody["reqid"]!.ToString()));
             string kid = responseBody["kid"]!.ToString();
-            Assert.IsTrue(!string.IsNullOrEmpty(kid));
+            Assert.IsFalse(string.IsNullOrEmpty(kid));
             return kid;
+        }
+    }
+
+    protected async Task ProposeAndAcceptEnableSigning()
+    {
+        string proposalId;
+        using (HttpRequestMessage request = new(HttpMethod.Post, "proposals/create"))
+        {
+            var proposalContent = new JsonObject
+            {
+                ["actions"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["name"] = "enable_signing",
+                        ["args"] = new JsonObject
+                        {
+                            ["kid"] = Guid.NewGuid().ToString("N")
+                        }
+                    }
+                }
+            };
+
+            request.Content = new StringContent(
+                proposalContent.ToJsonString(),
+                Encoding.UTF8,
+                "application/json");
+
+            using HttpResponseMessage response = await this.CgsClient_Member0.SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+            proposalId = responseBody[ProposalIdKey]!.ToString();
+        }
+
+        // All members vote on the above proposal by accepting it.
+        await this.AllMembersAcceptProposal(proposalId);
+    }
+
+    protected async Task<string> GenerateSigningKey()
+    {
+        using (HttpRequestMessage request = new(HttpMethod.Post, "signing/generateSigningKey"))
+        {
+            using HttpResponseMessage response = await this.CgsClient_Member0.SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+            Assert.IsFalse(string.IsNullOrEmpty(responseBody["reqid"]!.ToString()));
+            string kid = responseBody["kid"]!.ToString();
+            Assert.IsFalse(string.IsNullOrEmpty(kid));
+            return kid;
+        }
+    }
+
+    protected async Task ProposeAndAcceptRotateSigningKey()
+    {
+        string proposalId;
+        using (HttpRequestMessage request = new(HttpMethod.Post, "proposals/create"))
+        {
+            var proposalContent = new JsonObject
+            {
+                ["actions"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["name"] = "signing_enable_rotate_signing_key",
+                        ["args"] = new JsonObject()
+                    }
+                }
+            };
+
+            request.Content = new StringContent(
+                proposalContent.ToJsonString(),
+                Encoding.UTF8,
+                "application/json");
+
+            using HttpResponseMessage response = await this.CgsClient_Member0.SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+            proposalId = responseBody[ProposalIdKey]!.ToString();
+        }
+
+        // All members vote on the above proposal by accepting it.
+        await this.AllMembersAcceptProposal(proposalId);
+    }
+
+    protected async Task<string> GetSigningPublicKey()
+    {
+        using (HttpRequestMessage request = new(HttpMethod.Post, "signing/info"))
+        {
+            using HttpResponseMessage response = await this.CgsClient_Member0.SendAsync(request);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+            string publicKeyPem = responseBody["publicKeyPem"]!.ToString();
+            Assert.IsFalse(string.IsNullOrEmpty(publicKeyPem));
+            return publicKeyPem;
         }
     }
 
@@ -588,10 +981,11 @@ public class TestBase
         return info!["memberId"]!.ToString();
     }
 
-    protected async Task<List<(string id, HttpClient userClient)>> CreateAndAcceptUsers(
+    protected async Task<List<(string userId, string tenantId, HttpClient userClient)>>
+        CreateAndAcceptUsers(
         int numUsers)
     {
-        List<(string id, HttpClient userClient)> users = new();
+        List<(string userId, string tenantId, HttpClient userClient)> users = new();
         for (int i = 0; i < numUsers; i++)
         {
             string userId = Guid.NewGuid().ToString().Substring(0, 8);
@@ -617,7 +1011,7 @@ public class TestBase
             userClient.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Bearer", token["accessToken"]!.ToString());
 
-            users.Add((userId, userClient));
+            users.Add((userId, tenantId, userClient));
             await this.ProposeAndAcceptUserIdentity(userId, identifier, tenantId);
         }
 
@@ -643,5 +1037,17 @@ public class TestBase
         }
 
         return result;
+    }
+
+    protected async Task<string> GetServiceCertificateAsync()
+    {
+        using HttpRequestMessage request = new(HttpMethod.Get, "/node/network");
+        using HttpResponseMessage response = await this.CcfClient.SendAsync(request);
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+
+        var responseObj = await response.Content.ReadFromJsonAsync<JsonObject>();
+        var serviceCertPem = responseObj!["service_certificate"]!.ToString();
+        byte[] serviceCertBytes = Encoding.UTF8.GetBytes(serviceCertPem);
+        return Convert.ToBase64String(serviceCertBytes);
     }
 }

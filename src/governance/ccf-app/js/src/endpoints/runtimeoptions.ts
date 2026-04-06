@@ -1,5 +1,5 @@
 import * as ccfapp from "@microsoft/ccf-app";
-import { ErrorResponse } from "../models/errorresponse";
+import { ErrorResponse } from "../utils/ErrorResponse";
 import { RuntimeOptionStoreItem } from "../models";
 import { validateCallerAuthorized } from "../utils/utils";
 
@@ -13,9 +13,10 @@ const runtimeOptions = [
   "autoapprove-constitution-proposal",
   "autoapprove-jsapp-proposal",
   "autoapprove-deploymentspec-proposal",
+  "autoapprove-deploymentinfo-proposal",
   "autoapprove-cleanroompolicy-proposal"
 ];
-export function checkRuntimeOptionStatus(
+export function checkRuntimeOption(
   request: ccfapp.Request
 ): ccfapp.Response | ccfapp.Response<ErrorResponse> {
   const error = validateCallerAuthorized(request);

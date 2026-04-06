@@ -15,6 +15,8 @@ internal class Startup : ApiStartup
     {
     }
 
+    public override bool EnableOpenTelemetry => false;
+
     public override void OnConfigureServices(IServiceCollection services)
     {
         string? ep = this.Configuration[SettingName.TargetEndpoint];

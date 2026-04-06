@@ -1,18 +1,18 @@
 name: governance-test-ccf-headers
 services:
   test-header-ccf-1:
-    image: ccf/app/run-js/sandbox:$ccfImageTag
+    image: localhost:5000/ccf/app/run-js/sandbox:$ccfImageTag
     ports:
       - "9001:8080"
     volumes:
       - ./sandbox_common/${initialMemberName}_cert.pem:/app/member0_cert.pem
       - ./sandbox_common/${initialMemberName}_enc_pubk.pem:/app/member0_enc_pubk.pem
   cgs-client-header-member0:
-    image: cgs-client:latest
+    image: localhost:5000/cgs-client:latest
     ports:
       - "9002:8080"
   cgs-ui-header-member0:
-    image: cgs-ui:latest
+    image: localhost:5000/cgs-ui:latest
     ports:
       - "0:6300"
     environment:

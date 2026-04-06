@@ -1,11 +1,13 @@
-ARG CCF_VERSION=6.0.6
+ARG CCF_VERSION=6.0.26
 
 # Build the clean room specific C++ module that gets loaded in CCF.
 FROM mcr.microsoft.com/azurelinux/base/core:3.0 AS builder
-RUN tdnf install -y wget ca-certificates clang-tools-extra-devel
+RUN tdnf install -y wget ca-certificates clang-tools-extra-devel curl-devel libuv-devel \
+    && tdnf clean all
 ARG CCF_VERSION
-RUN wget https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_snp_devel_${CCF_VERSION}_x86_64.rpm -O ccf_snp_devel.rpm
-RUN tdnf install --exclude=aznfs -y ccf_snp_devel.rpm
+RUN wget https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_snp_devel_${CCF_VERSION}_x86_64.rpm -O ccf_snp_devel.rpm \
+    && tdnf install -y ccf_snp_devel.rpm \
+    && rm -f ccf_snp_devel.rpm
 
 # Copy the source.
 COPY /src/governance/ccf-app/cpp src/cpp
@@ -17,20 +19,20 @@ RUN chmod +x /scripts/*.sh
 RUN /scripts/ci-checks.sh
 
 # Build the binary.
-RUN cd src/cpp
-RUN mkdir build && cd build
 WORKDIR /src/cpp/build
 RUN CC="clang-18" CXX="clang++-18" cmake -GNinja -DCOMPILE_TARGET=snp ..
 RUN ninja
 
 # Run
 FROM mcr.microsoft.com/azurelinux/base/core:3.0
-RUN tdnf install -y wget ca-certificates tar
+RUN tdnf install -y wget ca-certificates tar \
+    && tdnf clean all
 ARG CCF_VERSION
-RUN wget https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_snp_${CCF_VERSION}_x86_64.rpm -O ccf_snp.rpm
-RUN tdnf install --exclude=aznfs -y ccf_snp.rpm
-RUN cp /opt/ccf_snp/bin/cchost /usr/bin/cchost
-RUN chmod +rx /usr/bin/cchost
+RUN wget https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_snp_${CCF_VERSION}_x86_64.rpm -O ccf_snp.rpm \
+    && tdnf install -y ccf_snp.rpm \
+    && cp /opt/ccf_snp/bin/cchost /usr/bin/cchost \
+    && chmod +rx /usr/bin/cchost \
+    && rm -f ccf_snp.rpm
 
 COPY --from=builder /src/cpp/build/libjs_cleanroom.snp.so /usr/lib/ccf/libjs_cleanroom.snp.so
 

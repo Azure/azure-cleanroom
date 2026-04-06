@@ -3,109 +3,360 @@
     ViewData["Title"] = "Contract Details";
 }
 
-<h2>Contract Details</h2>
+<div class="page-header mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1 class="page-title">
+                <i class="fas fa-file-contract me-2"></i>
+                Contract Details
+            </h1>
+            <p class="page-subtitle mb-0">View and manage contract configuration</p>
+        </div>
+        <div>
+            <a asp-controller="Contracts" asp-action="Index" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>
+                Back to Contracts
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Contract ID Header -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="d-flex align-items-center">
+            <div class="contract-icon me-3">
+                <i class="fas fa-file-contract fa-2x text-primary"></i>
+            </div>
+            <div>
+                <h4 class="mb-1 font-monospace">@Model.Id</h4>
+                <div class="d-flex align-items-center">
+                    @{
+                        var statusClass = Model.State switch
+                        {
+                            "Draft" => "badge bg-secondary",
+                            "Proposed" => "badge bg-warning text-dark",
+                            "Accepted" => "badge bg-success",
+                            _ => "badge bg-light text-dark"
+                        };
+                    }
+                    <span class="@statusClass me-2">
+                        <i class="fas fa-circle me-1" style="font-size: 0.5rem;"></i>
+                        @Model.State
+                    </span>
+                    <small class="text-muted">Version @Model.Version</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Action Buttons -->
 @{
     if (@Model.State == "Draft")
     {
-        <p><a asp-controller="Contracts" asp-action="Propose" asp-route-id="@Model.Id" asp-route-version="@Model.Version">Propose Contract</a></p>
+        <div class="alert alert-info mb-4">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <i class="fas fa-info-circle me-2"></i>
+                    This contract is in draft state and ready to be proposed.
+                </div>
+                <a asp-controller="Contracts" asp-action="Propose" asp-route-id="@Model.Id" asp-route-version="@Model.Version"
+                    class="btn btn-primary">
+                    <i class="fas fa-paper-plane me-1"></i>
+                    Propose Contract
+                </a>
+            </div>
+        </div>
     }
     else if (Model.State == "Proposed")
     {
-        <p>
-            <a asp-controller="Contracts" asp-action="VoteAccept" asp-route-id="@Model.Id" asp-route-proposalId="@Model.ProposalId">Accept Proposal</a>
-            <a asp-controller="Contracts" asp-action="VoteReject" asp-route-id="@Model.Id" asp-route-proposalId="@Model.ProposalId">Reject Proposal</a>
-        </p>
-    } else if (Model.State == "Accepted")
+        <div class="alert alert-warning mb-4">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <i class="fas fa-vote-yea me-2"></i>
+                    This contract proposal is pending member votes.
+                </div>
+                <div>
+                    <a asp-controller="Contracts" asp-action="VoteAccept" asp-route-id="@Model.Id"
+                        asp-route-proposalId="@Model.ProposalId" class="btn btn-success me-2">
+                        <i class="fas fa-check me-1"></i>
+                        Accept
+                    </a>
+                    <a asp-controller="Contracts" asp-action="VoteReject" asp-route-id="@Model.Id"
+                        asp-route-proposalId="@Model.ProposalId" class="btn btn-danger">
+                        <i class="fas fa-times me-1"></i>
+                        Reject
+                    </a>
+                </div>
+            </div>
+        </div>
+    }
+    else if (Model.State == "Accepted")
     {
-        <p>
-            <a asp-controller="Contracts" asp-action="RuntimeOptionsDetail" asp-route-id="@Model.Id">Runtime Options</a>
-        </p>
+        <div class="alert alert-success mb-4">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <i class="fas fa-check-circle me-2"></i>
+                    This contract has been accepted.
+                </div>
+                <a asp-controller="Contracts" asp-action="RuntimeOptionsDetail" asp-route-id="@Model.Id"
+                    class="btn btn-primary">
+                    <i class="fas fa-cogs me-1"></i>
+                    Runtime Options
+                </a>
+            </div>
+        </div>
     }
 }
-<table class="table">
-<thead>
-    <tr>
-        <th scope="col">Property</th>
-        <th scope="col">Value</th>
-    </tr>
-</thead>
-<tbody>
-    <tr>
-        <th scope="row">id</th>
-        <td>@Model.Id</td>
-    </tr>
-    <tr>
-        <th scope="row">state</th>
-            <td>
-                @Model.State @{
-                    if (Model.State == "Proposed")
-                    {
-                        <pre>(proposalId: <a asp-controller="Proposals" asp-action="Detail" asp-route-proposalId="@Model.ProposalId" asp-route-version="@Model.Version">@Model.ProposalId</a>)</pre>
-                    }
-                }
-            </td>
-    </tr>
-    <tr>
-        <th scope="row">version</th>
-        <td>@Model.Version</td>
-    </tr>
-    <tr>
-        <th scope="row">policy</th>
-            <td>
-                <a asp-controller="Contracts" asp-action="PolicyDetail" asp-route-id="@Model.Id">Policy</a>
-            </td>
-    </tr>
-    <tr>
-        <th scope="row">deployment spec</th>
-        <td>
-            <a asp-controller="Contracts" asp-action="DeploymentSpecDetail" asp-route-id="@Model.Id">Deployment Spec</a>
-        </td>
-    </tr>
-        <tr>
-            <th scope="row">secrets</th>
-            <td>
-                <a asp-controller="Contracts" asp-action="SecretsDetail" asp-route-id="@Model.Id">Secrets</a>
-            </td>
-        </tr>
-        <tr>
-            <th scope="row">events</th>
-            <td>
-                <a asp-controller="Contracts" asp-action="EventsDetail" asp-route-id="@Model.Id">Events</a>
-            </td>
-        </tr>
-        <tr>
-        <th scope="row">content</th>
-        <td><pre>@Model.Data</pre></td>
-    </tr>
-</tbody>
-</table>
+<!-- Contract Details -->
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Contract Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="info-item">
+                            <label class="form-label fw-semibold text-muted">Contract ID</label>
+                            <div class="font-monospace">@Model.Id</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-item">
+                            <label class="form-label fw-semibold text-muted">Version</label>
+                            <div>@Model.Version</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-item">
+                            <label class="form-label fw-semibold text-muted">Status</label>
+                            <div>
+                                <span class="@statusClass">
+                                    <i class="fas fa-circle me-1" style="font-size: 0.5rem;"></i>
+                                    @Model.State
+                                </span>
+                                @{
+                                    if (Model.State == "Proposed")
+                                    {
+                                        <div class="mt-1">
+                                            <small class="text-muted">
+                                                Proposal ID:
+                                                <a asp-controller="Proposals" asp-action="Detail"
+                                                    asp-route-proposalId="@Model.ProposalId" asp-route-version="@Model.Version"
+                                                    class="text-decoration-none">@Model.ProposalId</a>
+                                            </small>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-tools me-2"></i>
+                    Quick Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a asp-controller="Contracts" asp-action="PolicyDetail" asp-route-id="@Model.Id"
+                        class="btn btn-outline-primary">
+                        <i class="fas fa-shield-alt me-2"></i>
+                        View Policy
+                    </a>
+                    <a asp-controller="Contracts" asp-action="DelegatePoliciesDetail" asp-route-id="@Model.Id"
+                        class="btn btn-outline-primary">
+                        <i class="fas fa-user-shield me-2"></i>
+                        View Delegate Policies
+                    </a>
+                    <a asp-controller="Contracts" asp-action="DeploymentSpecDetail" asp-route-id="@Model.Id"
+                        class="btn btn-outline-primary">
+                        <i class="fas fa-rocket me-2"></i>
+                        Deployment Spec
+                    </a>
+                    <a asp-controller="Contracts" asp-action="SecretsDetail" asp-route-id="@Model.Id"
+                        class="btn btn-outline-primary">
+                        <i class="fas fa-key me-2"></i>
+                        Secrets
+                    </a>
+                    <a asp-controller="Contracts" asp-action="EventsDetail" asp-route-id="@Model.Id"
+                        class="btn btn-outline-primary">
+                        <i class="fas fa-history me-2"></i>
+                        Events
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Contract Content -->
+<div class="card mt-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-code me-2"></i>
+            Contract Content
+        </h5>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copyContractContent()"
+            title="Copy content to clipboard">
+            <i class="fas fa-copy me-1"></i>
+            Copy
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="code-container">
+            <pre class="bg-light p-3 rounded" id="contractContent"><code>@Model.Data</code></pre>
+        </div>
+    </div>
+</div>
+
+<script>
+    function copyContractContent() {
+        const contentElement = document.getElementById('contractContent');
+        const copyButton = document.querySelector('[onclick="copyContractContent()"]');
+        const originalIcon = copyButton.querySelector('i');
+        const originalText = copyButton.innerHTML;
+
+        if (contentElement) {
+            // Get the text content without HTML tags
+            const textContent = contentElement.textContent || contentElement.innerText || '';
+
+            // Use the modern clipboard API if available
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(textContent).then(() => {
+                    // Show success feedback
+                    copyButton.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+                    copyButton.classList.remove('btn-outline-secondary');
+                    copyButton.classList.add('btn-success');
+
+                    // Reset button after 2 seconds
+                    setTimeout(() => {
+                        copyButton.innerHTML = originalText;
+                        copyButton.classList.remove('btn-success');
+                        copyButton.classList.add('btn-outline-secondary');
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy text: ', err);
+                    fallbackCopyTextToClipboard(textContent, copyButton, originalText);
+                });
+            } else {
+                // Fallback for older browsers
+                fallbackCopyTextToClipboard(textContent, copyButton, originalText);
+            }
+        }
+    }
+
+    function fallbackCopyTextToClipboard(text, copyButton, originalText) {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                // Show success feedback
+                copyButton.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+                copyButton.classList.remove('btn-outline-secondary');
+                copyButton.classList.add('btn-success');
+
+                // Reset button after 2 seconds
+                setTimeout(() => {
+                    copyButton.innerHTML = originalText;
+                    copyButton.classList.remove('btn-success');
+                    copyButton.classList.add('btn-outline-secondary');
+                }, 2000);
+            } else {
+                console.error('Fallback: Copying text command was unsuccessful');
+            }
+        } catch (err) {
+            console.error('Fallback: Oops, unable to copy', err);
+        }
+
+        document.body.removeChild(textArea);
+    }
+</script>
 
 @if (Model.FinalVotes != null && Model.FinalVotes.Any())
 {
-    <h3>Final Votes</h3>
-    <table class="table table-hover w-auto">
-        <thead>
-            <tr>
-                <th>MemberId</th>
-                <th>Name</th>
-                <th>Vote</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var vote in @Model.FinalVotes)
-            {
-                <tr>
-                    <td>
-                        <pre>@vote.MemberId</pre>
-                    </td>
-                    <td>
-                        <pre>@vote.MemberName</pre>
-                    </td>
-                    <td>
-                        <pre>@vote.Vote</pre>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-vote-yea me-2"></i>
+                Final Votes
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col">
+                                <i class="fas fa-user me-1"></i>
+                                Member ID
+                            </th>
+                            <th scope="col">
+                                <i class="fas fa-tag me-1"></i>
+                                Name
+                            </th>
+                            <th scope="col">
+                                <i class="fas fa-check-circle me-1"></i>
+                                Vote
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var vote in @Model.FinalVotes)
+                        {
+                            <tr>
+                                <td>
+                                    <span class="font-monospace">@vote.MemberId</span>
+                                </td>
+                                <td>
+                                    <span class="fw-medium">@vote.MemberName</span>
+                                </td>
+                                <td>
+                                    @{
+                                        var voteClass = vote.Vote.ToString() switch
+                                        {
+                                            "True" => "badge bg-success",
+                                            "False" => "badge bg-danger",
+                                            _ => "badge bg-secondary"
+                                        };
+
+                                        var voteText = vote.Vote.ToString() switch
+                                        {
+                                            "True" => "Accepted",
+                                            "False" => "Rejected",
+                                            _ => vote.Vote.ToString()
+                                        };
+                                    }
+                                    <span class="@voteClass">
+                                        @voteText
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 }

@@ -53,13 +53,6 @@ runs:
 
     - uses: ./.github/actions/build-container-and-artefacts
       with:
-        name: ccr-attestation
-        tag: ${{ inputs.tag }}
-        dockerfile: build/docker/Dockerfile.ccr-attestation
-        context: ${{ github.workspace }}
-
-    - uses: ./.github/actions/build-container-and-artefacts
-      with:
         name: ccr-secrets
         tag: ${{ inputs.tag }}
         dockerfile: build/docker/Dockerfile.ccr-secrets
@@ -98,4 +91,11 @@ runs:
         name: skr
         tag: ${{ inputs.tag }}
         dockerfile: build/docker/Dockerfile.skr
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: cvm-attestation-agent
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.cvm-attestation-agent
         context: ${{ github.workspace }}

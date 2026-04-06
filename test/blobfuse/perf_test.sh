@@ -61,7 +61,7 @@ blobfuse2 gen-test-config \
   --temp-path=${temp_dir} \
   --output-file=${config_file}
 
-# print the config file generated 
+# print the config file generated
 echo "Config file generated for encrypted mount:"
 cat ${config_file}
 
@@ -88,7 +88,7 @@ testnames=("write" "read" "create")
 set +e
 exit_code=0
 
-for testname in "${testnames[@]}"; 
+for testname in "${testnames[@]}";
 do
     ./fio_bench.sh $testname $mount_dir $mount_dir_plain $temp_dir $temp_dir_plain $config_file $config_file_plain
     exit_code=$?

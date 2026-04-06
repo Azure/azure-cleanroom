@@ -1,34 +1,32 @@
 {
   "name": "ccr-proxy-ext-processor-$name",
-  "containerImage": "$containerRegistryUrl/ccr-proxy-ext-processor@$digest",
-  "command": [
-    "/bin/sh",
-    "-c",
-    "./run.sh"
-  ],
-  "environmentVariables": [
-    {
-      "name": "PORT",
-      "value": "$port",
-      "strategy": "string"
-    },
-    {
-      "name": "BUNDLE_RESOURCE_PATH",
-      "value": "$policyBundleUrl",
-      "strategy": "string"
-    },
-    {
-      "name": "CCR_POLICY_ALLOW_ALL",
-      "value": "$allowAll",
-      "strategy": "string"
-    },
-    {
-      "name": "TELEMETRY_MOUNT_PATH",
-      "value": "$telemetryMountPath",
-      "strategy": "string"
-    }
-  ],
-"securityContext": {
+  "properties": {
+    "image": "$containerRegistryUrl/ccr-proxy-ext-processor@$digest",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "./run.sh"
+    ],
+    "environmentVariables": [
+      {
+        "name": "PORT",
+        "value": "$port"
+      },
+      {
+        "name": "BUNDLE_RESOURCE_PATH",
+        "value": "$policyBundleUrl"
+      },
+      {
+        "name": "CCR_POLICY_ALLOW_ALL",
+        "value": "$allowAll"
+      },
+      {
+        "name": "TELEMETRY_MOUNT_PATH",
+        "value": "$telemetryMountPath"
+      }
+    ],
+    "securityContext": {
       "privileged": "true"
+    }
   }
 }

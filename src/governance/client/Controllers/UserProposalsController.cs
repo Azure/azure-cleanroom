@@ -26,7 +26,9 @@ public class UserProposalsController : UserProposalControllerBase
     public async Task<IActionResult> GetUserProposal([FromRoute] string proposalId)
     {
         var appClient = this.CcfClientManager.GetAppClient();
-        using (HttpRequestMessage request = new(HttpMethod.Get, $"app/users/proposals/{proposalId}"))
+        using (HttpRequestMessage request = new(
+            HttpMethod.Post,
+            $"app/users/proposals/{proposalId}"))
         {
             using HttpResponseMessage response = await appClient.SendAsync(request);
             this.Response.CopyHeaders(response.Headers);
@@ -42,7 +44,7 @@ public class UserProposalsController : UserProposalControllerBase
     {
         var appClient = this.CcfClientManager.GetAppClient();
         using (HttpRequestMessage request =
-            new(HttpMethod.Get, $"app/users/proposals/{proposalId}/status"))
+            new(HttpMethod.Post, $"app/users/proposals/{proposalId}/status"))
         {
             using HttpResponseMessage response = await appClient.SendAsync(request);
             this.Response.CopyHeaders(response.Headers);

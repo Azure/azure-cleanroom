@@ -1,0 +1,28 @@
+apiVersion: kaito.sh/v1beta1
+kind: Workspace
+metadata:
+  name: <NAME>
+  namespace: <NAMESPACE>
+resource:
+  labelSelector:
+    matchLabels:
+      apps: llama-3point1-8b-instruct
+  preferredNodes:
+    - <NODENAME>
+inference:
+  template:
+    spec:
+      containers:
+        - name: llama-3point1-8b-instruct
+          image: ghcr.io/kaito-project/aikit/llama3.1:8b-instruct
+          args:
+            - "run"
+            - "--address=:5000"
+      #     volumeMounts:
+      #       - name: model-store
+      #         mountPath: /models
+      # volumes:
+      #   - name: model-store
+      #     hostPath:
+      #       path: /shared/models
+      #       type: Directory

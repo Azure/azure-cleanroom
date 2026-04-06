@@ -1,0 +1,33 @@
+﻿// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+using System.Net;
+using Controllers;
+
+namespace CcfConsortiumMgr.Models;
+
+public class RecoverConsortiumInput
+{
+    public required string CcfEndpoint { get; set; }
+
+    public required string CcfServiceCertPem { get; set; }
+
+    public void Validate()
+    {
+        if (string.IsNullOrEmpty(this.CcfEndpoint))
+        {
+            throw new ApiException(
+                HttpStatusCode.BadRequest,
+                "RequiredInputMissing",
+                $"{nameof(this.CcfEndpoint)} is missing.");
+        }
+
+        if (string.IsNullOrEmpty(this.CcfServiceCertPem))
+        {
+            throw new ApiException(
+                HttpStatusCode.BadRequest,
+                "RequiredInputMissing",
+                $"{nameof(this.CcfServiceCertPem)} is missing.");
+        }
+    }
+}

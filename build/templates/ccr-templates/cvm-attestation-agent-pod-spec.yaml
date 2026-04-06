@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: cvm-attestation-agent
+    image: $containerRegistryUrl/cvm/cvm-attestation-agent@$digest
+    command: []
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+    env:
+    - name: TELEMETRY_MOUNT_PATH
+      value: $telemetryMountPath
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: tpmrm0
+      mountPath: /dev/tpmrm0

@@ -84,6 +84,6 @@ public class EncryptionTests
         var signature = Signing.SignData(input, privateKey, RSASignaturePaddingMode.Pss);
         var result =
             Signing.VerifyDataUsingKey(input, signature, publicKey, RSASignaturePaddingMode.Pss);
-        Assert.AreEqual(true, result);
+        Assert.IsTrue(result);
     }
 }

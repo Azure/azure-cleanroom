@@ -1,37 +1,38 @@
 {
   "name": "ccr-init",
-  "containerImage": "$containerRegistryUrl/ccr-init@$digest",
-  "environmentVariables": [
-    {
-      "name": "TELEMETRY_MOUNT_PATH",
-      "value": "$telemetryMountPath",
-      "strategy": "string"
-    }
-  ],
-  "command": [
-    "python",
-    "setup-iptables.py",
-    "--clear-mount-paths",
-    "$volumeStatusMountPath",
-    "--create-directories",
-    "$telemetryMountPath/infrastructure",
-    "$telemetryMountPath/application"
-  ],
-  "securityContext": {
-    "privileged": "true"
-  },
-  "mounts": [
-    {
-      "name": "volumestatusmounts",
-      "mountPath": "$volumeStatusMountPath",
-      "mountType": "emptyDir",
-      "readOnly": false
+  "properties": {
+    "image": "$containerRegistryUrl/ccr-init@$digest",
+    "environmentVariables": [
+      {
+        "name": "TELEMETRY_MOUNT_PATH",
+        "value": "$telemetryMountPath"
+      }
+    ],
+    "command": [
+      "python",
+      "setup-iptables.py",
+      "--clear-mount-paths",
+      "$volumeStatusMountPath",
+      "--create-directories",
+      "$telemetryMountPath/infrastructure",
+      "$telemetryMountPath/application"
+    ],
+    "securityContext": {
+      "privileged": "true"
     },
-    {
-      "name": "telemetrymounts",
-      "mountPath": "$telemetryMountPath",
-      "mountType": "emptyDir",
-      "readOnly": false
-    }
-  ]
+    "volumeMounts": [
+      {
+        "name": "volumestatusmounts",
+        "mountPath": "$volumeStatusMountPath",
+        "mountType": "emptyDir",
+        "readOnly": false
+      },
+      {
+        "name": "telemetrymounts",
+        "mountPath": "$telemetryMountPath",
+        "mountType": "emptyDir",
+        "readOnly": false
+      }
+    ]
+  }
 }

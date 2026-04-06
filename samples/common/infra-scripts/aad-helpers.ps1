@@ -29,3 +29,12 @@ function GetLoggedInEntityObjectId {
         }
     }
 }
+
+function Get-Assignee-Principal-Type {
+    if ($env:GITHUB_ACTIONS -eq "true") {
+        return "ServicePrincipal"
+    }
+    else {
+        return "User"
+    }
+}

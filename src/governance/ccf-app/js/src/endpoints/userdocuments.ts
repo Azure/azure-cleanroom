@@ -1,6 +1,6 @@
 import * as ccfapp from "@microsoft/ccf-app";
 import { RsaOaepAesKwpParams, ccf } from "@microsoft/ccf-app/global";
-import { ErrorResponse } from "../models/errorresponse";
+import { ErrorResponse } from "../utils/ErrorResponse";
 import {
   UserDocumentStoreItem,
   PutUserDocumentRequest,
@@ -15,11 +15,8 @@ import {
   GetAcceptedUserDocumentResponse,
   ListUserDocumentsResponse
 } from "../models";
-import {
-  SnpAttestationResult,
-  verifySnpAttestation
-} from "../attestation/snpattestation";
-import { validateCallerAuthorized, verifyReportData } from "../utils/utils";
+import { parseRequestQuery, validateCallerAuthorized } from "../utils/utils";
+import { verifyAttestationAndReportData } from "../attestation/attestationVerifierFactory";
 import { Base64 } from "js-base64";
 
 const userDocumentsStore = ccfapp.typedKv(
@@ -148,6 +145,7 @@ export function putUserDocument(
   userDocumentsStore.set(id, {
     contractId: contractId,
     data: data,
+    labels: userDocumentRequest.labels,
     approvers: userDocumentRequest.approvers
   });
   return {};
@@ -184,6 +182,7 @@ export function getUserDocument(
       contractId: acceptedUserDocumentItem.contractId,
       approvers: acceptedUserDocumentItem.approvers,
       data: acceptedUserDocumentItem.data,
+      labels: acceptedUserDocumentItem.labels,
       proposalId: acceptedUserDocumentItem.proposalId,
       proposerId: acceptedUserDocumentItem.proposerId,
       finalVotes: acceptedUserDocumentItem.finalVotes
@@ -206,6 +205,7 @@ export function getUserDocument(
               state: "Proposed",
               contractId: args.document.contractId,
               data: args.document.data,
+              labels: args.document.labels,
               version: args.document.version,
               approvers: value.approvers,
               proposalId: k,
@@ -258,6 +258,7 @@ export function getUserDocument(
       version: version,
       contractId: userDocumentItem.contractId,
       data: userDocumentItem.data,
+      labels: userDocumentItem.labels,
       approvers: userDocumentItem.approvers,
       proposalId: "",
       proposerId: ""
@@ -301,28 +302,17 @@ export function getAcceptedUserDocument(
     };
   }
 
-  // Validate attestation report.
+  // Validate attestation report and report data.
   const contractId = request.params.contractId;
-  let snpAttestationResult: SnpAttestationResult;
-  try {
-    snpAttestationResult = verifySnpAttestation(
-      contractId,
-      requestBody.attestation
-    );
-  } catch (e) {
+  const { error } = verifyAttestationAndReportData(
+    contractId,
+    requestBody,
+    () => Base64.decode(requestBody.encrypt.publicKey)
+  );
+  if (error) {
     return {
       statusCode: 400,
-      body: new ErrorResponse("VerifySnpAttestationFailed", e.message)
-    };
-  }
-
-  // Then validate the report data value.
-  try {
-    verifyReportData(snpAttestationResult, requestBody.encrypt.publicKey);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("ReportDataMismatch", e.message)
+      body: error
     };
   }
 
@@ -370,6 +360,7 @@ export function getAcceptedUserDocument(
     contractId: acceptedUserDocumentItem.contractId,
     approvers: acceptedUserDocumentItem.approvers,
     data: acceptedUserDocumentItem.data,
+    labels: acceptedUserDocumentItem.labels,
     proposalId: acceptedUserDocumentItem.proposalId,
     proposerId: acceptedUserDocumentItem.proposerId,
     finalVotes: acceptedUserDocumentItem.finalVotes
@@ -400,26 +391,86 @@ export function listUserDocuments(
   if (error !== undefined) {
     return error;
   }
-  const userDocumentSet = new Set<string>();
+
+  const parsedQuery = parseRequestQuery(request);
+  const labelSelector = parsedQuery.labelSelector;
+  let requiredLabels: { [labelName: string]: string } = {};
+  if (labelSelector != null) {
+    const parts = labelSelector.split(",");
+    for (const part of parts) {
+      if (part.indexOf(":") == -1) {
+        return {
+          statusCode: 400,
+          body: new ErrorResponse(
+            "InvalidParameter",
+            "labelSelector query parameter must be of the form labelName:labelValue."
+          )
+        };
+      }
+
+      const subparts = part.split(":");
+      if (subparts.length != 2) {
+        return {
+          statusCode: 400,
+          body: new ErrorResponse(
+            "InvalidParameter",
+            "labelSelector query parameter must be of the form labelName:labelValue."
+          )
+        };
+      }
+
+      const labelName = subparts[0].trim();
+      const labelValue = subparts[1].trim();
+      if (labelName.length == 0 || labelValue.length == 0) {
+        return {
+          statusCode: 400,
+          body: new ErrorResponse(
+            "InvalidParameter",
+            "labelSelector query parameter must be of the form labelName:labelValue."
+          )
+        };
+      }
+
+      requiredLabels[labelName] = labelValue;
+    }
+  }
+
+  const userDocuments: { [documentId: string]: ListUserDocumentResponse } = {};
   userDocumentsStore.forEach((v, k) => {
-    userDocumentSet.add(k);
+    if (
+      labelSelector == null ||
+      (v.labels != null &&
+        Object.entries(requiredLabels).every(([labelName, labelValue]) => {
+          return labelName in v.labels && v.labels[labelName] == labelValue;
+        }))
+    ) {
+      const item: ListUserDocumentResponse = {
+        id: k,
+        labels: v.labels
+      };
+      userDocuments[k] = item;
+    }
   });
 
   acceptedUserDocumentsStore.forEach((v, k) => {
-    userDocumentSet.add(k);
-  });
-
-  const userDocuments: ListUserDocumentResponse[] = [];
-  userDocumentSet.forEach((v) => {
-    const item = {
-      id: v
-    };
-    userDocuments.push(item);
+    if (
+      labelSelector == null ||
+      (v.labels != null &&
+        Object.entries(requiredLabels).every(([labelName, labelValue]) => {
+          return labelName in v.labels && v.labels[labelName] == labelValue;
+        }))
+    ) {
+      const item: ListUserDocumentResponse = {
+        id: k,
+        labels: v.labels
+      };
+      userDocuments[k] = item;
+    }
   });
 
   return {
     body: {
-      value: userDocuments
+      value: Object.values(userDocuments)
     }
   };
 }

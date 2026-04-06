@@ -1,0 +1,55 @@
+name: frontend-api-containers
+services:
+  credentials-proxy:
+    image: cleanroombuild.azurecr.io/workleap/azure-cli-credentials-proxy:1.2.5
+    ports:
+      - "0:8080"
+    volumes:
+      - ${HOME}/.azure:/app/.azure/
+    user: "0:0"
+    networks:
+      - governance-test_default
+  cgs-client-user-from-header:
+    image: $cgsClientImage
+    container_name: cgs-client
+    ports:
+      - "61002:8080"
+    networks:
+      - governance-test_default
+  mock-server:
+    image: $mockServerImage
+    container_name: mock-server
+    ports:
+      - "61003:8386"
+    networks:
+      - governance-test_default
+  frontend-service:
+    image: $frontendServiceImage
+    container_name: frontend-service
+    ports:
+      - "61001:8384"
+    environment:
+      - DOTNET_ENVIRONMENT=Development
+      - CGS_CLIENT_ENDPOINT=$network:61002
+      - MEMBERSHIP_MANAGER_ENDPOINT=$network:61003
+      - CONSORTIUM_MANAGER_ENDPOINT=$network:61003
+      - FIRST_PARTY_APP_ID=13ea23c1-5d2f-45c2-83d8-f2bdb98bf1ae
+      - ANALYTICS_WORKLOAD_ID=analytics_workload
+      - TENANT_ID=$frontendTenantId
+      - KEY_VAULT_URL=https://frontend-kv-testwestus.vault.azure.net/
+      - FIRST_PARTY_APP_CERTIFICATE_NAME=s2sCertificate
+      - FIRST_PARTY_APP_TOKEN_SCOPE=https://management.azure.com/.default
+      - CCR_SERVICE_CERT_PATH=ccr_service_cert_path
+      - IDENTITY_ENDPOINT=http://credentials-proxy:8080/token
+      - IMDS_ENDPOINT=dummy_required_value
+      - INSECURE_VIRTUAL_ENVIRONMENT=true
+    networks:
+      - governance-test_default
+    depends_on:
+      - credentials-proxy
+      - cgs-client-user-from-header
+      - mock-server
+
+networks:
+  governance-test_default:
+

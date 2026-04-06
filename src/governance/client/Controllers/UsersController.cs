@@ -31,7 +31,7 @@ public class UsersController : ClientControllerBase
     {
         var ccfClient = this.CcfClientManager.GetAppClient();
         using HttpResponseMessage response =
-            await ccfClient.GetAsync($"app/users/identities/{userId}");
+            await ccfClient.PostAsync($"app/users/identities/{userId}", content: null);
         await response.ValidateStatusCodeAsync(this.Logger);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
         return jsonResponse!;

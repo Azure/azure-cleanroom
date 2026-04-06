@@ -106,19 +106,13 @@ public class VirtualClusterProvider : ICleanRoomClusterProvider
                 progressReporter);
         }
 
-        // Install Spark Operator and wait for it to be ready.
-        progressReporter.Report("Installing spark-operator...");
-        this.logger.LogInformation(
-            $"Starting installation of Spark-Operator helm chart on: {kindClusterName}");
-        var helmClient = new HelmClient(this.logger, this.configuration, kubeConfigFile);
-        await helmClient.InstallSparkOperatorChart("spark-operator");
-        this.logger.LogInformation($"Spark-Operator helm chart installation succeeded.");
-
-        var kubectlClient = new KubectlClient(this.logger, this.configuration, kubeConfigFile);
-        progressReporter.Report("Waiting for spark-operator to become ready...");
-        this.logger.LogInformation($"Waiting for Spark-Operator pod/deployment to become ready.");
-        await kubectlClient.WaitForSparkOperatorUp("spark-operator");
-        this.logger.LogInformation($"Spark-Operator pod/deployment are reporting ready.");
+        if (input.MonitoringProfile != null && input.MonitoringProfile.Enabled)
+        {
+            this.logger.LogInformation($"Enabling monitoring for cluster: {clClusterName}");
+            await this.EnableClusterMonitoringAsync(
+                clClusterName,
+                progressReporter);
+        }
 
         if (input.AnalyticsWorkloadProfile != null && input.AnalyticsWorkloadProfile.Enabled)
         {
@@ -126,6 +120,24 @@ public class VirtualClusterProvider : ICleanRoomClusterProvider
                 clClusterName,
                 input.AnalyticsWorkloadProfile,
                 Constants.AnalyticsWorkloadNamespace,
+                progressReporter);
+        }
+
+        if (input.InferencingWorkloadProfile?.KServeProfile != null &&
+            input.InferencingWorkloadProfile.KServeProfile.Enabled)
+        {
+            await this.EnableKServeInferencingWorkloadAsync(
+                clClusterName,
+                input.InferencingWorkloadProfile.KServeProfile,
+                Constants.KServeInferencingWorkloadNamespace,
+                progressReporter);
+        }
+
+        if (input.FlexNodeProfile != null && input.FlexNodeProfile.Enabled)
+        {
+            await this.EnableFlexNodeAsync(
+                clClusterName,
+                input.FlexNodeProfile,
                 progressReporter);
         }
 
@@ -230,12 +242,38 @@ data:
                 progressReporter);
         }
 
+        if (input.MonitoringProfile != null && input.MonitoringProfile.Enabled)
+        {
+            this.logger.LogInformation($"Enabling monitoring for cluster: {clClusterName}");
+            await this.EnableClusterMonitoringAsync(
+                clClusterName,
+                progressReporter);
+        }
+
         if (input.AnalyticsWorkloadProfile != null && input.AnalyticsWorkloadProfile.Enabled)
         {
             await this.EnableAnalyticsWorkloadAsync(
                 clClusterName,
                 input.AnalyticsWorkloadProfile,
                 Constants.AnalyticsWorkloadNamespace,
+                progressReporter);
+        }
+
+        if (input.InferencingWorkloadProfile?.KServeProfile != null &&
+            input.InferencingWorkloadProfile.KServeProfile.Enabled)
+        {
+            await this.EnableKServeInferencingWorkloadAsync(
+                clClusterName,
+                input.InferencingWorkloadProfile.KServeProfile,
+                Constants.KServeInferencingWorkloadNamespace,
+                progressReporter);
+        }
+
+        if (input.FlexNodeProfile != null && input.FlexNodeProfile.Enabled)
+        {
+            await this.EnableFlexNodeAsync(
+                clClusterName,
+                input.FlexNodeProfile,
                 progressReporter);
         }
 
@@ -261,18 +299,57 @@ data:
 
     public async Task<CleanRoomClusterKubeConfig?> TryGetClusterKubeConfig(
         string clClusterName,
-        JsonObject? providerConfig)
+        JsonObject? providerConfig,
+        KubeConfigAccessRole accessRole)
     {
         string kindClusterName = this.ToKindClusterName(clClusterName);
         var kindClient = new KindClient(this.logger, this.configuration);
+        var kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
 
         try
         {
             var kubeConfig = await kindClient.GetKubeConfig(kindClusterName);
-            return new CleanRoomClusterKubeConfig
+
+            var kubectlClient = new KubectlClient(
+                this.logger,
+                this.configuration,
+                kubeConfigFile);
+
+            switch (accessRole)
             {
-                Kubeconfig = Encoding.UTF8.GetBytes(kubeConfig)
-            };
+                case KubeConfigAccessRole.Readonly:
+                    await kubectlClient.CreateReadOnlyRoleAsync(
+                        Constants.ReadonlyUserName);
+
+                    var readonlyKubeConfig = await Utils.GetUserKubeConfigAsync(
+                        kubectlClient,
+                        kubeConfig,
+                        Constants.ReadonlyUserName);
+
+                    return new CleanRoomClusterKubeConfig
+                    {
+                        Kubeconfig = Encoding.UTF8.GetBytes(readonlyKubeConfig)
+                    };
+
+                case KubeConfigAccessRole.Diagnostic:
+                    await kubectlClient.CreateDiagnosticRoleAsync(
+                        Constants.DiagnosticUserName);
+
+                    var diagnosticKubeConfig = await Utils.GetUserKubeConfigAsync(
+                        kubectlClient,
+                        kubeConfig,
+                        Constants.DiagnosticUserName);
+                    return new CleanRoomClusterKubeConfig
+                    {
+                        Kubeconfig = Encoding.UTF8.GetBytes(diagnosticKubeConfig)
+                    };
+
+                default:
+                    return new CleanRoomClusterKubeConfig
+                    {
+                        Kubeconfig = Encoding.UTF8.GetBytes(kubeConfig)
+                    };
+            }
         }
         catch (ExecuteCommandException e)
         when (e.Message.Contains("could not locate any control plane nodes for cluster " +
@@ -282,9 +359,20 @@ data:
         }
     }
 
-    public async Task<CleanRoomCluster?> TryGetCluster(
+    public async Task<CleanRoomClusterHealth?> TryGetClusterHealth(
         string clClusterName,
         JsonObject? providerConfig)
+    {
+        string kindClusterName = this.ToKindClusterName(clClusterName);
+        string kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
+        var kubectlClient = new KubectlClient(this.logger, this.configuration, kubeConfigFile);
+
+        return await Utils.GetClusterHealth(kubectlClient);
+    }
+
+    public async Task<CleanRoomCluster?> TryGetCluster(
+            string clClusterName,
+            JsonObject? providerConfig)
     {
         string kindClusterName = this.ToKindClusterName(clClusterName);
         var kindClient = new KindClient(this.logger, this.configuration);
@@ -299,13 +387,37 @@ data:
             await kubectlClient.TryGetAnalyticsAgentEndpoint(Constants.AnalyticsAgentNamespace);
         (bool observabilityEnabled, string? observabilityEndpoint) =
             await kubectlClient.TryGetObservabilityEndpoint(Constants.ObservabilityNamespace);
+        bool monitoringEnabled =
+            await kubectlClient.IsKaitoInstalled(Constants.MonitoringNamespace);
+        JsonObject? monitoringStatus = null;
+        if (monitoringEnabled)
+        {
+            monitoringStatus = await kubectlClient.GetKaitoWorkspaceStatus(
+                Constants.MonitoringNamespace);
+        }
+
+        (bool kserveInferencingWorkloadEnabled, string? kserveInferencingAgentEndpoint) =
+            await kubectlClient.TryGetInferencingAgentEndpoint(
+                Constants.KServeInferencingAgentNamespace);
+        var flexNodeObjects = await kubectlClient.GetFlexNodesAsync();
+        bool flexNodeEnabled = flexNodeObjects.Count > 0;
+        var flexNodes = flexNodeObjects.Select(node => new FlexNode
+        {
+            K8sNodeDetails = node
+        }).ToList();
         return this.ToCleanRoomCluster(
             clClusterName,
             kindClusterName,
             analyticsWorkloadEnabled,
             analyticsAgentEndpoint,
             observabilityEnabled,
-            observabilityEndpoint);
+            observabilityEndpoint,
+            monitoringEnabled,
+            monitoringStatus,
+            kserveInferencingWorkloadEnabled,
+            kserveInferencingAgentEndpoint,
+            flexNodeEnabled,
+            flexNodes);
     }
 
     public async Task<AnalyticsWorkloadGeneratedDeployment> GenerateAnalyticsWorkloadDeployment(
@@ -316,11 +428,11 @@ data:
         var contractData = await this.httpClientManager.GetContractData(
             this.logger,
             input.ContractUrl,
-            input.ContractUrlCaCert);
+            input.ContractUrlCaCert,
+            input.ContractUrlHeaders);
 
         var telemetryCollectionEnabled =
             input.TelemetryProfile != null && input.TelemetryProfile.CollectionEnabled;
-        Console.WriteLine($"Telemetry collection enabled: {telemetryCollectionEnabled}");
         return new AnalyticsWorkloadGeneratedDeployment
         {
             SecurityPolicyCreationOption = policyOption.PolicyCreationOption.ToString(),
@@ -333,25 +445,74 @@ data:
                     Release = Constants.AnalyticsAgentReleaseName,
                     Namespace = Constants.AnalyticsAgentNamespace
                 },
-                Values = AgentChartValues.ToAgentChartValues(
+                Values = AnalyticsAgentChartValues.ToAgentChartValues(
                     contractData,
                     telemetryCollectionEnabled,
                     Constants.SparkFrontendEndpoint,
-                    AciConstants.AllowAllPolicyDigest)
+                    AciConstants.AllowAllPolicy.Digest)
             },
             GovernancePolicy = new()
             {
                 Type = "add",
+                PolicyType = "snp-caci",
                 Claims = new()
                 {
-                    IsDebuggable = false,
-                    HostData = AciConstants.AllowAllPolicyDigest
+                    ["x-ms-sevsnpvm-is-debuggable"] = false,
+                    ["x-ms-sevsnpvm-hostdata"] = AciConstants.AllowAllPolicy.Digest
                 }
             },
             CcePolicy = new()
             {
-                Value = AciConstants.AllowAllPolicyRegoBase64,
+                Value = AciConstants.AllowAllPolicy.RegoBase64,
                 DocumentUrl = ImageUtils.GetAnalyticsAgentSecurityPolicyDocumentUrl()
+            }
+        };
+    }
+
+    public async Task<KServeInferencingWorkloadGeneratedDeployment>
+        GenerateKServeInferencingWorkloadDeployment(
+        GenerateKServeInferencingWorkloadDeploymentInput input,
+        JsonObject? providerConfig)
+    {
+        var contractData = await this.httpClientManager.GetContractData(
+            this.logger,
+            input.ContractUrl,
+            input.ContractUrlCaCert,
+            input.ContractUrlHeaders);
+
+        var telemetryCollectionEnabled =
+            input.TelemetryProfile != null && input.TelemetryProfile.CollectionEnabled;
+        return new KServeInferencingWorkloadGeneratedDeployment
+        {
+            DeploymentTemplate = new()
+            {
+                ChartMetadata = new()
+                {
+                    Chart = ImageUtils.GetInferencingAgentChartPath(),
+                    Version = ImageUtils.GetInferencingAgentChartVersion(),
+                    Release = Constants.KServeInferencingAgentReleaseName,
+                    Namespace = Constants.KServeInferencingAgentNamespace
+                },
+                Values = KServeInferencingAgentChartValues.ToAgentChartValues(
+                    contractData,
+                    telemetryCollectionEnabled,
+                    Constants.KServeInferencingFrontendEndpoint,
+                    AciConstants.AllowAllPolicy2.Digest)
+            },
+            GovernancePolicy = new()
+            {
+                Type = "add",
+                PolicyType = "snp-caci",
+                Claims = new()
+                {
+                    ["x-ms-sevsnpvm-is-debuggable"] = false,
+                    ["x-ms-sevsnpvm-hostdata"] = AciConstants.AllowAllPolicy.Digest
+                }
+            },
+            CcePolicy = new()
+            {
+                Value = AciConstants.AllowAllPolicy.RegoBase64,
+                DocumentUrl = ImageUtils.GetKServeInferencingAgentSecurityPolicyDocumentUrl()
             }
         };
     }
@@ -373,7 +534,13 @@ data:
         bool analyticsWorkloadEnabled,
         string? analyticsAgentEndpoint,
         bool observabilityEnabled,
-        string? observabilityEndpoint)
+        string? observabilityEndpoint,
+        bool monitoringEnabled,
+        JsonObject? monitoringStatus,
+        bool kserveInferencingWorkloadEnabled,
+        string? kserveInferencingAgentEndpoint,
+        bool flexNodeEnabled,
+        List<FlexNode>? flexNodes = null)
     {
         return new CleanRoomCluster
         {
@@ -390,11 +557,39 @@ data:
                 TracesEndpoint = observabilityEnabled ?
                     Constants.TempoServiceEndpoint : null
             },
+            MonitoringProfile = new MonitoringProfile
+            {
+                Enabled = monitoringEnabled,
+                KaitoProfile = monitoringEnabled ? new KaitoProfile
+                {
+                    ModelEndpoint = "http://workspace-llama-3point1-8b-instruct.kaito-workspace.svc",
+                    Workspace = new KaitoWorkspace
+                    {
+                        Status = monitoringStatus
+                    }
+                }
+                : null
+            },
             AnalyticsWorkloadProfile = new AnalyticsWorkloadProfile
             {
                 Enabled = analyticsWorkloadEnabled,
                 Namespace = analyticsWorkloadEnabled ? Constants.AnalyticsWorkloadNamespace : null,
                 Endpoint = analyticsAgentEndpoint
+            },
+            InferencingWorkloadProfile = new InferencingProfile
+            {
+                KServeProfile = new KServeInferencingProfile
+                {
+                    Enabled = kserveInferencingWorkloadEnabled,
+                    Namespace = kserveInferencingWorkloadEnabled ?
+                    Constants.KServeInferencingWorkloadNamespace : null,
+                    Endpoint = kserveInferencingAgentEndpoint
+                }
+            },
+            FlexNodeProfile = new FlexNodeProfile
+            {
+                Enabled = flexNodeEnabled,
+                Nodes = flexNodes
             },
             ProviderProperties = new JsonObject
             {
@@ -407,6 +602,184 @@ data:
     private string ToKindClusterName(string input)
     {
         return input + "-kind";
+    }
+
+    private async Task EnableFlexNodeAsync(
+        string clClusterName,
+        FlexNodeProfileInput flexNodeProfile,
+        IProgress<string> progressReporter)
+    {
+        const string StagingDir = "/opt/api-server-proxy-staging";
+        const string ProxyListenAddr = "127.0.0.1:6444";
+
+        string kindClusterName = this.ToKindClusterName(clClusterName);
+        string kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
+        var kubectlClient = new KubectlClient(this.logger, this.configuration, kubeConfigFile);
+        var dockerCliClient = new DockerCliClient(this.logger);
+
+        progressReporter.Report("Configuring flex node on kind cluster...");
+        this.logger.LogInformation("Configuring flex node on kind cluster...");
+
+        // Use one of the worker nodes with the expected naming convention.
+        var nodeName = $"{kindClusterName}-worker3";
+
+        if (await kubectlClient.IsFlexNodeReadyAsync(nodeName))
+        {
+            progressReporter.Report(
+                $"Flex node setup already completed on worker node '{nodeName}'...");
+            this.logger.LogInformation(
+                $"Flex node '{nodeName}' already has ready label. Skipping configuration.");
+            return;
+        }
+
+        this.logger.LogInformation($"Configuring worker node '{nodeName}' as flex node...");
+
+        // Add taint and labels to the worker node.
+        await kubectlClient.TaintNodeAsync(
+            nodeName,
+            "pod-policy=required:NoSchedule",
+            overwrite: true);
+
+        await kubectlClient.LabelNodeAsync(
+            nodeName,
+            "cleanroom.azure.com/flexnode=true",
+            overwrite: true);
+
+        await kubectlClient.LabelNodeAsync(
+            nodeName,
+            "pod-policy=required",
+            overwrite: true);
+
+        // Remove the placeholder taint that was added during kind cluster creation.
+        this.logger.LogInformation($"Removing placeholder taint from node '{nodeName}'...");
+        await kubectlClient.RemoveTaintNodeAsync(nodeName, "for-flex-node");
+
+        this.logger.LogInformation(
+            $"Worker node '{nodeName}' configured with flex node taint and labels.");
+
+        // Install api-server-proxy on the worker node.
+        progressReporter.Report("Installing api-server-proxy on flex node...");
+        this.logger.LogInformation($"Installing api-server-proxy on worker node: {nodeName}");
+
+        // Pull the api-server-proxy OCI package (binary + install/uninstall scripts).
+        var packageUrl = ImageUtils.ApiServerProxyPackageUrl();
+        this.logger.LogInformation(
+            $"Pulling api-server-proxy package from {packageUrl}...");
+        var oras = new OrasClient(this.logger, this.configuration);
+        string packageDir = Path.Combine(Path.GetTempPath(), $"{nodeName}-api-server-proxy-pkg");
+        if (Directory.Exists(packageDir))
+        {
+            Directory.Delete(packageDir, recursive: true);
+        }
+
+        Directory.CreateDirectory(packageDir);
+        bool useHttp = packageUrl.StartsWith("host.docker.internal") ||
+            packageUrl.StartsWith("localhost") ||
+            packageUrl.StartsWith("172.17.0.1") ||
+            packageUrl.StartsWith("ccr-registry");
+        await oras.Pull(packageUrl, packageDir, useHttp);
+        this.logger.LogInformation("api-server-proxy package pulled successfully.");
+
+        // Create staging directory on node.
+        this.logger.LogInformation($"Creating staging directory on node: {StagingDir}");
+        await dockerCliClient.Exec(nodeName, $"mkdir -p {StagingDir}");
+
+        // Copy uninstall.sh to node and run it to clean up any previous installation.
+        this.logger.LogInformation("Copying uninstall.sh to node...");
+        await dockerCliClient.Copy(
+            nodeName,
+            Path.Combine(packageDir, "uninstall.sh"),
+            $"{StagingDir}/uninstall.sh");
+
+        this.logger.LogInformation("Running uninstall.sh on worker node...");
+        await dockerCliClient.Exec(nodeName, $"bash {StagingDir}/uninstall.sh");
+        this.logger.LogInformation("api-server-proxy uninstall script completed.");
+
+        // Copy install.sh and the pre-built binary to node.
+        this.logger.LogInformation("Copying install.sh and api-server-proxy binary to node...");
+        await dockerCliClient.Copy(
+            nodeName,
+            Path.Combine(packageDir, "install.sh"),
+            $"{StagingDir}/install.sh");
+        await dockerCliClient.Copy(
+            nodeName,
+            Path.Combine(packageDir, "api-server-proxy"),
+            $"{StagingDir}/api-server-proxy");
+
+        // Copy signing certificate to node.
+        this.logger.LogInformation("Copying signing certificate to node...");
+        var tempSigningCertPath = Path.Combine(Path.GetTempPath(), $"{nodeName}-signing-cert.pem");
+        await File.WriteAllTextAsync(tempSigningCertPath, flexNodeProfile.PolicySigningCertPem);
+        await dockerCliClient.Copy(nodeName, tempSigningCertPath, $"{StagingDir}/signing-cert.pem");
+
+        // Verify files were copied.
+        this.logger.LogInformation("Verifying files on node...");
+        await dockerCliClient.Exec(nodeName, $"ls -la {StagingDir}/");
+
+        // Run install.sh with --local-binary, signing certificate and proxy listen address.
+        this.logger.LogInformation("Running install.sh on worker node...");
+        await dockerCliClient.Exec(
+            nodeName,
+            $"bash {StagingDir}/install.sh " +
+            $"--local-binary {StagingDir}/api-server-proxy " +
+            $"--signing-cert-file {StagingDir}/signing-cert.pem " +
+            $"--proxy-listen-addr {ProxyListenAddr}");
+
+        this.logger.LogInformation("api-server-proxy install script completed.");
+
+        // Verify api-server-proxy deployment.
+        await this.VerifyApiServerProxyDeploymentAsync(nodeName, dockerCliClient);
+
+        await kubectlClient.LabelNodeAsync(
+            nodeName,
+            "cleanroom.azure.com/ready=true",
+            overwrite: true);
+        this.logger.LogInformation($"api-server-proxy installed successfully on node: {nodeName}");
+    }
+
+    private async Task VerifyApiServerProxyDeploymentAsync(
+        string nodeName,
+        DockerCliClient dockerCliClient)
+    {
+        this.logger.LogInformation("Verifying api-server-proxy deployment...");
+
+        // Check api-server-proxy service status.
+        try
+        {
+            await dockerCliClient.Exec(
+                nodeName,
+                "systemctl status api-server-proxy --no-pager");
+            this.logger.LogInformation("api-server-proxy service is running.");
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogWarning($"api-server-proxy status check failed: {ex.Message}");
+        }
+
+        // Check recent api-server-proxy logs.
+        try
+        {
+            await dockerCliClient.Exec(
+                nodeName,
+                "journalctl -u api-server-proxy --no-pager -n 20");
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogWarning($"Failed to get api-server-proxy logs: {ex.Message}");
+        }
+
+        // Check kubelet service status.
+        try
+        {
+            await dockerCliClient.Exec(
+                nodeName,
+                "systemctl status kubelet --no-pager | head -15");
+            this.logger.LogInformation("kubelet service is running.");
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogWarning($"kubelet status check failed: {ex.Message}");
+        }
     }
 
     private async Task EnableClusterObservabilityAsync(
@@ -422,6 +795,8 @@ data:
         await kubectlClient.CreateNamespaceAsync(Constants.ObservabilityNamespace);
         this.logger.LogInformation($"Namespace created.");
         progressReporter.Report("Installing prometheus, loki, tempo and grafana...");
+        this.logger.LogInformation(
+            $"Installing Prometheus, Loki, Tempo and Grafana on: {clClusterName}.");
 
         var prometheusTask = helmClient.InstallPrometheusChart(
             Constants.PrometheusReleaseName,
@@ -476,6 +851,79 @@ data:
             $"Grafana is ready on: {clClusterName}");
     }
 
+    private async Task EnableClusterMonitoringAsync(
+        string clClusterName,
+        IProgress<string> progressReporter)
+    {
+        string kindClusterName = this.ToKindClusterName(clClusterName);
+        string kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
+        var kubectlClient = new KubectlClient(this.logger, this.configuration, kubeConfigFile);
+        var helmClient = new HelmClient(this.logger, this.configuration, kubeConfigFile);
+
+        this.logger.LogInformation($"Creating namespace {Constants.MonitoringNamespace}.");
+        await kubectlClient.CreateNamespaceAsync(Constants.MonitoringNamespace);
+        this.logger.LogInformation($"Namespace created.");
+        progressReporter.Report("Installing Kaito workspace controller...");
+
+        await helmClient.InstallKaitoChart(
+            Constants.KaitoReleaseName,
+            Constants.MonitoringNamespace);
+
+        this.logger.LogInformation($"Kaito workspace controller installation succeeded.");
+
+        this.logger.LogInformation(
+            $"Waiting for Kaito workspace controller to become ready on: {clClusterName}");
+        progressReporter.Report("Waiting for Kaito workspace controller to become ready...");
+        await kubectlClient.WaitForKaitoUp(Constants.MonitoringNamespace);
+        this.logger.LogInformation(
+            $"Kaito workspace controller is ready on: {clClusterName}");
+
+        string preferredNodeName = $"{clClusterName}-kind-worker3";
+
+        // Check if image already exists on the node
+        var dockerCliClient = new DockerCliClient(this.logger);
+        var image = "ghcr.io/kaito-project/aikit/llama3.1:8b-instruct";
+        var imageCheckCommand = $"crictl images -o json";
+        this.logger.LogInformation(
+            $"Checking if image {image} is already " +
+            $"present on {preferredNodeName}.");
+        var (exitCode, output, _) = await dockerCliClient.ExecWithOutput(
+            preferredNodeName,
+            imageCheckCommand);
+        this.logger.LogInformation($"exitCode {exitCode} output {output}.");
+        if (exitCode == 0 && output.Contains(image))
+        {
+            this.logger.LogInformation(
+                $"Image {image} already present on {preferredNodeName}. Skipping image load.");
+            progressReporter.Report(
+                $"Image {image} already present on node {preferredNodeName}...");
+        }
+        else
+        {
+            var sharedDir = Environment.GetEnvironmentVariable("SHARED_DIR") ??
+                throw new ArgumentNullException("SHARED_DIR");
+            var imageFile = Path.Combine(sharedDir, "images/llama3.1:8b-instruct.tar");
+            this.logger.LogInformation($"Loading {imageFile} into {preferredNodeName}.");
+            progressReporter.Report(
+                $"Loading {imageFile} into node {preferredNodeName} to avoid image pull " +
+                $"during pod start...");
+            var kindClient = new KindClient(this.logger, this.configuration);
+            await kindClient.LoadImageArchive(imageFile, kindClusterName, preferredNodeName);
+        }
+
+        this.logger.LogInformation(
+            $"Starting llama3.1:8b-instruct ai kit model deployment via Kaito on node " +
+            $"{preferredNodeName}");
+        progressReporter.Report(
+            $"Starting llama3.1:8b-instruct ai kit model deployment via Kaito on node " +
+            $"{preferredNodeName}...");
+        await kubectlClient.DeployAIKitModelVirtual(
+            Constants.MonitoringNamespace,
+            preferredNodeName);
+        this.logger.LogInformation(
+            $"Llama3.1:8b-instruct ai kit model deployment started via Kaito on: {clClusterName}.");
+    }
+
     private async Task EnableAnalyticsWorkloadAsync(
         string clClusterName,
         AnalyticsWorkloadProfileInput input,
@@ -483,8 +931,15 @@ data:
         IProgress<string> progressReporter)
     {
         string kindClusterName = this.ToKindClusterName(clClusterName);
-
         string kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
+
+        progressReporter.Report("Installing spark-operator...");
+        this.logger.LogInformation(
+            $"Starting installation of Spark-Operator helm chart on: {kindClusterName}");
+        var helmClient = new HelmClient(this.logger, this.configuration, kubeConfigFile);
+        await helmClient.InstallSparkOperatorChart("spark-operator");
+        this.logger.LogInformation($"Spark-Operator helm chart installation succeeded.");
+
         var kubectlClient = new KubectlClient(this.logger, this.configuration, kubeConfigFile);
         this.logger.LogInformation($"Creating namespace {ns}.");
         await kubectlClient.CreateNamespaceAsync(ns);
@@ -510,10 +965,12 @@ data:
         this.logger.LogInformation(
             $"Starting installation of cleanroom-spark-analytics-agent helm chart on: " +
             $"{kindClusterName}");
-        var deploymentTemplate = await this.httpClientManager.GetDeploymentTemplate(
-            this.logger,
-            input.ConfigurationUrl!,
-            input.ConfigurationUrlCaCert);
+        var deploymentTemplate =
+            await this.httpClientManager.GetDeploymentTemplate<AnalyticsDeploymentTemplate>(
+                this.logger,
+                input.ConfigurationUrl!,
+                input.ConfigurationUrlCaCert,
+                input.ConfigurationUrlHeaders);
         await this.InstallAnalyticsAgentOnKindAsync(
             deploymentTemplate,
             telemetryCollectionEnabled,
@@ -531,10 +988,94 @@ data:
         this.logger.LogInformation($"Waiting for analytics agent pod/deployment to become ready.");
         await kubectlClient.WaitForAnalyticsAgentUp(Constants.AnalyticsAgentNamespace);
         this.logger.LogInformation($"Analytics agent pod/deployment are reporting ready.");
+
+        progressReporter.Report("Waiting for spark-operator to become ready...");
+        this.logger.LogInformation($"Waiting for Spark-Operator pod/deployment to become ready.");
+        await kubectlClient.WaitForSparkOperatorUp("spark-operator");
+        this.logger.LogInformation($"Spark-Operator pod/deployment are reporting ready.");
+    }
+
+    private async Task EnableKServeInferencingWorkloadAsync(
+        string clClusterName,
+        KServeInferencingWorkloadProfileInput input,
+        string ns,
+        IProgress<string> progressReporter)
+    {
+        string kindClusterName = this.ToKindClusterName(clClusterName);
+        string kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
+
+        progressReporter.Report("Installing cert-manager...");
+        this.logger.LogInformation(
+            $"Starting installation of cert-manager helm chart on: {kindClusterName}");
+        var helmClient = new HelmClient(this.logger, this.configuration, kubeConfigFile);
+        await helmClient.InstallCertManagerChart("cert-manager");
+        this.logger.LogInformation($"Cert-manager helm chart installation succeeded.");
+
+        var kubectlClient = new KubectlClient(this.logger, this.configuration, kubeConfigFile);
+
+        this.logger.LogInformation($"Creating namespace {ns}.");
+        await kubectlClient.CreateNamespaceAsync(ns);
+        this.logger.LogInformation($"Namespace created.");
+
+        progressReporter.Report("Installing KServe...");
+        this.logger.LogInformation(
+            $"Starting installation of KServe helm chart on: {kindClusterName}");
+        await helmClient.InstallKServe();
+        this.logger.LogInformation($"KServe helm chart installation succeeded.");
+
+        var deploymentTemplate =
+            await this.httpClientManager.GetDeploymentTemplate<KServeInferencingDeploymentTemplate>(
+                this.logger,
+                input.ConfigurationUrl!,
+                input.ConfigurationUrlCaCert,
+                input.ConfigurationUrlHeaders);
+
+        var telemetryCollectionEnabled =
+            input.TelemetryProfile != null &&
+            input.TelemetryProfile.CollectionEnabled;
+        progressReporter.Report("Installing kserve-inferencing-frontend...");
+        this.logger.LogInformation(
+            $"Starting installation of kserve-inferencing-frontend helm chart on: " +
+            $"{kindClusterName}");
+        await this.InstallKServeInferencingFrontendOnKindAsync(
+            deploymentTemplate,
+            telemetryCollectionEnabled,
+            kubeConfigFile);
+        this.logger.LogInformation($"Kserve-inferencing-frontend helm chart installation " +
+            $"succeeded.");
+
+        progressReporter.Report("Installing kserve-inferencing-agent...");
+        this.logger.LogInformation(
+            $"Starting installation of kserve-inferencing-agent helm chart on: " +
+            $"{kindClusterName}");
+        await this.InstallKServeInferencingAgentOnKindAsync(
+            deploymentTemplate,
+            telemetryCollectionEnabled,
+            kubeConfigFile);
+        this.logger.LogInformation($"Kserve-inferencing-agent helm chart installation " +
+            $"succeeded.");
+
+        progressReporter.Report("Waiting for KServe to become ready...");
+        this.logger.LogInformation($"Waiting for KServe pod/deployment to become ready.");
+        await kubectlClient.WaitForKServeUp("kserve");
+        this.logger.LogInformation($"KServe pod/deployment are reporting ready.");
+
+        progressReporter.Report("Waiting for kserve-inferencing-frontend to become ready...");
+        this.logger.LogInformation(
+            $"Waiting for inferencing frontend pod/deployment to become ready.");
+        await kubectlClient.WaitForInferencingFrontendUp(
+            Constants.KServeInferencingFrontendServiceNamespace);
+        this.logger.LogInformation($"Inferencing frontend pod/deployment are reporting ready.");
+
+        progressReporter.Report("Waiting for kserve-inferencing-agent to become ready...");
+        this.logger.LogInformation(
+            $"Waiting for inferencing agent pod/deployment to become ready.");
+        await kubectlClient.WaitForInferencingAgentUp(Constants.KServeInferencingAgentNamespace);
+        this.logger.LogInformation($"Inferencing agent pod/deployment are reporting ready.");
     }
 
     private async Task InstallAnalyticsAgentOnKindAsync(
-        DeploymentTemplate deploymentTemplate,
+        AnalyticsDeploymentTemplate deploymentTemplate,
         bool telemetryCollectionEnabled,
         string kubeConfigFile)
     {
@@ -584,16 +1125,13 @@ data:
                 $"{ImageUtils.CcrProxyImage()}:{ImageUtils.CcrProxyTag()}");
             app = app.Replace(
                 "<CCR_SKR_IMAGE_URL>",
-                $"{ImageUtils.SkrImage()}:{ImageUtils.SkrTag()}");
-            app = app.Replace(
-                "<CCR_ATTESTATION_IMAGE_URL>",
-                $"{ImageUtils.CcrAttestationImage()}:{ImageUtils.CcrAttestationTag()}");
+                $"{ImageUtils.LocalSkrImage()}:{ImageUtils.LocalSkrTag()}");
             app = app.Replace(
                 "<OTEL_COLLECTOR_IMAGE_URL>",
                 $"{ImageUtils.OtelCollectorImage()}:{ImageUtils.OtelCollectorTag()}");
             app = app.Replace(
                 "<CCR_GOVERNANCE_IMAGE_URL>",
-                $"{ImageUtils.CcrGovernanceImage()}:{ImageUtils.CcrGovernanceTag()}");
+                $"{ImageUtils.CcrGovernanceVirtualImage()}:{ImageUtils.CcrGovernanceVirtualTag()}");
             var telemetryReplacements = new Dictionary<string, string>();
             if (telemetryCollectionEnabled)
             {
@@ -655,8 +1193,8 @@ data:
                 "<CCR_PROXY_IMAGE_URL>",
                 $"{ImageUtils.CcrProxyImage()}:{ImageUtils.CcrProxyTag()}");
             app = app.Replace(
-                "<CCR_ATTESTATION_IMAGE_URL>",
-                $"{ImageUtils.CcrAttestationImage()}:{ImageUtils.CcrAttestationTag()}");
+                "<CCR_SKR_IMAGE_URL>",
+                $"{ImageUtils.LocalSkrImage()}:{ImageUtils.LocalSkrTag()}");
             app = app.Replace(
                 "<OTEL_COLLECTOR_IMAGE_URL>",
                 $"{ImageUtils.OtelCollectorImage()}:{ImageUtils.OtelCollectorTag()}");
@@ -707,6 +1245,214 @@ data:
 
             var virt = await File.ReadAllTextAsync(
                 "spark-frontend/values.virtual.yaml");
+            virt = virt.Replace("<CLEANROOM_REGISTRY_USE_HTTP>", $"{ImageUtils.RegistryUseHttp()}");
+            valuesOverridesFile = Path.GetTempFileName();
+            await File.WriteAllTextAsync(valuesOverridesFile, virt);
+            files.Add(valuesOverridesFile);
+            return files;
+        }
+    }
+
+    private async Task InstallKServeInferencingAgentOnKindAsync(
+        KServeInferencingDeploymentTemplate deploymentTemplate,
+        bool telemetryCollectionEnabled,
+        string kubeConfigFile)
+    {
+        string ns = Constants.KServeInferencingAgentNamespace;
+        string ccrFqdn = $"kserve-inferencing-agent.{ns}.svc";
+        var valuesOverrideFiles = await GenerateValuesOverrideFiles();
+        var helmClient = new HelmClient(this.logger, this.configuration, kubeConfigFile);
+        await helmClient.InstallInferencingAgentChart(
+            Constants.KServeInferencingAgentReleaseName,
+            ns,
+            valuesOverrideFiles);
+
+        async Task<List<string>> GenerateValuesOverrideFiles()
+        {
+            List<string> files = [];
+            var values = deploymentTemplate.Values;
+            var app = await File.ReadAllTextAsync(
+                "kserve-inferencing-agent/values.app.yaml");
+            string caType = !string.IsNullOrEmpty(values.CcrgovEndpoint) ? "cgs" : "local";
+            var discovery = values.CcrgovServiceCertDiscovery ?? new ServiceCertDiscoveryInput();
+            app = app.Replace("<CA_TYPE>", caType);
+            app = app.Replace("<CCR_FQDN>", ccrFqdn);
+            app = app.Replace("<CCR_GOV_ENDPOINT>", values.CcrgovEndpoint);
+            app = app.Replace("<CCR_GOV_API_PATH_PREFIX>", values.CcrgovApiPathPrefix);
+            app = app.Replace("<CCR_GOV_SERVICE_CERT>", values.CcrgovServiceCert);
+            app = app.Replace("<CCR_GOV_SERVICE_CERT_DISCOVERY_ENDPOINT>", discovery.Endpoint);
+            app = app.Replace(
+                "<CCR_GOV_SERVICE_CERT_DISCOVERY_SNP_HOST_DATA>",
+                discovery.SnpHostData);
+            app = app.Replace(
+                "<CCR_GOV_SERVICE_CERT_DISCOVERY_SKIP_DIGEST_CHECK>",
+                discovery.SkipDigestCheck.ToString().ToLower());
+            app = app.Replace(
+                "<CCR_GOV_SERVICE_CERT_DISCOVERY_CONSTITUTION_DIGEST>",
+                discovery.ConstitutionDigest);
+            app = app.Replace(
+                "<CCR_GOV_SERVICE_CERT_DISCOVERY_JSAPP_BUNDLE_DIGEST>",
+                discovery.JsappBundleDigest);
+            app = app.Replace(
+                "<INFERENCING_FRONTEND_ENDPOINT>",
+                values.InferencingFrontendEndpoint);
+            app = app.Replace(
+                "<INFERENCING_FRONTEND_SNP_HOST_DATA>",
+                values.InferencingFrontendSnpHostData);
+            app = app.Replace("<CCF_NETWORK_RECOVERY_MEMBERS>", values.CcfNetworkRecoveryMembers);
+            app = app.Replace(
+                "<INFERENCING_AGENT_IMAGE_URL>",
+                $"{ImageUtils.InferencingAgentImage()}:{ImageUtils.InferencingAgentTag()}");
+            app = app.Replace(
+                "<CCR_PROXY_IMAGE_URL>",
+                $"{ImageUtils.CcrProxyImage()}:{ImageUtils.CcrProxyTag()}");
+            app = app.Replace(
+                "<CCR_SKR_IMAGE_URL>",
+                $"{ImageUtils.LocalSkrImage()}:{ImageUtils.LocalSkrTag()}");
+            app = app.Replace(
+                "<OTEL_COLLECTOR_IMAGE_URL>",
+                $"{ImageUtils.OtelCollectorImage()}:{ImageUtils.OtelCollectorTag()}");
+            app = app.Replace(
+                "<CCR_GOVERNANCE_IMAGE_URL>",
+                $"{ImageUtils.CcrGovernanceVirtualImage()}:{ImageUtils.CcrGovernanceVirtualTag()}");
+            var telemetryReplacements = new Dictionary<string, string>();
+            if (telemetryCollectionEnabled)
+            {
+                telemetryReplacements["<TELEMETRY_COLLECTION_ENABLED>"] = "true";
+                telemetryReplacements["<PROMETHEUS_ENDPOINT>"] =
+                    $"{Constants.PrometheusServiceEndpoint}.cluster.local:9090/api/v1/write";
+                telemetryReplacements["<LOKI_ENDPOINT>"] =
+                    $"{Constants.LokiServiceEndpoint}.cluster.local:3100/otlp";
+                telemetryReplacements["<TEMPO_ENDPOINT>"] =
+                    $"{Constants.TempoServiceEndpoint}.cluster.local:4317";
+            }
+            else
+            {
+                telemetryReplacements["<TELEMETRY_COLLECTION_ENABLED>"] = "false";
+                telemetryReplacements["<PROMETHEUS_ENDPOINT>"] = string.Empty;
+                telemetryReplacements["<LOKI_ENDPOINT>"] = string.Empty;
+                telemetryReplacements["<TEMPO_ENDPOINT>"] = string.Empty;
+            }
+
+            foreach (var kvp in telemetryReplacements)
+            {
+                app = app.Replace(kvp.Key, kvp.Value);
+            }
+
+            var valuesOverridesFile = Path.GetTempFileName();
+            await File.WriteAllTextAsync(valuesOverridesFile, app);
+            files.Add(valuesOverridesFile);
+
+            var virt = await File.ReadAllTextAsync(
+                "kserve-inferencing-agent/values.virtual.yaml");
+            valuesOverridesFile = Path.GetTempFileName();
+            await File.WriteAllTextAsync(valuesOverridesFile, virt);
+            files.Add(valuesOverridesFile);
+
+            return files;
+        }
+    }
+
+    private async Task InstallKServeInferencingFrontendOnKindAsync(
+        KServeInferencingDeploymentTemplate deploymentTemplate,
+        bool telemetryCollectionEnabled,
+        string kubeConfigFile)
+    {
+        string ns = Constants.KServeInferencingFrontendServiceNamespace;
+        var valuesOverrideFiles = await GenerateValuesOverrideFiles();
+        var helmClient = new HelmClient(this.logger, this.configuration, kubeConfigFile);
+        await helmClient.InstallInferencingFrontendChart(
+            Constants.KServeInferencingFrontendReleaseName,
+            ns,
+            valuesOverrideFiles);
+
+        async Task<List<string>> GenerateValuesOverrideFiles()
+        {
+            List<string> files = [];
+            var values = deploymentTemplate.Values;
+            var app = await File.ReadAllTextAsync(
+                "kserve-inferencing-frontend/values.app.yaml");
+            var discovery = values.CcrgovServiceCertDiscovery ?? new ServiceCertDiscoveryInput();
+            app = app.Replace("<CCR_GOV_ENDPOINT>", values.CcrgovEndpoint);
+            app = app.Replace("<CCR_GOV_API_PATH_PREFIX>", values.CcrgovApiPathPrefix);
+            app = app.Replace("<CCR_GOV_SERVICE_CERT>", values.CcrgovServiceCert);
+            app = app.Replace("<CCR_GOV_SERVICE_CERT_DISCOVERY_ENDPOINT>", discovery.Endpoint);
+            app = app.Replace(
+                "<CCR_GOV_SERVICE_CERT_DISCOVERY_SNP_HOST_DATA>",
+                discovery.SnpHostData);
+            app = app.Replace(
+                "<CCR_GOV_SERVICE_CERT_DISCOVERY_SKIP_DIGEST_CHECK>",
+                discovery.SkipDigestCheck.ToString().ToLower());
+            app = app.Replace(
+                "<CCR_GOV_SERVICE_CERT_DISCOVERY_CONSTITUTION_DIGEST>",
+                discovery.ConstitutionDigest);
+            app = app.Replace(
+                "<CCR_GOV_SERVICE_CERT_DISCOVERY_JSAPP_BUNDLE_DIGEST>",
+                discovery.JsappBundleDigest);
+            app = app.Replace(
+                "<INFERENCING_FRONTEND_IMAGE_URL>",
+                $"{ImageUtils.InferencingFrontendImage()}:{ImageUtils.InferencingFrontendTag()}");
+            app = app.Replace(
+                "<CCR_PROXY_IMAGE_URL>",
+                $"{ImageUtils.CcrProxyImage()}:{ImageUtils.CcrProxyTag()}");
+            app = app.Replace(
+                "<CCR_SKR_IMAGE_URL>",
+                $"{ImageUtils.LocalSkrImage()}:{ImageUtils.LocalSkrTag()}");
+            app = app.Replace(
+                "<OTEL_COLLECTOR_IMAGE_URL>",
+                $"{ImageUtils.OtelCollectorImage()}:{ImageUtils.OtelCollectorTag()}");
+            app = app.Replace(
+                "<CCR_GOVERNANCE_IMAGE_URL>",
+                $"{ImageUtils.CcrGovernanceVirtualImage()}:{ImageUtils.CcrGovernanceVirtualTag()}");
+            app = app.Replace("<CLEANROOM_REGISTRY_URL>", $"{ImageUtils.RegistryUrl()}");
+            app = app.Replace(
+                "<CLEANROOM_VERSIONS_DOCUMENT>",
+                $"{ImageUtils.GetCleanroomVersionsDocumentUrl()}");
+            app = app.Replace(
+                "<CLEANROOM_CVM_MEASUREMENTS_DOCUMENT>",
+                $"{ImageUtils.GetCleanroomCvmMeasurementsDocumentUrl()}");
+            app = app.Replace(
+                "<RUNTIME_DIGESTS_DOCUMENT>",
+                $"{ImageUtils.GetRuntimeDigestsDocumentUrl()}");
+            app = app.Replace(
+                "<CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL>",
+                $"{ImageUtils.SidecarsPolicyDocumentRegistryUrl()}");
+            app = app.Replace(
+                "<INFERENCING_NAMESPACE>",
+                Constants.KServeInferencingWorkloadNamespace);
+            app = app.Replace("<ALLOW_ALL>", "true");
+            app = app.Replace("<DEBUG_MODE>", "false");
+
+            var telemetryReplacements = new Dictionary<string, string>();
+            if (telemetryCollectionEnabled)
+            {
+                telemetryReplacements["<TELEMETRY_COLLECTION_ENABLED>"] = "true";
+                telemetryReplacements["<PROMETHEUS_ENDPOINT>"] =
+                    $"{Constants.PrometheusServiceEndpoint}.cluster.local:9090/api/v1/write";
+                telemetryReplacements["<LOKI_ENDPOINT>"] =
+                    $"{Constants.LokiServiceEndpoint}.cluster.local:3100/otlp";
+                telemetryReplacements["<TEMPO_ENDPOINT>"] =
+                    $"{Constants.TempoServiceEndpoint}.cluster.local:4317";
+            }
+            else
+            {
+                telemetryReplacements["<TELEMETRY_COLLECTION_ENABLED>"] = "false";
+                telemetryReplacements["<PROMETHEUS_ENDPOINT>"] = string.Empty;
+                telemetryReplacements["<LOKI_ENDPOINT>"] = string.Empty;
+                telemetryReplacements["<TEMPO_ENDPOINT>"] = string.Empty;
+            }
+
+            foreach (var kvp in telemetryReplacements)
+            {
+                app = app.Replace(kvp.Key, kvp.Value);
+            }
+
+            var valuesOverridesFile = Path.GetTempFileName();
+            await File.WriteAllTextAsync(valuesOverridesFile, app);
+            files.Add(valuesOverridesFile);
+
+            var virt = await File.ReadAllTextAsync(
+                "kserve-inferencing-frontend/values.virtual.yaml");
             virt = virt.Replace("<CLEANROOM_REGISTRY_USE_HTTP>", $"{ImageUtils.RegistryUseHttp()}");
             valuesOverridesFile = Path.GetTempFileName();
             await File.WriteAllTextAsync(valuesOverridesFile, virt);

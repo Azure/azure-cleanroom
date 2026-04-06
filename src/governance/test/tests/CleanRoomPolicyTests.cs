@@ -26,6 +26,7 @@ public class CleanRoomPolicyTests : TestBase
             var proposalContent = new JsonObject
             {
                 ["type"] = "add",
+                ["policyType"] = "snp-caci",
                 ["contractId"] = contractId,
                 ["claims"] = new JsonObject
                 {
@@ -44,11 +45,10 @@ public class CleanRoomPolicyTests : TestBase
             Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
             var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
             Assert.AreEqual("ProposalFailedToValidate", error.Code);
-            Assert.IsTrue(
-                error.Message.Contains(
-                    "Proposal failed to validate: set_clean_room_policy at position 0 failed " +
-                    "validation: Error: Clean Room Policy can only be proposed once contract " +
-                    $"'{contractId}' has been accepted."),
+            Assert.Contains(
+                "Proposal failed to validate: set_clean_room_policy at position 0 failed " +
+                "validation: Error: Clean Room Policy can only be proposed once contract " +
+                $"'{contractId}' has been accepted.",
                 error.Message);
         }
     }

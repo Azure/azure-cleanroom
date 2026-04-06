@@ -45,13 +45,27 @@ cluster_provider_compose_file: str = (
 )
 
 
-def cluster_provider_deploy(cmd, provider_client_name):
+def cluster_provider_deploy(cmd, provider_client_name, env_file=None):
     from python_on_whales import DockerClient
 
     docker = DockerClient(
         compose_files=[cluster_provider_compose_file],
         compose_project_name=provider_client_name,
     )
+
+    # Read and set environment variables from file if provided
+    if env_file:
+        if not os.path.exists(env_file):
+            raise CLIError(f"Environment file not found: {env_file}")
+
+        logger.warning(f"Loading environment variables from: {env_file}")
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    os.environ[key.strip()] = value.strip()
+                    logger.debug(f"Set environment variable: {key.strip()}")
 
     if "AZCLI_CLEANROOM_CLUSTER_PROVIDER_CLIENT_IMAGE" in os.environ:
         image = os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_CLIENT_IMAGE"]
@@ -61,7 +75,7 @@ def cluster_provider_deploy(cmd, provider_client_name):
 
     set_docker_compose_env_params()
     docker.compose.up(remove_orphans=True, detach=True)
-    (_, port) = docker.compose.port(service="client", private_port=8080)
+    _, port = docker.compose.port(service="client", private_port=8080)
 
     cluster_provider_endpoint = f"http://localhost:{port}"
     while True:
@@ -106,7 +120,9 @@ def cluster_up(
     resource_group,
     ws_folder,
     location,
+    node_vm_size,
     provider_client_name,
+    env_file=None,
 ):
     if not location:
         location = az_cli(
@@ -144,14 +160,23 @@ def cluster_up(
         "resourceGroupName": resource_group,
         "tenantId": tenant_id,
     }
+    if node_vm_size:
+        provider_config["nodeVmSize"] = node_vm_size
     provider_config_file = os.path.join(ws_folder, "providerConfig.json")
     with open(provider_config_file, "w") as f:
         f.write(json.dumps(provider_config, indent=2))
 
-    az_cli(f"cleanroom cluster provider deploy --name {provider_client_name}")
+    # Pass env-file to cluster provider deploy if specified
+    deploy_cmd = f"cleanroom cluster provider deploy --name {provider_client_name}"
+    if env_file:
+        if not os.path.exists(env_file):
+            raise CLIError(f"Environment file not found: {env_file}")
+        deploy_cmd += f" --env-file {env_file}"
+
+    az_cli(deploy_cmd)
 
     logger.warning(
-        f"Creating cluster {cluster_name}... this might take 5 to 10 minutes."
+        f"Creating cluster {cluster_name} in resource group {resource_group} ... this might take 5 to 10 minutes."
     )
     az_cli(
         f"cleanroom cluster create "
@@ -172,24 +197,46 @@ def cluster_create(
     cluster_name,
     infra_type,
     provider_config,
+    node_vm_size,
     enable_observability,
+    enable_monitoring,
     enable_analytics_workload,
     analytics_workload_config_url,
     analytics_workload_config_url_ca_cert,
     analytics_workload_disable_telemetry,
     analytics_workload_security_policy_creation_option,
     analytics_workload_security_policy,
+    analytics_workload_pool_node_count,
+    enable_kserve_inferencing_workload,
+    kserve_inferencing_workload_config_url,
+    kserve_inferencing_workload_config_url_ca_cert,
+    kserve_inferencing_workload_disable_telemetry_collection,
+    kserve_inferencing_workload_security_policy_creation_option,
+    kserve_inferencing_workload_security_policy,
+    enable_flex_node,
+    flex_node_ssh_private_key,
+    flex_node_ssh_public_key,
+    flex_node_policy_signing_cert,
+    flex_node_vm_size,
+    flex_node_count,
     provider_client_name,
 ):
     provider_endpoint = get_provider_client_endpoint(cmd, provider_client_name)
     from .custom_ccf import to_security_policy_config
 
-    security_policy_config = to_security_policy_config(
+    analytics_security_policy_config = to_security_policy_config(
         analytics_workload_security_policy_creation_option,
         analytics_workload_security_policy,
     )
 
+    kserve_inferencing_security_policy_config = to_security_policy_config(
+        kserve_inferencing_workload_security_policy_creation_option,
+        kserve_inferencing_workload_security_policy,
+    )
+
     provider_config = parse_provider_config(provider_config, infra_type)
+    if node_vm_size:
+        provider_config["nodeVmSize"] = node_vm_size
     content = {
         "infraType": infra_type,
         "providerConfig": provider_config,
@@ -197,6 +244,9 @@ def cluster_create(
 
     if enable_observability:
         content["observabilityProfile"] = {"enabled": True}
+
+    if enable_monitoring:
+        content["monitoringProfile"] = {"enabled": True}
 
     if enable_analytics_workload:
         content["analyticsWorkloadProfile"] = {
@@ -206,7 +256,61 @@ def cluster_create(
             },
             "configurationUrl": analytics_workload_config_url,
             "configurationUrlCaCert": analytics_workload_config_url_ca_cert,
-            "securityPolicy": security_policy_config,
+            "securityPolicy": analytics_security_policy_config,
+        }
+        if analytics_workload_pool_node_count:
+            content["analyticsWorkloadProfile"]["poolProfile"] = {
+                "nodeCount": analytics_workload_pool_node_count
+            }
+
+    if enable_kserve_inferencing_workload:
+        content["inferencingWorkloadProfile"] = {
+            "kserveProfile": {
+                "enabled": True,
+                "telemetryProfile": {
+                    "collectionEnabled": not kserve_inferencing_workload_disable_telemetry_collection,
+                },
+                "configurationUrl": kserve_inferencing_workload_config_url,
+                "configurationUrlCaCert": kserve_inferencing_workload_config_url_ca_cert,
+                "securityPolicy": kserve_inferencing_security_policy_config,
+            }
+        }
+
+    if enable_flex_node:
+        ssh_private_key_pem = None
+        ssh_public_key = None
+        policy_signing_cert_pem = None
+        if flex_node_ssh_private_key:
+            if os.path.exists(flex_node_ssh_private_key):
+                with open(flex_node_ssh_private_key, "r") as f:
+                    ssh_private_key_pem = f.read()
+            else:
+                raise CLIError(
+                    f"SSH private key file not found: {flex_node_ssh_private_key}"
+                )
+        if flex_node_ssh_public_key:
+            if os.path.exists(flex_node_ssh_public_key):
+                with open(flex_node_ssh_public_key, "r") as f:
+                    ssh_public_key = f.read().strip()
+            else:
+                raise CLIError(
+                    f"SSH public key file not found: {flex_node_ssh_public_key}"
+                )
+        if flex_node_policy_signing_cert:
+            if os.path.exists(flex_node_policy_signing_cert):
+                with open(flex_node_policy_signing_cert, "r") as f:
+                    policy_signing_cert_pem = f.read()
+            else:
+                raise CLIError(
+                    f"Policy signing cert file not found: {flex_node_policy_signing_cert}"
+                )
+        content["flexNodeProfile"] = {
+            "enabled": True,
+            "sshPrivateKeyPem": ssh_private_key_pem,
+            "sshPublicKey": ssh_public_key,
+            "policySigningCertPem": policy_signing_cert_pem,
+            "vmSize": flex_node_vm_size,
+            "nodeCount": flex_node_count,
         }
 
     logger.warning(
@@ -229,20 +333,39 @@ def cluster_update(
     infra_type,
     provider_config,
     enable_observability,
+    enable_monitoring,
     enable_analytics_workload,
     analytics_workload_config_url,
     analytics_workload_config_url_ca_cert,
     analytics_workload_disable_telemetry_collection,
     analytics_workload_security_policy_creation_option,
     analytics_workload_security_policy,
+    analytics_workload_pool_node_count,
+    enable_kserve_inferencing_workload,
+    kserve_inferencing_workload_config_url,
+    kserve_inferencing_workload_config_url_ca_cert,
+    kserve_inferencing_workload_disable_telemetry_collection,
+    kserve_inferencing_workload_security_policy_creation_option,
+    kserve_inferencing_workload_security_policy,
+    enable_flex_node,
+    flex_node_ssh_private_key,
+    flex_node_ssh_public_key,
+    flex_node_policy_signing_cert,
+    flex_node_vm_size,
+    flex_node_count,
     provider_client_name,
 ):
     provider_endpoint = get_provider_client_endpoint(cmd, provider_client_name)
     from .custom_ccf import to_security_policy_config
 
-    security_policy_config = to_security_policy_config(
+    analytics_security_policy_config = to_security_policy_config(
         analytics_workload_security_policy_creation_option,
         analytics_workload_security_policy,
+    )
+
+    kserve_inferencing_security_policy_config = to_security_policy_config(
+        kserve_inferencing_workload_security_policy_creation_option,
+        kserve_inferencing_workload_security_policy,
     )
 
     provider_config = parse_provider_config(provider_config, infra_type)
@@ -254,6 +377,9 @@ def cluster_update(
     if enable_observability:
         content["observabilityProfile"] = {"enabled": True}
 
+    if enable_monitoring:
+        content["monitoringProfile"] = {"enabled": True}
+
     if enable_analytics_workload:
         content["analyticsWorkloadProfile"] = {
             "enabled": True,
@@ -262,8 +388,60 @@ def cluster_update(
             },
             "configurationUrl": analytics_workload_config_url,
             "configurationUrlCaCert": analytics_workload_config_url_ca_cert,
-            "securityPolicy": security_policy_config,
+            "securityPolicy": analytics_security_policy_config,
+            "poolProfile": {"nodeCount": analytics_workload_pool_node_count},
         }
+
+    if enable_kserve_inferencing_workload:
+        content["inferencingWorkloadProfile"] = {
+            "kserveProfile": {
+                "enabled": True,
+                "telemetryProfile": {
+                    "collectionEnabled": not kserve_inferencing_workload_disable_telemetry_collection,
+                },
+                "configurationUrl": kserve_inferencing_workload_config_url,
+                "configurationUrlCaCert": kserve_inferencing_workload_config_url_ca_cert,
+                "securityPolicy": kserve_inferencing_security_policy_config,
+            }
+        }
+
+    if enable_flex_node:
+        ssh_private_key_pem = None
+        ssh_public_key = None
+        policy_signing_cert_pem = None
+        if flex_node_ssh_private_key:
+            if os.path.exists(flex_node_ssh_private_key):
+                with open(flex_node_ssh_private_key, "r") as f:
+                    ssh_private_key_pem = f.read()
+            else:
+                raise CLIError(
+                    f"SSH private key file not found: {flex_node_ssh_private_key}"
+                )
+        if flex_node_ssh_public_key:
+            if os.path.exists(flex_node_ssh_public_key):
+                with open(flex_node_ssh_public_key, "r") as f:
+                    ssh_public_key = f.read().strip()
+            else:
+                raise CLIError(
+                    f"SSH public key file not found: {flex_node_ssh_public_key}"
+                )
+        if flex_node_policy_signing_cert:
+            if os.path.exists(flex_node_policy_signing_cert):
+                with open(flex_node_policy_signing_cert, "r") as f:
+                    policy_signing_cert_pem = f.read()
+            else:
+                raise CLIError(
+                    f"Policy signing cert file not found: {flex_node_policy_signing_cert}"
+                )
+        content["flexNodeProfile"] = {
+            "enabled": True,
+            "sshPrivateKeyPem": ssh_private_key_pem,
+            "sshPublicKey": ssh_public_key,
+            "policySigningCertPem": policy_signing_cert_pem,
+            "vmSize": flex_node_vm_size,
+            "nodeCount": flex_node_count,
+        }
+
     logger.warning(
         f"Run `docker compose -p {provider_client_name} logs -f` to monitor cluster update progress."
     )
@@ -291,6 +469,23 @@ def cluster_show(cmd, cluster_name, infra_type, provider_config, provider_client
     return r.json()
 
 
+def cluster_show_health(
+    cmd, cluster_name, infra_type, provider_config, provider_client_name
+):
+    provider_endpoint = get_provider_client_endpoint(cmd, provider_client_name)
+    provider_config = parse_provider_config(provider_config, infra_type)
+    content = {
+        "infraType": infra_type,
+        "providerConfig": provider_config,
+    }
+    r = requests.post(
+        f"{provider_endpoint}/clusters/{cluster_name}/health", json=content
+    )
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
 def cluster_delete(
     cmd, cluster_name, infra_type, provider_config, provider_client_name
 ):
@@ -308,13 +503,20 @@ def cluster_delete(
 
 
 def cluster_get_kubeconfig(
-    cmd, cluster_name, infra_type, file, provider_config, provider_client_name
+    cmd,
+    cluster_name,
+    infra_type,
+    file,
+    provider_config,
+    provider_client_name,
+    access_role,
 ):
     provider_endpoint = get_provider_client_endpoint(cmd, provider_client_name)
     provider_config = parse_provider_config(provider_config, infra_type)
     content = {
         "infraType": infra_type,
         "providerConfig": provider_config,
+        "accessRole": access_role,
     }
     r = requests.post(
         f"{provider_endpoint}/clusters/{cluster_name}/getkubeconfig", json=content
@@ -383,6 +585,69 @@ def cluster_analytics_workload_deployment_generate(
         f.write(base64.b64decode(r.json()["ccePolicy"]["value"]).decode())
     with open(
         output_dir + f"{os.path.sep}analytics-workload.cce-policy.json", "w"
+    ) as f:
+        f.write((json.dumps(r.json()["ccePolicy"], indent=2)))
+
+
+def cluster_kserve_inferencing_workload_deployment_generate(
+    cmd,
+    infra_type,
+    provider_config,
+    disable_telemetry_collection,
+    contract_id,
+    gov_client_name,
+    security_policy_creation_option,
+    output_dir,
+    provider_client_name,
+):
+    if not os.path.exists(output_dir):
+        raise CLIError(f"Output folder location {output_dir} does not exist.")
+
+    provider_endpoint = get_provider_client_endpoint(cmd, provider_client_name)
+    from .custom import get_cgs_client_port
+
+    cgs_port = get_cgs_client_port(cmd, gov_client_name)
+    contract_url = f"http://host.docker.internal:{cgs_port}/contracts/{contract_id}"
+    from .custom_ccf import to_security_policy_config
+
+    security_policy_config = to_security_policy_config(
+        security_policy_creation_option, None
+    )
+
+    provider_config = parse_provider_config(provider_config, infra_type)
+    content = {
+        "infraType": infra_type,
+        "providerConfig": provider_config,
+        "contractUrl": contract_url,
+        "telemetryProfile": {
+            "collectionEnabled": not disable_telemetry_collection,
+        },
+        "contractUrlCaCert": None,
+        "securityPolicy": security_policy_config,
+    }
+    r = requests.post(
+        f"{provider_endpoint}/clusters/kserveInferencingWorkload/generateDeployment",
+        json=content,
+    )
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    with open(
+        output_dir
+        + f"{os.path.sep}kserve-inferencing-workload.deployment-template.json",
+        "w",
+    ) as f:
+        f.write(json.dumps(r.json()["deploymentTemplate"], indent=2))
+    with open(
+        output_dir + f"{os.path.sep}kserve-inferencing-workload.governance-policy.json",
+        "w",
+    ) as f:
+        f.write(json.dumps(r.json()["governancePolicy"], indent=2))
+    with open(
+        output_dir + f"{os.path.sep}kserve-inferencing-workload.cce-policy.rego", "w"
+    ) as f:
+        f.write(base64.b64decode(r.json()["ccePolicy"]["value"]).decode())
+    with open(
+        output_dir + f"{os.path.sep}kserve-inferencing-workload.cce-policy.json", "w"
     ) as f:
         f.write((json.dumps(r.json()["ccePolicy"], indent=2)))
 
@@ -460,14 +725,16 @@ def set_docker_compose_env_params():
 
     if "AZCLI_CLEANROOM_CLUSTER_PROVIDER_PROXY_IMAGE" not in os.environ:
         os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_PROXY_IMAGE"] = ""
-    if "AZCLI_CLEANROOM_CLUSTER_PROVIDER_ATTESTATION_IMAGE" not in os.environ:
-        os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_ATTESTATION_IMAGE"] = ""
     if "AZCLI_CLEANROOM_CLUSTER_PROVIDER_OTEL_COLLECTOR_IMAGE" not in os.environ:
         os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_OTEL_COLLECTOR_IMAGE"] = ""
     if "AZCLI_CLEANROOM_CLUSTER_PROVIDER_GOVERNANCE_IMAGE" not in os.environ:
         os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_GOVERNANCE_IMAGE"] = ""
+    if "AZCLI_CLEANROOM_CLUSTER_PROVIDER_GOVERNANCE_VIRTUAL_IMAGE" not in os.environ:
+        os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_GOVERNANCE_VIRTUAL_IMAGE"] = ""
     if "AZCLI_CLEANROOM_CLUSTER_PROVIDER_SKR_IMAGE" not in os.environ:
         os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_SKR_IMAGE"] = ""
+    if "AZCLI_CLEANROOM_CLUSTER_PROVIDER_LOCAL_SKR_IMAGE" not in os.environ:
+        os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_LOCAL_SKR_IMAGE"] = ""
     if "AZCLI_CLEANROOM_CLUSTER_PROVIDER_CONTAINER_REGISTRY_URL" not in os.environ:
         os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_CONTAINER_REGISTRY_URL"] = ""
     if "AZCLI_CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL" not in os.environ:
@@ -501,6 +768,53 @@ def set_docker_compose_env_params():
         ] = ""
     if "AZCLI_CLEANROOM_CLUSTER_PROVIDER_SPARK_FRONTEND_CHART_URL" not in os.environ:
         os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_SPARK_FRONTEND_CHART_URL"] = ""
+    if (
+        "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_IMAGE"
+        not in os.environ
+    ):
+        os.environ[
+            "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_IMAGE"
+        ] = ""
+    if (
+        "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_SECURITY_POLICY_DOCUMENT_URL"
+        not in os.environ
+    ):
+        os.environ[
+            "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_SECURITY_POLICY_DOCUMENT_URL"
+        ] = ""
+    if (
+        "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_CHART_URL"
+        not in os.environ
+    ):
+        os.environ[
+            "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_CHART_URL"
+        ] = ""
+    if (
+        "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_IMAGE"
+        not in os.environ
+    ):
+        os.environ[
+            "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_IMAGE"
+        ] = ""
+    if (
+        "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_SECURITY_POLICY_DOCUMENT_URL"
+        not in os.environ
+    ):
+        os.environ[
+            "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_SECURITY_POLICY_DOCUMENT_URL"
+        ] = ""
+    if (
+        "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_CHART_URL"
+        not in os.environ
+    ):
+        os.environ[
+            "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_CHART_URL"
+        ] = ""
+    if (
+        "AZCLI_CLEANROOM_CLUSTER_PROVIDER_API_SERVER_PROXY_PACKAGE_URL"
+        not in os.environ
+    ):
+        os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_API_SERVER_PROXY_PACKAGE_URL"] = ""
 
 
 def parse_provider_config(provider_config, infra_type):
@@ -519,4 +833,4 @@ def parse_provider_config(provider_config, infra_type):
 
 
 def requires_provider_config(infra_type):
-    return infra_type == "caci"
+    return infra_type == "aks"

@@ -1,0 +1,33 @@
+# sbt specific
+target/
+project/target/
+project/project/
+lib_managed/
+src_managed/
+.history
+.lib/
+
+# Scala-IDE specific
+.scala_dependencies
+.worksheet
+.cache
+.classpath
+.project
+.settings/
+
+# IntelliJ specific
+.idea/
+*.iml
+*.iws
+out/
+
+
+# Build output
+dist/
+*.jar
+*.class
+*.log
+
+# OS specific
+.DS_Store
+Thumbs.db

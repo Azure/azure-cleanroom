@@ -1,0 +1,11 @@
+output-dir: "{cwd}/generated"
+emit:
+  - "@typespec/openapi3"
+  - "@typespec/http-server-js"
+options:
+  "@typespec/openapi3":
+    emitter-output-dir: "{output-dir}/schema"
+    openapi-versions:
+      - 3.1.0
+  "@typespec/http-server-js":
+    emitter-output-dir: "{output-dir}/server/nodejs"

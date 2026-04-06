@@ -508,7 +508,7 @@ public class MemberDocumentTests : TestBase
         var document = (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(documentUrl))!;
         string currentVersion = document[VersionKey]!.ToString();
         Assert.AreEqual(nameof(DocumentState.Draft), document[StateKey]!.ToString());
-        Assert.IsTrue(!string.IsNullOrEmpty(currentVersion));
+        Assert.IsFalse(string.IsNullOrEmpty(currentVersion));
 
         // Any subsequent updates with no Version should fail.
         using (HttpRequestMessage request = new(HttpMethod.Put, documentUrl))
@@ -561,7 +561,7 @@ public class MemberDocumentTests : TestBase
 
         document = (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(documentUrl))!;
         string newVersion = document[VersionKey]!.ToString();
-        Assert.IsTrue(!string.IsNullOrEmpty(newVersion));
+        Assert.IsFalse(string.IsNullOrEmpty(newVersion));
         Assert.AreEqual(nameof(DocumentState.Draft), document[StateKey]!.ToString());
         Assert.AreNotEqual(currentVersion, newVersion);
     }
@@ -846,6 +846,6 @@ public class MemberDocumentTests : TestBase
         public string MemberId { get; set; } = default!;
 
         [JsonPropertyName("vote")]
-        public bool Vote { get; set; } = default!;
+        public bool Vote { get; set; } = default;
     }
 }

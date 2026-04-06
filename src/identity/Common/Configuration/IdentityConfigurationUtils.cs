@@ -83,12 +83,6 @@ public static class IdentityConfigurationUtils
         return config;
     }
 
-    public static DiagnosticsConfiguration GetDiagnosticsConfiguration(
-        this IConfiguration configuration)
-    {
-        return configuration.GetSection("Diagnostics").Get<DiagnosticsConfiguration>()!;
-    }
-
     /// <summary>
     /// Validates the configuration.
     /// </summary>

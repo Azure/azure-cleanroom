@@ -51,14 +51,11 @@ mkdir -p "$outDir/configurations"
 $publisherConfig = "$outDir/configurations/publisher-config"
 $consumerConfig = "$outDir/configurations/consumer-config"
 $publisherDatastoreConfig = "$datastoreOutdir/quote-of-the-day-publisher-datastore-config"
-$consumerDatastoreConfig = "$datastoreOutdir/quote-of-the-day-consumer-datastore-config"
 
 mkdir -p "$datastoreOutdir/secrets"
 $publisherSecretStoreConfig = "$datastoreOutdir/secrets/quote-of-the-day-publisher-secretstore-config"
-$consumerSecretStoreConfig = "$datastoreOutdir/secrets/quote-of-the-day-consumer-secretstore-config"
 
 $publisherLocalSecretStore = "$datastoreOutdir/secrets/quote-of-the-day-publisher-secretstore-local"
-$consumerLocalSecretStore = "$datastoreOutdir/secrets/quote-of-the-day-consumer-secretstore-local"
 
 $resourceGroupTags = ""
 if ($env:GITHUB_ACTIONS -eq "true") {
@@ -112,23 +109,13 @@ az cleanroom governance proposal vote `
     --governance-client "ob-consumer-client"
 
 # "publisher" deploys client-side containers to interact with the governance service as the new member.
-# Set overrides if local registry is to be used for CGS images.
-if ($registry -eq "local") {
-    $localTag = cat "$ccfOutDir/local-registry-tag.txt"
-    $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$localTag"
-    $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$localTag"
-}
-elseif ($registry -eq "acr") {
-    $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$tag"
-    $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$tag"
-}
-
 az cleanroom governance client deploy `
     --ccf-endpoint $ccfEndpoint `
     --signing-cert $ccfOutDir/publisher_cert.pem `
     --signing-key $ccfOutDir/publisher_privk.pem `
     --service-cert $ccfOutDir/service_cert.pem `
-    --name "ob-publisher-client"
+    --name "ob-publisher-client" `
+    --env-file $ccfOutDir/governance-client.env
 
 # "publisher" accepts the invitation and becomes an active member in the consortium.
 az cleanroom governance member activate --governance-client "ob-publisher-client"
@@ -361,8 +348,7 @@ az cleanroom governance ca propose-enable `
 
 $clientName = "ob-publisher-client"
 pwsh $collabSamplePath/verify-deployment-proposals.ps1 `
-    -cleanroomConfig $publisherConfig `
-    -governanceClient $clientName
+    -cleanroomConfig $publisherConfig
 
 # Vote on the proposed deployment template.
 $proposalId = az cleanroom governance deployment template show `
@@ -427,8 +413,7 @@ az cleanroom governance proposal vote `
 
 $clientName = "ob-consumer-client"
 pwsh $collabSamplePath/verify-deployment-proposals.ps1 `
-    -cleanroomConfig $consumerConfig `
-    -governanceClient $clientName
+    -cleanroomConfig $consumerConfig
 
 # Vote on the proposed deployment template.
 $proposalId = az cleanroom governance deployment template show `
@@ -521,5 +506,4 @@ pwsh $collabSamplePath/setup-access.ps1 `
     -subject $contractId `
     -issuerUrl $issuerUrl `
     -outDir $outDir `
-    -kvType akvpremium `
-    -governanceClient "ob-publisher-client"
+    -kvType akvpremium

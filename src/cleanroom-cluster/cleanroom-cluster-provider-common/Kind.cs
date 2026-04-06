@@ -20,7 +20,14 @@ public class KindClient : RunCommand
 
     public async Task CreateCluster(string name)
     {
-        await this.Kind($"create cluster --name {name} --config=kind/kind-config.yaml");
+        var template = await File.ReadAllTextAsync("kind/kind-config.yaml");
+        var hostSharedDir =
+            Environment.GetEnvironmentVariable("CR_CLUSTER_PROVIDER_HOST_SHARED_DIR") ??
+            throw new ArgumentNullException("CR_CLUSTER_PROVIDER_HOST_SHARED_DIR");
+        template = template.Replace("<HOST_SHARED_DIR>", hostSharedDir);
+        var configFile = Path.GetTempFileName();
+        await File.WriteAllTextAsync(configFile, template);
+        await this.Kind($"create cluster --name {name} --config={configFile}");
     }
 
     public async Task DeleteCluster(string name)
@@ -52,6 +59,11 @@ public class KindClient : RunCommand
         var nodeNames = await this.Kind($"get nodes --name {name}");
         var nodes = nodeNames.Split("\n").Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
         return nodes.Select(x => x.Trim()).ToList();
+    }
+
+    public async Task LoadImageArchive(string imageFile, string name, string nodeName)
+    {
+        await this.Kind($"load image-archive {imageFile} --name {name} --nodes {nodeName}");
     }
 
     private async Task<string> Kind(

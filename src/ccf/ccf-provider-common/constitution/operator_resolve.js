@@ -57,6 +57,7 @@ function canOperatorPass(action) {
     "remove_ca_cert_bundle", // To manage CAs for OpenID configuration endpoints (i.e. when using Entra).
     "remove_jwt_issuer", // Same as above, but to manage the issuers themselves.
     "remove_node",
+    "remove_snp_minimum_tcb_version", // Goes along with set_snp_minimum_tcb_version_hex.
     "remove_snp_uvm_endorsement", // Goes along with add_snp_uvm_endorsement
     "set_ca_cert_bundle", // For OpenID/OAuth/Entra to update the CA bundle used to authenticate the configuration endpoint.
     "set_jwt_issuer", // Same as set_ca_cert and remove_jwt_issuer, this is necessary to manage/update IdPs.
@@ -64,6 +65,7 @@ function canOperatorPass(action) {
     "set_node_data",
     "set_service_certificate_validity",
     "set_recovery_threshold", // Possible to avoid by having recovery svc member pre-created?
+    "set_snp_minimum_tcb_version_hex", // To set minimum TCB version per CPU model.
     "transition_node_to_trusted",
     "transition_service_to_open",
     "trigger_ledger_chunk",

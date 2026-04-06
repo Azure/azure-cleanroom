@@ -10,14 +10,12 @@ namespace CleanRoomProvider;
 public enum InfraType
 {
     /// <summary>
-    /// Spark pods are started in AKS/VN2 setup with Confidential ACI instances ie
-    /// in an SEV-SNP environment.
-    /// Meant for production.
+    /// Pods are started in AKS. Meant for production.
     /// </summary>
-    caci,
+    aks,
 
     /// <summary>
-    /// Spark pods are started in a kind cluster. Meant for local dev/test.
+    /// Pods are started in a kind cluster. Meant for local dev/test.
     /// </summary>
     @virtual
 }

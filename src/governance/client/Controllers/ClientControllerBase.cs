@@ -22,12 +22,15 @@ public abstract class ClientControllerBase : ControllerBase
         string? serviceCertPem = this.GetServiceCertPem("x-ms-service-cert");
         CcfServiceCertLocator? certLocator =
             this.GetServiceCertLocator("x-ms-service-cert-discovery");
+        string? authMode = this.GetHeader("x-ms-auth-mode");
 
         this.CcfClientManager = new CcfClientManager(
             this.Logger,
             ccfEndpoint,
             serviceCertPem,
-            certLocator);
+            certLocator,
+            authMode,
+            httpContextAccessor);
     }
 
     protected ILogger Logger { get; }

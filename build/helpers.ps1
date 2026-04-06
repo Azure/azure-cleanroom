@@ -207,7 +207,7 @@ function Get-Container-Rego-Policy-Json {
 
     $containerImage = "${repo}/${containerName}@${digest}"
     $policyJson = Get-Content -Path "$PSScriptRoot/templates/ccr-policies/$containerName-policy.json" | ConvertFrom-Json
-    $policyJson.containerImage = $containerImage
+    $policyJson.properties.image = $containerImage
 
     $ccePolicyJson = [ordered]@{
         version    = "1.0"
@@ -221,6 +221,7 @@ function Get-Container-Rego-Policy-Json {
         Write-Host "Generating CCE Policy with --debug-mode parameter"
         az confcom acipolicygen `
             -i ${outDir}/${containerName}-ccepolicy-input.json `
+            --enable-stdio `
             --debug-mode `
             --outraw `
         | Out-File ${outDir}/${containerName}-ccepolicy-input.rego
@@ -228,6 +229,7 @@ function Get-Container-Rego-Policy-Json {
     else {
         az confcom acipolicygen `
             -i ${outDir}/${containerName}-ccepolicy-input.json `
+            --enable-stdio `
             --outraw `
         | Out-File ${outDir}/${containerName}-ccepolicy-input.rego
     }
@@ -274,12 +276,14 @@ function Get-VN2-Container-Rego-Policy-Json {
         az confcom acipolicygen `
             -i ${outDir}/${containerName}-vn2-ccepolicy-input.json `
             --debug-mode `
+            --enable-stdio `
             --outraw `
         | Out-File ${outDir}/${containerName}-vn2-ccepolicy-input.rego
     }
     else {
         az confcom acipolicygen `
             -i ${outDir}/${containerName}-vn2-ccepolicy-input.json `
+            --enable-stdio `
             --outraw `
         | Out-File ${outDir}/${containerName}-vn2-ccepolicy-input.rego
     }

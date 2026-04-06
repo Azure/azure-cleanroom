@@ -2,8 +2,6 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$resourceGroup,
   [Parameter(Mandatory = $true)]
-  [string]$governanceClient,
-  [Parameter(Mandatory = $true)]
   [string]$subject,
   [Parameter(Mandatory = $true)]
   [string]$issuerUrl,
@@ -124,7 +122,7 @@ function Assign-Permission-StorageAccount {
       --name $STORAGE_ACCOUNT_NAME `
       --resource-group $resourceGroup) | ConvertFrom-Json
 
-  $role = "Storage Blob Data Contributor"
+  $role = "Storage Blob Data Owner"
   $roleAssignment = (az role assignment list `
       --assignee-object-id $objectId `
       --scope $storageAccount.id `

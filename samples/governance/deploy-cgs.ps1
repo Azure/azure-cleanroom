@@ -28,7 +28,7 @@ mkdir -p $sandbox_common
 bash $root/samples/governance/keygenerator.sh --name $initialMemberName --gen-enc-key -o $sandbox_common
 
 Write-Output "Building governance ccf app"
-pwsh $build/build-governance-ccf-app.ps1 --output $sandbox_common/dist
+pwsh $build/cgs/build-governance-ccf-app.ps1 --output $sandbox_common/dist
 
 if (!$NoBuild) {
   pwsh $build/ccf/build-ccf-runjs-app-sandbox.ps1

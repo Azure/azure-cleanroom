@@ -1,0 +1,9 @@
+# Use the official .NET Core SDK as the base image
+FROM python:3.10-slim AS base
+
+RUN pip install isort black
+
+COPY ./python-linter.sh /python-linter.sh
+RUN chmod +x /python-linter.sh
+WORKDIR /
+ENTRYPOINT ["/python-linter.sh"]

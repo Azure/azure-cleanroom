@@ -112,23 +112,13 @@ az cleanroom governance proposal vote `
   --governance-client "ob-consumer-client"
 
 # "publisher" deploys client-side containers to interact with the governance service as the new member.
-# Set overrides if local registry is to be used for CGS images.
-if ($registry -eq "local") {
-  $localTag = cat "$ccfOutDir/local-registry-tag.txt"
-  $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$localTag"
-  $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$localTag"
-}
-elseif ($registry -eq "acr") {
-  $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$tag"
-  $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$tag"
-}
-
 az cleanroom governance client deploy `
   --ccf-endpoint $ccfEndpoint `
   --signing-cert $ccfOutDir/publisher_cert.pem `
   --signing-key $ccfOutDir/publisher_privk.pem `
   --service-cert $ccfOutDir/service_cert.pem `
-  --name "ob-publisher-client"
+  --name "ob-publisher-client" `
+  --env-file $ccfOutDir/governance-client.env
 
 # "publisher" accepts the invitation and becomes an active member in the consortium.
 az cleanroom governance member activate --governance-client "ob-publisher-client"
@@ -563,8 +553,7 @@ az cleanroom governance ca propose-enable `
 
 $clientName = "ob-publisher-client"
 pwsh $PSScriptRoot/../../verify-deployment-proposals.ps1 `
-  -cleanroomConfig $publisherConfig `
-  -governanceClient $clientName
+  -cleanroomConfig $publisherConfig
 
 # Vote on the proposed deployment template.
 $proposalId = az cleanroom governance deployment template show `
@@ -629,8 +618,7 @@ az cleanroom governance proposal vote `
 
 $clientName = "ob-consumer-client"
 pwsh $PSScriptRoot/../../verify-deployment-proposals.ps1 `
-  -cleanroomConfig $consumerConfig `
-  -governanceClient $clientName
+  -cleanroomConfig $consumerConfig
 
 # Vote on the proposed deployment template.
 $proposalId = az cleanroom governance deployment template show `
@@ -741,8 +729,7 @@ pwsh $PSScriptRoot/../../setup-access.ps1 `
   -subject $contractId `
   -issuerUrl $issuerUrl `
   -outDir $outDir `
-  -kvType akvpremium `
-  -governanceClient "ob-publisher-client"
+  -kvType akvpremium
 
 # Creates a KEK with SKR policy, wraps DEKs with the KEK and put in kv.
 curl --fail-with-body `
@@ -779,5 +766,4 @@ pwsh $PSScriptRoot/../../setup-access.ps1 `
   -subject $contractId `
   -issuerUrl $issuerUrl `
   -outDir $outDir `
-  -kvType akvpremium `
-  -governanceClient "ob-consumer-client"
+  -kvType akvpremium

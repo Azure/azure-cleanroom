@@ -6,7 +6,6 @@ using System.Text.Json;
 using Azure.Identity;
 using Docker.DotNet;
 using Microsoft.Identity.Client;
-using Microsoft.Rest.TransientFaultHandling;
 
 namespace Controllers;
 
@@ -86,30 +85,6 @@ public class ODataError
         {
             statusCode = (int)de.StatusCode;
             code = de.StatusCode.ToString();
-        }
-        else if (e is HttpRequestWithStatusException se)
-        {
-            try
-            {
-                var o = JsonSerializer.Deserialize<ODataError>(se.Message);
-                if (o != null && !string.IsNullOrEmpty(o.Error?.Code))
-                {
-                    code = o.Error.Code;
-                    message = o.Error.Message;
-                }
-                else
-                {
-                    code = se.StatusCode.ToString();
-                    message = se.Message;
-                }
-            }
-            catch
-            {
-                code = se.StatusCode.ToString();
-                message = se.Message;
-            }
-
-            statusCode = (int)se.StatusCode;
         }
         else if (e is AuthenticationFailedException afe &&
             afe.InnerException is MsalException mse)

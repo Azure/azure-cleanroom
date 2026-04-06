@@ -46,7 +46,7 @@ public class SecretTests : TestBase
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
             var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
             secretId = responseBody["secretId"]!.ToString();
-            Assert.IsTrue(!string.IsNullOrEmpty(secretId));
+            Assert.IsFalse(string.IsNullOrEmpty(secretId));
         }
 
         // Getting secret before a clean room policy is set should fail.
@@ -102,7 +102,7 @@ public class SecretTests : TestBase
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
             var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
             secretId = responseBody["secretId"]!.ToString();
-            Assert.IsTrue(!string.IsNullOrEmpty(secretId));
+            Assert.IsFalse(string.IsNullOrEmpty(secretId));
         }
 
         // Setup secret level policy (hostData2) with duplicates to check if the CGS will de-dup it.
@@ -112,6 +112,7 @@ public class SecretTests : TestBase
             var addPolicy = new JsonObject
             {
                 ["type"] = "add",
+                ["policyType"] = "snp-caci",
                 ["claims"] = new JsonObject
                 {
                     ["x-ms-sevsnpvm-is-debuggable"] = false,
@@ -130,8 +131,9 @@ public class SecretTests : TestBase
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
             // Check the get response by the user matches with the policy that was set.
-            using HttpRequestMessage request2 =
-                new(HttpMethod.Get, $"contracts/{contractId}/secrets/{secretId}/cleanroompolicy");
+            using HttpRequestMessage request2 = new(
+                HttpMethod.Get,
+                $"contracts/{contractId}/cleanroompolicy/delegates/secrets/{secretId}");
             using HttpResponseMessage response2 = await this.CgsClient_Member0.SendAsync(request2);
             Assert.AreEqual(HttpStatusCode.OK, response2.StatusCode);
             var responseBody = (await response2.Content.ReadFromJsonAsync<JsonObject>())!;
@@ -182,7 +184,7 @@ public class SecretTests : TestBase
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
             var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
             secretId = responseBody["secretId"]!.ToString();
-            Assert.IsTrue(!string.IsNullOrEmpty(secretId));
+            Assert.IsFalse(string.IsNullOrEmpty(secretId));
         }
 
         // Re-running this test will find an existing clean room policy for the "default" contract
@@ -298,7 +300,8 @@ public class SecretTests : TestBase
             // Payload contains valid attestation report but no clean room policy has been proposed
             // yet so get secret should fail.
             var attestationReport = JsonSerializer.Deserialize<JsonObject>(
-                await File.ReadAllTextAsync("data/attestation-report.json"))!;
+                await File.ReadAllTextAsync(
+                    "data/encryption/attestation.json"))!["report"]!["snpCACI"]!;
             var publicKey = CreateX509Certificate2("foo").PublicKey.ExportSubjectPublicKeyInfo();
             var publicKeyPem = PemEncoding.Write("PUBLIC KEY", publicKey);
             request.Content = new StringContent(
@@ -335,7 +338,8 @@ public class SecretTests : TestBase
         {
             // Payload contains valid attestation report but public key does not match reportdata.
             var attestationReport = JsonSerializer.Deserialize<JsonObject>(
-                await File.ReadAllTextAsync("data/attestation-report.json"))!;
+                await File.ReadAllTextAsync(
+                    "data/encryption/attestation.json"))!["report"]!["snpCACI"]!;
             var publicKey = CreateX509Certificate2("foo").PublicKey.ExportSubjectPublicKeyInfo();
             var publicKeyPem = PemEncoding.Write("PUBLIC KEY", publicKey);
             request.Content = new StringContent(
@@ -407,7 +411,7 @@ public class SecretTests : TestBase
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
             var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
             secretId = responseBody["secretId"]!.ToString();
-            Assert.IsTrue(!string.IsNullOrEmpty(secretId));
+            Assert.IsFalse(string.IsNullOrEmpty(secretId));
         }
 
         using (HttpRequestMessage request =
@@ -429,8 +433,7 @@ public class SecretTests : TestBase
                 HashAlgorithmName.SHA256,
                 RSASignaturePadding.Pkcs1);
             var cert = req.CreateSelfSigned(DateTimeOffset.Now, DateTimeOffset.Now.AddYears(1));
-            return new X509Certificate2(
-                cert.Export(X509ContentType.Pfx, string.Empty), string.Empty);
+            return cert;
         }
     }
 
@@ -443,7 +446,8 @@ public class SecretTests : TestBase
         string secretNameUrl = $"contracts/{contractId}/secrets/{secretName}";
 
         // Create a user that would create the secret.
-        List<(string id, HttpClient userClient)> users = await this.CreateAndAcceptUsers(1);
+        List<(string id, string _, HttpClient userClient)> users =
+            await this.CreateAndAcceptUsers(1);
 
         // Add a secret as the user.
         string secretId;
@@ -461,20 +465,27 @@ public class SecretTests : TestBase
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
             var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
             secretId = responseBody["secretId"]!.ToString();
-            Assert.IsTrue(!string.IsNullOrEmpty(secretId));
+            Assert.IsFalse(string.IsNullOrEmpty(secretId));
         }
 
-        // Querying for the cleanroom policy for a non-existent secret should fail.
-        using (HttpRequestMessage request =
-            new(HttpMethod.Get, $"contracts/{contractId}/secrets/doesnotexist/cleanroompolicy"))
+        // Querying for the cleanroom policy for a non-existent secret should return empty claims.
+        using (HttpRequestMessage request = new(
+            HttpMethod.Post,
+            $"contracts/{contractId}/cleanroompolicy/delegates/secrets/doesnotexist"))
         {
             using HttpResponseMessage response = await users[0].userClient.SendAsync(request);
-            Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
-            var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
-            Assert.AreEqual("SecretNotFound", error.Code);
-            Assert.AreEqual(
-                "A secret with the specified id 'doesnotexist' was not found.",
-                error.Message);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+            var emptyPolicy = new JsonObject
+            {
+                ["claims"] = new JsonObject()
+            };
+            JsonObject expectedClaims =
+                this.ConvertClaimsToArrayFormat(emptyPolicy["claims"]!.AsObject());
+            Assert.IsTrue(
+                JsonNode.DeepEquals(expectedClaims, responseBody["claims"]),
+                $"Expected: {expectedClaims.ToJsonString()}, " +
+                $"actual: {responseBody["claims"]?.ToJsonString()}");
         }
 
         // Getting secret before a clean room policy is set should fail.
@@ -511,6 +522,7 @@ public class SecretTests : TestBase
             var addPolicy = new JsonObject
             {
                 ["type"] = "add",
+                ["policyType"] = "snp-caci",
                 ["claims"] = new JsonObject
                 {
                     ["x-ms-sevsnpvm-is-debuggable"] = false,
@@ -526,8 +538,9 @@ public class SecretTests : TestBase
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
             // Check the get response by the user matches with the policy that was set.
-            using HttpRequestMessage request2 =
-                new(HttpMethod.Get, $"contracts/{contractId}/secrets/{secretId}/cleanroompolicy");
+            using HttpRequestMessage request2 = new(
+                HttpMethod.Post,
+                $"contracts/{contractId}/cleanroompolicy/delegates/secrets/{secretId}");
             using HttpResponseMessage response2 = await users[0].userClient.SendAsync(request2);
             Assert.AreEqual(HttpStatusCode.OK, response2.StatusCode);
             var responseBody = (await response2.Content.ReadFromJsonAsync<JsonObject>())!;
@@ -549,17 +562,14 @@ public class SecretTests : TestBase
         }
 
         // Getting the secret via gov sidecar using contract level policy (ie hostData1) should
-        // fail.
+        // always work.
         using (HttpRequestMessage request = new(HttpMethod.Post, secretIdUrl))
         {
             using HttpResponseMessage response = await this.GovSidecarClient.SendAsync(request);
-            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
-            var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
-            Assert.AreEqual("VerifySnpAttestationFailed", error.Code);
-            Assert.AreEqual(
-                $"Attestation claim x-ms-sevsnpvm-hostdata, value {this.GovSidecarHostData} " +
-                $"does not match policy values: {this.GovSidecar2HostData}",
-                error.Message);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+            string secretValue = responseBody["value"]!.ToString();
+            Assert.AreEqual("somesecret", secretValue);
         }
 
         // Removing policy should allow getting the secret via contract level policy (ie hostData1).
@@ -582,22 +592,15 @@ public class SecretTests : TestBase
             using HttpResponseMessage response = await this.GovSidecarClient.SendAsync(request);
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
-            // After removing the policy above check the get response by the user matches with the
-            // contract level policy now.
-            using HttpRequestMessage request2 =
-                new(HttpMethod.Get, $"contracts/{contractId}/secrets/{secretId}/cleanroompolicy");
+            // After removing the policy above check the get response by the user is now empty.
+            using HttpRequestMessage request2 = new(
+                HttpMethod.Post,
+                $"contracts/{contractId}/cleanroompolicy/delegates/secrets/{secretId}");
             using HttpResponseMessage response2 = await users[0].userClient.SendAsync(request2);
             Assert.AreEqual(HttpStatusCode.OK, response2.StatusCode);
             var responseBody = (await response2.Content.ReadFromJsonAsync<JsonObject>())!;
-            JsonObject expectedClaims = this.ConvertClaimsToArrayFormat(new()
-            {
-                ["x-ms-sevsnpvm-is-debuggable"] = false,
-                ["x-ms-sevsnpvm-hostdata"] = this.GovSidecarHostData
-            });
-            Assert.IsTrue(
-                JsonNode.DeepEquals(expectedClaims, responseBody["claims"]),
-                $"Expected: {expectedClaims.ToJsonString()}, " +
-                $"actual: {responseBody["claims"]?.ToJsonString()}");
+            var claimsJson = responseBody["claims"]?.ToJsonString();
+            Assert.AreEqual("{}", claimsJson, $"Expected empty claims {{}}, but got: {claimsJson}");
         }
 
         // Getting the secret via gov sidecar using hostData2 should fail but start working with
@@ -608,10 +611,6 @@ public class SecretTests : TestBase
             Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
             var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
             Assert.AreEqual("VerifySnpAttestationFailed", error.Code);
-            Assert.AreEqual(
-                $"Attestation claim x-ms-sevsnpvm-hostdata, value {this.GovSidecar2HostData} " +
-                $"does not match policy values: {this.GovSidecarHostData}",
-                error.Message);
         }
 
         using (HttpRequestMessage request = new(HttpMethod.Post, secretIdUrl))
@@ -647,7 +646,7 @@ public class SecretTests : TestBase
         await this.ProposeContractAndAcceptAllowAllCleanRoomPolicy(contractId);
 
         // As the contract and clean room policy was proposed and accepted should be able to
-        // set a cleanroom secert now.
+        // set a cleanroom secret now.
         string secretId;
         using (HttpRequestMessage request = new(HttpMethod.Put, secretNameUrl))
         {
@@ -663,7 +662,7 @@ public class SecretTests : TestBase
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
             var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
             secretId = responseBody["secretId"]!.ToString();
-            Assert.IsTrue(!string.IsNullOrEmpty(secretId));
+            Assert.IsFalse(string.IsNullOrEmpty(secretId));
         }
 
         // Get secret should now succeed as sidecar 1 as we have not set the secret level policy
@@ -686,6 +685,7 @@ public class SecretTests : TestBase
             var addPolicy = new JsonObject
             {
                 ["type"] = "add",
+                ["policyType"] = "snp-caci",
                 ["claims"] = new JsonObject
                 {
                     ["x-ms-sevsnpvm-is-debuggable"] = false,
@@ -701,8 +701,9 @@ public class SecretTests : TestBase
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
             // Check the get response by a member matches with the policy that was set.
-            using HttpRequestMessage request2 =
-                new(HttpMethod.Get, $"contracts/{contractId}/secrets/{secretId}/cleanroompolicy");
+            using HttpRequestMessage request2 = new(
+                HttpMethod.Get,
+                $"contracts/{contractId}/cleanroompolicy/delegates/secrets/{secretId}");
             using HttpResponseMessage response2 = await this.CgsClient_Member0.SendAsync(request2);
             Assert.AreEqual(HttpStatusCode.OK, response2.StatusCode);
             var responseBody = (await response2.Content.ReadFromJsonAsync<JsonObject>())!;
@@ -724,17 +725,14 @@ public class SecretTests : TestBase
         }
 
         // Getting the secret via gov sidecar using contract level policy (ie hostData1) should
-        // fail.
+        // always succeed.
         using (HttpRequestMessage request = new(HttpMethod.Post, secretIdUrl))
         {
             using HttpResponseMessage response = await this.GovSidecarClient.SendAsync(request);
-            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
-            var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
-            Assert.AreEqual("VerifySnpAttestationFailed", error.Code);
-            Assert.AreEqual(
-                $"Attestation claim x-ms-sevsnpvm-hostdata, value {this.GovSidecarHostData} " +
-                $"does not match policy values: {this.GovSidecar2HostData}",
-                error.Message);
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+            string secretValue = responseBody["value"]!.ToString();
+            Assert.AreEqual("somesecret", secretValue);
         }
 
         // Removing policy should allow getting the secret via contract level policy (ie hostData1).
@@ -759,16 +757,18 @@ public class SecretTests : TestBase
 
             // After removing the policy above check the get response by a member matches with the
             // contract level policy now.
-            using HttpRequestMessage request2 =
-                new(HttpMethod.Get, $"contracts/{contractId}/secrets/{secretId}/cleanroompolicy");
+            using HttpRequestMessage request2 = new(
+                HttpMethod.Get,
+                $"contracts/{contractId}/cleanroompolicy/delegates/secrets/{secretId}");
             using HttpResponseMessage response2 = await this.CgsClient_Member0.SendAsync(request2);
             Assert.AreEqual(HttpStatusCode.OK, response2.StatusCode);
             var responseBody = (await response2.Content.ReadFromJsonAsync<JsonObject>())!;
-            JsonObject expectedClaims = this.ConvertClaimsToArrayFormat(new()
+            var emptyPolicy = new JsonObject
             {
-                ["x-ms-sevsnpvm-is-debuggable"] = false,
-                ["x-ms-sevsnpvm-hostdata"] = this.GovSidecarHostData
-            });
+                ["claims"] = new JsonObject()
+            };
+            JsonObject expectedClaims =
+                this.ConvertClaimsToArrayFormat(emptyPolicy["claims"]!.AsObject());
             Assert.IsTrue(
                 JsonNode.DeepEquals(expectedClaims, responseBody["claims"]),
                 $"Expected: {expectedClaims.ToJsonString()}, " +
@@ -783,10 +783,6 @@ public class SecretTests : TestBase
             Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
             var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
             Assert.AreEqual("VerifySnpAttestationFailed", error.Code);
-            Assert.AreEqual(
-                $"Attestation claim x-ms-sevsnpvm-hostdata, value {this.GovSidecar2HostData} " +
-                $"does not match policy values: {this.GovSidecarHostData}",
-                error.Message);
         }
 
         using (HttpRequestMessage request = new(HttpMethod.Post, secretIdUrl))

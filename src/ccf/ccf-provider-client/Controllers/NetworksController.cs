@@ -68,7 +68,11 @@ public class NetworksController : CCfClientController
 
         if (async)
         {
-            await this.queue.PerformAsync(this.operationStore, this.HttpContext, CreateNetwork);
+            await this.queue.PerformAsync(
+                this.operationStore,
+                this.HttpContext,
+                CreateNetwork,
+                this.logger);
             return this.Accepted();
         }
         else
@@ -362,7 +366,11 @@ public class NetworksController : CCfClientController
 
         if (async)
         {
-            await this.queue.PerformAsync(this.operationStore, this.HttpContext, RecoverNetwork);
+            await this.queue.PerformAsync(
+                this.operationStore,
+                this.HttpContext,
+                RecoverNetwork,
+                this.logger);
             return this.Accepted();
         }
         else
@@ -699,6 +707,62 @@ public class NetworksController : CCfClientController
         JsonObject result = await ccfNetworkProvider.RemoveSnpHostData(
             networkName,
             content.HostData,
+            content.ProviderConfig);
+        return this.Ok(result);
+    }
+
+    [HttpPost("/networks/{networkName}/setSnpMinimumTcbVersion")]
+    public async Task<IActionResult> SetSnpMinimumTcbVersion(
+        [FromRoute] string networkName,
+        [FromBody] SetSnpMinimumTcbVersionInput content)
+    {
+        CcfNetworkProvider ccfNetworkProvider = this.GetNetworkProvider(content.InfraType);
+        JsonObject result = await ccfNetworkProvider.SetSnpMinimumTcbVersion(
+            networkName,
+            content.Cpuid,
+            content.TcbVersion,
+            content.ProviderConfig);
+        return this.Ok(result);
+    }
+
+    [HttpPost("/networks/{networkName}/removeSnpMinimumTcbVersion")]
+    public async Task<IActionResult> RemoveSnpMinimumTcbVersion(
+        [FromRoute] string networkName,
+        [FromBody] RemoveSnpMinimumTcbVersionInput content)
+    {
+        CcfNetworkProvider ccfNetworkProvider = this.GetNetworkProvider(content.InfraType);
+        JsonObject result = await ccfNetworkProvider.RemoveSnpMinimumTcbVersion(
+            networkName,
+            content.Cpuid,
+            content.ProviderConfig);
+        return this.Ok(result);
+    }
+
+    [HttpPost("/networks/{networkName}/addSnpUvmEndorsement")]
+    public async Task<IActionResult> AddSnpUvmEndorsement(
+        [FromRoute] string networkName,
+        [FromBody] AddSnpUvmEndorsementInput content)
+    {
+        CcfNetworkProvider ccfNetworkProvider = this.GetNetworkProvider(content.InfraType);
+        JsonObject result = await ccfNetworkProvider.AddSnpUvmEndorsement(
+            networkName,
+            content.Did,
+            content.Feed,
+            content.Svn,
+            content.ProviderConfig);
+        return this.Ok(result);
+    }
+
+    [HttpPost("/networks/{networkName}/removeSnpUvmEndorsement")]
+    public async Task<IActionResult> RemoveSnpUvmEndorsement(
+        [FromRoute] string networkName,
+        [FromBody] RemoveSnpUvmEndorsementInput content)
+    {
+        CcfNetworkProvider ccfNetworkProvider = this.GetNetworkProvider(content.InfraType);
+        JsonObject result = await ccfNetworkProvider.RemoveSnpUvmEndorsement(
+            networkName,
+            content.Did,
+            content.Feed,
             content.ProviderConfig);
         return this.Ok(result);
     }

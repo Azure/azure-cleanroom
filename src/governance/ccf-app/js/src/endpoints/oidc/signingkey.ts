@@ -1,8 +1,12 @@
 import * as ccfapp from "@microsoft/ccf-app";
 import { ccf } from "@microsoft/ccf-app/global";
 import { SigningKeyItem } from "../../models";
-import { ErrorResponse } from "../../models/errorresponse";
-import { isOidcIssuerEnabled, getLastGenerateSigningKeyReqdId, getGenerateSigningKeyKid } from "./issuer";
+import { ErrorResponse } from "../../utils/ErrorResponse";
+import {
+  isOidcIssuerEnabled,
+  getLastGenerateSigningKeyReqdId,
+  getGenerateSigningKeyKid
+} from "./issuer";
 
 const signingKeyStore = ccfapp.typedKv(
   "oidc_issuer.signing_keys",
@@ -12,7 +16,7 @@ const signingKeyStore = ccfapp.typedKv(
 
 const signingKeyName = "signingKey";
 
-export function getSigningKey(): SigningKeyItem {
+export function getIssuerSigningKey(): SigningKeyItem {
   if (signingKeyStore.has(signingKeyName)) {
     return signingKeyStore.get(signingKeyName);
   }
@@ -20,7 +24,7 @@ export function getSigningKey(): SigningKeyItem {
   return null;
 }
 
-export function generateSigningKey(): ccfapp.Response {
+export function generateIssuerSigningKey(): ccfapp.Response {
   // Generate a signing key only if feature is enabled and a request to create a signing key
   // was proposed. We only want to create a signing key when signaled by the acceptance of the
   // enable_oidc_issuer/oidc_issuer_enable_rotate_signing_key proposal. This is tracked via

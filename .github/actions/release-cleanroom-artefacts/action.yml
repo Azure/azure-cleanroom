@@ -39,11 +39,11 @@ runs:
       run: az acr login --name ${{ inputs.registry-name }}
 
     - shell: pwsh
-      run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
+      run: Install-Module -Name powershell-yaml -Force
 
     - shell: pwsh
       run: |
-        ./build/build-ccr-artefacts.ps1 -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom -tag ${{ inputs.tag }} -push -outputPath ${{ github.workspace }}/ccr-artefacts
+        ./build/ccr/build-ccr-artefacts.ps1 -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom -tag ${{ inputs.tag }} -push -outputPath ${{ github.workspace }}/ccr-artefacts
 
     - uses: actions/upload-artifact@v4
       with:
@@ -55,6 +55,18 @@ runs:
       if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/ccr-governance-opa-policy
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        registry-name: ${{ inputs.registry-name }}
+    
+    - shell: pwsh
+      run: |
+        ./build/ccr/build-cvm-measurements.ps1 -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom -tag ${{ inputs.tag }} -push
+
+    - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
+      with:
+        name: cvm-measurements
         tag: ${{ inputs.tag }}
         environment: ${{ inputs.environment }}
         registry-name: ${{ inputs.registry-name }}

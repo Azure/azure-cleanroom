@@ -1,0 +1,169 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: jobrecords.cleanroom.azure.com
+  labels:
+    {{- include "webserver.labels" . | nindent 4 }}
+spec:
+  group: cleanroom.azure.com
+  names:
+    kind: JobRecord
+    listKind: JobRecordList
+    plural: jobrecords
+    singular: jobrecord
+    shortNames:
+      - jr
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - queryId
+              properties:
+                queryId:
+                  type: string
+                  description: Unique identifier for the query/job
+            status:
+              type: object
+              properties:
+                latestRun:
+                  type: object
+                  description: Details of the most recent run
+                  properties:
+                    runId:
+                      type: string
+                      description: Unique identifier for the run
+                    startTime:
+                      type: string
+                      format: date-time
+                      description: Timestamp when the run started
+                    endTime:
+                      type: string
+                      format: date-time
+                      description: Timestamp when the run completed
+                    isSuccessful:
+                      type: boolean
+                      description: Whether the run completed successfully
+                    error:
+                      type: object
+                      description: Error details for a failed run
+                      properties:
+                        code:
+                          type: string
+                          description: Error code identifying the type of failure
+                        message:
+                          type: string
+                          description: Human-readable error message
+                    stats:
+                      type: object
+                      description: Statistics for the run
+                      properties:
+                        rowsRead:
+                          type: integer
+                          format: int64
+                          description: Number of rows read during the run
+                        rowsWritten:
+                          type: integer
+                          format: int64
+                          description: Number of rows written during the run
+                runs:
+                  type: array
+                  description: History of job runs associated with this JobRecord
+                  items:
+                    type: object
+                    properties:
+                      runId:
+                        type: string
+                        description: Unique identifier for the run
+                      startTime:
+                        type: string
+                        format: date-time
+                        description: Timestamp when the run started
+                      endTime:
+                        type: string
+                        format: date-time
+                        description: Timestamp when the run completed
+                      isSuccessful:
+                        type: boolean
+                        description: Whether the run completed successfully
+                      error:
+                        type: object
+                        description: Error details for a failed run
+                        properties:
+                          code:
+                            type: string
+                            description: Error code identifying the type of failure
+                          message:
+                            type: string
+                            description: Human-readable error message
+                      stats:
+                        type: object
+                        description: Statistics for the run
+                        properties:
+                          rowsRead:
+                            type: integer
+                            format: int64
+                            description: Number of rows read during the run
+                          rowsWritten:
+                            type: integer
+                            format: int64
+                            description: Number of rows written during the run
+                summary:
+                  type: object
+                  description: Aggregated statistics across all tracked runs including totals and averages computed from run history
+                  properties:
+                    totalRuns:
+                      type: integer
+                      description: Total number of runs tracked
+                    successfulRuns:
+                      type: integer
+                      description: Number of successful runs
+                    failedRuns:
+                      type: integer
+                      description: Number of failed runs
+                    totalRuntimeSeconds:
+                      type: number
+                      format: double
+                      description: Sum of all run durations in seconds
+                    avgDurationSeconds:
+                      type: number
+                      format: double
+                      description: Average duration of runs in seconds
+                    totalRowsRead:
+                      type: integer
+                      format: int64
+                      description: Total rows read across all runs
+                    totalRowsWritten:
+                      type: integer
+                      format: int64
+                      description: Total rows written across all runs
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Total_Runs
+          type: integer
+          jsonPath: .status.summary.totalRuns
+        - name: Success
+          type: integer
+          jsonPath: .status.summary.successfulRuns
+        - name: Failed
+          type: integer
+          jsonPath: .status.summary.failedRuns
+        - name: Avg_Duration
+          type: number
+          jsonPath: .status.summary.avgDurationSeconds
+        - name: Latest_Run
+          type: date
+          jsonPath: .status.latestRun.endTime
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

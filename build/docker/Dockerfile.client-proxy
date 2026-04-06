@@ -1,6 +1,7 @@
 FROM mcr.microsoft.com/oss/envoyproxy/envoy:v1.33.0
 
-RUN apt-get update && apt-get install -y gettext nano
+RUN apt-get update && apt-get install -y --no-install-recommends gettext \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR "/home/envoy"
 

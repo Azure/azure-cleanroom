@@ -1,0 +1,64 @@
+openapi: '3.0.3'
+info:
+  title: Cleanroom Spark Specification
+  description: Cleanroom Spark Specification
+  version: '1.0'
+
+paths: {}
+
+components:
+  schemas:
+    Query:
+      type: object
+      properties:
+        segments:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuerySegment"
+      required:
+      - segments
+
+    QuerySegment:
+      type: object
+      properties:
+        executionSequence:
+          type: integer
+          description: The sequence in which this segment is to be executed. Segments with lower sequence number are executed before the higher ones. Segments with the same sequence will be executed in parallel.
+        data:
+          type: string
+        preConditions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PreCondition"
+        postFilters:
+          type: array
+          items:
+            $ref: "#/components/schemas/PostFilter"
+      required:
+      - data
+      - executionSequence
+
+    PreCondition:
+      type: object
+      properties:
+        viewName:
+          type: string
+          description:  The name of the view of the loaded dataset on which the pre-condition is to be applied
+        minRowCount:
+          type: integer
+          description: The minimum row count in the view of the dataset. If the row count is less than this value, the query will not be executed
+      required:
+      - viewName
+      - minRowCount
+
+    PostFilter:
+      type: object
+      properties:
+        columnName:
+          type: string
+        value:
+          type: integer
+          description: The minimum value that a column must have in the row, to retain that row. All other rows are filtered out
+      required:
+      - columnName
+      - value

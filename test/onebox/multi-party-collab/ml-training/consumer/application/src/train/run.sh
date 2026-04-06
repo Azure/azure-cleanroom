@@ -19,7 +19,7 @@ done
 
 echo "Joining datasets with configuration:"
 cat /mnt/remote/config/query_config.json
-python3.9 ccr_join.py --query-config /mnt/remote/config/query_config.json
+python3 ccr_join.py --query-config /mnt/remote/config/query_config.json
 
 # Wait for model configuration to be available 
 until [ "$(ls -A "/mnt/remote/config/model_config.json")" != "" ]
@@ -31,4 +31,4 @@ echo "model configuration is available"
 echo "Training model with configuration:"
 cat /mnt/remote/config/model_config.json
 
-python3.9 ccr_train.py --model-config /mnt/remote/config/model_config.json
+python3 ccr_train.py --model-config /mnt/remote/config/model_config.json

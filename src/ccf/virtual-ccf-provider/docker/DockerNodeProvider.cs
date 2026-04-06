@@ -136,7 +136,9 @@ public class DockerNodeProvider : ICcfNodeProvider
             Env =
             [
                 $"CONFIG_DATA_TGZ={tgzConfigData}",
-                $"CCF_LOG_LEVEL={nodeLogLevel?.ToLower() ?? "info"}"
+                $"CCF_LOG_LEVEL={nodeLogLevel?.ToLower() ?? "info"}",
+                $"CCR_ATTESTATION_HOST=cvm-attestation-verifier-nw-{nodeName}",
+                $"CCR_ATTESTATION_PORT={Ports.CvmAttestationVerifierPort}"
             ],
             ExposedPorts = new Dictionary<string, EmptyStruct>
             {
@@ -199,6 +201,7 @@ public class DockerNodeProvider : ICcfNodeProvider
             createContainerParams);
 
         NodeEndpoint nodeEndpoint = await this.CreateAndStartNodeContainer(createContainerParams);
+        await this.CreateAndStartCvmAttestationVerifierContainer(networkName, nodeEndpoint);
         await this.CreateAndStartRecoveryAgentContainer(networkName, nodeEndpoint);
         return nodeEndpoint;
     }
@@ -316,7 +319,9 @@ public class DockerNodeProvider : ICcfNodeProvider
             Env =
             [
                 $"CONFIG_DATA_TGZ={tgzConfigData}",
-                $"CCF_LOG_LEVEL={nodeLogLevel?.ToLower() ?? "info"}"
+                $"CCF_LOG_LEVEL={nodeLogLevel?.ToLower() ?? "info"}",
+                $"CCR_ATTESTATION_HOST=cvm-attestation-verifier-nw-{nodeName}",
+                $"CCR_ATTESTATION_PORT={Ports.CvmAttestationVerifierPort}"
             ],
             ExposedPorts = new Dictionary<string, EmptyStruct>
             {
@@ -379,6 +384,7 @@ public class DockerNodeProvider : ICcfNodeProvider
             createContainerParams);
 
         NodeEndpoint nodeEndpoint = await this.CreateAndStartNodeContainer(createContainerParams);
+        await this.CreateAndStartCvmAttestationVerifierContainer(networkName, nodeEndpoint);
         await this.CreateAndStartRecoveryAgentContainer(networkName, nodeEndpoint);
         return nodeEndpoint;
     }
@@ -509,7 +515,9 @@ public class DockerNodeProvider : ICcfNodeProvider
             Env =
             [
                 $"CONFIG_DATA_TGZ={tgzConfigData}",
-                $"CCF_LOG_LEVEL={nodeLogLevel?.ToLower() ?? "info"}"
+                $"CCF_LOG_LEVEL={nodeLogLevel?.ToLower() ?? "info"}",
+                $"CCR_ATTESTATION_HOST=cvm-attestation-verifier-nw-{containerName}",
+                $"CCR_ATTESTATION_PORT={Ports.CvmAttestationVerifierPort}"
             ],
             ExposedPorts = new Dictionary<string, EmptyStruct>
             {
@@ -572,6 +580,7 @@ public class DockerNodeProvider : ICcfNodeProvider
             createContainerParams);
 
         NodeEndpoint nodeEndpoint = await this.CreateAndStartNodeContainer(createContainerParams);
+        await this.CreateAndStartCvmAttestationVerifierContainer(networkName, nodeEndpoint);
         await this.CreateAndStartRecoveryAgentContainer(networkName, nodeEndpoint);
         return nodeEndpoint;
     }
@@ -616,6 +625,18 @@ public class DockerNodeProvider : ICcfNodeProvider
                     {
                         { $"{DockerConstants.CcfNetworkNameTag}={networkName}", true },
                         { $"{DockerConstants.CcfNetworkTypeTag}=recovery-agent", true }
+                    }
+                }
+            }),
+            this.client.DeleteContainers(
+                this.logger,
+                filters: new Dictionary<string, IDictionary<string, bool>>
+            {
+                {
+                    "label", new Dictionary<string, bool>
+                    {
+                        { $"{DockerConstants.CcfNetworkNameTag}={networkName}", true },
+                        { $"{DockerConstants.CcfNetworkTypeTag}=cvm-attestation-verifier", true }
                     }
                 }
             }),
@@ -680,6 +701,19 @@ public class DockerNodeProvider : ICcfNodeProvider
                     {
                         { $"{DockerConstants.CcfNetworkNameTag}={networkName}", true },
                         { $"{DockerConstants.CcfNetworkTypeTag}=recovery-agent", true },
+                        { $"{DockerConstants.CcfNetworkResourceNameTag}={nodeName}", true }
+                    }
+                }
+            }),
+            this.client.DeleteContainers(
+                this.logger,
+                filters: new Dictionary<string, IDictionary<string, bool>>
+            {
+                {
+                    "label", new Dictionary<string, bool>
+                    {
+                        { $"{DockerConstants.CcfNetworkNameTag}={networkName}", true },
+                        { $"{DockerConstants.CcfNetworkTypeTag}=cvm-attestation-verifier", true },
                         { $"{DockerConstants.CcfNetworkResourceNameTag}={nodeName}", true }
                     }
                 }
@@ -882,6 +916,57 @@ public class DockerNodeProvider : ICcfNodeProvider
         return container.ToNodeEndpoint();
     }
 
+    private async Task CreateAndStartCvmAttestationVerifierContainer(
+        string networkName,
+        NodeEndpoint nodeEndpoint)
+    {
+        var containerName = "cvm-attestation-verifier-nw-" + nodeEndpoint.NodeName;
+
+        var imageParams = new ImagesCreateParameters
+        {
+            FromImage = ImageUtils.CvmAttestationVerifierImage(),
+            Tag = ImageUtils.CvmAttestationVerifierTag(),
+        };
+        await this.client.Images.CreateImageAsync(
+            imageParams,
+            authConfig: null,
+            new Progress<JSONMessage>(m => this.logger.LogInformation(m.ToProgressMessage())));
+
+        var createContainerParams = new CreateContainerParameters
+        {
+            Labels = new Dictionary<string, string>
+            {
+                {
+                    DockerConstants.CcfNetworkNameTag,
+                    networkName
+                },
+                {
+                    DockerConstants.CcfNetworkTypeTag,
+                    "cvm-attestation-verifier"
+                },
+                {
+                    DockerConstants.CcfNetworkResourceNameTag,
+                    nodeEndpoint.NodeName
+                }
+            },
+            Name = containerName,
+            Image = $"{imageParams.FromImage}:{imageParams.Tag}",
+            HostConfig = new HostConfig
+            {
+                NetworkMode = networkName,
+                Devices = new List<DeviceMapping>(),
+                CapAdd = new List<string>(),
+                Binds = new List<string>()
+            }
+        };
+
+        this.logger.LogInformation($"Creating container: {createContainerParams.Name}");
+        var container = await this.client.CreateOrGetContainer(createContainerParams);
+        await this.client.Containers.StartContainerAsync(
+            container.ID,
+            new ContainerStartParameters());
+    }
+
     private async Task<RecoveryAgentEndpoint> CreateAndStartRecoveryAgentContainer(
         string networkName,
         NodeEndpoint nodeEndpoint)
@@ -914,7 +999,7 @@ public class DockerNodeProvider : ICcfNodeProvider
         // Copy out the test keys/report into the host directory so that it can be mounted into
         // the container.
         WorkspaceDirectories.CopyDirectory(
-            Directory.GetCurrentDirectory() + "/insecure-virtual/recovery-agent",
+            Directory.GetCurrentDirectory() + "/insecure-virtual",
             insecureVirtualDir,
             recursive: true);
 

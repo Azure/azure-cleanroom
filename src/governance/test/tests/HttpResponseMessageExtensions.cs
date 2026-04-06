@@ -8,7 +8,6 @@ using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Microsoft.Rest.TransientFaultHandling;
 
 namespace Test;
 
@@ -56,7 +55,7 @@ public static class HttpResponseMessageExtensions
         string? transactionId = null;
         if (response.Headers.TryGetValues(TransactionIdHeader, out var values))
         {
-            transactionId = values!.First();
+            transactionId = values.First();
         }
 
         return transactionId;
@@ -101,10 +100,7 @@ public static class HttpResponseMessageExtensions
                 $"failed with statusCode {response.StatusCode}, " +
                 $"reasonPhrase: {response.ReasonPhrase} and content: {content}.");
 
-            throw new HttpRequestWithStatusException(content)
-            {
-                StatusCode = response.StatusCode
-            };
+            throw new Azure.RequestFailedException((int)response.StatusCode, content);
         }
     }
 }

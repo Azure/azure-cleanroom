@@ -1,10 +1,10 @@
 import * as ccfapp from "@microsoft/ccf-app";
-import { CAConfigItem } from "../../models";
+import { CaConfigItem } from "../../models";
 
 const caGovStore = ccfapp.typedKv(
   "public:ccf.gov.ca",
   ccfapp.string,
-  ccfapp.json<CAConfigItem>()
+  ccfapp.json<CaConfigItem>()
 );
 
 export function isCAEnabledInternal(contractId: string): boolean {

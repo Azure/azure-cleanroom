@@ -1,0 +1,40 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "platformName": {
+            "value": "ml-inference-platform"
+        },
+        "location": {
+            "value": "westeurope"
+        },
+        "aksClusterName": {
+            "value": "aks-ml-cluster"
+        },
+        "nodeCount": {
+            "value": 3
+        },
+        "vmSize": {
+            "value": "Standard_D4ds_v5"
+        },
+        "enablePrometheus": {
+            "value": false
+        },
+        "chartVersions": {
+            "value": {
+                "keda": "2.18.0",
+                "certManager": "v1.16.1",
+                "envoyGateway": "1.5.3",
+                "kserve": "v0.15.0",
+                "prometheus": "77.14.0"
+            }
+        },
+        "tags": {
+            "value": {
+                "project": "ml-inference-platform",
+                "environment": "production",
+                "deployedBy": "bicep"
+            }
+        }
+    }
+}

@@ -5,12 +5,38 @@ receivers:
         endpoint: 0.0.0.0:4317
       http:
         endpoint: 0.0.0.0:4318
+{%- if apache_spark_enabled %}
+  apachespark:
+    collection_interval: 2s
+    initial_delay: 30s
+    endpoint: {{ spark_metrics_endpoint }}
+{%- endif %}
 
 processors:
+  {# https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/receiver/apachesparkreceiver/documentation.md#resource-attributes #}
+  transform/spark:
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(attributes["spark_application_id"], resource.attributes["spark.application.id"])
+          - set(attributes["spark_application_name"], resource.attributes["spark.application.name"])
+          - set(attributes["spark_executor_id"], resource.attributes["spark.executor.id"])
+          - set(attributes["spark_job_id"], resource.attributes["spark.job.id"])
+          - set(attributes["spark_stage_attempt_id"], resource.attributes["spark.stage.attempt.id"])
+          - set(attributes["spark_stage_id"], resource.attributes["spark.stage.id"])
   batch:
     timeout: 0
     send_batch_size: 90
     send_batch_max_size: 100
+{%- if resource_processor_enabled %}
+  resource:
+    attributes:
+      {% for key, value in resource_attributes.items() %}
+      - key: {{ key }}
+        value: {{ value }}
+        action: upsert
+      {% endfor %}
+{%- endif %}
 
 exporters:
 {%- if prometheus_enabled %}
@@ -56,14 +82,12 @@ exporters:
     verbosity: basic
     sampling_initial: 0
     sampling_thereafter: 0
-
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: []
-      exporters: 
-        - debug
+      exporters:
 {%- if file_exporters_enabled %}
         - file/traces
 {% endif %}
@@ -71,8 +95,18 @@ service:
         - otlp/tempo
 {% endif %}
     metrics:
-      receivers: [otlp]
-      processors: []
+      receivers:
+        - otlp
+{%- if apache_spark_enabled %}
+        - apachespark
+{% endif %}
+      processors:
+{%- if resource_processor_enabled %}
+        - resource
+{%- endif %}
+{%- if apache_spark_enabled %}
+        - transform/spark
+{%- endif %}
       exporters: 
         - debug
 {%- if file_exporters_enabled %}
@@ -85,7 +119,6 @@ service:
       receivers: [otlp]
       processors: []
       exporters: 
-        - debug
 {%- if file_exporters_enabled %}
         - file/logs
 {% endif %}

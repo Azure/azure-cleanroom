@@ -15,7 +15,7 @@ jobs:
     permissions:
       id-token: write
       contents: read  # This is required for actions/checkout
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=ml-training-nightly-${{ matrix.key-store }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: test
     env:
       TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
@@ -63,7 +63,7 @@ jobs:
           kvType: ${{ matrix.key-store }}
 
   encrypted-storage-nightly:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=encrypted-storage-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: test
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -105,7 +105,7 @@ jobs:
           tag: 6.0.0
 
   nginx-hello-nightly:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=nginx-hello-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: test
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -147,7 +147,7 @@ jobs:
           tag: 6.0.0
 
   big-data-query-analytics-nightly:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=big-data-query-analytics-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: test
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}

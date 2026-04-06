@@ -1,4 +1,4 @@
-FROM cleanroombuild.azurecr.io/otel/opentelemetry-collector-builder:0.131.0 AS collector-builder
+FROM cleanroombuild.azurecr.io/otel/opentelemetry-collector-builder:0.142.0 AS collector-builder
 
 WORKDIR /build
 COPY src/otel-collector/builder-config.yaml ./builder-config.yaml

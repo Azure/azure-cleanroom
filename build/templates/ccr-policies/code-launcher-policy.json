@@ -1,60 +1,59 @@
 {
   "name": "$applicationName-code-launcher",
-  "containerImage": "$containerRegistryUrl/code-launcher@$digest",
-  "command": [
-    "python3",
-    "/app/code-launcher/code_launcher.py",
-    "--application-name",
-    "$applicationName"
-  ],
-  "environmentVariables": [
-    {
-      "name": "APPLICATION_NAME",
-      "value": ".*",
-      "strategy": "re2"
-    },
-    {
-      "name": "TELEMETRY_MOUNT_PATH",
-      "value": "$telemetryMountPath",
-      "strategy": "string"
-    },
-    {
-      "name": "VOLUMESTATUS_MOUNT_PATH",
-      "value": "$volumeStatusMountPath",
-      "strategy": "string"
-    },
-    {
-      "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
-      "value": ".*",
-      "strategy": "re2"
-    },
-    {
-      "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
-      "value": ".*",
-      "strategy": "re2"
+  "properties": {
+    "image": "$containerRegistryUrl/code-launcher@$digest",
+    "command": [
+      "code_launcher",
+      "--application-name",
+      "$applicationName"
+    ],
+    "environmentVariables": [
+      {
+        "name": "APPLICATION_NAME",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "TELEMETRY_MOUNT_PATH",
+        "value": "$telemetryMountPath"
+      },
+      {
+        "name": "VOLUMESTATUS_MOUNT_PATH",
+        "value": "$volumeStatusMountPath"
+      },
+      {
+        "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
+        "value": ".*",
+        "regex": true
+      }
+    ],
+    "volumeMounts": [
+      {
+        "name": "remotemounts",
+        "mountPath": "/mnt/remote",
+        "mountType": "emptyDir",
+        "readOnly": false
+      },
+      {
+        "name": "telemetrymounts",
+        "mountPath": "$telemetryMountPath",
+        "mountType": "emptyDir",
+        "readOnly": false
+      },
+      {
+        "name": "volumestatusmounts",
+        "mountPath": "$volumeStatusMountPath",
+        "mountType": "emptyDir",
+        "readOnly": false
+      }
+    ],
+    "securityContext": {
+      "privileged": "true"
     }
-  ],
-  "mounts": [
-    {
-      "name": "remotemounts",
-      "mountPath": "/mnt/remote",
-      "mountType": "emptyDir",
-      "readOnly": false
-    },
-    {
-      "name": "telemetrymounts",
-      "mountPath": "$telemetryMountPath",
-      "mountType": "emptyDir",
-      "readOnly": false
-    },
-    {
-      "name": "volumestatusmounts",
-      "mountPath": "$volumeStatusMountPath",
-      "mountType": "emptyDir",
-      "readOnly": false
-    }
-  ],
-  "securityContext": {
-    "privileged": "true"
   }
 }

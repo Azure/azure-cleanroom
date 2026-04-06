@@ -1,0 +1,57 @@
+name: "PR Validation: CVM Attestation"
+
+on:
+  workflow_call:
+
+permissions:
+  id-token: write
+  contents: read  # This is required for actions/checkout
+  checks: write   # This is required to generate the test report
+
+jobs:
+  cvm-attestation:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=cvm-attestation-${{ github.run_id }}-${{ github.run_attempt }}"]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Azure Confidential VM
+        shell: pwsh
+        run: ./src/cvm/tests/deploy-cvm.ps1
+
+      - name: Test CVM attestation agent
+        shell: pwsh
+        run: ./src/cvm/tests/test-cvm-attestation-agent.ps1
+
+      - name: Upload generated artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cvm-attestation
+          path: ./src/cvm/tests/generated
+          overwrite: true
+        if: always()
+
+      - name: Delete resource group
+        if: success()
+        shell: pwsh
+        run: |
+          $deploy = Get-Content ./src/cvm/tests/generated/cvm-deploy.json | ConvertFrom-Json
+          Write-Host "Deleting resource group $($deploy.resource_group) ..."
+          az group delete --name $deploy.resource_group --yes --no-wait

@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 WORKDIR /app
 
@@ -13,6 +13,7 @@ COPY src/governance/sidecar/*.csproj /app/src/governance/sidecar/
 COPY src/governance/test/*.csproj /app/src/governance/test/
 COPY src/internal/Cose/*.csproj /app/src/internal/Cose/
 COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
+COPY src/internal/governance-common/*.csproj /app/src/internal/governance-common/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
 RUN dotnet restore /app/src/governance/governance.sln
 
@@ -25,17 +26,19 @@ COPY src/internal /app/src/internal
 
 RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/governance/sidecar/ccr-governance.csproj
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS virtual
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS virtual
 
 # Note: install iproute2 for ss command.
-RUN apt-get update && apt-get install -y curl jq iproute2
+RUN apt-get update && apt-get install -y --no-install-recommends curl jq iproute2 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY --from=build /app/publish .
 COPY src/governance/sidecar/bootstrap-virtual.sh bootstrap-virtual.sh
-COPY samples/governance/insecure-virtual/ insecure-virtual/
-COPY samples/governance/insecure-virtual-2/ insecure-virtual-2/
+COPY samples/reports/insecure-virtual/ insecure-virtual/
+COPY samples/reports/insecure-virtual-2/ insecure-virtual-2/
+COPY samples/reports/cvm/insecure-virtual/ cvm/insecure-virtual/
 RUN chmod +x ./bootstrap-virtual.sh
 
 # Listen on 8300 within the container.
@@ -45,16 +48,19 @@ ENV INSECURE_VIRTUAL_ENVIRONMENT=true
 
 ENTRYPOINT ["./bootstrap-virtual.sh"]
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS prod
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS prod
 
 # Note: install iproute2 for ss command.
-RUN apt-get update && apt-get install -y curl jq iproute2
+RUN apt-get update && apt-get install -y --no-install-recommends curl jq iproute2 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY --from=build /app/publish .
 COPY src/governance/sidecar/bootstrap.sh bootstrap.sh
 RUN chmod +x ./bootstrap.sh
+COPY src/scripts/wait-for-it.sh wait-for-it.sh
+RUN chmod +x ./wait-for-it.sh
 
 # Listen on 8300 within the container.
 ARG PORT=8300

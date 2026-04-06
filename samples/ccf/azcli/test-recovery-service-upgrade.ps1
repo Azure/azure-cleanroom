@@ -143,20 +143,15 @@ if ($proposal.proposalState -ne "Accepted") {
     $repo = $setup.repo
     $tag = $setup.tag
 
-    if ($repo -ne "") {
-        $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$tag"
-        $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$tag"
-    }
-    else {
-        $env:AZCLI_CGS_CLIENT_IMAGE = ""
-        $env:AZCLI_CGS_UI_IMAGE = ""
-    }
+    # Write environment variables to file
+    $envFilePath = "$sandbox_common/governance-client.env"
     az cleanroom governance client deploy `
         --ccf-endpoint $ccfEndpoint `
         --signing-key $sandbox_common/${initialMemberName}_privk.pem `
         --signing-cert $sandbox_common/${initialMemberName}_cert.pem `
         --service-cert $sandbox_common/service_cert.pem `
-        --name $initialMemberProjectName
+        --name $initialMemberProjectName `
+        --env-file $envFilePath
     $proposal = (az cleanroom governance proposal vote `
             --proposal-id $proposal.proposalId `
             --action accept `

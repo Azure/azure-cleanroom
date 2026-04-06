@@ -39,8 +39,8 @@ public class AciConstants
     public class ContainerName
     {
         public const string CcfRecoveryAgent = "ccf-recovery-agent";
+        public const string CvmAttestationVerifier = "cvm-attestation-verifier";
         public const string CcHost = "ccf-cchost";
-        public const string CcrAttestation = "ccr-attestation";
         public const string CcrProxy = "ccr-proxy";
         public const string CcfRecoveryService = "ccf-recovery-service";
         public const string CcfConsortiumManager = "ccf-consortium-manager";

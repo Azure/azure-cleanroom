@@ -38,7 +38,7 @@ public class RuntimeOptionsController : ClientControllerBase
     {
         var appClient = this.CcfClientManager.GetAppClient();
         using HttpResponseMessage response = await appClient.PostAsync(
-            $"app/runtimeoptions/checkstatus/{option}",
+            $"app/runtimeoptions/{option}/status",
             content: null);
         await response.ValidateStatusCodeAsync(this.Logger);
         this.Response.CopyHeaders(response.Headers);
@@ -83,6 +83,6 @@ public class RuntimeOptionsController : ClientControllerBase
         await response.ValidateStatusCodeAsync(this.Logger);
         await response.WaitGovTransactionCommittedAsync(this.Logger, this.CcfClientManager);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
-        return this.Ok(jsonResponse!);
+        return this.Ok(jsonResponse);
     }
 }

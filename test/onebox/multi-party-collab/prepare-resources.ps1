@@ -18,7 +18,13 @@ param(
 
     [string]$overridesFilePath = "",
 
-    [string]$resourceGroupTags = ""
+    [string]$resourceGroupTags = "",
+
+    [Parameter()]
+    [ValidateSet("blob", "adlsgen2")]
+    [string]$storageType = "blob",
+
+    [string]$location = "westeurope"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,10 +37,10 @@ mkdir -p $outDir/$resourceGroup
 
 pwsh $PSScriptRoot/generate-names.ps1 `
     -resourceGroup $resourceGroup `
-    -kvType $kvType `
     -overridesFilePath $overridesFilePath `
     -backupKv $backupKv `
-    -outDir $outDir/$resourceGroup
+    -outDir $outDir/$resourceGroup `
+    -location $location
 
 . $outDir/$resourceGroup/names.generated.ps1
 $sandbox_common = $outDir
@@ -79,10 +85,16 @@ else {
     $result.dek.kv = $result.kek.kv
 }
 
-$storageAccount = Create-Storage-Resources `
-    -resourceGroup $resourceGroup `
-    -storageAccountName @($STORAGE_ACCOUNT_NAME) `
-    -objectId $objectId
+$storageResourceArgs = @{
+    resourceGroup      = $resourceGroup
+    storageAccountName = @($STORAGE_ACCOUNT_NAME)
+    objectId           = $objectId
+}
+if ($storageType -eq "adlsgen2") {
+    $storageResourceArgs.enableHns = $true
+}
+
+$storageAccount = Create-Storage-Resources @storageResourceArgs
 $result.sa = $storageAccount
 
 if ($identityType -eq "service_principal") {

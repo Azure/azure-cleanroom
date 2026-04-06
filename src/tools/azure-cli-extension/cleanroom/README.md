@@ -216,6 +216,7 @@ az cleanroom governance deployment template show --contract-id $contractId
 @"
 {
   "type": "add",
+  "policyType": "snp-caci",
   "claims": {
     "x-ms-sevsnpvm-is-debuggable": false,
     "x-ms-sevsnpvm-hostdata": "<insert ccepolicy hash value here Eg 73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20>"
@@ -554,6 +555,7 @@ az group create --name $resourceGroup --location westeurope
 
 $networkName = "ccf-network"
 $subscriptionId = az account show --query "id" -o tsv
+$tenantId = az account show --query "tenantId" -o tsv
 
 # Create a storage account for using Azure File shares for the CCF nodes.
 az storage account create `
@@ -583,6 +585,7 @@ $storageAccountId = az storage account show `
 {
     "location": "$location",
     "subscriptionId": "$subscriptionId",
+    "tenantId": "$tenantId",
     "resourceGroupName": "$resourceGroup",
     "azureFiles": {
         "storageAccountId": "$storageAccountId"

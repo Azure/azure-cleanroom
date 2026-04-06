@@ -12,4 +12,6 @@ public class GenerateAnalyticsWorkloadDeploymentInput
     public string ContractUrl { get; set; } = default!;
 
     public string? ContractUrlCaCert { get; set; } = default!;
+
+    public Dictionary<string, string>? ContractUrlHeaders { get; set; } = default!;
 }

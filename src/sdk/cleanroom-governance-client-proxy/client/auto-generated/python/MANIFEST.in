@@ -1,0 +1,8 @@
+include *.md
+include LICENSE
+include cleanroom/governance/client/proxy/py.typed
+recursive-include tests *.py
+recursive-include samples *.py *.md
+include cleanroom/__init__.py
+include cleanroom/governance/__init__.py
+include cleanroom/governance/client/__init__.py

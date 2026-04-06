@@ -1,0 +1,13 @@
+[
+  {
+    "name": "test",
+    "properties": {
+      "image": "busybox:latest",
+      "command": [
+        "sleep"
+      ],
+      "environmentVariables": [],
+      "volumeMounts": []
+    }
+  }
+]

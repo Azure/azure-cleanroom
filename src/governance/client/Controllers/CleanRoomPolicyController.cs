@@ -22,7 +22,7 @@ public class CleanRoomPolicyController : ClientControllerBase
     {
         var appClient = this.CcfClientManager.GetAppClient();
         using HttpResponseMessage response =
-            await appClient.GetAsync($"app/contracts/{contractId}/cleanroompolicy");
+            await appClient.PostAsync($"app/contracts/{contractId}/cleanroompolicy", content: null);
         await response.ValidateStatusCodeAsync(this.Logger);
         this.Response.CopyHeaders(response.Headers);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
@@ -50,6 +50,11 @@ public class CleanRoomPolicyController : ClientControllerBase
                 message: "Musty specify the claims to add/remove."));
         }
 
+        if (content["contractId"] == null)
+        {
+            content["contractId"] = contractId;
+        }
+
         var proposalContent = new JsonObject
         {
             ["actions"] = new JsonArray
@@ -57,12 +62,7 @@ public class CleanRoomPolicyController : ClientControllerBase
                     new JsonObject
                     {
                         ["name"] = "set_clean_room_policy",
-                        ["args"] = new JsonObject
-                        {
-                            ["contractId"] = contractId,
-                            ["type"] = type,
-                            ["claims"] = JsonNode.Parse(claims.ToJsonString())
-                        }
+                        ["args"] = content
                     }
                 }
         };
@@ -84,5 +84,34 @@ public class CleanRoomPolicyController : ClientControllerBase
         await response.WaitGovTransactionCommittedAsync(this.Logger, this.CcfClientManager);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
         return this.Ok(jsonResponse!);
+    }
+
+    [HttpGet("/contracts/{contractId}/cleanroompolicy/delegates/{delegateType}/{delegateId}")]
+    public async Task<JsonObject> GetCleanRoomDelegatePolicy(
+        [FromRoute] string contractId,
+        [FromRoute] string delegateType,
+        [FromRoute] string delegateId)
+    {
+        var appClient = this.CcfClientManager.GetAppClient();
+        using HttpResponseMessage response = await appClient.PostAsync(
+            $"app/contracts/{contractId}/cleanroompolicy/delegates/{delegateType}/{delegateId}",
+            content: null);
+        await response.ValidateStatusCodeAsync(this.Logger);
+        this.Response.CopyHeaders(response.Headers);
+        var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
+        return jsonResponse!;
+    }
+
+    [HttpGet("/contracts/{contractId}/cleanroompolicy/delegates")]
+    public async Task<JsonObject> ListCleanRoomDelegatePolicies(
+        [FromRoute] string contractId)
+    {
+        var appClient = this.CcfClientManager.GetAppClient();
+        using HttpResponseMessage response = await appClient.GetAsync(
+            $"app/contracts/{contractId}/cleanroompolicy/delegates");
+        await response.ValidateStatusCodeAsync(this.Logger);
+        this.Response.CopyHeaders(response.Headers);
+        var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
+        return jsonResponse!;
     }
 }

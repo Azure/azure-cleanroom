@@ -35,8 +35,8 @@ public class UserDocuments : ControllerBase
         var appClient = await this.ccfClientManager.GetAppClient();
         var wsConfig = await this.ccfClientManager.GetWsConfig();
         var content = Attestation.PrepareRequestContent(
-            wsConfig.Attestation.PublicKey,
-            wsConfig.Attestation.Report);
+            wsConfig.KeyPair.PublicKey,
+            wsConfig.Report);
 
         using (HttpRequestMessage request = new(
             HttpMethod.Post,
@@ -54,7 +54,7 @@ public class UserDocuments : ControllerBase
             string base64WrappedValue = jsonResponse["value"]!.ToString();
             byte[] wrappedValue = Convert.FromBase64String(base64WrappedValue);
             byte[] unwrappedValue = wrappedValue.UnwrapRsaOaepAesKwpValue(
-                wsConfig.Attestation.PrivateKey);
+                wsConfig.KeyPair.PrivateKey);
             string json = Encoding.UTF8.GetString(unwrappedValue);
             var userdocument = JsonSerializer.Deserialize<JsonObject>(json);
             return this.Ok(userdocument);

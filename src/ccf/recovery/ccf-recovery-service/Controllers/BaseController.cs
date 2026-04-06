@@ -38,7 +38,7 @@ public abstract class BaseController : ControllerBase
                 "attestation input must be supplied.");
         }
 
-        var attestation = JsonSerializer.Deserialize<CcfAttestationReport>(attestationJson)!;
+        var attestation = JsonSerializer.Deserialize<CcfSnpCACIAttestationReport>(attestationJson)!;
         SnpReport snpReport;
         try
         {
@@ -88,7 +88,8 @@ public abstract class BaseController : ControllerBase
         var incomingReportData = snpReport.ReportData;
 
         string publicKey = this.GetPublicKey(content);
-        var publicKeyReportData = Attestation.AsReportData(publicKey);
+        var publicKeyReportData = Attestation.ToReportDataHashValue(
+            Encoding.UTF8.GetBytes(publicKey));
 
         // A sha256 returns 32 bytes of data while attestation.report_data is 64 bytes
         // (128 chars in a hex string) in size, so need to pad 00s at the end to compare. That is:
@@ -101,7 +102,7 @@ public abstract class BaseController : ControllerBase
                 HttpStatusCode.Unauthorized,
                 "ReportDataMismatch",
                 $"Attestation claim 'reportData' Value '{incomingReportData}' does not match " +
-                $"expected value: {paddedPublicKeyReportData}");
+                $"expected value: {paddedPublicKeyReportData} (publicKey: {publicKey})");
         }
 
         return new AttesationReportInfo

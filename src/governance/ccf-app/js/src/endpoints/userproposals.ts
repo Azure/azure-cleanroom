@@ -7,7 +7,7 @@ import {
   UserProposalInfoItem,
   UserProposalStoreItem
 } from "../models";
-import { ErrorResponse } from "../models/errorresponse";
+import { ErrorResponse } from "../utils/ErrorResponse";
 import { getCallerId, validateCallerAuthorized } from "../utils/utils";
 import { userProposalActions } from "./userproposalactions";
 
@@ -22,7 +22,7 @@ const userProposalsInfoStore = ccfapp.typedKv(
   ccfapp.json<UserProposalInfoItem>()
 );
 
-export function putProposal(
+export function putUserProposal(
   request: ccfapp.Request<CreateUserProposalRequest>
 ): ccfapp.Response<CreateUserProposalResponse | ErrorResponse> {
   let error = validateCallerAuthorized(request);
@@ -95,7 +95,7 @@ export function putProposal(
   return { body: responseBody };
 }
 
-export function getProposal(
+export function getUserProposal(
   request: ccfapp.Request
 ): ccfapp.Response<GetUserProposalResponse> | ccfapp.Response<ErrorResponse> {
   const error = validateCallerAuthorized(request);
@@ -125,7 +125,7 @@ export function getProposal(
   };
 }
 
-export function getProposalStatus(
+export function checkUserProposal(
   request: ccfapp.Request
 ): ccfapp.Response<UserProposalInfoItem> | ccfapp.Response<ErrorResponse> {
   const error = validateCallerAuthorized(request);
@@ -149,7 +149,7 @@ export function getProposalStatus(
   };
 }
 
-export function withdrawProposal(
+export function withdrawUserProposal(
   request: ccfapp.Request
 ): ccfapp.Response<UserProposalInfoItem> | ccfapp.Response<ErrorResponse> {
   const error = validateCallerAuthorized(request);
@@ -195,7 +195,7 @@ export function withdrawProposal(
   };
 }
 
-export function submitBallotProposal(
+export function submitUserProposalBallot(
   request: ccfapp.Request<SubmitUserProposalBallotRequest>
 ): ccfapp.Response<UserProposalInfoItem> | ccfapp.Response<ErrorResponse> {
   const error = validateCallerAuthorized(request);

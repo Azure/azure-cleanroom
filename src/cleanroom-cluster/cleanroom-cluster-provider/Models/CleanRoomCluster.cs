@@ -13,7 +13,13 @@ public class CleanRoomCluster
 
     public ObservabilityProfile? ObservabilityProfile { get; set; } = default!;
 
+    public MonitoringProfile? MonitoringProfile { get; set; } = default!;
+
     public AnalyticsWorkloadProfile? AnalyticsWorkloadProfile { get; set; } = default!;
+
+    public InferencingProfile? InferencingWorkloadProfile { get; set; } = default!;
+
+    public FlexNodeProfile? FlexNodeProfile { get; set; } = default!;
 
     public JsonObject? ProviderProperties { get; set; }
 }

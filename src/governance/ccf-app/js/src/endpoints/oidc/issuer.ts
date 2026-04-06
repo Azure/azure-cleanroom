@@ -1,10 +1,9 @@
 import * as ccfapp from "@microsoft/ccf-app";
-import { ErrorResponse } from "../../models/errorresponse";
+import { ErrorResponse } from "../../utils/ErrorResponse";
 import {
-  getCallerId,
-  getTenantId,
-  isMember,
-  checkValidUrl
+  getCallerTenantId,
+  checkValidUrl,
+  validateCallerAuthorized
 } from "../../utils/utils";
 
 const oidcIssuerGovStore = ccfapp.typedKv(
@@ -12,8 +11,15 @@ const oidcIssuerGovStore = ccfapp.typedKv(
   ccfapp.string,
   ccfapp.string
 );
-const tenantIdIssuerUrlStore = ccfapp.typedKv(
+const memberTenantIssuerUrlStore = ccfapp.typedKv(
   "public:oidc_issuer.tenantid_issuer_url",
+  ccfapp.string,
+  ccfapp.string
+);
+
+// Per-tenant issuer URL set by a user (JWT or user_cert auth).
+const userTenantIssuerUrlStore = ccfapp.typedKv(
+  "public:oidc_issuer.user_tenantid_issuer_url",
   ccfapp.string,
   ccfapp.string
 );
@@ -25,15 +31,9 @@ export interface SetIssuerUrlRequest {
 export function setIssuerUrl(
   request: ccfapp.Request<SetIssuerUrlRequest>
 ): ccfapp.Response | ccfapp.Response<ErrorResponse> {
-  const callerId = getCallerId(request);
-  if (!isMember(callerId)) {
-    return {
-      statusCode: 403,
-      body: new ErrorResponse(
-        "UnauthorizedCaller",
-        "Caller is not authorized to invoke this enpoint."
-      )
-    };
+  const error = validateCallerAuthorized(request);
+  if (error !== undefined) {
+    return error;
   }
 
   const body = request.body.json();
@@ -46,24 +46,44 @@ export function setIssuerUrl(
     };
   }
 
-  const tenantId = getTenantId(callerId);
+  // Get tenant ID based on auth policy.
+  const tenantId = getCallerTenantId(request);
+
   if (!tenantId) {
     return {
       statusCode: 400,
       body: new ErrorResponse(
-        "NoTenantIdMemberData",
-        "Cannot set issuer as tenantId information was not found for this member."
+        "NoTenantId",
+        "Cannot set issuer as tenantId information was not found in registered identity."
       )
     };
   }
 
-  tenantIdIssuerUrlStore.set(tenantId, body.url);
+  // Store in appropriate table based on caller type.
+  // Members write to member table, users (JWT and user_cert) write to user table.
+  if (
+    request.caller.policy === "jwt" ||
+    request.caller.policy === "user_cert"
+  ) {
+    userTenantIssuerUrlStore.set(tenantId, body.url);
+  } else {
+    memberTenantIssuerUrlStore.set(tenantId, body.url);
+  }
+
   return { statusCode: 200 };
 }
 
-export function getTenantIdIssuerUrl(tenantId: string): string {
-  if (tenantIdIssuerUrlStore.has(tenantId)) {
-    return tenantIdIssuerUrlStore.get(tenantId);
+export function getUserTenantIdIssuerUrl(tenantId: string): string {
+  if (userTenantIssuerUrlStore.has(tenantId)) {
+    return userTenantIssuerUrlStore.get(tenantId);
+  }
+
+  return null;
+}
+
+export function getMemberTenantIdIssuerUrl(tenantId: string): string {
+  if (memberTenantIssuerUrlStore.has(tenantId)) {
+    return memberTenantIssuerUrlStore.get(tenantId);
   }
 
   return null;

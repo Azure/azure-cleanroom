@@ -37,3 +37,27 @@ runs:
         tenant-id: ${{ inputs.tenant-id }}
         subscription-id: ${{ inputs.subscription-id }}
         needs-attestation: ${{ inputs.needs-attestation }}
+
+    - uses: ./.github/actions/release-container
+      with:
+        name: ccr-proxy
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: ccr-proxy
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}
+
+    - uses: ./.github/actions/release-container
+      with:
+        name: skr
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: skr
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id}}
+        needs-attestation: ${{ inputs.needs-attestation }}

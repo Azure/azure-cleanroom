@@ -4,13 +4,14 @@ import logging
 import os
 from doctest import debug
 from string import Template
+from typing import List
 from urllib.parse import urlparse
 
 import oras.client
 import yaml
 
 from ..exceptions.exception import CleanroomSpecificationError, ErrorCode
-from ..models.model import *
+from ..models.cleanroom import *
 
 DEFAULT_CLEANROOM_CONTAINER_REGISTRY_URL = "mcr.microsoft.com/azurecleanroom"
 DEFAULT_CLEANROOM_CONTAINER_VERSION = "6.0.0"
@@ -85,6 +86,8 @@ sidecar_replacement_vars = {
         "prometheusEndpoint": "",
         "lokiEndpoint": "",
         "tempoEndpoint": "",
+        "sparkMetricsEndpoint": "",
+        "resourceAttributes": "",
     },
     "ccr-governance": lambda ccf_endpoint, contract_id, service_cert_base64, telemetry_mount_path: {
         "cgsEndpoint": ccf_endpoint,
@@ -95,9 +98,6 @@ sidecar_replacement_vars = {
     "ccr-secrets": lambda telemetry_mount_path, identity_port="8290", skr_port="8284": {
         "identityPort": identity_port,
         "skrPort": skr_port,
-        "telemetryMountPath": telemetry_mount_path,
-    },
-    "ccr-attestation": lambda telemetry_mount_path: {
         "telemetryMountPath": telemetry_mount_path,
     },
     "ccr-proxy": lambda telemetry_mount_path: {
@@ -233,7 +233,7 @@ def get_ccr_init(
 
     ccr_init.template_json["properties"]["command"].extend(ccr_init_cmd)
 
-    ccr_init.policy_json["command"].extend(ccr_init_cmd)
+    ccr_init.policy_json["properties"]["command"].extend(ccr_init_cmd)
 
     # Check for command key presence before extending as the policy_rego might not be generated if
     # the policy document was created without pre-computed rego-policy.
@@ -398,7 +398,7 @@ def get_code_launcher(
                 {"port": f"{port}", "protocol": "TCP"}
             )
 
-    code_launcher_sidecar.policy_json["command"].extend(code_launcher_cmd)
+    code_launcher_sidecar.policy_json["properties"]["command"].extend(code_launcher_cmd)
 
     # Check for command key presence before extending as the policy_rego might not be generated if
     # the policy document was created without pre-computed rego-policy.
@@ -491,9 +491,17 @@ def get_blobfuse_sidecar(
     subdirectory = ""
     storageBlobEndpoint = access_point.store.provider.url
     storageContainerName = access_point.store.name
-    is_onelake = False
+    use_adls = (
+        True
+        if access_point.store.provider.protocol
+        in [
+            ProtocolType.Azure_OneLake,
+            ProtocolType.Azure_BlobStorage_DataLakeGen2,
+        ]
+        else False
+    )
+
     if access_point.store.provider.protocol == ProtocolType.Azure_OneLake:
-        is_onelake = True
         storage_account_name = "onelake"
         parsed_onelake_url = urlparse(access_point.store.provider.url)
         storageBlobEndpoint = parsed_onelake_url.hostname
@@ -521,7 +529,7 @@ def get_blobfuse_sidecar(
         "clientId": access_point.identity.clientId,
         "tenantId": access_point.identity.tenantId,
         "encryptionMode": encryption_mode,
-        "useAdls": ("--use-adls" if is_onelake else "--no-use-adls"),
+        "useAdls": ("--use-adls" if use_adls else "--no-use-adls"),
         "telemetryMountPath": TELEMETRY_MOUNT_PATH,
         "volumeStatusMountPath": VOLUMESTATUS_MOUNT_PATH,
         "traceContextJsonBase64": "",
@@ -541,7 +549,7 @@ def get_blobfuse_sidecar(
     blobfuse_sidecar.template_json["properties"]["command"].extend(
         blobfuse_launcher_cmd
     )
-    blobfuse_sidecar.policy_json["command"].extend(blobfuse_launcher_cmd)
+    blobfuse_sidecar.policy_json["properties"]["command"].extend(blobfuse_launcher_cmd)
     if "command" in blobfuse_sidecar.policy_rego:
         blobfuse_sidecar.policy_rego["command"].extend(blobfuse_launcher_cmd)
 
@@ -695,14 +703,6 @@ def get_deployment_template(
             sidecar_replacement_vars["ccr-governance"](
                 ccf_endpoint, contract_id, sslServerCertBase64, TELEMETRY_MOUNT_PATH
             ),
-            debug_mode,
-            logger,
-        )
-    )
-    sidecars.append(
-        get_sidecar(
-            "ccr-attestation",
-            sidecar_replacement_vars["ccr-attestation"](TELEMETRY_MOUNT_PATH),
             debug_mode,
             logger,
         )

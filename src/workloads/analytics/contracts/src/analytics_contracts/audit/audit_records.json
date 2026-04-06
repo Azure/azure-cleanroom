@@ -1,0 +1,26 @@
+{
+  "DATASET_LOAD_COMPLETED": {
+    "id": 3001,
+    "message": "Dataset: {dataset_name} load completed successfully | job id: {job_id}"
+  },
+  "DATASET_LOAD_FAILED": {
+    "id": 3002,
+    "message": "Dataset: {dataset_name} load failed | job id: {job_id}"
+  },
+  "QUERY_COMPLETED": {
+    "id": 3003,
+    "message": "Query execution completed successfully | job id: {job_id}"
+  },
+  "QUERY_FAILED": {
+    "id": 3004,
+    "message": "Query failed | job id: {job_id} | reason: {reason}"
+  },
+  "DATASET_WRITE_COMPLETED": {
+    "id": 3005,
+    "message": "Dataset write completed successfully to {destination} | dataset: {dataset_name} | rows: {row_count} | job id: {job_id}"
+  },
+  "DATASET_WRITE_FAILED": {
+    "id": 3006,
+    "message": "Dataset write failed to {destination} | dataset: {dataset_name} | job id: {job_id} | reason: {reason}"
+  }
+}

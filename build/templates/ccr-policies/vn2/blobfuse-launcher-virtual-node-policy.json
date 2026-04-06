@@ -3,8 +3,7 @@
   "properties": {
     "image": "$containerRegistryUrl/blobfuse-launcher@$digest",
     "command": [
-      "python3.10",
-      "./blobfuse-launcher.py",
+      "blobfuse_launcher",
       "--governance-port",
       "8300",
       "--skr-port",
@@ -18,7 +17,9 @@
       "--mount-path",
       "$mountPath/$datasetName",
       "--encryption-mode",
-      "$encryptionMode"
+      "$encryptionMode",
+      "--readiness-port",
+      "$readinessPort"
     ],
     "environmentVariables": [
       {

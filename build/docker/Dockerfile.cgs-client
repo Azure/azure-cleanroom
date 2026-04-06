@@ -1,5 +1,5 @@
 # Use the official .NET Core SDK as the base image
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 # Set the working directory
 WORKDIR /app
@@ -15,6 +15,7 @@ COPY src/governance/sidecar/*.csproj /app/src/governance/sidecar/
 COPY src/governance/test/*.csproj /app/src/governance/test/
 COPY src/internal/Cose/*.csproj /app/src/internal/Cose/
 COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
+COPY src/internal/governance-common/*.csproj /app/src/internal/governance-common/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
 RUN dotnet restore /app/src/governance/governance.sln
 
@@ -29,7 +30,7 @@ COPY src/internal /app/src/internal
 RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/governance/client/cgs-client.csproj
 
 # Use the official .NET Core runtime as the base image for the final stage
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
 # Set the working directory
 WORKDIR /app

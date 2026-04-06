@@ -5,16 +5,21 @@ param (
     [string]
     $environment,
 
+    [int]
+    $retentionDays = 1,
+
     [switch]
-    $dryRun
+    $dryRun,
+
+    [switch]
+    $skipSpn
 )
 
-$retentionDays = 2
 
 if ($environment -eq "pr") {
     $mhsms = @(
         "prcovidtrainingmhsm4",
-        "azcleanroomemuhsm2"
+        "azcleanroompublichsm"
     )
 }
 else {
@@ -47,71 +52,73 @@ foreach ($rg in $resourceGroups) {
 Write-Host "The following $($rgsToDelete.Count) RGs will be deleted"
 Write-Host $($rgsToDelete -join "`n")
 
-Write-Host "Enumerating service principal type role assignments..."
-# Get all role assignments for service principals
-$assignments = az role assignment list --all --query "[?principalType=='ServicePrincipal']" | ConvertFrom-Json
-Write-Host "Checking for stale role assignments out of $($assignments.Count) items..."
+if (!$skipSpn) {
+    Write-Host "Enumerating service principal type role assignments..."
+    # Get all role assignments for service principals
+    $assignments = az role assignment list --all --query "[?principalType=='ServicePrincipal']" | ConvertFrom-Json
+    Write-Host "Checking for stale role assignments out of $($assignments.Count) items..."
 
-# Collect unique principalIds
-$principalIds = $assignments.principalId | Sort-Object -Unique
-Write-Host "Enumerating missing service principals out of $($principalIds.Count) items..."
+    # Collect unique principalIds
+    $principalIds = $assignments.principalId | Sort-Object -Unique
+    Write-Host "Enumerating missing service principals out of $($principalIds.Count) items..."
 
-# HashSet of missing principals
-$missingPrincipals = @{}
-$index = 1
-foreach ($principalId in $principalIds) {
-    # Use Carriage Return to overwrite the current line so that we show progress on one line.
-    Write-Host "`rChecking $index/$($principalIds.Count)..." -NoNewline
-    if ($principalIdsToExclude -contains $principalId) {
+    # HashSet of missing principals
+    $missingPrincipals = @{}
+    $index = 1
+    foreach ($principalId in $principalIds) {
+        # Use Carriage Return to overwrite the current line so that we show progress on one line.
+        Write-Host "`rChecking $index/$($principalIds.Count)..." -NoNewline
+        if ($principalIdsToExclude -contains $principalId) {
+            $index++
+            continue
+        }
+        $sp = az ad sp show --id $principalId 2>$null
+        if (-not $sp) {
+            $missingPrincipals[$principalId] = $true
+        }
         $index++
-        continue
     }
-    $sp = az ad sp show --id $principalId 2>$null
-    if (-not $sp) {
-        $missingPrincipals[$principalId] = $true
-    }
-    $index++
-}
-Write-Host  # Move to next line after loop
+    Write-Host  # Move to next line after loop
 
-Write-Host "$($missingPrincipals.Count) missing principals were found."
-$rasToDelete = @()
-$skippedRoleAssignments = @()
-foreach ($a in $assignments) {
-    if ($missingPrincipals.ContainsKey($a.principalId)) {
-        # Check if the role assignment is older than retention days
-        if ($a.createdOn) {
-            try {
-                $createdDate = [DateTime]::Parse($a.createdOn)
-                if ($($currentDate - $createdDate).Days -gt $retentionDays) {
-                    $rasToDelete += $a
+    Write-Host "$($missingPrincipals.Count) missing principals were found."
+    $rasToDelete = @()
+    $skippedRoleAssignments = @()
+    foreach ($a in $assignments) {
+        if ($missingPrincipals.ContainsKey($a.principalId)) {
+            # Check if the role assignment is older than retention days
+            if ($a.createdOn) {
+                try {
+                    $createdDate = [DateTime]::Parse($a.createdOn)
+                    if ($($currentDate - $createdDate).Days -gt $retentionDays) {
+                        $rasToDelete += $a
+                    }
+                }
+                catch {
+                    # If date parsing fails, default to safety behavior
+                    Write-Host "Warning: Invalid creation date format for role assignment $($a.id): $($a.createdOn), skipping deletion for safety"
+                    $skippedRoleAssignments += $a.id
                 }
             }
-            catch {
-                # If date parsing fails, default to safety behavior
-                Write-Host "Warning: Invalid creation date format for role assignment $($a.id): $($a.createdOn), skipping deletion for safety"
+            else {
+                # If no creation date available, default to the existing behavior for safety
+                Write-Host "Warning: No creation date found for role assignment $($a.id), skipping deletion for safety"
                 $skippedRoleAssignments += $a.id
             }
         }
-        else {
-            # If no creation date available, default to the existing behavior for safety
-            Write-Host "Warning: No creation date found for role assignment $($a.id), skipping deletion for safety"
-            $skippedRoleAssignments += $a.id
+    }
+
+    Write-Host "$($rasToDelete.Count) role assignments will be deleted."
+
+    # Log skipped role assignments for manual verification
+    if ($skippedRoleAssignments.Count -gt 0) {
+        Write-Host ""
+        Write-Host "$($skippedRoleAssignments.Count) role assignments were skipped due to missing/invalid creation dates:"
+        foreach ($skippedId in $skippedRoleAssignments) {
+            Write-Host "  - $skippedId"
         }
+        Write-Host "These assignments may need manual verification and cleanup."
+        Write-Host ""
     }
-}
-
-Write-Host "$($rasToDelete.Count) role assignments will be deleted."
-
-# Log skipped role assignments for manual verification
-if ($skippedRoleAssignments.Count -gt 0) {
-    Write-Host ""
-    Write-Host "$($skippedRoleAssignments.Count) role assignments were skipped due to missing/invalid creation dates:"
-    foreach ($skippedId in $skippedRoleAssignments) {
-        Write-Host "  - $skippedId"
-    }
-    Write-Host "These assignments may need manual verification and cleanup."
-    Write-Host ""
 }
 
 if ($dryRun) {
@@ -123,23 +130,25 @@ foreach ($rg in $rgsToDelete) {
     az group delete --name $rg --no-wait --yes
 }
 
-foreach ($a in $rasToDelete) {
-    $principalId = $a.principalId
-    $role = $a.roleDefinitionName
-    $scope = $a.scope
-    # rasToDelete already contains assignments with valid createdOn dates since they're filtered
-    $createdOn = $a.createdOn
+if (!$skipSpn) {
+    foreach ($a in $rasToDelete) {
+        $principalId = $a.principalId
+        $role = $a.roleDefinitionName
+        $scope = $a.scope
+        # rasToDelete already contains assignments with valid createdOn dates since they're filtered
+        $createdOn = $a.createdOn
 
-    Write-Host "Removing stale role assignment: $role at $scope for $principalId (created: $createdOn)"
-    az role assignment delete --assignee-object-id $principalId --role $role --scope $scope
+        Write-Host "Removing stale role assignment: $role at $scope for $principalId (created: $createdOn)"
+        az role assignment delete --assignee-object-id $principalId --role $role --scope $scope
+    }
 }
 
 pwsh $PSScriptRoot/remove-old-buckets.ps1 `
-    -Prefix "consumer-input-big-data-query-analytics-" `
+    -Prefix "consumer-input-big-data-" `
     -MaxAgeDays $retentionDays
 
 pwsh $PSScriptRoot/remove-old-buckets.ps1 `
-    -Prefix "consumer-output-big-data-query-analytics-" `
+    -Prefix "consumer-output-big-data-" `
     -MaxAgeDays $retentionDays
 
 foreach ($mhsm in $mhsms) {
@@ -171,3 +180,75 @@ foreach ($mhsm in $mhsms) {
         }
     }
 }
+
+function Remove-ManagedResources {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $subscriptionId,
+
+        [Parameter(Mandatory = $true)]
+        [string] $resourceType,
+
+        [Parameter(Mandatory = $true)]
+        [string] $apiVersion,
+
+        [Parameter(Mandatory = $true)]
+        [DateTime] $currentDate,
+
+        [Parameter(Mandatory = $true)]
+        [int] $retentionDays
+    )
+
+    $listUrl = "https://eastus2euap.management.azure.com/subscriptions/$subscriptionId/providers/Private.CleanRoom/$($resourceType)?api-version=$apiVersion"
+    $response = az rest `
+        --method get `
+        --resource "https://management.azure.com/" `
+        --url $listUrl `
+    | ConvertFrom-Json
+
+    $items = @($response.value)
+    foreach ($item in $items) {
+        if ([string]::IsNullOrWhiteSpace($item.systemData.createdAt)) {
+            # Some resources with missing data were found hence adding a created time for such resources to ensure deletion.
+            $createdAt = (Get-Date).AddDays(-30).ToUniversalTime()
+        }
+        else {
+            $createdAt = [DateTime]::Parse($item.systemData.createdAt)
+        }
+        if ($($currentDate - $createdAt).Days -gt $retentionDays) {
+            Write-Host "Deleting: $($item.name) ($resourceType) created $createdAt"
+
+            az rest `
+                --method delete `
+                --resource "https://management.azure.com/" `
+                --url "https://eastus2euap.management.azure.com$($item.id)?api-version=$apiVersion"
+        }
+    }
+
+    Write-Host "Processed $($items.Count) $resourceType in subscription" -ForegroundColor Cyan
+}
+
+# Cleanup managed resources older than retention days.
+$subscriptionId = az account show --query "id" -o tsv
+$cleanRoomApiVersion = "2025-10-31-preview"
+
+Remove-ManagedResources `
+    -subscriptionId $subscriptionId `
+    -resourceType "consortiums" `
+    -apiVersion $cleanRoomApiVersion `
+    -currentDate $currentDate `
+    -retentionDays $retentionDays
+
+Remove-ManagedResources `
+    -subscriptionId $subscriptionId `
+    -resourceType "collaborations" `
+    -apiVersion $cleanRoomApiVersion `
+    -currentDate $currentDate `
+    -retentionDays $retentionDays
+
+Remove-ManagedResources `
+    -subscriptionId $subscriptionId `
+    -resourceType "consortiumviews" `
+    -apiVersion $cleanRoomApiVersion `
+    -currentDate $currentDate `
+    -retentionDays $retentionDays

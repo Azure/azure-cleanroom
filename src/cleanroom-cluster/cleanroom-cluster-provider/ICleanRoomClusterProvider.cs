@@ -12,6 +12,7 @@ public interface ICleanRoomClusterProvider
 
     ODataError? CreateClusterValidate(
         string clusterName,
+        CleanRoomClusterInput? input,
         JsonObject? providerConfig)
     {
         return null;
@@ -36,11 +37,23 @@ public interface ICleanRoomClusterProvider
         return null;
     }
 
+    ODataError? GetClusterKubeConfigValidate(
+        string clusterName,
+        JsonObject? providerConfig)
+    {
+        return null;
+    }
+
     public Task<CleanRoomCluster> GetCluster(
         string clusterName,
         JsonObject? providerConfig);
 
     public Task<CleanRoomClusterKubeConfig?> TryGetClusterKubeConfig(
+        string clusterName,
+        JsonObject? providerConfig,
+        KubeConfigAccessRole accessRole);
+
+    public Task<CleanRoomClusterHealth?> TryGetClusterHealth(
         string clusterName,
         JsonObject? providerConfig);
 
@@ -59,5 +72,10 @@ public interface ICleanRoomClusterProvider
 
     public Task<AnalyticsWorkloadGeneratedDeployment> GenerateAnalyticsWorkloadDeployment(
         GenerateAnalyticsWorkloadDeploymentInput input,
+        JsonObject? providerConfig);
+
+    public Task<KServeInferencingWorkloadGeneratedDeployment>
+        GenerateKServeInferencingWorkloadDeployment(
+        GenerateKServeInferencingWorkloadDeploymentInput input,
         JsonObject? providerConfig);
 }

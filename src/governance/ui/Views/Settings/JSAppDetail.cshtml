@@ -1,31 +1,263 @@
 ﻿@model JSAppViewModel
 @{
-    ViewData["Title"] = "JS App";
+    ViewData["Title"] = "JavaScript Application Details";
 }
-<a href="#modules">Jump to Modules</a>
 
-<h2>Endpoints</h2>
-<pre>@Model.Endpoints</pre>
+<div class="content-wrapper">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 text-gradient mb-1">
+                <i class="fas fa-code me-2"></i>JavaScript Application
+            </h1>
+            <p class="text-muted mb-0">View application endpoints and modules</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshApp()">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+            <a href="/Settings" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Settings
+            </a>
+        </div>
+    </div>
 
-<div id="modules">
-<h2>Modules</h2>
-    @{
-        int count = 0;
-        foreach (var item in Model.Modules)
-        {
-            count++;
-            <p><a href="#module_@count">@count: @item.Item1</a></p>
+    <!-- Quick Navigation -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-compass me-2"></i>Quick Navigation
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="#endpoints-section" class="btn btn-outline-primary btn-sm">
+                    <i class="fas fa-plug me-1"></i>Endpoints
+                </a>
+                <a href="#modules-section" class="btn btn-outline-primary btn-sm">
+                    <i class="fas fa-cubes me-1"></i>Modules (@Model.Modules.Count())
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Endpoints Section -->
+    <div class="card mb-4" id="endpoints-section">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-plug me-2"></i>Application Endpoints
+            </h5>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copyEndpoints()"
+                title="Copy endpoints to clipboard">
+                <i class="fas fa-copy me-1"></i>Copy
+            </button>
+        </div>
+        <div class="card-body">
+            @if (!string.IsNullOrEmpty(Model.Endpoints))
+            {
+                <div class="code-container">
+                    <pre class="bg-light p-3 rounded" id="endpointsContent"
+                        style="max-height: 400px; overflow-y: auto;"><code>@Model.Endpoints</code></pre>
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-4">
+                    <i class="fas fa-plug fa-2x text-muted mb-2"></i>
+                    <p class="text-muted mb-0">No endpoints defined</p>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Modules Section -->
+    <div class="card" id="modules-section">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-cubes me-2"></i>Application Modules
+                <span class="badge bg-primary ms-2">@Model.Modules.Count()</span>
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            @if (Model.Modules.Any())
+            {
+                <div class="accordion" id="modulesAccordion">
+                    @{
+                        int moduleCount = 0;
+                        foreach (var module in Model.Modules)
+                        {
+                            moduleCount++;
+                            var collapseId = $"collapse{moduleCount}";
+                            var headingId = $"heading{moduleCount}";
+
+                            <div class="accordion-item" id="module_@moduleCount">
+                                <h2 class="accordion-header" id="@headingId">
+                                    <button class="accordion-button @(moduleCount == 1 ? "" : "collapsed")" type="button"
+                                        data-bs-toggle="collapse" data-bs-target="#@collapseId"
+                                        aria-expanded="@(moduleCount == 1 ? "true" : "false")" aria-controls="@collapseId">
+                                        <i class="fas fa-cube me-2"></i>
+                                        <strong>Module @moduleCount:</strong>
+                                        <span class="ms-2 font-monospace">@module.Item1</span>
+                                    </button>
+                                </h2>
+                                <div id="@collapseId" class="accordion-collapse collapse @(moduleCount == 1 ? "show" : "")"
+                                    aria-labelledby="@headingId" data-bs-parent="#modulesAccordion">
+                                    <div class="accordion-body">
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-file-code me-1"></i>Module Source Code
+                                            </h6>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                                onclick="copyModuleContent(@moduleCount)" title="Copy module code">
+                                                <i class="fas fa-copy me-1"></i>Copy
+                                            </button>
+                                        </div>
+                                        @if (!string.IsNullOrEmpty(module.Item2))
+                                        {
+                                            <div class="code-container">
+                                                <pre class="bg-light p-3 rounded border" id="moduleContent@moduleCount"
+                                                    style="max-height: 500px; overflow-y: auto;"><code>@module.Item2</code></pre>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="text-center py-3">
+                                                <i class="fas fa-exclamation-circle text-warning"></i>
+                                                <span class="text-muted ms-2">No source code available for this module</span>
+                                            </div>
+                                        }
+
+                                        <!-- Module Info -->
+                                        <div class="row mt-3">
+                                            <div class="col-md-6">
+                                                <small class="text-muted d-block">Module Name:</small>
+                                                <code>@module.Item1</code>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <small class="text-muted d-block">Code Size:</small>
+                                                <strong>@(module.Item2?.Length ?? 0) characters</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-5">
+                    <i class="fas fa-cubes fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No Modules Found</h5>
+                    <p class="text-muted mb-4">No JavaScript modules are currently loaded in the application.</p>
+                    <button type="button" class="btn btn-primary" onclick="refreshApp()">
+                        <i class="fas fa-sync-alt me-1"></i>Refresh Application
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<script>
+    function copyEndpoints() {
+        const contentElement = document.getElementById('endpointsContent');
+        const copyButton = document.querySelector('[onclick="copyEndpoints()"]');
+        const originalText = copyButton.innerHTML;
+
+        if (contentElement) {
+            const textContent = contentElement.textContent || contentElement.innerText || '';
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(textContent).then(() => {
+                    copyButton.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+                    copyButton.classList.remove('btn-outline-secondary');
+                    copyButton.classList.add('btn-success');
+
+                    setTimeout(() => {
+                        copyButton.innerHTML = originalText;
+                        copyButton.classList.remove('btn-success');
+                        copyButton.classList.add('btn-outline-secondary');
+                    }, 2000);
+                });
+            }
         }
     }
-    @{
-    int count2 = 0;
-    foreach (var item in Model.Modules)
-    {
-        count2++;
-        <div id="module_@count2">
-        <p><b>@count: @item.Item1</b></p>
-        <p><pre>@item.Item2</pre></p>
-        </div>
+
+    function copyModuleContent(moduleNumber) {
+        const contentElement = document.getElementById('moduleContent' + moduleNumber);
+        const copyButton = document.querySelector('[onclick="copyModuleContent(' + moduleNumber + ')"]');
+        const originalText = copyButton.innerHTML;
+
+        if (contentElement) {
+            const textContent = contentElement.textContent || contentElement.innerText || '';
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(textContent).then(() => {
+                    copyButton.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+                    copyButton.classList.remove('btn-outline-secondary');
+                    copyButton.classList.add('btn-success');
+
+                    setTimeout(() => {
+                        copyButton.innerHTML = originalText;
+                        copyButton.classList.remove('btn-success');
+                        copyButton.classList.add('btn-outline-secondary');
+                    }, 2000);
+                });
+            }
+        }
     }
-}
-</div>
+
+    function refreshApp() {
+        const refreshBtn = document.querySelector('[onclick="refreshApp()"]');
+        const icon = refreshBtn.querySelector('i');
+
+        icon.classList.add('fa-spin');
+        refreshBtn.disabled = true;
+
+        setTimeout(() => {
+            icon.classList.remove('fa-spin');
+            refreshBtn.disabled = false;
+            location.reload();
+        }, 1000);
+    }
+
+    // Smooth scrolling for navigation links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            e.preventDefault();
+            const targetId = this.getAttribute('href').substring(1);
+            const targetElement = document.getElementById(targetId);
+            if (targetElement) {
+                targetElement.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            }
+        });
+    });
+</script>
+
+<style>
+    /* Fix dropdown z-index issues */
+    .dropdown-menu {
+        z-index: 1051 !important;
+    }
+
+    .dropdown {
+        position: relative;
+        z-index: 1050;
+    }
+
+    /* Ensure cards don't interfere with dropdown */
+    .card {
+        position: relative;
+        z-index: 1;
+    }
+
+    /* Override Bootstrap dropdown positioning if needed */
+    .dropdown-menu.show {
+        z-index: 1051 !important;
+    }
+</style>

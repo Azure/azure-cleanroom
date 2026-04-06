@@ -15,7 +15,7 @@ param
 
     [string]$repo = "localhost:5000",
 
-    [string]$tag = ""
+    [string]$tag = "latest"
 )
 #https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
 $ErrorActionPreference = 'Stop'
@@ -55,15 +55,8 @@ if (-not (Test-Path $sandbox_common/${operatorName}_cert.id) -and $useServiceCer
     $versions = (az cleanroom governance service version --governance-client $cgsProjectName) | ConvertFrom-Json
 
     Write-Output "Restarting $cgsProjectName with constitution digest: $($versions.constitution.digest), jsapp bundle digest: $($versions.jsapp.digest)"
-    if ($repo -ne "") {
-        $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$tag"
-        $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$tag"
-    }
-    else {
-        $env:AZCLI_CGS_CLIENT_IMAGE = ""
-        $env:AZCLI_CGS_UI_IMAGE = ""
-    }
 
+    $envFilePath = "$sandbox_common/governance-client.env"
     az cleanroom governance client deploy `
         --ccf-endpoint $ccfEndpoint `
         --signing-key $sandbox_common/${operatorName}_privk.pem `
@@ -72,5 +65,6 @@ if (-not (Test-Path $sandbox_common/${operatorName}_cert.id) -and $useServiceCer
         --service-cert-discovery-snp-host-data $discoverySettings.hostData[0] `
         --service-cert-discovery-constitution-digest $versions.constitution.digest `
         --service-cert-discovery-jsapp-bundle-digest $versions.jsapp.digest `
-        --name $cgsProjectName
+        --name $cgsProjectName `
+        --env-file $envFilePath
 }

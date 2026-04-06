@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
 using static CgsUI.Controllers.MembersController;
 using static CgsUI.Controllers.UsersController;
 
@@ -24,6 +27,10 @@ public class UserDocumentViewModel
 
     public List<FinalVotesViewModel> FinalVotes { get; set; } = default!;
 
+    public JsonObject Labels { get; set; } = default!;
+
+    public List<LabelsViewModel> LabelsView { get; set; } = default!;
+
     public class FinalVotesViewModel
     {
         public string ApproverId { get; set; } = default!;
@@ -36,6 +43,13 @@ public class UserDocumentViewModel
         public string ApproverId { get; set; } = default!;
 
         public string ApproverIdType { get; set; } = default!;
+    }
+
+    public class LabelsViewModel
+    {
+        public string Name { get; set; } = default!;
+
+        public string Value { get; set; } = default!;
     }
 }
 

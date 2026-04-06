@@ -21,20 +21,70 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=lint-${{ github.run_id }}-${{ github.run_attempt }}"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run isort
+        uses: isort/isort-action@master
+        with:
+          configuration: "--check-only --profile black"
+      - name: Run Black
+        uses: psf/black@stable
+
+  detect-changes:
+    needs: [lint]
+    runs-on: ubuntu-latest
+    outputs:
+      build-groups: ${{ steps.resolve.outputs.build-groups }}
+      test-stages: ${{ steps.resolve.outputs.test-stages }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve impacted CI stages
+        id: resolve
+        env:
+          CI_EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 ./scripts/resolve_pr_impacts.py
+
   build:
+    needs: [detect-changes]
+    if: ${{ needs.detect-changes.outputs.build-groups != '' }}
     uses: ./.github/workflows/pr_build_all.yml
+    with:
+      build-groups: ${{ needs.detect-changes.outputs.build-groups }}
 
   test-cgs:
+    needs: [detect-changes]
+    if: ${{ contains(needs.detect-changes.outputs.test-stages, 'test-cgs') }}
     uses: ./.github/workflows/pr_cgs_tests.yml
 
   test-ccf:
-    needs: [build]
+    needs: [detect-changes, build]
+    if: ${{ contains(needs.detect-changes.outputs.test-stages, 'test-ccf') }}
     uses: ./.github/workflows/pr_ccf.yml
 
   test-cleanroom-cluster:
-    needs: [build]
+    needs: [detect-changes, build]
+    if: ${{ contains(needs.detect-changes.outputs.test-stages, 'test-cleanroom-cluster') }}
     uses: ./.github/workflows/pr_cleanroom_cluster.yml
 
+  # TODO (gsinha): GitHub Actions don't have access to the CVM over public IP due to network restrictions.
+  # Enable once we have a solution in place (e.g. self-hosted runner in the same VNet as the CVM).
+  # test-cvm:
+  #   needs: [build]
+  #   uses: ./.github/workflows/pr_cvm.yml
+
   test-multi-party-collab:
-    needs: [build]
+    needs: [detect-changes, build]
+    if: ${{ contains(needs.detect-changes.outputs.test-stages, 'test-multi-party-collab') }}
     uses: ./.github/workflows/pr_multi_party_collab_samples.yml
+
+  test-workloads:
+    needs: [detect-changes, build]
+    if: ${{ contains(needs.detect-changes.outputs.test-stages, 'test-workloads') }}
+    uses: ./.github/workflows/pr_workload_samples.yml

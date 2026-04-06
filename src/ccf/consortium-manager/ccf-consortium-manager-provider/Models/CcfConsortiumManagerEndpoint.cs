@@ -5,7 +5,7 @@ namespace CcfConsortiumMgrProvider;
 
 public class CcfConsortiumManagerEndpoint
 {
-    public string Name { get; set; } = default!;
+    public required string Name { get; set; }
 
-    public string Endpoint { get; set; } = default!;
+    public required string Endpoint { get; set; }
 }

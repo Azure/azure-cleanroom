@@ -4,13 +4,13 @@
     "image": "$containerRegistryUrl/workloads/cleanroom-spark-analytics-app@$digest",
     "command": [
       "python3",
-      "/app/src/spark_launcher.py",
+      "/app/src/analytics_workload/spark_launcher.py",
       "driver",
       "--properties-file",
       "/opt/spark/conf/spark.properties",
       "--class",
       "org.apache.spark.deploy.PythonRunner",
-      "local:///app/src/run_query.py"
+      "local:///app/src/analytics_workload/run_query.py"
     ],
     "environmentVariables": [
       {
@@ -35,6 +35,24 @@
       {
         "name": "SPARK_CONF_DIR",
         "value": "/opt/spark/conf"
+      },
+      {
+        "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "value": "http://localhost:4317"
+      },
+      {
+        "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
+        "value": "grpc"
+      },
+      {
+        "name": "OTEL_SERVICE_NAME",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "OTEL_RESOURCE_ATTRIBUTES",
+        "value": ".*",
+        "regex": true
       }
     ],
     "volumeMounts": [
@@ -65,12 +83,6 @@
       {
         "name": "volumestatusmounts",
         "mountPath": "/mnt/volumestatus",
-        "mountType": "emptyDir",
-        "readOnly": false
-      },
-      {
-        "name": "uds",
-        "mountPath": "/mnt/uds",
         "mountType": "emptyDir",
         "readOnly": false
       }

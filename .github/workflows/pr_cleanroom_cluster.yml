@@ -16,8 +16,26 @@ permissions:
 #   cancel-in-progress: true
 
 jobs:
-  caci-cleanroom-cluster:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+  pick-location:
+    runs-on: ubuntu-latest
+    outputs:
+      location: ${{ steps.pick.outputs.location }}
+    steps:
+      - name: Pick a random Azure location
+        id: pick
+        shell: bash
+        run: |
+          # These are the locations where DC4as_v5 SKU is available that we use in Flex Node tests.
+          # "westeurope" is intentionally left out of the list since we have been seeing issues related to AKS Free tier quotas in that region.
+          # westus is removed as it is being used by another PR validation flow.
+          locations=("northeurope" "germanywestcentral" "centralindia" "eastasia" "southeastasia" )
+          index=$((RANDOM % ${#locations[@]}))
+          echo "location=${locations[$index]}" >> "$GITHUB_OUTPUT"
+          echo "Selected location: ${locations[$index]}"
+          
+  aks-cleanroom-cluster:
+    needs: [pick-location]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=aks-cleanroom-cluster-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -32,15 +50,6 @@ jobs:
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
-      - shell: pwsh
-        run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
-
-      - name: Install confcom extension
-        shell: pwsh
-        run: |
-          az extension add --name confcom -y --allow-preview true
-          az version
-
       - name: Login to Azure and refresh token
         uses: ./.github/actions/login-to-azure
         env:
@@ -50,15 +59,18 @@ jobs:
 
       - name: Deploy CACI/VN2 backed cluster
         run: >
-          pwsh ./samples/spark/azcli/deploy-cluster.ps1
-          -infraType caci
+          pwsh ./samples/workloads/azcli/deploy-cluster.ps1
+          -infraType aks
+          -enableObservability
+          -enableAnalytics
           -securityPolicyCreationOption cached-debug
           -registry acr
           -repo ${{ vars.ACR_URL }}
           -tag ${{ github.run_id }}
+          -location ${{ needs.pick-location.outputs.location }}
 
       - name: Test Spark application run
-        run: pwsh ./samples/spark/azcli/test-cluster.ps1
+        run: pwsh ./samples/workloads/azcli/test-cluster.ps1 -testAnalytics
 
       - name: Dump cleanroom-cluster-provider logs
         shell: pwsh
@@ -68,7 +80,15 @@ jobs:
       - name: Dump cleanroom-cluster logs
         shell: pwsh
         if: ${{ !cancelled() }}
-        run: pwsh ./samples/spark/azcli/dump-cleanroom-cluster-logs.ps1
+        run: pwsh ./samples/workloads/azcli/dump-cleanroom-cluster-logs.ps1
+
+      - name: Upload generated artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: aks-cleanroom-cluster
+          path: ./samples/workloads/azcli/sandbox_common
+          overwrite: true
+        if: always()
 
       - name: Delete resource groups
         if: success()
@@ -76,7 +96,7 @@ jobs:
         run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=cleanroom-cluster-${{ github.job }}-${{ github.run_id }}"
 
   virtual-cleanroom-cluster:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=virtual-cleanroom-cluster-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -100,14 +120,17 @@ jobs:
 
       - name: Deploy virtual cluster
         run: >
-          pwsh ./samples/spark/azcli/deploy-cluster.ps1
+          pwsh ./samples/workloads/azcli/deploy-cluster.ps1
           -infraType virtual
+          -enableObservability
+          -enableAnalytics
+          -enableKServeInferencing
           -registry acr
           -repo ${{ vars.ACR_URL }}
           -tag ${{ github.run_id }}
 
-      - name: Test Spark application run
-        run: pwsh ./samples/spark/azcli/test-cluster.ps1
+      - name: Test workload run
+        run: pwsh ./samples/workloads/azcli/test-cluster.ps1 -testAnalytics -testKServeInferencing
 
       - name: Dump cleanroom-cluster-provider logs
         shell: pwsh
@@ -117,10 +140,11 @@ jobs:
       - name: Dump cleanroom-cluster logs
         shell: pwsh
         if: ${{ !cancelled() }}
-        run: pwsh ./samples/spark/azcli/dump-cleanroom-cluster-logs.ps1
+        run: pwsh ./samples/workloads/azcli/dump-cleanroom-cluster-logs.ps1
 
-  caci-cleanroom-cluster-update:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+  aks-cleanroom-cluster-flexnode:
+    needs: [pick-location]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=aks-cleanroom-cluster-flexnode-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -135,15 +159,6 @@ jobs:
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
-      - shell: pwsh
-        run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
-
-      - name: Install confcom extension
-        shell: pwsh
-        run: |
-          az extension add --name confcom -y --allow-preview true
-          az version
-
       - name: Login to Azure and refresh token
         uses: ./.github/actions/login-to-azure
         env:
@@ -151,22 +166,20 @@ jobs:
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy CACI/VN2 backed cluster
+      - name: Deploy cluster with flex node
         run: >
-          pwsh ./samples/spark/azcli/deploy-cluster.ps1
-          -infraType caci
-          -donotEnableAnalytics
+          pwsh ./samples/workloads/azcli/deploy-cluster.ps1
+          -infraType aks
+          -enableObservability
+          -enableFlexNode
+          -enableKServeInferencing
           -registry acr
           -repo ${{ vars.ACR_URL }}
           -tag ${{ github.run_id }}
+          -location ${{ needs.pick-location.outputs.location }}
 
-      - name: Enable analytics workload
-        run: >
-          pwsh ./samples/spark/azcli/enable-analytics-workload.ps1
-          -securityPolicyCreationOption cached-debug
-
-      - name: Test Spark application run
-        run: pwsh ./samples/spark/azcli/test-cluster.ps1
+      - name: Test flex node workloads
+        run: pwsh ./samples/workloads/azcli/test-cluster.ps1 -testFlexNode -testKServeInferencing
 
       - name: Dump cleanroom-cluster-provider logs
         shell: pwsh
@@ -176,15 +189,23 @@ jobs:
       - name: Dump cleanroom-cluster logs
         shell: pwsh
         if: ${{ !cancelled() }}
-        run: pwsh ./samples/spark/azcli/dump-cleanroom-cluster-logs.ps1
+        run: pwsh ./samples/workloads/azcli/dump-cleanroom-cluster-logs.ps1
         
+      - name: Upload generated artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: aks-cleanroom-cluster-flexnode
+          path: ./samples/workloads/azcli/sandbox_common
+          overwrite: true
+        if: always()
+
       - name: Delete resource groups
         if: success()
         shell: pwsh
         run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=cleanroom-cluster-${{ github.job }}-${{ github.run_id }}"
 
-  virtual-cleanroom-cluster-update:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+  virtual-cleanroom-cluster-flexnode:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=virtual-cleanroom-cluster-flexnode-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -206,21 +227,19 @@ jobs:
           TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy virtual cluster
+      - name: Deploy virtual cluster with flex node
         run: >
-          pwsh ./samples/spark/azcli/deploy-cluster.ps1
+          pwsh ./samples/workloads/azcli/deploy-cluster.ps1
           -infraType virtual
-          -donotEnableAnalytics
           -registry acr
+          -enableObservability
+          -enableFlexNode
+          -enableKServeInferencing
           -repo ${{ vars.ACR_URL }}
           -tag ${{ github.run_id }}
 
-      - name: Enable analytics workload
-        run: >
-          pwsh ./samples/spark/azcli/enable-analytics-workload.ps1
-
-      - name: Test Spark application run
-        run: pwsh ./samples/spark/azcli/test-cluster.ps1
+      - name: Test Flex Node workloads
+        run: pwsh ./samples/workloads/azcli/test-cluster.ps1 -testFlexNode -testKServeInferencing
 
       - name: Dump cleanroom-cluster-provider logs
         shell: pwsh
@@ -230,4 +249,4 @@ jobs:
       - name: Dump cleanroom-cluster logs
         shell: pwsh
         if: ${{ !cancelled() }}
-        run: pwsh ./samples/spark/azcli/dump-cleanroom-cluster-logs.ps1
+        run: pwsh ./samples/workloads/azcli/dump-cleanroom-cluster-logs.ps1

@@ -55,7 +55,7 @@ public class OidcController : ClientControllerBase
     public async Task<JsonObject> GetOidcIssuerInfo()
     {
         var appClient = this.CcfClientManager.GetAppClient();
-        using (HttpRequestMessage request = new(HttpMethod.Get, $"app/oidc/issuerInfo"))
+        using (HttpRequestMessage request = new(HttpMethod.Post, $"app/oidc/issuerInfo"))
         {
             using HttpResponseMessage response = await appClient.SendAsync(request);
             this.Response.CopyHeaders(response.Headers);

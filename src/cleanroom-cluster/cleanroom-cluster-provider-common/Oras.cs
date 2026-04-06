@@ -18,9 +18,15 @@ public class OrasClient : RunCommand
         this.config = config;
     }
 
-    public async Task Pull(string registryUrl, string outDir)
+    public async Task Pull(string registryUrl, string outDir, bool useHttp = false)
     {
-        await this.Oras($"pull {registryUrl} -o {outDir}");
+        var args = $"pull {registryUrl} -o {outDir}";
+        if (useHttp)
+        {
+            args += " --plain-http";
+        }
+
+        await this.Oras(args);
     }
 
     private async Task<(int, string, string)> Oras(string args, bool skipOutputLogging = false)

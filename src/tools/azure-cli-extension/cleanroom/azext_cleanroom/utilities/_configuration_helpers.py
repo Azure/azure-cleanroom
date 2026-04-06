@@ -2,9 +2,8 @@ from typing import Any
 
 import cleanroom_common.azure_cleanroom_core.utilities.configuration_helpers as config_helpers
 from azure.cli.core.util import CLIError
-from cleanroom_common.azure_cleanroom_core.models.model import CleanRoomSpecification
-from cleanroom_common.azure_cleanroom_core.models.secretstore import (
-    SecretStoreSpecification,
+from cleanroom_common.azure_cleanroom_core.models.cleanroom import (
+    CleanRoomSpecification,
 )
 
 from ..utilities._azcli_helpers import logger

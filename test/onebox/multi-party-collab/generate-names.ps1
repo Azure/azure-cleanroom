@@ -3,15 +3,13 @@ param(
     [string]$resourceGroup,
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet("mhsm", "akvpremium")]
-    [string]$kvType,
-
-    [Parameter(Mandatory = $true)]
     [string]$outDir,
 
     [string]$backupKv = "",
 
-    [string]$overridesFilePath = ""
+    [string]$overridesFilePath = "",
+
+    [string]$location = "westeurope"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -37,7 +35,7 @@ else {
 mkdir -p $outDir
 
 @"
-`$RESOURCE_GROUP_LOCATION = $($overrides['$RESOURCE_GROUP_LOCATION'] ?? "`"westeurope`"")
+`$RESOURCE_GROUP_LOCATION = $($overrides['$RESOURCE_GROUP_LOCATION'] ?? "`"$location`"")
 `$STORAGE_ACCOUNT_NAME = $($overrides['$STORAGE_ACCOUNT_NAME'] ?? "`"${uniqueString}sa`"")
 `$HSM_RESOURCE_GROUP = $($overrides['$HSM_RESOURCE_GROUP'] ?? "`"$resourceGroup`"")
 `$MHSM_NAME = $($overrides['$MHSM_NAME'] ?? "`"$tdpmhsmName`"")

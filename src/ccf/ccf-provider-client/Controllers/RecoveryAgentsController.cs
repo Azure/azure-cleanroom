@@ -67,7 +67,8 @@ public class RecoveryAgentsController : CCfClientController
                 var report = item.Report?["report"];
                 if (report != null)
                 {
-                    var attestationReport = JsonSerializer.Deserialize<AttestationReport>(report)!;
+                    var attestationReport =
+                        JsonSerializer.Deserialize<SnpCACIAttestationReport>(report)!;
                     SnpReport.VerifySnpAttestation(
                         attestationReport.Attestation,
                         attestationReport.PlatformCertificates,
@@ -98,7 +99,8 @@ public class RecoveryAgentsController : CCfClientController
                 var report = item.Report?["report"];
                 if (report != null)
                 {
-                    var attestationReport = JsonSerializer.Deserialize<AttestationReport>(report)!;
+                    var attestationReport =
+                        JsonSerializer.Deserialize<SnpCACIAttestationReport>(report)!;
                     SnpReport.VerifySnpAttestation(
                         attestationReport.Attestation,
                         attestationReport.PlatformCertificates,

@@ -60,7 +60,7 @@ $ccrContainers = @(
     "s3fs-launcher"
     "code-launcher",
     "otel-collector",
-    "ccr-attestation",
+    "skr",
     "ccr-secrets",
     "ccr-governance",
     "cleanroom-client",
@@ -73,7 +73,6 @@ $ccrVersionsDocuments = "versions/ccr-containers"
 $sidecarDigestsDocument = "sidecar-digests"
 
 $ccrPolicyDocuments = @(
-    "policies/ccr-attestation-policy",
     "policies/ccr-governance-policy",
     "policies/ccr-init-policy",
     "policies/ccr-proxy-ext-processor-policy",

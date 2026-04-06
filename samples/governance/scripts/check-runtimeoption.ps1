@@ -4,7 +4,7 @@ function Check-RuntimeOption {
   (
     [string]
     [Parameter(Mandatory)]
-    [ValidateSet('autoapprove-constitution-proposal', 'autoapprove-jsapp-proposal', 'autoapprove-deploymentspec-proposal', 'autoapprove-cleanroompolicy-proposal')]
+    [ValidateSet('autoapprove-constitution-proposal', 'autoapprove-jsapp-proposal', 'autoapprove-deploymentspec-proposal', 'autoapprove-deploymentinfo-proposal', 'autoapprove-cleanroompolicy-proposal')]
     $statusOf,
 
     [string]
@@ -15,6 +15,6 @@ function Check-RuntimeOption {
 
   $port = GetPortOrDie($port)
 
-  $response = (curl -sS -X POST localhost:$port/runtimeoptions/checkstatus/$statusOf -d "")
+  $response = (curl -sS -X POST localhost:$port/runtimeoptions/$statusOf/status -d "")
   return $response
 }

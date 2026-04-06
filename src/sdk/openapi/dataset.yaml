@@ -1,0 +1,89 @@
+openapi: '3.0.3'
+info:
+  title: Cleanroom Dataset Specification
+  description: Cleanroom Dataset Specification
+  version: '1.0'
+
+paths: {}
+
+components:
+  schemas:
+    DataFormat:
+      type: string
+      enum:
+      - csv
+      - json
+      - parquet
+
+    DataFieldType:
+      type: string
+      enum:
+      - string
+      - integer
+      - number
+      - boolean
+      - date
+      - long
+      - timestamp
+
+    Workload:
+      type: string
+      enum:
+      - analytics-sparksql
+
+    DataField:
+      type: object
+      properties:
+        fieldName:
+          type: string
+        fieldType:
+          $ref: "#/components/schemas/DataFieldType"
+      required:
+      - fieldName
+      - fieldType
+
+    DataSchema:
+      type: object
+      properties:
+        format:
+          $ref: "#/components/schemas/DataFormat"
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataField"
+      required:
+      - format
+      - fields
+
+    DataAccessPolicy:
+      type: object
+      properties:
+        accessMode:
+          type: string
+          enum:
+          - read
+          - write
+        allowedFields:
+          type: array
+          items:
+            type: string
+      required:
+      - accessMode
+      - allowedFields
+
+    DatasetSpecification:
+      type: object
+      properties:
+        name:
+          type: string
+        datasetSchema:
+          $ref: "#/components/schemas/DataSchema"
+        datasetAccessPolicy:
+          $ref: "#/components/schemas/DataAccessPolicy"
+        datasetAccessPoint:
+          $ref: "cleanroom.yaml#/components/schemas/AccessPoint"
+      required:
+      - name
+      - datasetSchema
+      - datasetAccessPolicy
+      - datasetAccessPoint

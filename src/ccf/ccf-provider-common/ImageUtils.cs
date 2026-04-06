@@ -165,6 +165,17 @@ public static class ImageUtils
         return GetTag("CCF_PROVIDER_RECOVERY_AGENT_IMAGE") ?? $"{McrTag}";
     }
 
+    public static string CvmAttestationVerifierImage()
+    {
+        return GetImage("CCF_PROVIDER_CVM_ATTESTATION_VERIFIER_IMAGE") ??
+        $"{McrRegistryUrl}/cvm/cvm-attestation-verifier";
+    }
+
+    public static string CvmAttestationVerifierTag()
+    {
+        return GetTag("CCF_PROVIDER_CVM_ATTESTATION_VERIFIER_IMAGE") ?? $"{McrTag}";
+    }
+
     public static string CcfRecoveryServiceImage()
     {
         return GetImage("CCF_PROVIDER_RECOVERY_SERVICE_IMAGE") ??
@@ -198,16 +209,6 @@ public static class ImageUtils
         return GetTag("CCF_PROVIDER_PROXY_IMAGE") ?? $"{McrTag}";
     }
 
-    public static string CcrAttestationImage()
-    {
-        return GetImage("CCF_PROVIDER_ATTESTATION_IMAGE") ?? $"{McrRegistryUrl}/ccr-attestation";
-    }
-
-    public static string CcrAttestationTag()
-    {
-        return GetTag("CCF_PROVIDER_ATTESTATION_IMAGE") ?? McrTag;
-    }
-
     public static string SkrImage()
     {
         return GetImage("CCF_PROVIDER_SKR_IMAGE") ?? $"{McrRegistryUrl}/skr";
@@ -232,12 +233,12 @@ public static class ImageUtils
     public static string LocalSkrImage()
     {
         // TODO (anrdesai): Move test image references to test project
-        return "cleanroombuild.azurecr.io/local-skr";
+        return GetImage("CCF_PROVIDER_LOCAL_SKR_IMAGE") ?? $"{McrRegistryUrl}/local-skr";
     }
 
     public static string LocalSkrTag()
     {
-        return "latest";
+        return GetTag("CCF_PROVIDER_LOCAL_SKR_IMAGE") ?? $"{McrTag}";
     }
 
     private static string? GetImage(string envVar)
@@ -245,7 +246,7 @@ public static class ImageUtils
         var image = Environment.GetEnvironmentVariable(envVar);
         if (!string.IsNullOrEmpty(image))
         {
-            // localhost:5000/foo/bar:123 => localhost:500/foo/bar
+            // localhost:5000/foo/bar:123 => localhost:5000/foo/bar
             int finalPart = image.LastIndexOf("/");
             int finalColon = image.LastIndexOf(":");
             if (finalColon > finalPart)

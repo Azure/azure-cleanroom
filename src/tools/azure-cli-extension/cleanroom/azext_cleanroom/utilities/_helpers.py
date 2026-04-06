@@ -3,7 +3,7 @@ from cleanroom_common.azure_cleanroom_core.exceptions.exception import (
     CleanroomSpecificationError,
     ErrorCode,
 )
-from cleanroom_common.azure_cleanroom_core.models.model import *
+from cleanroom_common.azure_cleanroom_core.models.cleanroom import *
 from knack.log import get_logger
 
 logger = get_logger(__name__)

@@ -53,11 +53,13 @@ function canCgsOperatorPass(action) {
 function canContractOperatorPass(action) {
   const allowedOperatorActions = [
     "set_deployment_spec",
+    "set_deployment_info",
     "set_clean_room_policy"
   ];
 
   const actionToOption = {
     set_deployment_spec: "autoapprove-deploymentspec-proposal",
+    set_deployment_info: "autoapprove-deploymentinfo-proposal",
     set_clean_room_policy: "autoapprove-cleanroompolicy-proposal"
   };
 
@@ -89,6 +91,7 @@ function canVetoAction(action) {
     "set_contract",
     "set_clean_room_policy",
     "set_deployment_spec",
+    "set_deployment_info",
     "set_contract_runtime_options_enable_logging",
     "set_contract_runtime_options_enable_telemetry",
     "set_member_document"

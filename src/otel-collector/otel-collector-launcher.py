@@ -1,4 +1,6 @@
 import argparse
+import base64
+import json
 import logging
 import os
 import signal
@@ -35,6 +37,14 @@ class OtelConfig(BaseModel):
 
     tempo_endpoint: str = Field(default=os.getenv("TEMPO_ENDPOINT") or "")
 
+    spark_metrics_endpoint: str = Field(
+        default=os.getenv("SPARK_METRICS_ENDPOINT") or ""
+    )
+
+    resource_attributes_base64: str = Field(
+        default=os.getenv("RESOURCE_ATTRIBUTES") or ""
+    )
+
     @property
     def file_exporters_enabled(self) -> bool:
         return self.telemetry_path != ""
@@ -50,6 +60,14 @@ class OtelConfig(BaseModel):
     @property
     def tempo_enabled(self) -> bool:
         return self.tempo_endpoint != ""
+
+    @property
+    def apache_spark_enabled(self) -> bool:
+        return self.spark_metrics_endpoint != ""
+
+    @property
+    def resource_processor_enabled(self) -> bool:
+        return self.resource_attributes_base64 != ""
 
     @property
     def prometheus_insecure(self) -> bool:
@@ -115,6 +133,18 @@ def main():
                 "loki_enabled": config.loki_enabled,
                 "tempo_enabled": config.tempo_enabled,
                 "file_exporters_enabled": config.file_exporters_enabled,
+                "apache_spark_enabled": config.apache_spark_enabled,
+                "spark_metrics_endpoint": config.spark_metrics_endpoint,
+                "resource_processor_enabled": config.resource_processor_enabled,
+                "resource_attributes": (
+                    json.loads(
+                        base64.b64decode(config.resource_attributes_base64).decode(
+                            "utf-8"
+                        )
+                    )
+                    if config.resource_attributes_base64
+                    else {}
+                ),
             }
         )
 

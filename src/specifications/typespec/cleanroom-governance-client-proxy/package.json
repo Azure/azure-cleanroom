@@ -1,0 +1,14 @@
+{
+  "name": "cleanroom-governance-client-proxy",
+  "version": "0.2.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@typespec/compiler": "latest",
+    "@typespec/http": "latest",
+    "@typespec/rest": "latest",
+    "@typespec/openapi3": "latest",
+    "@typespec/http-client-python": "latest",
+    "@typespec/http-server-csharp": "latest"
+  }
+}

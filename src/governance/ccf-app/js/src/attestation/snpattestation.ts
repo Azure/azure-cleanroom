@@ -1,12 +1,7 @@
 // From https://github.com/microsoft/CCF/blob/a4666e003e6cf2142db0d413082839501b4cca6f/tests/npm-app/src/endpoints/snp_attestation.ts
 import { Base64 } from "js-base64";
 import * as ccfapp from "@microsoft/ccf-app";
-import {
-  getCustomCleanRoomPolicyProps,
-  getContractCleanRoomPolicyProps,
-  hex,
-  isEmpty
-} from "../utils/utils";
+import { hex, verifyPolicyClaims } from "../utils/utils";
 import { SnpAttestationClaims } from "./SnpAttestationClaims";
 import * as ccfsnp from "@microsoft/ccf-app/snp_attestation";
 
@@ -81,22 +76,8 @@ export interface SnpAttestationResult {
 
 export function verifySnpAttestation(
   contractId: string,
-  attestation: SnpEvidence
-): SnpAttestationResult {
-  return verifySnpAttestationInternal(contractId, attestation, true);
-}
-
-export function verifySnpAttestationViaCustomPolicy(
-  key: string,
-  attestation: SnpEvidence
-): SnpAttestationResult {
-  return verifySnpAttestationInternal(key, attestation, false);
-}
-
-function verifySnpAttestationInternal(
-  policyKey: string,
   attestation: SnpEvidence,
-  isContract: boolean
+  delegatedPolicies?: string[]
 ): SnpAttestationResult {
   const evidence = ccfapp
     .typedArray(Uint8Array)
@@ -121,49 +102,8 @@ function verifySnpAttestationInternal(
   const claimsProvider = new SnpAttestationClaims(r);
   const attestationClaims = claimsProvider.getClaims();
 
-  // Get the clean room policy.
-  const cleanroomPolicy = isContract
-    ? getContractCleanRoomPolicyProps(policyKey)
-    : getCustomCleanRoomPolicyProps(policyKey);
-
-  console.log(
-    `Clean room policy: ${JSON.stringify(cleanroomPolicy)}, keys: ${Object.keys(
-      cleanroomPolicy
-    )}, keys: ${Object.keys(cleanroomPolicy).length}`
-  );
-
-  if (isEmpty(cleanroomPolicy)) {
-    throw Error(
-      "The clean room policy is missing. Please propose a new clean room policy."
-    );
-  }
-
-  for (let inx = 0; inx < Object.keys(cleanroomPolicy).length; inx++) {
-    const key = Object.keys(cleanroomPolicy)[inx];
-
-    // check if key is in attestation
-    const attestationValue = attestationClaims[key];
-    const policyValue = cleanroomPolicy[key];
-    const isUndefined = typeof attestationValue === "undefined";
-    console.log(
-      `Checking key ${key}, typeof attestationValue: ${typeof attestationValue}, ` +
-        `isUndefined: ${isUndefined}, attestation value: ${attestationValue}, policyValue: ${policyValue}`
-    );
-    if (isUndefined) {
-      console.log(`Policy claim ${key} is missing from attestation`);
-      throw Error(`Missing claim in attestation: ${key}`);
-    }
-    if (
-      policyValue.filter((p) => {
-        console.log(`Check if policy value ${p} === ${attestationValue}`);
-        return p === attestationValue;
-      }).length === 0
-    ) {
-      throw Error(
-        `Attestation claim ${key}, value ${attestationValue} does not match policy values: ${policyValue}`
-      );
-    }
-  }
+  // Verify attestation claims against the cleanroom policy (and delegated policies).
+  verifyPolicyClaims(contractId, attestationClaims, delegatedPolicies);
 
   return {
     attestation: {

@@ -9,6 +9,7 @@ export interface Certificate {
 
 export interface CleanRoom {
   crypto: CleanRoomCrypto;
+  attestation: CleanRoomAttestation;
 }
 
 export interface CleanRoomCrypto {
@@ -53,4 +54,32 @@ export interface CleanRoomCrypto {
     ca: boolean,
     caPathLenConstraint?: number
   ): Certificate;
+}
+
+export interface CvmSnpAttestationCheckResult {
+  passed: boolean;
+  detail: string;
+}
+
+export interface CvmSnpAttestationNamedCheck {
+  id: string;
+  result: CvmSnpAttestationCheckResult;
+}
+
+export interface CvmSnpAttestationResult {
+  verified: boolean;
+  checks: CvmSnpAttestationNamedCheck[];
+  runtimeClaims: Record<string, unknown>;
+}
+
+export interface CleanRoomAttestation {
+  /**
+   * Verifies Azure CVM SNP attestation evidence collected via the vTPM path.
+   * Takes as input the TPM quote, HCL report (wrapping the SNP report),
+   * the VCEK certificate, AIK certificate, PCR values, and a nonce.
+   *
+   * @param evidence A JSON string containing the attestation evidence and nonce.
+   * @returns The verification result with individual check statuses.
+   */
+  verifyCvmSnpAttestation(evidence: string): CvmSnpAttestationResult;
 }

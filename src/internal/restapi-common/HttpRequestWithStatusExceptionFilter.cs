@@ -3,7 +3,6 @@
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.Rest.TransientFaultHandling;
 
 namespace Controllers;
 
@@ -17,11 +16,11 @@ public class HttpRequestWithStatusExceptionFilter : IActionFilter, IOrderedFilte
 
     public void OnActionExecuted(ActionExecutedContext context)
     {
-        if (context.Exception is HttpRequestWithStatusException httpResponseException)
+        if (context.Exception is Azure.RequestFailedException httpResponseException)
         {
             context.Result = new ObjectResult(httpResponseException.Message)
             {
-                StatusCode = (int)httpResponseException.StatusCode
+                StatusCode = httpResponseException.Status
             };
 
             context.ExceptionHandled = true;

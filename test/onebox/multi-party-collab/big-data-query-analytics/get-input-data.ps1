@@ -1,4 +1,3 @@
-
 function Get-InputData {
     param(
         [string]
@@ -7,43 +6,75 @@ function Get-InputData {
         $handles,
 
         [DateTimeOffset]
-        $startDate
+        $startDate,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("csv", "json", "parquet")][string]
+        $format = "csv",
+
+        [Parameter(Mandatory = $true)]
+        [string]
+        $schemaFields = "date:date,time:string,author:string,mentions:string",
+
+        [string]
+        $baseUrl = "https://github.com/Azure-Samples/Synapse/raw/refs/heads/main/Data/Tweets"
     )
 
-    #https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
     $ErrorActionPreference = 'Stop'
     $PSNativeCommandUseErrorActionPreference = $true
 
-    # Use sample dataset at https://github.com/Azure-Samples/Synapse/tree/main/Data/Tweets
-    $src = "https://github.com/Azure-Samples/Synapse/raw/refs/heads/main/Data/Tweets"
-
-    Write-Output "Downloading data from '$src'..."
-
+    $scriptDir = $PSScriptRoot
+    $currentDate = $startDate
     foreach ($handle in $handles) {
-        $destDir = $dataDir
+        New-Item -ItemType Directory -Force -Path "$dataDir/csv" | Out-Null
+        $outputDir = "$dataDir/csv"
         if ($startDate -ne [DateTimeOffset]::MinValue) {
-            $destDir = Join-Path -Path $dataDir -ChildPath $startDate.ToString("yyyy-MM-dd")
-            mkdir -p $destDir
-            $startDate = $startDate.AddDays(1)
+            $outputDir = Join-Path "$dataDir/csv" ($currentDate.ToString("yyyy-MM-dd"))
+            $currentDate = $currentDate.AddDays(1)
         }
 
-        Write-Output "Downloading data for '$handle' to {$destDir}..."
-        curl -sS -L "$src/$handle.csv" -o "$destDir/$handle.csv"
+        New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+
+        $csvUrl = "$baseUrl/$handle.csv"
+        $csvPath = Join-Path $outputDir "$handle.csv"
+
+        Write-Host "Downloading data for $handle from $csvUrl..."
+        Invoke-WebRequest -Uri $csvUrl -OutFile $csvPath
     }
-
-    Write-Output "Downloaded data '$dataDir'."
+    if ($format -ne "csv") {
+        New-Item -ItemType Directory -Force -Path "$dataDir/$format" | Out-Null
+        $pythonScript = "$scriptDir/convert_data.py"
+        $argsList = @(
+            $pythonScript,
+            "--data-dir", "$dataDir/csv",
+            "--output-dir", "$dataDir/$format",
+            "--format", $format,
+            "--schema-fields", $schemaFields
+        )
+        python3 @argsList
+        if ($LASTEXITCODE -ne 0) {
+            throw "Error executing data conversion script"
+        }
+    }
 }
-
 function Get-PublisherData {
     param(
         [string]
         $dataDir,
 
         [DateTimeOffset]
-        $startDate = [DateTimeOffset]::MinValue
+        $startDate = [DateTimeOffset]::MinValue,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("csv", "json", "parquet")][string]
+        $format = "csv",
+
+        [Parameter(Mandatory = $true)]
+        [string]
+        $schemaFields = "date:date,time:string,author:string,mentions:string"
     )
     $handles = ("RahulPotharajuTweets", "raghurwiTweets", "MikeDoesBigDataTweets", "SQLCindyTweets")
-    Get-InputData -dataDir $dataDir -handles $handles -startDate $startDate
+    Get-InputData -dataDir $dataDir -handles $handles -startDate $startDate -format $format -schemaFields $schemaFields
 }
 
 function Get-ConsumerData {
@@ -52,8 +83,16 @@ function Get-ConsumerData {
         $dataDir,
 
         [DateTimeOffset]
-        $startDate = [DateTimeOffset]::MinValue
+        $startDate = [DateTimeOffset]::MinValue,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("csv", "json", "parquet")][string]
+        $format = "csv",
+
+        [Parameter(Mandatory = $true)]
+        [string]
+        $schemaFields = "date:date,time:string,author:string,mentions:string"
     )
     $handles = ("BrigitMurtaughTweets", "FranmerMSTweets", "JeremyLiknessTweets", "mwinkleTweets")
-    Get-InputData -dataDir $dataDir -handles $handles -startDate $startDate
+    Get-InputData -dataDir $dataDir -handles $handles -startDate $startDate -format $format -schemaFields $schemaFields
 }

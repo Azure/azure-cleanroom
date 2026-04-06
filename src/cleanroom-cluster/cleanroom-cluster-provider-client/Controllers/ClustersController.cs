@@ -48,7 +48,17 @@ public class ClustersController : ClusterClientController
         }
 
         ClusterProvider provider = this.GetCleanRoomClusterProvider(content.InfraType);
-        var pError = provider.CreateClusterValidate(clusterName, content.ProviderConfig);
+        var clusterInput = new CleanRoomClusterInput
+        {
+            ObservabilityProfile = content.ObservabilityProfile,
+            MonitoringProfile = content.MonitoringProfile,
+            AnalyticsWorkloadProfile = content.AnalyticsWorkloadProfile,
+            InferencingWorkloadProfile = content.InferencingWorkloadProfile,
+            FlexNodeProfile = content.FlexNodeProfile,
+            AadProfile = content.AadProfile
+        };
+        var pError =
+            provider.CreateClusterValidate(clusterName, clusterInput, content.ProviderConfig);
         if (pError != null)
         {
             return this.BadRequest(pError);
@@ -56,7 +66,11 @@ public class ClustersController : ClusterClientController
 
         if (async)
         {
-            await this.queue.PerformAsync(this.operationStore, this.HttpContext, CreateCluster);
+            await this.queue.PerformAsync(
+                this.operationStore,
+                this.HttpContext,
+                CreateCluster,
+                this.logger);
             return this.Accepted();
         }
         else
@@ -78,6 +92,49 @@ public class ClustersController : ClusterClientController
                 }
             }
 
+            if (content.InferencingWorkloadProfile?.KServeProfile != null &&
+                content.InferencingWorkloadProfile.KServeProfile.Enabled)
+            {
+                if (string.IsNullOrEmpty(
+                    content.InferencingWorkloadProfile.KServeProfile.ConfigurationUrl))
+                {
+                    return this.BadRequest(new ODataError(
+                    code: "ConfigurationUrlMissing",
+                    message: "A configuration Url must be provided for enabling inferencing workload."));
+                }
+            }
+
+            if (content.AadProfile?.AdminGroupObjectIds != null &&
+                content.AadProfile.AdminGroupObjectIds.Any())
+            {
+                foreach (var objectId in content.AadProfile.AdminGroupObjectIds)
+                {
+                    if (!Guid.TryParse(objectId, out _))
+                    {
+                        return this.BadRequest(new ODataError(
+                            code: "InvalidAdminGroupObjectId",
+                            message: $"Admin group object ID '{objectId}' is not a valid GUID."));
+                    }
+                }
+            }
+
+            if (content.FlexNodeProfile != null && content.FlexNodeProfile.Enabled)
+            {
+                if (string.IsNullOrEmpty(content.FlexNodeProfile.PolicySigningCertPem))
+                {
+                    return this.BadRequest(new ODataError(
+                        code: "SigningCertMissing",
+                        message: "Signing certificate PEM is required for flex node deployment."));
+                }
+
+                if (content.FlexNodeProfile.NodeCount < 1)
+                {
+                    return this.BadRequest(new ODataError(
+                        code: "InvalidNodeCount",
+                        message: "Flex node count must be greater than 0."));
+                }
+            }
+
             return null;
         }
 
@@ -85,11 +142,7 @@ public class ClustersController : ClusterClientController
         {
             return await provider.CreateCluster(
                 clusterName,
-                new CleanRoomClusterInput
-                {
-                    ObservabilityProfile = content.ObservabilityProfile,
-                    AnalyticsWorkloadProfile = content.AnalyticsWorkloadProfile
-                },
+                clusterInput,
                 content.ProviderConfig,
                 progressReporter);
         }
@@ -108,7 +161,17 @@ public class ClustersController : ClusterClientController
         }
 
         ClusterProvider provider = this.GetCleanRoomClusterProvider(content.InfraType);
-        var pError = provider.CreateClusterValidate(clusterName, content.ProviderConfig);
+        var clusterInput = new CleanRoomClusterInput
+        {
+            ObservabilityProfile = content.ObservabilityProfile,
+            MonitoringProfile = content.MonitoringProfile,
+            AnalyticsWorkloadProfile = content.AnalyticsWorkloadProfile,
+            InferencingWorkloadProfile = content.InferencingWorkloadProfile,
+            FlexNodeProfile = content.FlexNodeProfile,
+            AadProfile = content.AadProfile
+        };
+        var pError =
+            provider.CreateClusterValidate(clusterName, clusterInput, content.ProviderConfig);
         if (pError != null)
         {
             return this.BadRequest(pError);
@@ -116,7 +179,11 @@ public class ClustersController : ClusterClientController
 
         if (async)
         {
-            await this.queue.PerformAsync(this.operationStore, this.HttpContext, UpdateCluster);
+            await this.queue.PerformAsync(
+                this.operationStore,
+                this.HttpContext,
+                UpdateCluster,
+                this.logger);
             return this.Accepted();
         }
         else
@@ -146,6 +213,49 @@ public class ClustersController : ClusterClientController
                 }
             }
 
+            if (content.InferencingWorkloadProfile?.KServeProfile != null &&
+                content.InferencingWorkloadProfile.KServeProfile.Enabled)
+            {
+                if (string.IsNullOrEmpty(
+                    content.InferencingWorkloadProfile.KServeProfile.ConfigurationUrl))
+                {
+                    return this.BadRequest(new ODataError(
+                        code: "ConfigurationUrlMissing",
+                        message: "A configuration Url must be provided for enabling inferencing workload."));
+                }
+            }
+
+            if (content.AadProfile?.AdminGroupObjectIds != null &&
+                content.AadProfile.AdminGroupObjectIds.Any())
+            {
+                foreach (var objectId in content.AadProfile.AdminGroupObjectIds)
+                {
+                    if (!Guid.TryParse(objectId, out _))
+                    {
+                        return this.BadRequest(new ODataError(
+                            code: "InvalidAdminGroupObjectId",
+                            message: $"Admin group object ID '{objectId}' is not a valid GUID."));
+                    }
+                }
+            }
+
+            if (content.FlexNodeProfile != null && content.FlexNodeProfile.Enabled)
+            {
+                if (string.IsNullOrEmpty(content.FlexNodeProfile.PolicySigningCertPem))
+                {
+                    return this.BadRequest(new ODataError(
+                        code: "SigningCertMissing",
+                        message: "Signing certificate PEM is required for flex node deployment."));
+                }
+
+                if (content.FlexNodeProfile.NodeCount < 1)
+                {
+                    return this.BadRequest(new ODataError(
+                        code: "InvalidNodeCount",
+                        message: "Flex node count must be greater than 0."));
+                }
+            }
+
             return null;
         }
 
@@ -153,11 +263,7 @@ public class ClustersController : ClusterClientController
         {
             return await provider.UpdateCluster(
                 clusterName,
-                new CleanRoomClusterInput
-                {
-                    ObservabilityProfile = content.ObservabilityProfile,
-                    AnalyticsWorkloadProfile = content.AnalyticsWorkloadProfile
-                },
+                clusterInput,
                 content.ProviderConfig,
                 progressReporter);
         }
@@ -206,17 +312,19 @@ public class ClustersController : ClusterClientController
     [HttpPost("/clusters/{clusterName}/getkubeconfig")]
     public async Task<IActionResult> GetCleanRoomClusterKubeconfig(
         [FromRoute] string clusterName,
-        [FromBody] GetClusterInput content)
+        [FromBody] GetClusterKubeConfigInput content)
     {
         ClusterProvider provider = this.GetCleanRoomClusterProvider(content.InfraType);
-        var pError = provider.GetClusterValidate(clusterName, content.ProviderConfig);
+        var pError = provider.GetClusterKubeConfigValidate(clusterName, content.ProviderConfig);
         if (pError != null)
         {
             return this.BadRequest(pError);
         }
 
-        var kubeConfig =
-            await provider.GetClusterKubeConfig(clusterName, content.ProviderConfig);
+        var kubeConfig = await provider.GetClusterKubeConfig(
+            clusterName,
+            content.ProviderConfig,
+            content.AccessRole);
         if (kubeConfig != null)
         {
             return this.Ok(kubeConfig);
@@ -227,8 +335,33 @@ public class ClustersController : ClusterClientController
             message: $"No cluster named {clusterName} was found."));
     }
 
+    [HttpPost("/clusters/{clusterName}/health")]
+    public async Task<IActionResult> GetCleanRoomClusterHealth(
+        [FromRoute] string clusterName,
+        [FromBody] GetClusterInput content)
+    {
+        ClusterProvider provider = this.GetCleanRoomClusterProvider(content.InfraType);
+        var pError = provider.GetClusterValidate(clusterName, content.ProviderConfig);
+        if (pError != null)
+        {
+            return this.BadRequest(pError);
+        }
+
+        var health = await provider.GetClusterHealth(
+            clusterName,
+            content.ProviderConfig);
+        if (health != null)
+        {
+            return this.Ok(health);
+        }
+
+        return this.NotFound(new ODataError(
+            code: "ClusterNotFound",
+            message: $"No cluster named {clusterName} was found."));
+    }
+
     [HttpPost("/clusters/analyticsWorkload/generateDeployment")]
-    public async Task<IActionResult> GenerateDeployment(
+    public async Task<IActionResult> GenerateAnalyticsDeployment(
         [FromBody] GenerateAnalyticsWorkloadDeploymentInput content)
     {
         ClusterProvider provider = this.GetCleanRoomClusterProvider(content.InfraType);
@@ -246,7 +379,8 @@ public class ClustersController : ClusterClientController
                 ContractUrl = content.ContractUrl!,
                 TelemetryProfile = content.TelemetryProfile,
                 ContractUrlCaCert = content.ContractUrlCaCert,
-                SecurityPolicy = content.SecurityPolicy
+                SecurityPolicy = content.SecurityPolicy,
+                ContractUrlHeaders = content.ContractUrlHeaders
             },
             content.ProviderConfig);
 
@@ -261,6 +395,44 @@ public class ClustersController : ClusterClientController
                     message: $"securityPolicyCreationOption {policyOption} is not applicable."));
             }
 
+            if (string.IsNullOrEmpty(content.ContractUrl))
+            {
+                return this.BadRequest(new ODataError(
+                    code: "InvalidInput",
+                    message: $"contractUrl must be specified."));
+            }
+
+            return null;
+        }
+    }
+
+    [HttpPost("/clusters/kserveInferencingWorkload/generateDeployment")]
+    public async Task<IActionResult> GenerateKServeInferencingDeployment(
+        [FromBody] GenerateKServeInferencingWorkloadDeploymentInput content)
+    {
+        ClusterProvider provider = this.GetCleanRoomClusterProvider(content.InfraType);
+
+        var error = ValidateCreateInput();
+        if (error != null)
+        {
+            return error;
+        }
+
+        var result = await provider.GenerateKServeInferencingWorkloadDeployment(
+            new CleanRoomProvider.GenerateKServeInferencingWorkloadDeploymentInput
+            {
+                ContractUrl = content.ContractUrl!,
+                TelemetryProfile = content.TelemetryProfile,
+                ContractUrlCaCert = content.ContractUrlCaCert,
+                ContractUrlHeaders = content.ContractUrlHeaders,
+                SecurityPolicy = content.SecurityPolicy
+            },
+            content.ProviderConfig);
+
+        return this.Ok(result);
+
+        IActionResult? ValidateCreateInput()
+        {
             if (string.IsNullOrEmpty(content.ContractUrl))
             {
                 return this.BadRequest(new ODataError(

@@ -64,14 +64,14 @@ public class ContractData
                 if (!this.CcrgovServiceCertDiscovery.SkipDigestCheck &&
                     string.IsNullOrEmpty(this.CcrgovServiceCertDiscovery.ConstitutionDigest))
                 {
-                    throw new ArgumentException("BadInput: constitutionDigest cannot be " +
+                    throw new ArgumentException("BadInput: constitutionDigest must be " +
                         "specified in the contract.");
                 }
 
                 if (!this.CcrgovServiceCertDiscovery.SkipDigestCheck &&
                     string.IsNullOrEmpty(this.CcrgovServiceCertDiscovery.JsappBundleDigest))
                 {
-                    throw new ArgumentException("BadInput: jsappBundleDigest cannot be specified " +
+                    throw new ArgumentException("BadInput: jsappBundleDigest must be specified " +
                         "in the contract.");
                 }
             }

@@ -66,6 +66,10 @@ def load_command_table(self, _):
         g.custom_command("propose", "governance_deployment_policy_propose_cmd")
         g.custom_command("show", "governance_deployment_policy_show_cmd")
 
+    with self.command_group("cleanroom governance deployment information") as g:
+        g.custom_command("propose", "governance_deployment_information_propose_cmd")
+        g.custom_command("show", "governance_deployment_information_show_cmd")
+
     with self.command_group("cleanroom governance oidc-issuer") as g:
         g.custom_command("propose-enable", "governance_oidc_issuer_propose_enable_cmd")
         g.custom_command(
@@ -81,6 +85,17 @@ def load_command_table(self, _):
             "governance_oidc_issuer_propose_set_issuer_url_cmd",
         )
         g.custom_command("show", "governance_oidc_issuer_show_cmd")
+
+    with self.command_group("cleanroom governance signing") as g:
+        g.custom_command("propose-enable", "governance_signing_propose_enable_cmd")
+        g.custom_command(
+            "generate-signing-key", "governance_signing_generate_signing_key_cmd"
+        )
+        g.custom_command(
+            "propose-rotate-signing-key",
+            "governance_signing_propose_rotate_signing_key_cmd",
+        )
+        g.custom_command("show", "governance_signing_show_cmd")
 
     with self.command_group("cleanroom governance contract runtime-option") as g:
         g.custom_command("get", "governance_contract_runtime_option_get_cmd")
@@ -109,6 +124,7 @@ def load_command_table(self, _):
         g.custom_command("propose", "governance_user_document_propose_cmd")
         g.custom_command("vote", "governance_user_document_vote_cmd")
         g.custom_command("show", "governance_user_document_show_cmd")
+        g.custom_command("list", "governance_user_document_list_cmd")
 
     with self.command_group("cleanroom governance user-document runtime-option") as g:
         g.custom_command("get", "governance_user_document_runtime_option_get_cmd")
@@ -180,6 +196,7 @@ def load_command_table(self, _):
         g.custom_command("create", "cluster_create_cmd")
         g.custom_command("update", "cluster_update_cmd")
         g.custom_command("show", "cluster_show_cmd")
+        g.custom_command("show-health", "cluster_show_health_cmd")
         g.custom_command("get-kubeconfig", "cluster_get_kubeconfig_cmd")
         g.custom_command("delete", "cluster_delete_cmd")
         g.custom_command("up", "cluster_up_cmd")
@@ -187,6 +204,13 @@ def load_command_table(self, _):
     with self.command_group("cleanroom cluster analytics-workload deployment") as g:
         g.custom_command(
             "generate", "cluster_analytics_workload_deployment_generate_cmd"
+        )
+
+    with self.command_group(
+        "cleanroom cluster kserve-inferencing-workload deployment"
+    ) as g:
+        g.custom_command(
+            "generate", "cluster_kserve_inferencing_workload_deployment_generate_cmd"
         )
 
     with self.command_group("cleanroom ccf provider") as g:
@@ -227,6 +251,22 @@ def load_command_table(self, _):
         )
         g.custom_command(
             "remove-snp-host-data", "ccf_network_join_policy_remove_snp_host_data_cmd"
+        )
+        g.custom_command(
+            "set-snp-minimum-tcb-version",
+            "ccf_network_join_policy_set_snp_minimum_tcb_version_cmd",
+        )
+        g.custom_command(
+            "remove-snp-minimum-tcb-version",
+            "ccf_network_join_policy_remove_snp_minimum_tcb_version_cmd",
+        )
+        g.custom_command(
+            "add-snp-uvm-endorsement",
+            "ccf_network_join_policy_add_snp_uvm_endorsement_cmd",
+        )
+        g.custom_command(
+            "remove-snp-uvm-endorsement",
+            "ccf_network_join_policy_remove_snp_uvm_endorsement_cmd",
         )
 
     with self.command_group("cleanroom ccf network security-policy") as g:
@@ -302,3 +342,50 @@ def load_command_table(self, _):
         g.custom_command("az-federated", "config_add_identity_az_federated_cmd")
         g.custom_command("az-secret", "config_add_identity_az_secret_cmd")
         g.custom_command("oidc-attested", "config_add_identity_oidc_attested_cmd")
+
+    with self.command_group("cleanroom collaboration") as g:
+        with self.command_group(f"{g.group_name} context") as g1:
+            g1.custom_command("list", "collaboration_context_list_cmd")
+            g1.custom_command("add", "collaboration_context_add_cmd")
+            g1.custom_command("set", "collaboration_context_set_cmd")
+            g1.custom_command("show", "collaboration_context_show_cmd")
+
+        with self.command_group(f"{g.group_name} identity") as g2:
+            g2.custom_command("list", "collaboration_identity_list_cmd")
+
+            with self.command_group(f"{g2.group_name} add") as g21:
+                g21.custom_command(
+                    "az-federated", "collaboration_identity_add_az_federated_cmd"
+                )
+                g21.custom_command(
+                    "az-secret", "collaboration_identity_add_az_secret_cmd"
+                )
+                g21.custom_command(
+                    "oidc-attested", "collaboration_identity_add_oidc_attested_cmd"
+                )
+
+        with self.command_group(f"{g.group_name} dataset") as g3:
+            g3.custom_command("list", "collaboration_dataset_list_cmd")
+            g3.custom_command("publish", "collaboration_dataset_publish_cmd")
+
+        with self.command_group(f"{g.group_name} spark-sql") as g4:
+            g4.custom_command("list", "collaboration_spark_sql_application_list_cmd")
+            g4.custom_command(
+                "publish", "collaboration_spark_sql_application_publish_cmd"
+            )
+            g4.custom_command("show", "collaboration_spark_sql_application_show_cmd")
+            g4.custom_command(
+                "execute", "collaboration_spark_sql_application_execute_cmd"
+            )
+            g4.custom_command(
+                "get-execution-status",
+                "collaboration_spark_sql_application_get_execution_status_cmd",
+            )
+
+            with self.command_group(f"{g4.group_name} query segment") as g41:
+                g41.custom_command(
+                    "add", "collaboration_spark_sql_application_querysegment_add_cmd"
+                )
+                g41.custom_command(
+                    "list", "collaboration_spark_sql_application_querysegment_list_cmd"
+                )

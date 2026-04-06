@@ -32,9 +32,9 @@ runs:
 
     - uses: ./.github/actions/build-container-and-artefacts
       with:
-        name: ccr-attestation
+        name: skr
         tag: ${{ inputs.tag }}
-        dockerfile: build/docker/Dockerfile.ccr-attestation
+        dockerfile: build/docker/Dockerfile.skr
         context: ${{ github.workspace }}
 
     - uses: ./.github/actions/build-container-and-artefacts
@@ -42,4 +42,11 @@ runs:
         name: ccf-recovery-agent
         tag: ${{ inputs.tag }}
         dockerfile: build/docker/Dockerfile.ccf-recovery-agent
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: cvm-attestation-verifier
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.cvm-attestation-verifier
         context: ${{ github.workspace }}

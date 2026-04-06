@@ -1,0 +1,50 @@
+{
+  "DATASET_LOAD_STARTED": {
+    "id": 1001,
+    "message": "Started loading dataset {dataset_name} from {dataset_path} for start_date: {start_date}, end_date: {end_date}"
+  },
+  "DATASET_LOAD_COMPLETED": {
+    "id": 1002,
+    "message": "Dataset {dataset_name} loaded successfully from {dataset_path} with {row_count} rows"
+  },
+  "DATASET_LOAD_FAILED": {
+    "id": 1003,
+    "message": "Failed to load dataset {dataset_name} from {dataset_path}: {error}"
+  },
+  "DATASET_WRITE_STARTED": {
+    "id": 1004,
+    "message": "Started writing dataset {dataset_name} to {output_path}"
+  },
+  "DATASET_WRITE_COMPLETED": {
+    "id": 1005,
+    "message": "Output to datasink {dataset_name} written successfully at {output_path} with {row_count} rows"
+  },
+  "DATASET_WRITE_FAILED": {
+    "id": 1006,
+    "message": "Failed to write dataset {dataset_name} to {output_path}: {error}"
+  },
+  "QUERY_SEGMENT_EXECUTION_STARTED": {
+    "id": 1007,
+    "message": "Started executing query segment in step {step_number}"
+  },
+  "QUERY_SEGMENT_EXECUTION_COMPLETED": {
+    "id": 1008,
+    "message": "Query segment in step {step_number} completed with {row_count} rows"
+  },
+  "QUERY_SEGMENT_EXECUTION_FAILED": {
+    "id": 1009,
+    "message": "Query segment in step {step_number} failed with error: {error}"
+  },
+  "QUERY_EXECUTION_STARTED": {
+    "id": 1010,
+    "message": "Query execution started"
+  },
+  "QUERY_EXECUTION_COMPLETED": {
+    "id": 1011,
+    "message": "Query execution completed successfully in {duration_sec} seconds"
+  },
+  "QUERY_EXECUTION_FAILED": {
+    "id": 1012,
+    "message": "Query execution failed: {error}"
+  }
+}

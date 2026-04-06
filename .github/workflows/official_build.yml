@@ -10,7 +10,7 @@ on:
       build-type:
         description: The build type
         type: string
-        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client"
+        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client, frontend-service"
   workflow_call:
     inputs:
       tag:
@@ -20,7 +20,7 @@ on:
       build-type:
         description: The build type
         type: string
-        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client"
+        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client, frontend-service"
 
 permissions:
   contents: read  # This is required for actions/checkout
@@ -34,17 +34,17 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"]
     environment: test
     steps:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
       - name: Install powershell-yaml
         shell: pwsh
-        run: Install-Module -Name powershell-yaml -RequiredVersion 0.4.7 -Force
+        run: Install-Module -Name powershell-yaml -Force
 
       # Generate SBOM for the container using
       # https://github.com/microsoft/sbom-tool/blob/main/docs/setting-up-github-actions.md#adding-the-sbom-generation-task
@@ -177,6 +177,12 @@ jobs:
       - name: Build cleanroom cluster provider client
         if: ${{ contains(inputs.build-type, 'cleanroom-cluster-provider-client') }}
         uses: ./.github/actions/build-cleanroom-cluster-provider-client
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+
+      - name: Build frontend service container
+        if: ${{ contains(inputs.build-type, 'frontend-service') }}
+        uses: ./.github/actions/build-frontend-service
         with:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
 

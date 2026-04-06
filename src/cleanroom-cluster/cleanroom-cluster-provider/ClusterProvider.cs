@@ -22,10 +22,12 @@ public class ClusterProvider
 
     public ODataError? CreateClusterValidate(
     string clusterName,
+    CleanRoomClusterInput? input,
     JsonObject? providerConfig)
     {
         return this.clusterProvider.CreateClusterValidate(
             clusterName,
+            input,
             providerConfig);
     }
 
@@ -64,6 +66,15 @@ public class ClusterProvider
             providerConfig);
     }
 
+    public ODataError? GetClusterKubeConfigValidate(
+        string clusterName,
+        JsonObject? providerConfig)
+    {
+        return this.clusterProvider.GetClusterKubeConfigValidate(
+            clusterName,
+            providerConfig);
+    }
+
     public async Task<CleanRoomCluster?> GetCluster(
         string clusterName,
         JsonObject? providerConfig)
@@ -75,9 +86,20 @@ public class ClusterProvider
 
     public async Task<CleanRoomClusterKubeConfig?> GetClusterKubeConfig(
         string clusterName,
-        JsonObject? providerConfig)
+        JsonObject? providerConfig,
+        KubeConfigAccessRole accessRole)
     {
         return await this.clusterProvider.TryGetClusterKubeConfig(
+            clusterName,
+            providerConfig,
+            accessRole);
+    }
+
+    public async Task<CleanRoomClusterHealth?> GetClusterHealth(
+        string clusterName,
+        JsonObject? providerConfig)
+    {
+        return await this.clusterProvider.TryGetClusterHealth(
             clusterName,
             providerConfig);
     }
@@ -105,6 +127,16 @@ public class ClusterProvider
         JsonObject? providerConfig)
     {
         return await this.clusterProvider.GenerateAnalyticsWorkloadDeployment(
+            input,
+            providerConfig);
+    }
+
+    public async Task<KServeInferencingWorkloadGeneratedDeployment>
+        GenerateKServeInferencingWorkloadDeployment(
+        GenerateKServeInferencingWorkloadDeploymentInput input,
+        JsonObject? providerConfig)
+    {
+        return await this.clusterProvider.GenerateKServeInferencingWorkloadDeployment(
             input,
             providerConfig);
     }

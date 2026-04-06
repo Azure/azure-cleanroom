@@ -1,10 +1,19 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\..\samples\reports\insecure-virtual\encryption\attestation.json" Link="insecure-virtual\encryption\attestation.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\..\samples\reports\insecure-virtual\signing\attestation.json" Link="insecure-virtual\signing\attestation.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Azure.Identity" />
@@ -21,30 +30,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="insecure-virtual\recovery-agent\attestation\attestation-report.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="insecure-virtual\recovery-agent\certs\cert.pem">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="insecure-virtual\recovery-agent\keys\priv_key.pem">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="insecure-virtual\recovery-agent\keys\pub_key.pem">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="insecure-virtual\recovery-service\encryption_key_attestation.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="insecure-virtual\recovery-service\signing_key_attestation.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="insecure-virtual\consortium-manager\encryption_key_attestation.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="insecure-virtual\consortium-manager\signing_key_attestation.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Update="templates\virtual\join-config.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
@@ -54,6 +39,11 @@
     <None Update="templates\virtual\start-config.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="insecure-virtual\encryption\" />
+    <Folder Include="insecure-virtual\signing\" />
   </ItemGroup>
 
 </Project>

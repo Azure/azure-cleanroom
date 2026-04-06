@@ -1,0 +1,92 @@
+name: Test big data analytics longhaul
+description: Run longhaul big data analytics tests on pre-deployed cleanroom environment
+inputs:
+  repo:
+    description: The registry URL
+    required: true
+  tag:
+    description: The tag for the built image
+    required: true
+  deploymentConfigDir:
+    description: The directory containing deployment-config.json
+    required: true
+  durationMinutes:
+    description: Total duration to run the longhaul test in minutes
+    required: false
+    default: "240"
+  pauseMinutes:
+    description: Pause duration between cycles in minutes
+    required: false
+    default: "20"
+  enableChaos:
+    description: Enable chaos actions (CCF recovery or frontend restart) between cycles
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Login to Azure and refresh token
+      uses: ./.github/actions/login-to-azure
+      env:
+        CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
+        TENANT_ID: ${{ env.AZURE_TENANT_ID }}
+        SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Install az cleanroom extension
+      shell: bash
+      run: |
+        oras pull ${{ inputs.repo }}/cli/cleanroom-whl:${{ inputs.tag }}
+        az extension add --allow-preview true --source ./cleanroom-*-py2.py3-none-any.whl -y
+
+    - name: Install uv
+      shell: bash
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+
+    - name: Install python
+      shell: bash
+      run: |
+        uv python install 3.12 3.10
+
+    - name: Deploy governance client
+      shell: bash
+      run: |
+        project_name=$(jq -r '.project_name' "${{ inputs.deploymentConfigDir }}/deployment-config.json")
+        initial_member_name=$(jq -r '.initial_member_name' "${{ inputs.deploymentConfigDir }}/deployment-config.json")
+        ccf_endpoint=$(jq -r '.ccf_endpoint' "${{ inputs.deploymentConfigDir }}/deployment-config.json")
+        out_dir=$(jq -r '.out_dir' "${{ inputs.deploymentConfigDir }}/deployment-config.json")
+
+        az cleanroom governance client deploy \
+          --ccf-endpoint "$ccf_endpoint" \
+          --signing-key "$out_dir/ccf/${initial_member_name}_privk.pem" \
+          --signing-cert "$out_dir/ccf/${initial_member_name}_cert.pem" \
+          --service-cert "$out_dir/ccf/service_cert.pem" \
+          --name "$project_name" \
+          --env-file "$out_dir/ccf/governance-client.env"
+
+    - name: Run longhaul test
+      shell: pwsh
+      run: |
+        $chaosFlag = ""
+        if ("${{ inputs.enableChaos }}" -eq "true") {
+          $chaosFlag = "-enableChaos"
+        }
+        pwsh -Command ./test/onebox/multi-party-collab/big-data-query-analytics/test-longhaul.ps1 `
+          -deploymentConfigDir "${{ inputs.deploymentConfigDir }}" `
+          -durationMinutes ${{ inputs.durationMinutes }} `
+          -pauseMinutes ${{ inputs.pauseMinutes }} `
+          $chaosFlag
+
+    - name: Dump cleanroom-cluster-provider logs
+      shell: bash
+      if: ${{ !cancelled() }}
+      run: |
+        cluster_provider_project_name=$(jq -r '.cluster_provider_project_name' "${{ inputs.deploymentConfigDir }}/deployment-config.json")
+        docker compose -p "$cluster_provider_project_name" logs
+
+    - name: Dump cleanroom-cluster logs
+      shell: pwsh
+      if: ${{ !cancelled() }}
+      run: ./test/onebox/multi-party-collab/big-data-query-analytics/dump-cleanroom-cluster-logs.ps1 `
+          -kubeConfig "${{ inputs.deploymentConfigDir }}/cl-cluster/k8s-credentials.yaml" `
+          -jobConfig "${{ inputs.deploymentConfigDir }}/analytics-workload/jobConfig.json"

@@ -1,8 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using AttestationClient;
 using CoseUtils;
 using Microsoft.AspNetCore.Mvc;
 
@@ -27,7 +29,7 @@ public class ContractsController : ClientControllerBase
     {
         var appClient = this.CcfClientManager.GetAppClient();
         using HttpResponseMessage response =
-            await appClient.GetAsync($"app/contracts/{contractId}");
+            await appClient.PostAsync($"app/contracts/{contractId}", content: null);
         await response.ValidateStatusCodeAsync(this.Logger);
         this.Response.CopyHeaders(response.Headers);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
@@ -85,7 +87,7 @@ public class ContractsController : ClientControllerBase
         JsonObject currentContract;
         var appClient = this.CcfClientManager.GetAppClient();
         using (HttpResponseMessage gr =
-            await appClient.GetAsync($"app/contracts/{contractId}"))
+            await appClient.PostAsync($"app/contracts/{contractId}", content: null))
         {
             await gr.ValidateStatusCodeAsync(this.Logger);
             currentContract = (await gr.Content.ReadFromJsonAsync<JsonObject>())!;
@@ -192,7 +194,7 @@ public class ContractsController : ClientControllerBase
         JsonObject currentContract;
         var appClient = this.CcfClientManager.GetAppClient();
         using (HttpResponseMessage gr =
-            await appClient.GetAsync($"app/contracts/{contractId}"))
+            await appClient.PostAsync($"app/contracts/{contractId}", content: null))
         {
             await gr.ValidateStatusCodeAsync(this.Logger);
             currentContract = (await gr.Content.ReadFromJsonAsync<JsonObject>())!;

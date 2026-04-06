@@ -5,11 +5,11 @@ namespace CcfConsortiumMgrProvider;
 
 public class CcfConsortiumManager
 {
-    public string Name { get; set; } = default!;
+    public required string Name { get; set; }
 
-    public string InfraType { get; set; } = default!;
+    public required string InfraType { get; set; }
 
-    public string Endpoint { get; set; } = default!;
+    public required string Endpoint { get; set; }
 
-    public string ServiceCert { get; set; } = default!;
+    public required string ServiceCert { get; set; }
 }

@@ -1,0 +1,24 @@
+// Import all model files
+import "./models/sign.tsp";
+import "./models/encrypt.tsp";
+import "./models/snpattestation.tsp";
+import "./models/cvmsnpattestation.tsp";
+import "./models/kvstoremodels.tsp";
+import "./models/contractmodels.tsp";
+import "./models/eventmodels.tsp";
+import "./models/secretmodels.tsp";
+import "./models/memberdocumentmodels.tsp";
+import "./models/userdocumentmodels.tsp";
+import "./models/camodels.tsp";
+import "./models/userproposalmodels.tsp";
+import "./models/errorresponse.tsp";
+import "./models/tokenmodels.tsp";
+import "./models/openidmodels.tsp";
+import "./models/proposalmodels.tsp";
+import "./models/membermodels.tsp";
+import "./models/useridentitiesmodel.tsp";
+import "./models/userinvitationmodels.tsp";
+import "./models/cleanroompolicymodels.tsp";
+import "./models/contractruntimeoptionsmodel.tsp";
+import "./models/deploymentinfomodels.tsp";
+import "./models/deploymentspecmodels.tsp";

@@ -2,26 +2,27 @@ import * as ccfapp from "@microsoft/ccf-app";
 import { ccf, RsaOaepAesKwpParams } from "@microsoft/ccf-app/global";
 import {
   GenerateEndorsedCertRequest,
-  CAKeyItem,
+  CaKeyItem,
   GenerateEndorsedCertRequestData
 } from "../../models";
-import { ErrorResponse } from "../../models/errorresponse";
+import { ErrorResponse } from "../../utils/ErrorResponse";
 import { getLastGenerateRequestId, isCAEnabledInternal } from "./ca";
+import { verifyAttestationAndReportData } from "../../attestation/attestationVerifierFactory";
 import {
-  SnpAttestationResult,
-  verifySnpAttestation
-} from "../../attestation/snpattestation";
-import { b64ToBuf, verifyReportData, verifySignature } from "../../utils/utils";
+  b64ToBuf,
+  toDelegatePolicyKey,
+  verifySignature
+} from "../../utils/utils";
 import { Base64 } from "js-base64";
 import { cleanroom } from "../../global.cleanroom";
 
 const caSigningKeyStore = ccfapp.typedKv(
   "ca.signing_keys",
   ccfapp.string,
-  ccfapp.json<CAKeyItem>()
+  ccfapp.json<CaKeyItem>()
 );
 
-export function getCASigningKey(contractId: string): CAKeyItem {
+export function getCASigningKey(contractId: string): CaKeyItem {
   if (caSigningKeyStore.has(contractId)) {
     return caSigningKeyStore.get(contractId);
   }
@@ -54,24 +55,18 @@ export function generateEndorsedCert(
     };
   }
 
-  // First validate attestation report.
-  let snpAttestationResult: SnpAttestationResult;
-  try {
-    snpAttestationResult = verifySnpAttestation(contractId, body.attestation);
-  } catch (e) {
+  // First validate attestation report and report data.
+  const delegatePolicyKey = toEndorsedCertPolicyKey(contractId);
+  const { error } = verifyAttestationAndReportData(
+    contractId,
+    body,
+    () => Base64.decode(body.encrypt.publicKey),
+    [delegatePolicyKey]
+  );
+  if (error) {
     return {
       statusCode: 400,
-      body: new ErrorResponse("VerifySnpAttestationFailed", e.message)
-    };
-  }
-
-  //  Then validate the report data value.
-  try {
-    verifyReportData(snpAttestationResult, body.encrypt.publicKey);
-  } catch (e) {
-    return {
-      statusCode: 400,
-      body: new ErrorResponse("ReportDataMismatch", e.message)
+      body: error
     };
   }
 
@@ -127,6 +122,10 @@ export function generateEndorsedCert(
   return { body: { value: wrappedBase64 } };
 }
 
+function toEndorsedCertPolicyKey(contractId: string): string {
+  return toDelegatePolicyKey(contractId, "ca", "endorsed-cert");
+}
+
 export function generateCASigningKey(request: ccfapp.Request): ccfapp.Response {
   const contractId = request.params.contractId;
   // Generate a signing key only if feature is enabled and a request to create a signing key
@@ -161,7 +160,7 @@ export function generateCASigningKey(request: ccfapp.Request): ccfapp.Response {
     true,
     0
   );
-  const item: CAKeyItem = {
+  const item: CaKeyItem = {
     requestId: requestId,
     publicKey: pair.publicKey,
     privateKey: pair.privateKey,

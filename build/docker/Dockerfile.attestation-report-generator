@@ -1,5 +1,5 @@
 # Use the official .NET Core SDK as the base image
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 # Set the working directory
 WORKDIR /app
@@ -26,10 +26,11 @@ COPY src/tools/attestation-report-generator /app/src/tools/attestation-report-ge
 RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/tools/attestation-report-generator/attestation-report-generator.csproj
 
 # Use the official .NET Core runtime as the base image for the final stage
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
 # Note: install iproute2 for ss command.
-RUN apt-get update && apt-get install -y curl jq iproute2
+RUN apt-get update && apt-get install -y --no-install-recommends curl jq iproute2 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
 WORKDIR /app

@@ -1,120 +1,404 @@
 ﻿@model UserDocumentViewWithMembersUsersModel
 @{
-    ViewData["Title"] = "User Documents Details";
+    ViewData["Title"] = "User Document Details";
 }
 
-<h2>Document Details</h2>
+<div class="page-header mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1 class="page-title">
+                <i class="fas fa-file-alt me-2"></i>
+                Document Details
+            </h1>
+            <p class="page-subtitle mb-0">View and manage user document configuration</p>
+        </div>
+        <div>
+            <a asp-controller="UserDocuments" asp-action="Index" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>
+                Back to Documents
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Document ID Header -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="d-flex align-items-center">
+            <div class="document-icon me-3">
+                <i class="fas fa-file-alt fa-2x text-primary"></i>
+            </div>
+            <div>
+                <h4 class="mb-1 font-monospace">@Model.Document.Id</h4>
+                <div class="d-flex align-items-center">
+                    @{
+                        var statusClass = Model.Document.State switch
+                        {
+                            "Draft" => "badge bg-secondary",
+                            "Proposed" => "badge bg-warning text-dark",
+                            "Accepted" => "badge bg-success",
+                            _ => "badge bg-light text-dark"
+                        };
+                    }
+                    <span class="@statusClass me-2">
+                        <i class="fas fa-circle me-1" style="font-size: 0.5rem;"></i>
+                        @Model.Document.State
+                    </span>
+                    <small class="text-muted">Version @Model.Document.Version</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Action Buttons -->
 @{
     if (@Model.Document.State == "Draft")
     {
-        <p><a asp-controller="UserDocuments" asp-action="Propose" asp-route-id="@Model.Document.Id" asp-route-version="@Model.Document.Version">Propose Document</a></p>
+        <div class="alert alert-info mb-4">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <i class="fas fa-info-circle me-2"></i>
+                    This document is in draft state and ready to be proposed.
+                </div>
+                <a asp-controller="UserDocuments" asp-action="Propose" asp-route-id="@Model.Document.Id"
+                    asp-route-version="@Model.Document.Version" class="btn btn-primary">
+                    <i class="fas fa-paper-plane me-1"></i>
+                    Propose Document
+                </a>
+            </div>
+        </div>
     }
     else if (Model.Document.State == "Proposed")
     {
-        <p>
-            <a asp-controller="UserDocuments" asp-action="VoteAccept" asp-route-id="@Model.Document.Id" asp-route-proposalId="@Model.Document.ProposalId">Accept Proposal</a>
-            <a asp-controller="UserDocuments" asp-action="VoteReject" asp-route-id="@Model.Document.Id" asp-route-proposalId="@Model.Document.ProposalId">Reject Proposal</a>
-        </p>
-    }
-    {
-        <p>
-            <a asp-controller="UserDocuments" asp-action="RuntimeOptionsDetail" asp-route-id="@Model.Document.Id">Runtime Options</a>
-        </p>
+        <div class="alert alert-warning mb-4">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <i class="fas fa-vote-yea me-2"></i>
+                    This document proposal is pending approver votes.
+                </div>
+                <div>
+                    <a asp-controller="UserDocuments" asp-action="VoteAccept" asp-route-id="@Model.Document.Id"
+                        asp-route-proposalId="@Model.Document.ProposalId" class="btn btn-success me-2">
+                        <i class="fas fa-check me-1"></i>
+                        Accept
+                    </a>
+                    <a asp-controller="UserDocuments" asp-action="VoteReject" asp-route-id="@Model.Document.Id"
+                        asp-route-proposalId="@Model.Document.ProposalId" class="btn btn-danger">
+                        <i class="fas fa-times me-1"></i>
+                        Reject
+                    </a>
+                </div>
+            </div>
+        </div>
     }
 }
-<table class="table">
-<thead>
-    <tr>
-        <th scope="col">Property</th>
-        <th scope="col">Value</th>
-    </tr>
-</thead>
-<tbody>
-    <tr>
-        <th scope="row">id</th>
-            <td>@Model.Document.Id</td>
-    </tr>
-        <tr>
-            <th scope="row">contractId</th>
-            <td>@Model.Document.ContractId</td>
-        </tr>
-        <tr>
-        <th scope="row">state</th>
-            <td>
-                @Model.Document.State @{
-                if (Model.Document.State == "Proposed")
-                    {
-                    <pre>(proposalId: <a asp-controller="Proposals" asp-action="Detail" asp-route-proposalId="@Model.Document.ProposalId" asp-route-version="@Model.Document.Version">@Model.Document.ProposalId</a>)</pre>
-                    }
-                }
-            </td>
-    </tr>
-    <tr>
-        <th scope="row">version</th>
-            <td>@Model.Document.Version</td>
-    </tr>
-        <tr>
-        <th scope="row">content</th>
-            <td><pre>@Model.Document.Data</pre></td>
-    </tr>
-</tbody>
-</table>
+
+<div class="alert alert-light mb-4">
+    <div class="d-flex align-items-center justify-content-between">
+        <div>
+            <i class="fas fa-cogs me-2"></i>
+            Runtime options are available for this document.
+        </div>
+        <a asp-controller="UserDocuments" asp-action="RuntimeOptionsDetail" asp-route-id="@Model.Document.Id"
+            class="btn btn-outline-primary">
+            <i class="fas fa-cogs me-1"></i>
+            Runtime Options
+        </a>
+    </div>
+</div>
+<!-- Document Details -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-info-circle me-2"></i>
+            Document Information
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="info-item">
+                    <label class="form-label fw-semibold text-muted">Document ID</label>
+                    <div class="font-monospace">@Model.Document.Id</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="info-item">
+                    <label class="form-label fw-semibold text-muted">Contract ID</label>
+                    <div class="font-monospace">@Model.Document.ContractId</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="info-item">
+                    <label class="form-label fw-semibold text-muted">Version</label>
+                    <div>@Model.Document.Version</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="info-item">
+                    <label class="form-label fw-semibold text-muted">Status</label>
+                    <div>
+                        <span class="@statusClass">
+                            <i class="fas fa-circle me-1" style="font-size: 0.5rem;"></i>
+                            @Model.Document.State
+                        </span>
+                        @{
+                            if (Model.Document.State == "Proposed")
+                            {
+                                <div class="mt-1">
+                                    <small class="text-muted">
+                                        Proposal ID:
+                                        <a asp-controller="Proposals" asp-action="Detail"
+                                            asp-route-proposalId="@Model.Document.ProposalId"
+                                            asp-route-version="@Model.Document.Version"
+                                            class="text-decoration-none">@Model.Document.ProposalId</a>
+                                    </small>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Document Content -->
+<div class="card mt-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-file-code me-2"></i>
+            Document Content
+        </h5>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copyDocumentContent()"
+            title="Copy content to clipboard">
+            <i class="fas fa-copy me-1"></i>
+            Copy
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="code-container">
+            <pre class="bg-light p-3 rounded" id="documentContent"><code>@Model.Document.Data</code></pre>
+        </div>
+    </div>
+</div>
+
+<script>
+    function copyDocumentContent() {
+        const contentElement = document.getElementById('documentContent');
+        const copyButton = document.querySelector('[onclick="copyDocumentContent()"]');
+        const originalIcon = copyButton.querySelector('i');
+        const originalText = copyButton.innerHTML;
+
+        if (contentElement) {
+            // Get the text content without HTML tags
+            const textContent = contentElement.textContent || contentElement.innerText || '';
+
+            // Use the modern clipboard API if available
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(textContent).then(() => {
+                    // Show success feedback
+                    copyButton.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+                    copyButton.classList.remove('btn-outline-secondary');
+                    copyButton.classList.add('btn-success');
+
+                    // Reset button after 2 seconds
+                    setTimeout(() => {
+                        copyButton.innerHTML = originalText;
+                        copyButton.classList.remove('btn-success');
+                        copyButton.classList.add('btn-outline-secondary');
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy text: ', err);
+                    fallbackCopyTextToClipboard(textContent, copyButton, originalText);
+                });
+            } else {
+                // Fallback for older browsers
+                fallbackCopyTextToClipboard(textContent, copyButton, originalText);
+            }
+        }
+    }
+
+    function fallbackCopyTextToClipboard(text, copyButton, originalText) {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                // Show success feedback
+                copyButton.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+                copyButton.classList.remove('btn-outline-secondary');
+                copyButton.classList.add('btn-success');
+
+                // Reset button after 2 seconds
+                setTimeout(() => {
+                    copyButton.innerHTML = originalText;
+                    copyButton.classList.remove('btn-success');
+                    copyButton.classList.add('btn-outline-secondary');
+                }, 2000);
+            } else {
+                console.error('Fallback: Copying text command was unsuccessful');
+            }
+        } catch (err) {
+            console.error('Fallback: Oops, unable to copy', err);
+        }
+
+        document.body.removeChild(textArea);
+    }
+</script>
 
 @if (Model.Document.Approvers != null && Model.Document.Approvers.Any())
 {
-    <h3>Approvers</h3>
-    <table class="table table-hover w-auto">
-        <thead>
-            <tr>
-                <th>ApproverId</th>
-                <th>Username</th>
-                <th>Type</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var approver in @Model.Document.Approvers)
-            {
-                <tr>
-                    <td>
-                        <pre>@approver.ApproverId</pre>
-                    </td>
-                    @{string? name = approver.ApproverIdType == "user" ? 
-                    @Model.Users.Value.Find(u => u.Id == approver.ApproverId)?.Data.Identifier : 
-                    @Model.Members.Value.Find(u => u.MemberId == approver.ApproverId)?.MemberData.Identifier;}
-                    <td>
-                        <pre>@name</pre>
-                    </td>
-                    <td>
-                        <pre>@approver.ApproverIdType</pre>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-users me-2"></i>
+                Approvers
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col">
+                                <i class="fas fa-user me-1"></i>
+                                Approver ID
+                            </th>
+                            <th scope="col">
+                                <i class="fas fa-tag me-1"></i>
+                                Name
+                            </th>
+                            <th scope="col">
+                                <i class="fas fa-user-tag me-1"></i>
+                                Type
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var approver in @Model.Document.Approvers)
+                        {
+                            <tr>
+                                <td>
+                                    <span class="font-monospace">@approver.ApproverId</span>
+                                </td>
+                                @{
+                                    string? name = approver.ApproverIdType == "user" ?
+                                    @Model.Users.Value.Find(u => u.Id == approver.ApproverId)?.Data.Identifier :
+                                    @Model.Members.Value.Find(u => u.MemberId == approver.ApproverId)?.MemberData.Identifier;
+                                }
+                                <td>
+                                    <span class="fw-medium">@name</span>
+                                </td>
+                                <td>
+                                    @{
+                                        var typeClass = approver.ApproverIdType?.ToLower() switch
+                                        {
+                                            "user" => "badge bg-primary",
+                                            "member" => "badge bg-success",
+                                            _ => "badge bg-secondary"
+                                        };
+                                    }
+                                    <span class="@typeClass">
+                                        @approver.ApproverIdType
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 }
 
 @if (Model.Document.FinalVotes != null && Model.Document.FinalVotes.Any())
 {
-    <h3>Final Votes</h3>
-    <table class="table table-hover w-auto">
-        <thead>
-            <tr>
-                <th>ApproverId</th>
-                <th>Vote</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var vote in @Model.Document.FinalVotes)
-            {
-                <tr>
-                    <td>
-                        <pre>@vote.ApproverId</pre>
-                    </td>
-                    <td>
-                        <pre>@vote.Ballot</pre>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-vote-yea me-2"></i>
+                Final Votes
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col">
+                                <i class="fas fa-user me-1"></i>
+                                Approver Name
+                            </th>
+                            <th scope="col">
+                                <i class="fas fa-check-circle me-1"></i>
+                                Vote
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var vote in @Model.Document.FinalVotes)
+                        {
+                            var approver = Model.Document.Approvers?.FirstOrDefault(a => a.ApproverId == vote.ApproverId);
+                            string? name = approver?.ApproverIdType == "user" ?
+                            @Model.Users.Value.Find(u => u.Id == vote.ApproverId)?.Data.Identifier :
+                            @Model.Members.Value.Find(m => m.MemberId == vote.ApproverId)?.MemberData.Identifier;
+
+                            var voteClass = vote.Ballot?.ToLower() switch
+                            {
+                                "accept" => "badge bg-success",
+                                "reject" => "badge bg-danger",
+                                _ => "badge bg-secondary"
+                            };
+
+                            <tr>
+                                <td>
+                                    <span class="fw-medium">@(name ?? vote.ApproverId)</span>
+                                </td>
+                                <td>
+                                    <span class="@voteClass">
+                                        @vote.Ballot
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Labels Section -->
+@if (Model.Document.LabelsView != null && Model.Document.LabelsView.Any())
+{
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-tags me-2"></i>
+                Labels
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var label in Model.Document.LabelsView)
+                {
+                    <span class="badge bg-light text-dark border"
+                        style="font-weight: 500; font-size: 0.9rem; padding: 0.5rem 0.75rem;">
+                        <i class="fas fa-tag me-1" style="font-size: 0.75rem;"></i>
+                        <span class="text-muted">@label.Name:</span>
+                        <span class="ms-1">@label.Value</span>
+                    </span>
+                }
+            </div>
+        </div>
+    </div>
 }

@@ -1,5 +1,5 @@
 # Use the official .NET Core SDK as the base image
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 # Set the working directory
 WORKDIR /app
@@ -25,22 +25,28 @@ COPY src/ccf/consortium-manager/ccf-consortium-manager-provider/*.csproj /app/sr
 COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
 COPY src/internal/Cose/*.csproj /app/src/internal/Cose/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
+COPY src/internal/clientauth-common/*.csproj /app/src/internal/clientauth-common/
 RUN dotnet restore /app/src/ccf/ccf.sln
 
 # copy everything else and build app
 COPY stylecop.json /app
 COPY Menees.Analyzers.Settings.xml /app
 COPY .editorconfig /app
+COPY samples/reports /app/samples/reports
 COPY src/internal /app/src/internal
 COPY src/ccf /app/src/ccf
+
+# Build the test project to catch any build issues
+RUN dotnet build -c Release --no-restore /app/src/ccf/tests/ccf-tests.csproj
 
 # Publish the application
 RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/ccf/ccf-provider-client/ccf-provider-client.csproj
 
 # Use the official .NET Core runtime as the base image for the final stage
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
-RUN apt-get update && apt-get install -y curl
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN VERSION="1.2.0" && \
     curl -LO "https://github.com/oras-project/oras/releases/download/v${VERSION}/oras_${VERSION}_linux_amd64.tar.gz" && \

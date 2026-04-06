@@ -9,10 +9,15 @@
 
 #include "app/checks.h"
 #include "ccf/app_interface.h"
+#include "ccf/ds/logger.h"
 #include "ccf/js/samples/governance_driven_registry.h"
 #include "crypto/certs.h"
 
+#include <cstdlib>
+#include <httplib.h>
+#include <nlohmann/json.hpp>
 #include <openssl/crypto.h>
+#include <stdexcept>
 
 namespace cleanroomapp::js::extensions
 {
@@ -68,6 +73,37 @@ namespace cleanroomapp::js::extensions
     }
 
     return ccf::js::core::constants::Undefined;
+  }
+
+  // Makes an HTTP POST request to the given host:port/path with the
+  // provided JSON body. Returns the response body as a string.
+  static std::string http_post(
+    const std::string& host,
+    int port,
+    const std::string& path,
+    const std::string& body)
+  {
+    httplib::Client client(host, port);
+    client.set_connection_timeout(30);
+    client.set_read_timeout(30);
+    client.set_write_timeout(30);
+
+    auto res = client.Post(path, body, "application/json");
+    if (!res)
+    {
+      throw std::runtime_error(
+        "HTTP POST to " + host + ":" + std::to_string(port) + path +
+        " failed: " + httplib::to_string(res.error()));
+    }
+
+    if (res->status != 200)
+    {
+      throw std::runtime_error(
+        "HTTP POST returned status " + std::to_string(res->status) + ": " +
+        res->body);
+    }
+
+    return res->body;
   }
 
   JSValue js_generate_self_signed_cert(
@@ -157,6 +193,57 @@ namespace cleanroomapp::js::extensions
     {
       return JS_ThrowInternalError(
         ctx, "Failed to generate self signed cert: %s", exc.what());
+    }
+  }
+
+  JSValue js_verify_cvm_snp_attestation(
+    JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+  {
+    if (argc != 1)
+      return JS_ThrowTypeError(
+        ctx, "Passed %d arguments, but expected 1", argc);
+
+    ccf::js::core::Context& jsctx =
+      *(ccf::js::core::Context*)JS_GetContextOpaque(ctx);
+
+    auto evidence_str = jsctx.to_str(argv[0]);
+    if (!evidence_str)
+    {
+      return ccf::js::core::constants::Exception;
+    }
+
+    try
+    {
+      // Parse input to validate it is valid JSON.
+      auto input = nlohmann::json::parse(evidence_str.value());
+
+      // Read host and port from environment variables, defaulting to
+      // localhost:8901 if not set.
+      const char* host_env = std::getenv("CCR_ATTESTATION_HOST");
+      const char* port_env = std::getenv("CCR_ATTESTATION_PORT");
+      std::string host = host_env ? host_env : "localhost";
+      int port = port_env ? std::stoi(port_env) : 8901;
+
+      CCF_APP_INFO(
+        "Verifying CVM SNP attestation via {}:{}/snp/verify", host, port);
+
+      // Make an HTTP POST call to the local attestation verification
+      // service with the evidence JSON as the request body.
+      auto response_str = http_post(host, port, "/snp/verify", input.dump());
+
+      // Return as parsed JSON object.
+      return JS_ParseJSON(
+        ctx, response_str.c_str(), response_str.size(), "<verify>");
+    }
+    catch (const nlohmann::json::parse_error& exc)
+    {
+      return JS_ThrowInternalError(
+        ctx, "Failed to parse evidence input: %s", exc.what());
+    }
+    catch (const std::exception& exc)
+    {
+      return JS_ThrowInternalError(
+        ctx, "Failed to verify CVM SNP attestation: %s", exc.what());
     }
   }
 

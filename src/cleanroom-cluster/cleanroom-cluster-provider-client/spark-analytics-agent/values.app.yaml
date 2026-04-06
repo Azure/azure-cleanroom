@@ -2,7 +2,6 @@ images:
   analyticsagentUrl: <ANALYTICS_AGENT_IMAGE_URL>
   ccrproxyUrl: <CCR_PROXY_IMAGE_URL>
   ccrskrUrl: <CCR_SKR_IMAGE_URL>
-  ccrattestationUrl: <CCR_ATTESTATION_IMAGE_URL>
   ccrgovernanceUrl: <CCR_GOVERNANCE_IMAGE_URL>
   otelCollectorUrl: <OTEL_COLLECTOR_IMAGE_URL>
 

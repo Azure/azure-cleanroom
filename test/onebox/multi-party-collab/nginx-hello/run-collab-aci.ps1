@@ -80,19 +80,14 @@ $response = (az cleanroom ccf network show `
         --name $CCF_NAME `
         --provider-config $outDir/ccf/providerConfig.json `
         --provider-client $ccfProviderProjectName | ConvertFrom-Json)
-$ccfEndpoint = $response.endpoint
-
 $withSecurityPolicy = !$allowAll
 pwsh $PSScriptRoot/run-scenario-generate-template-policy.ps1 `
     -registry $registryArg `
     -repo $repo `
     -tag $tag `
-    -ccfEndpoint $ccfEndpoint `
     -outDir $outDir `
     -datastoreOutDir $datastoreOutdir `
     -withSecurityPolicy:$withSecurityPolicy
-
-pwsh $root/build/ccr/build-ccr-client-proxy.ps1 
 
 $dnsNameLabel = Get-UniqueString("cl-${ISV_RESOURCE_GROUP}")
 pwsh $PSScriptRoot/../deploy-caci-cleanroom.ps1 -resourceGroup $ISV_RESOURCE_GROUP -location $ISV_RESOURCE_GROUP_LOCATION -dnsNameLabel $dnsNameLabel -outDir $outDir

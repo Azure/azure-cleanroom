@@ -10,7 +10,7 @@ namespace CcfProvider;
 public class RecoveryAgentClientManager
 {
     private readonly ILogger logger;
-    private SigningConfiguration signingConfig = default!;
+    private SigningConfiguration? signingConfig;
     private HttpClientManager httpClientManager;
 
     public RecoveryAgentClientManager(ILogger logger)

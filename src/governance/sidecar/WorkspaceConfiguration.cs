@@ -13,5 +13,11 @@ public class WorkspaceConfiguration
 
     public CcfServiceCertLocator? ServiceCertLocator { get; set; } = default!;
 
-    public AttestationReportKey Attestation { get; set; } = default!;
+    public KeyPair KeyPair { get; set; } = default!;
+
+    public AttestationReport? Report { get; set; }
+
+    public JwtTokenConfiguration? JwtTokenConfiguration { get; set; }
+
+    public string? AuthMode { get; set; } = default!;
 }

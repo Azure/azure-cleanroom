@@ -7,7 +7,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Azure;
 using Azure.Core;
-using Azure.Identity;
 using Azure.ResourceManager;
 using Azure.ResourceManager.ContainerInstance;
 using Azure.ResourceManager.ContainerInstance.Models;
@@ -18,6 +17,7 @@ using CcfProvider;
 using CcfRecoveryProvider;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using TokenCredentials;
 
 namespace CAciCcfProvider;
 
@@ -267,7 +267,7 @@ public class CAciRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstancePr
         JsonObject providerConfig,
         string dnsNameLabel)
     {
-        var client = new ArmClient(new DefaultAzureCredential());
+        var client = new ArmClient(TokenCredentialFactory.GetTenantCredential(providerConfig));
         string location = providerConfig["location"]!.ToString();
         string subscriptionId = providerConfig["subscriptionId"]!.ToString();
         string resourceGroupName = providerConfig["resourceGroupName"]!.ToString();
@@ -333,10 +333,6 @@ public class CAciRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstancePr
                         $"{ImageUtils.CcfRecoveryServiceTag()}"
                     },
                     {
-                        AciConstants.ContainerName.CcrAttestation,
-                        $"{ImageUtils.CcrAttestationImage()}:{ImageUtils.CcrAttestationTag()}"
-                    },
-                    {
                         AciConstants.ContainerName.Skr,
                         $"{ImageUtils.SkrImage()}:{ImageUtils.SkrTag()}"
                     },
@@ -358,7 +354,6 @@ public class CAciRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstancePr
             List<string> requiredContainers =
                 [
                     AciConstants.ContainerName.CcfRecoveryService,
-                    AciConstants.ContainerName.CcrAttestation,
                     AciConstants.ContainerName.Skr,
                     AciConstants.ContainerName.CcrProxy
                 ];
@@ -435,25 +430,7 @@ public class CAciRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstancePr
                         },
                         VolumeMounts =
                         {
-                            new ContainerVolumeMount("uds", "/mnt/uds"),
                             new ContainerVolumeMount("certs", MountPaths.CertsFolderMountPath)
-                        }
-                    },
-                new(
-                    AciConstants.ContainerName.CcrAttestation,
-                    containerGroupSecurityPolicy.Images[AciConstants.ContainerName.CcrAttestation],
-                    new ContainerResourceRequirements(
-                        new ContainerResourceRequestsContent(0.5, 0.2)))
-                    {
-                        Command =
-                        {
-                            "app",
-                            "-socket-address",
-                            "/mnt/uds/sock"
-                        },
-                        VolumeMounts =
-                        {
-                            new ContainerVolumeMount("uds", "/mnt/uds")
                         }
                     },
                 new(
@@ -565,10 +542,6 @@ public class CAciRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstancePr
                 },
                 Volumes =
                 {
-                    new ContainerVolume("uds")
-                    {
-                        EmptyDir = BinaryData.FromObjectAsJson(new Dictionary<string, object>())
-                    },
                     new ContainerVolume("certs")
                     {
                         EmptyDir = BinaryData.FromObjectAsJson(new Dictionary<string, object>())

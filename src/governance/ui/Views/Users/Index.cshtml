@@ -3,73 +3,223 @@
     ViewData["Title"] = "Users";
 }
 
-<h2>Users</h2>
-<table class="table table-hover">
-    <thead>
-        <tr>
-            <th>Username</th>
-            <th>User Id</th>
-            <th>Invitation Id</th>
-            <th>Invitation Status</th>
-        </tr>
-    </thead>
-    <tbody>
-        @{
-            if (@Model.Users != null && @Model.Users.Any())
-    {
-        @foreach (var user in @Model.Users)
-        {
-            <tr>
-                <td>@user.UserName</td>
-                <td>@user.UserId</td>
-                <td>@user.InvitationId</td>
-                <td>@user.InvitationStatus</td>
-            </tr>
-        }
-    }
-    else
-    {
-            <tr>
-                <td><i>No users yet</i></td>
-                <td></td>
-                <td></td>
-                <td></td>
-            </tr>
-    }
-    }
-    </tbody>
-</table>
+<div class="content-wrapper">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 text-gradient mb-1">
+                <i class="fas fa-user-friends me-2"></i>User Management
+            </h1>
+            <p class="text-muted mb-0">View and manage users and invitations</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshUsers()">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+        </div>
+    </div>
 
-<h2>Open Invitations</h2>
-<table class="table table-hover">
-    <thead>
-        <tr>
-            <th>Username</th>
-            <th>Invitation Id</th>
-            <th>Invitation Status</th>
-        </tr>
-    </thead>
-    <tbody>
-        @{
-            if (@Model.OpenInvitations != null && @Model.OpenInvitations.Any())
-        {
-            @foreach (var oi in @Model.OpenInvitations)
+    <!-- Users Table -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-users me-2"></i>Active Users
+            </h5>
+            <div class="d-flex gap-2">
+                <div class="input-group input-group-sm" style="width: 250px;">
+                    <span class="input-group-text">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text" class="form-control" placeholder="Search users..." id="userSearch">
+                </div>
+                <div class="text-muted d-flex align-items-center">
+                    <small>@(Model.Users?.Count() ?? 0) users</small>
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            @if (Model.Users != null && Model.Users.Any())
             {
-                <tr>
-                    <td>@oi.UserName</td>
-                    <td>@oi.InvitationId</td>
-                    <td>@oi.InvitationStatus</td>
-                </tr>
+                <div class="table-container">
+                    <table class="table table-hover mb-0" id="usersTable">
+                        <thead>
+                            <tr>
+                                <th width="25%">
+                                    <i class="fas fa-user me-1"></i>Username
+                                </th>
+                                <th width="25%">
+                                    <i class="fas fa-hashtag me-1"></i>User ID
+                                </th>
+                                <th width="25%">
+                                    <i class="fas fa-envelope me-1"></i>Invitation ID
+                                </th>
+                                <th width="25%">
+                                    <i class="fas fa-check-circle me-1"></i>Invitation Status
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var user in Model.Users)
+                            {
+                                <tr class="user-row" data-search="@user.UserName @user.UserId">
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-user-circle me-2 text-primary"></i>
+                                            <span class="fw-medium">@user.UserName</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="font-monospace">@user.UserId</span>
+                                    </td>
+                                    <td>
+                                        <span class="font-monospace text-muted">@user.InvitationId</span>
+                                    </td>
+                                    <td>
+                                        @{
+                                            var statusClass = user.InvitationStatus?.ToLower() switch
+                                            {
+                                                "accepted" => "badge bg-success",
+                                                "pending" => "badge bg-warning text-dark",
+                                                "expired" => "badge bg-danger",
+                                                _ => "badge bg-secondary"
+                                            };
+                                        }
+                                        <span class="@statusClass">
+                                            <i class="fas fa-circle me-1" style="font-size: 0.5rem;"></i>
+                                            @user.InvitationStatus
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
             }
-        }
-        else
-        {
-            <tr>
-                <td><i>No open invitations</i></td>
-                <td></td>
-                <td></td>
-            </tr>
-        }
+            else
+            {
+                <div class="text-center py-5">
+                    <i class="fas fa-user-friends fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No Users Found</h5>
+                    <p class="text-muted mb-0">No users are currently added to the consortium.</p>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Open Invitations Table -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-envelope me-2"></i>Open Invitations
+            </h5>
+            <div class="text-muted">
+                <small>@(Model.OpenInvitations?.Count() ?? 0) pending</small>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            @if (Model.OpenInvitations != null && Model.OpenInvitations.Any())
+            {
+                <div class="table-container">
+                    <table class="table table-hover mb-0" id="invitationsTable">
+                        <thead>
+                            <tr>
+                                <th width="40%">
+                                    <i class="fas fa-user me-1"></i>Username
+                                </th>
+                                <th width="35%">
+                                    <i class="fas fa-envelope me-1"></i>Invitation ID
+                                </th>
+                                <th width="25%">
+                                    <i class="fas fa-clock me-1"></i>Status
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var invitation in Model.OpenInvitations)
+                            {
+                                <tr class="invitation-row" data-search="@invitation.UserName @invitation.InvitationId">
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-envelope-open me-2 text-warning"></i>
+                                            <span class="fw-medium">@invitation.UserName</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="font-monospace text-muted">@invitation.InvitationId</span>
+                                    </td>
+                                    <td>
+                                        @{
+                                            var inviteStatusClass = invitation.InvitationStatus?.ToLower() switch
+                                            {
+                                                "pending" => "badge bg-warning text-dark",
+                                                "sent" => "badge bg-info",
+                                                "expired" => "badge bg-danger",
+                                                _ => "badge bg-secondary"
+                                            };
+                                        }
+                                        <span class="@inviteStatusClass">
+                                            <i class="fas fa-circle me-1" style="font-size: 0.5rem;"></i>
+                                            @invitation.InvitationStatus
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-4">
+                    <i class="fas fa-envelope-open fa-2x text-muted mb-2"></i>
+                    <p class="text-muted mb-0">No pending invitations</p>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<script>
+    // Search functionality for users
+    document.getElementById('userSearch').addEventListener('input', function () {
+        filterUsers();
+    });
+
+    function filterUsers() {
+        const searchTerm = document.getElementById('userSearch').value.toLowerCase();
+        const userRows = document.querySelectorAll('.user-row');
+        const invitationRows = document.querySelectorAll('.invitation-row');
+
+        // Filter user rows
+        userRows.forEach(row => {
+            const searchData = row.dataset.search.toLowerCase();
+            const matchesSearch = searchData.includes(searchTerm);
+            row.style.display = matchesSearch ? '' : 'none';
+        });
+
+        // Filter invitation rows
+        invitationRows.forEach(row => {
+            const searchData = row.dataset.search.toLowerCase();
+            const matchesSearch = searchData.includes(searchTerm);
+            row.style.display = matchesSearch ? '' : 'none';
+        });
     }
-    </tbody>
-</table>
+
+    function refreshUsers() {
+        const refreshBtn = document.querySelector('[onclick="refreshUsers()"]');
+        const icon = refreshBtn.querySelector('i');
+
+        icon.classList.add('fa-spin');
+        refreshBtn.disabled = true;
+
+        // Simulate refresh (in real app, this would be an AJAX call)
+        setTimeout(() => {
+            icon.classList.remove('fa-spin');
+            refreshBtn.disabled = false;
+
+            if (window.CleanroomUI) {
+                window.CleanroomUI.showToast('Users refreshed successfully.', 'success');
+            }
+        }, 1000);
+    }
+</script>

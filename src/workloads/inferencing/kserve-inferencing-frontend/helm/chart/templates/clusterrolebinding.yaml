@@ -1,0 +1,34 @@
+{{- if .Values.serviceAccount.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "webserver.fullname" . }}-kserve-frontend
+  labels:
+    {{- include "webserver.labels" . | nindent 4 }}
+rules:
+- apiGroups: ["serving.kserve.io"]
+  resources: ["inferenceservices"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "webserver.fullname" . }}-kserve-frontend
+  labels:
+    {{- include "webserver.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "webserver.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "webserver.fullname" . }}-kserve-frontend
+  apiGroup: rbac.authorization.k8s.io
+---
+{{- end }}

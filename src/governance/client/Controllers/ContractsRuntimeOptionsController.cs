@@ -21,8 +21,9 @@ public class ContractsRuntimeOptionsController : ClientControllerBase
     public async Task EnableExecution([FromRoute] string contractId)
     {
         var appClient = this.CcfClientManager.GetAppClient();
-        using HttpResponseMessage response =
-            await appClient.PostAsync($"app/contracts/{contractId}/enable", content: null);
+        using HttpResponseMessage response = await appClient.PostAsync(
+            $"app/contracts/{contractId}/runtimeoptions/execution/enable",
+            content: null);
         await response.ValidateStatusCodeAsync(this.Logger);
         this.Response.CopyHeaders(response.Headers);
         await response.WaitAppTransactionCommittedAsync(this.Logger, this.CcfClientManager);
@@ -32,8 +33,9 @@ public class ContractsRuntimeOptionsController : ClientControllerBase
     public async Task DisableExecution([FromRoute] string contractId)
     {
         var appClient = this.CcfClientManager.GetAppClient();
-        using HttpResponseMessage response =
-            await appClient.PostAsync($"app/contracts/{contractId}/disable", content: null);
+        using HttpResponseMessage response = await appClient.PostAsync(
+            $"app/contracts/{contractId}/runtimeoptions/execution/disable",
+            content: null);
         await response.ValidateStatusCodeAsync(this.Logger);
         this.Response.CopyHeaders(response.Headers);
         await response.WaitAppTransactionCommittedAsync(this.Logger, this.CcfClientManager);
@@ -73,7 +75,7 @@ public class ContractsRuntimeOptionsController : ClientControllerBase
     {
         var appClient = this.CcfClientManager.GetAppClient();
         using HttpResponseMessage response = await appClient.PostAsync(
-            $"app/contracts/{contractId}/checkstatus/execution",
+            $"app/contracts/{contractId}/runtimeoptions/execution/status",
             content: null);
         await response.ValidateStatusCodeAsync(this.Logger);
         this.Response.CopyHeaders(response.Headers);
@@ -87,7 +89,7 @@ public class ContractsRuntimeOptionsController : ClientControllerBase
     {
         var appClient = this.CcfClientManager.GetAppClient();
         using HttpResponseMessage response = await appClient.PostAsync(
-            $"app/contracts/{contractId}/checkstatus/logging",
+            $"app/contracts/{contractId}/runtimeoptions/logging/status",
             content: null);
         await response.ValidateStatusCodeAsync(this.Logger);
         this.Response.CopyHeaders(response.Headers);
@@ -101,7 +103,7 @@ public class ContractsRuntimeOptionsController : ClientControllerBase
     {
         var appClient = this.CcfClientManager.GetAppClient();
         using HttpResponseMessage response = await appClient.PostAsync(
-            $"app/contracts/{contractId}/checkstatus/telemetry",
+            $"app/contracts/{contractId}/runtimeoptions/telemetry/status",
             content: null);
         await response.ValidateStatusCodeAsync(this.Logger);
         this.Response.CopyHeaders(response.Headers);
@@ -144,6 +146,6 @@ public class ContractsRuntimeOptionsController : ClientControllerBase
         await response.ValidateStatusCodeAsync(this.Logger);
         await response.WaitGovTransactionCommittedAsync(this.Logger, this.CcfClientManager);
         var jsonResponse = await response.Content.ReadFromJsonAsync<JsonObject>();
-        return this.Ok(jsonResponse!);
+        return this.Ok(jsonResponse);
     }
 }

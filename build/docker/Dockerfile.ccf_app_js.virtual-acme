@@ -6,10 +6,8 @@ FROM ghcr.io/microsoft/ccf/app/run-js/virtual:ccf-6.0.0-rc1
 
 # Note: libjs_generic.virtual is not included in run-js container
 COPY --from=builder /opt/ccf_virtual/lib/libjs_generic.virtual.so /usr/lib/ccf
-RUN true # https://github.com/moby/moby/issues/37965
 COPY --from=builder /opt/ccf_virtual/bin/*.js /app/
-RUN true # https://github.com/moby/moby/issues/37965
-COPY --from=builder /opt/ccf_virtual/bin/keygenerator.sh /app/ 
+COPY --from=builder /opt/ccf_virtual/bin/keygenerator.sh /app/
 
 COPY ./src/governance/ccf-app/js/config/cchost_config_virtual_js-acme.json /app/
 

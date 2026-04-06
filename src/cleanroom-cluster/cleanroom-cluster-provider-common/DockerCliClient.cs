@@ -25,6 +25,13 @@ public class DockerCliClient : RunCommand
         await this.Docker($"cp {sourcePath} {containerId}:{containerPath}");
     }
 
+    public async Task<(int exitCode, string output, string error)> ExecWithOutput(
+        string containerId,
+        string command)
+    {
+        return await this.Docker($"exec {containerId} {command}", skipOutputLogging: true);
+    }
+
     private async Task<(int, string, string)> Docker(string args, bool skipOutputLogging = false)
     {
         StringBuilder output = new();

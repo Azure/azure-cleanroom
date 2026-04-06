@@ -40,6 +40,7 @@ function Create-KeyVault {
     )
 
     Write-Host "Creating $sku Key Vault $keyVaultName in resource group $resourceGroup"
+
     $keyVaultResult = $null
     & {
         # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
@@ -51,7 +52,7 @@ function Create-KeyVault {
     if ($null -eq $keyVaultResult) {
         $keyVaultResult = (az keyvault show --name $keyVaultName --resource-group $resourceGroup) | ConvertFrom-Json
     }
-
+    
     $role = "Key Vault Administrator"
     $roleAssignment = (az role assignment list `
             --assignee-object-id $adminObjectId `
@@ -69,13 +70,4 @@ function Create-KeyVault {
     }
 
     return $keyVaultResult
-}
-
-function Get-Assignee-Principal-Type {
-    if ($env:GITHUB_ACTIONS -eq "true") {
-        return "ServicePrincipal"
-    }
-    else {
-        return "User"
-    }
 }

@@ -1,0 +1,43 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "restapi-common", "..\..\internal\restapi-common\restapi-common.csproj", "{8888463D-F004-2537-F586-373CE15FE350}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "kserve-inferencing-agent", "kserve-inferencing-agent\kserve-inferencing-agent.csproj", "{D2D7EF44-A308-9CCA-2561-9C939CB22CCD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "governance-common", "..\..\internal\governance-common\governance-common.csproj", "{62FA7377-CF3D-0644-FB56-1F71D7E1D6D7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Attestation", "..\..\internal\Attestation\Attestation.csproj", "{5A93C71E-B788-CA1D-705C-59C90E30B162}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8888463D-F004-2537-F586-373CE15FE350}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8888463D-F004-2537-F586-373CE15FE350}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8888463D-F004-2537-F586-373CE15FE350}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8888463D-F004-2537-F586-373CE15FE350}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D2D7EF44-A308-9CCA-2561-9C939CB22CCD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D2D7EF44-A308-9CCA-2561-9C939CB22CCD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D2D7EF44-A308-9CCA-2561-9C939CB22CCD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D2D7EF44-A308-9CCA-2561-9C939CB22CCD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{62FA7377-CF3D-0644-FB56-1F71D7E1D6D7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{62FA7377-CF3D-0644-FB56-1F71D7E1D6D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{62FA7377-CF3D-0644-FB56-1F71D7E1D6D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{62FA7377-CF3D-0644-FB56-1F71D7E1D6D7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5A93C71E-B788-CA1D-705C-59C90E30B162}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A93C71E-B788-CA1D-705C-59C90E30B162}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A93C71E-B788-CA1D-705C-59C90E30B162}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5A93C71E-B788-CA1D-705C-59C90E30B162}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {B280E557-ED84-40E2-91B5-55D25C8B8934}
+	EndGlobalSection
+EndGlobal

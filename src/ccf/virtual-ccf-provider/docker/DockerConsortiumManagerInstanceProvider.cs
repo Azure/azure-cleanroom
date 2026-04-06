@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 using System.Text.Json.Nodes;
+using Azure.ResourceManager.ContainerInstance.Models;
 using CcfCommon;
 using CcfConsortiumMgrProvider;
 using CcfProvider;
-using CcfRecoveryProvider;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using Microsoft.Extensions.Configuration;
@@ -35,6 +35,9 @@ public class DockerConsortiumManagerInstanceProvider : ICcfConsortiumManagerInst
     public async Task<CcfConsortiumManagerEndpoint> CreateConsortiumManager(
         string instanceName,
         string consortiumManagerName,
+        string akvEndpoint,
+        string maaEndpoint,
+        string? managedIdentityId,
         SecurityPolicyConfiguration policyOption,
         JsonObject? providerConfig)
     {
@@ -67,9 +70,12 @@ public class DockerConsortiumManagerInstanceProvider : ICcfConsortiumManagerInst
             this.CreateConsortiumManagerContainer(
                 instanceName,
                 consortiumManagerName,
+                akvEndpoint,
+                maaEndpoint,
                 skrEndpoint,
                 credsProxyEndpoint,
-                envoyEndpoint);
+                envoyEndpoint,
+                providerConfig);
     }
 
     public async Task<CcfConsortiumManagerEndpoint?> TryGetConsortiumManagerEndpoint(
@@ -87,12 +93,39 @@ public class DockerConsortiumManagerInstanceProvider : ICcfConsortiumManagerInst
         return null;
     }
 
+    public async Task<ConsortiumManagerHealth> GetConsortiumManagerHealth(
+        string consortiumManagerName,
+        JsonObject? providerConfig)
+    {
+        var container =
+            await this.TryGetConsortiumManagerContainer(
+                consortiumManagerName,
+                providerConfig);
+        if (container == null)
+        {
+            throw new Exception(
+                $"No consortium manager endpoint found for {consortiumManagerName}.");
+        }
+
+        var ep = await this.TryGetConsortiumManagerEndpoint(consortiumManagerName, providerConfig);
+        if (ep == null)
+        {
+            throw new Exception($"No envoy endpoint found for {consortiumManagerName}.");
+        }
+
+        var health = this.ToConsortiumManagerHealth(container, ep);
+        return health;
+    }
+
     private async Task<CcfConsortiumManagerEndpoint> CreateConsortiumManagerContainer(
         string instanceName,
         string consortiumManagerName,
+        string akvEndpoint,
+        string maaEndpoint,
         string skrEndpoint,
         CredentialsProxyEndpoint credsProxyEndpoint,
-        EnvoyEndpoint envoyEndpoint)
+        EnvoyEndpoint envoyEndpoint,
+        JsonObject? providerConfig)
     {
         string containerName = "consortium-manager-" + instanceName;
         var imageParams = new ImagesCreateParameters
@@ -116,9 +149,25 @@ public class DockerConsortiumManagerInstanceProvider : ICcfConsortiumManagerInst
         // Copy out the test keys/report into the host directory so that it can be mounted into
         // the container.
         WorkspaceDirectories.CopyDirectory(
-            Directory.GetCurrentDirectory() + "/insecure-virtual/consortium-manager",
+            Directory.GetCurrentDirectory() + "/insecure-virtual",
             insecureVirtualDir,
             recursive: true);
+
+        // Create the environment variables.
+        var envVars = new List<string>
+            {
+                $"ASPNETCORE_URLS=http://+:{Ports.ConsortiumManagerPort}",
+                $"IDENTITY_ENDPOINT={credsProxyEndpoint.IdentityEndpoint}",
+                $"IMDS_ENDPOINT={credsProxyEndpoint.ImdsEndpoint}",
+                $"AKV_ENDPOINT={akvEndpoint}",
+                $"MAA_ENDPOINT={maaEndpoint}",
+                $"SKR_ENDPOINT={skrEndpoint}",
+                $"SERVICE_CERT_LOCATION={MountPaths.ConsortiumManagerCertPemFile}",
+                $"SERVICE_ENDPOINT={envoyEndpoint.Endpoint}",
+                $"AUTH_CONFIGURATIONS={providerConfig?["AUTH_CONFIGURATIONS"]?.ToString() ?? @"[]"}",
+                $"INSECURE_VIRTUAL_ENVIRONMENT=true"
+            };
+        this.AddSparkUrlOverrides(envVars, providerConfig);
 
         var createParams = new CreateContainerParameters
         {
@@ -139,14 +188,7 @@ public class DockerConsortiumManagerInstanceProvider : ICcfConsortiumManagerInst
             },
             Name = containerName,
             Image = $"{imageParams.FromImage}:{imageParams.Tag}",
-            Env = new List<string>
-            {
-                $"ASPNETCORE_URLS=http://+:{Ports.ConsortiumManagerPort}",
-                $"IDENTITY_ENDPOINT={credsProxyEndpoint.IdentityEndpoint}",
-                $"IMDS_ENDPOINT={credsProxyEndpoint.ImdsEndpoint}",
-                $"SKR_ENDPOINT={skrEndpoint}",
-                $"INSECURE_VIRTUAL_ENVIRONMENT=true"
-            },
+            Env = envVars,
             ExposedPorts = new Dictionary<string, EmptyStruct>
             {
                 {
@@ -282,6 +324,29 @@ public class DockerConsortiumManagerInstanceProvider : ICcfConsortiumManagerInst
             });
     }
 
+    private ConsortiumManagerHealth ToConsortiumManagerHealth(
+        ContainerListResponse container,
+        CcfConsortiumManagerEndpoint ep)
+    {
+        var status = CcfConsortiumMgrProvider.ServiceStatus.Ok;
+        var reasons = new List<CcfConsortiumMgrProvider.Reason>();
+        if (container.State == "exited")
+        {
+            status = CcfConsortiumMgrProvider.ServiceStatus.Unhealthy;
+            var code = "ContainerExited";
+            var message = $"Container {container.ID} has exited: {container.Status}.";
+            reasons.Add(new() { Code = code, Message = message });
+        }
+
+        return new ConsortiumManagerHealth
+        {
+            Name = ep.Name,
+            Endpoint = ep.Endpoint,
+            Status = status,
+            Reasons = reasons
+        };
+    }
+
     private async Task<ContainerListResponse?> TryGetEnvoyContainer(
         string consortiumManagerName,
         JsonObject? providerConfig)
@@ -309,6 +374,27 @@ public class DockerConsortiumManagerInstanceProvider : ICcfConsortiumManagerInst
         return containers.FirstOrDefault();
     }
 
+    private async Task<ContainerListResponse?> TryGetConsortiumManagerContainer(
+        string serviceName,
+        JsonObject? providerConfig)
+    {
+        var containers = await this.client.GetContainers(
+            this.logger,
+            filters: new Dictionary<string, IDictionary<string, bool>>
+        {
+            {
+                "label",
+                new Dictionary<string, bool>
+                {
+                    { $"{DockerConstants.CcfConsortiumManagerNameTag}={serviceName}", true },
+                    { $"{DockerConstants.CcfConsortiumManagerTypeTag}=consortium-manager", true }
+                }
+            }
+        });
+
+        return containers.FirstOrDefault();
+    }
+
     private CcfConsortiumManagerEndpoint ToConsortiumManagerEndpoint(EnvoyEndpoint ep)
     {
         // As envoy will front the calls return its endpoint.
@@ -317,5 +403,42 @@ public class DockerConsortiumManagerInstanceProvider : ICcfConsortiumManagerInst
             Name = ep.Name,
             Endpoint = ep.Endpoint
         };
+    }
+
+    private void AddSparkUrlOverrides(
+        List<string> envVars,
+        JsonObject? providerConfig)
+    {
+        string? sparkContainerRegistryUrl =
+            providerConfig?["SPARK_CONTAINER_REGISTRY_URL"]?.ToString();
+        if (sparkContainerRegistryUrl != null)
+        {
+            envVars.Add($"SPARK_CONTAINER_REGISTRY_URL={sparkContainerRegistryUrl}");
+        }
+
+        string? sparkAnalyticsAgentChartUrl =
+            providerConfig?["SPARK_ANALYTICS_AGENT_CHART_URL"]?.ToString();
+        if (sparkAnalyticsAgentChartUrl != null)
+        {
+            envVars.Add($"SPARK_ANALYTICS_AGENT_CHART_URL={sparkAnalyticsAgentChartUrl}");
+        }
+
+        string? sparkAnalyticsAgentSecurityPolicyDocumentUrl =
+            providerConfig?["SPARK_ANALYTICS_AGENT_SECURITY_POLICY_DOCUMENT_URL"]?.ToString();
+        if (sparkAnalyticsAgentSecurityPolicyDocumentUrl != null)
+        {
+            envVars.Add(
+                $"SPARK_ANALYTICS_AGENT_SECURITY_POLICY_DOCUMENT_URL=" +
+                $"{sparkAnalyticsAgentSecurityPolicyDocumentUrl}");
+        }
+
+        string? sparkFrontendSecurityPolicyDocumentUrl =
+            providerConfig?["SPARK_FRONTEND_SECURITY_POLICY_DOCUMENT_URL"]?.ToString();
+        if (sparkFrontendSecurityPolicyDocumentUrl != null)
+        {
+            envVars.Add(
+                $"SPARK_FRONTEND_SECURITY_POLICY_DOCUMENT_URL=" +
+                $"{sparkFrontendSecurityPolicyDocumentUrl}");
+        }
     }
 }

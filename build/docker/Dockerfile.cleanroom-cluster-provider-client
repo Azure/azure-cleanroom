@@ -1,5 +1,5 @@
 # Use the official .NET Core SDK as the base image
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 # Set the working directory
 WORKDIR /app
@@ -11,12 +11,13 @@ COPY Directory.Build.props /app
 COPY src/cleanroom-cluster/*.sln /app/src/cleanroom-cluster/
 COPY src/cleanroom-cluster/cleanroom-cluster-provider-client/*.csproj /app/src/cleanroom-cluster/cleanroom-cluster-provider-client/
 COPY src/cleanroom-cluster/cleanroom-cluster-provider/*.csproj /app/src/cleanroom-cluster/cleanroom-cluster-provider/
-COPY src/cleanroom-cluster/caci-cleanroom-cluster-provider/*.csproj /app/src/cleanroom-cluster/caci-cleanroom-cluster-provider/
+COPY src/cleanroom-cluster/aks-cleanroom-cluster-provider/*.csproj /app/src/cleanroom-cluster/aks-cleanroom-cluster-provider/
 COPY src/cleanroom-cluster/virtual-cleanroom-cluster-provider/*.csproj /app/src/cleanroom-cluster/virtual-cleanroom-cluster-provider/
 COPY src/cleanroom-cluster/cleanroom-cluster-provider-common/*.csproj /app/src/cleanroom-cluster/cleanroom-cluster-provider-common/
 COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
 COPY src/internal/Cose/*.csproj /app/src/internal/Cose/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
+COPY src/internal/clientauth-common/*.csproj /app/src/internal/clientauth-common/
 RUN dotnet restore /app/src/cleanroom-cluster/cluster.sln
 
 # copy everything else and build app
@@ -30,9 +31,10 @@ COPY src/cleanroom-cluster /app/src/cleanroom-cluster
 RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/cleanroom-cluster/cleanroom-cluster-provider-client/cleanroom-cluster-provider-client.csproj
 
 # Use the official .NET Core runtime as the base image for the final stage
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
-RUN apt-get update && apt-get install -y curl
+RUN apt-get update && apt-get install -y --no-install-recommends curl jq ssh \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install kubectl
 RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
@@ -60,13 +62,15 @@ RUN VERSION="1.2.0" && \
 # Install the docker cli (not daemon) as kind requires it
 ENV DOCKERVERSION=28.0.4
 RUN curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKERVERSION}.tgz \
-  && tar xzvf docker-${DOCKERVERSION}.tgz --strip 1 -C /usr/local/bin docker/docker \
-  && rm docker-${DOCKERVERSION}.tgz
-
-COPY /external/virtualnodesOnAzureContainerInstances/Helm /virtualnodesOnAzureContainerInstances/Helm
+    && tar xzvf docker-${DOCKERVERSION}.tgz --strip 1 -C /usr/local/bin docker/docker \
+    && rm docker-${DOCKERVERSION}.tgz
 
 # Set the working directory
 WORKDIR /app
+
+# Download KServe dependency versions at build time.
+RUN curl -fsSL https://raw.githubusercontent.com/kserve/kserve/refs/tags/v0.17.0/kserve-deps.env \
+    -o /app/kserve-deps.env
 
 # Copy the published output from the build stage to the runtime stage
 COPY --from=build /app/publish .

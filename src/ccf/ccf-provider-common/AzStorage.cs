@@ -4,11 +4,11 @@
 using System.Text.Json.Nodes;
 using Azure;
 using Azure.Core;
-using Azure.Identity;
 using Azure.ResourceManager;
 using Azure.ResourceManager.Resources;
 using Azure.ResourceManager.Storage;
 using Azure.ResourceManager.Storage.Models;
+using TokenCredentials;
 
 namespace CcfProvider;
 
@@ -21,7 +21,7 @@ internal static class AzStorage
         string location,
         JsonObject providerConfig)
     {
-        var armClient = new ArmClient(new DefaultAzureCredential());
+        var armClient = new ArmClient(TokenCredentialFactory.GetTenantCredential(providerConfig));
         var resourceIdentifier = new ResourceIdentifier($"/subscriptions/{subscriptionId}");
         SubscriptionResource subscription = armClient.GetSubscriptionResource(resourceIdentifier);
 
@@ -43,13 +43,15 @@ internal static class AzStorage
         return storageAccount.Id.ToString();
     }
 
-    public static async Task<string> GetStorageAccountKey(string storageAccountId)
+    public static async Task<string> GetStorageAccountKey(
+        string storageAccountId,
+        JsonObject providerConfig)
     {
         var accountId = new ResourceIdentifier(storageAccountId);
         string subscriptionId = accountId.SubscriptionId!;
         string resourceGroupName = accountId.ResourceGroupName!;
 
-        var armClient = new ArmClient(new DefaultAzureCredential());
+        var armClient = new ArmClient(TokenCredentialFactory.GetTenantCredential(providerConfig));
         var resourceIdentifier = new ResourceIdentifier($"/subscriptions/{subscriptionId}");
         SubscriptionResource subscription = armClient.GetSubscriptionResource(resourceIdentifier);
 

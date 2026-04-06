@@ -1,0 +1,14 @@
+output-dir: "{cwd}/generated"
+emit:
+  - "@typespec/openapi3"
+  - "@typespec/http-server-csharp"
+  - "@typespec/http-client-python"  
+options:
+  "@typespec/openapi3":
+    emitter-output-dir: "{output-dir}/schema"
+    openapi-versions:
+      - 3.1.0
+  "@typespec/http-server-csharp":
+    emitter-output-dir: "{output-dir}/server/aspnet"
+  "@typespec/http-client-python":
+    emitter-output-dir: "{output-dir}/clients/python"

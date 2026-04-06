@@ -1,0 +1,13 @@
+env:
+  insecureVirtualEnv: true
+
+settings:
+  cleanroom:
+    useHttp: <CLEANROOM_REGISTRY_USE_HTTP>
+  kserve:
+    computeProvider: "virtual"
+  applications:
+    inferencing:
+      resourceLimits:
+        cpu: "1"
+        memory: "2Gi"

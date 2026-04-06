@@ -34,7 +34,7 @@ $sandbox_common = "$PSScriptRoot/sandbox_common"
 mkdir -p $sandbox_common
 
 Write-Output "Building cgs js app"
-pwsh $build/build-governance-ccf-app.ps1 --output $sandbox_common/dist
+pwsh $build/cgs/build-governance-ccf-app.ps1 --output $sandbox_common/dist
 
 if (!$NoBuild) {
    pwsh $build/cgs/build-cgs-client.ps1

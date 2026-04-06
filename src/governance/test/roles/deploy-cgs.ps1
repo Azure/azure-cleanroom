@@ -5,7 +5,14 @@ param
   $NoBuild,
 
   [string]
-  $initialMemberName = "member0"
+  $initialMemberName = "member0",
+
+  [ValidateSet('mcr', 'local', 'acr')]
+  [string]$registry = "local",
+
+  [string]$repo = "",
+
+  [string]$tag = "latest"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -28,9 +35,26 @@ mkdir -p $sandbox_common
 bash $root/samples/governance/keygenerator.sh --name $initialMemberName --gen-enc-key -o $sandbox_common
 
 Write-Output "Building governance ccf app"
-pwsh $build/build-governance-ccf-app.ps1 --output $sandbox_common/dist
+pwsh $build/cgs/build-governance-ccf-app.ps1 --output $sandbox_common/dist
 
-if (!$NoBuild) {
+if ($registry -eq "acr") {
+  Write-Output "Pulling images from registry: $repo with tag: $tag"
+  $registryName = ($repo -split '\.')[0]
+  az acr login -n $registryName
+  $images = @(
+    "ccf/app/run-js/sandbox",
+    "cgs-client",
+    "cgs-ui"
+  )
+  foreach ($image in $images) {
+    $sourceImage = "$repo/$image`:$tag"
+    $destImage = "localhost:5000/$image`:latest"
+    Write-Output "Pulling $sourceImage and tagging as $destImage"
+    docker pull $sourceImage
+    docker tag $sourceImage $destImage
+  }
+} elseif (!$NoBuild) {
+  Write-Output "Building containers locally"
   pwsh $build/ccf/build-ccf-runjs-app-sandbox.ps1
   pwsh $build/cgs/build-cgs-client.ps1
   pwsh $build/cgs/build-cgs-ui.ps1
@@ -288,7 +312,14 @@ curl -sS -X POST localhost:$port_member1/proposals/$proposalId/ballots/vote_acce
 Write-Output "Accepting the open network proposal as member2"
 curl -sS -X POST localhost:$port_member2/proposals/$proposalId/ballots/vote_accept | jq
 
-Write-Output "Waiting a bit to avoid FrontendNotOpen error"
-sleep 3
+Write-Output "Waiting on node/ready/app to avoid FrontendNotOpen error"
+& {
+  # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
+  $PSNativeCommandUseErrorActionPreference = $false
+  while ((curl -s  -o /dev/null -w "%{http_code}" http://localhost:$port_member0/node/ready/app) -ne "204") {
+    Write-Host "Waiting for node/ready/app to be up"
+    Start-Sleep -Seconds 3
+  }
+}
 
 Write-Output "Deployment successful. cgs-client containers are listening on $port_member0, $port_member1 & $port_member2."

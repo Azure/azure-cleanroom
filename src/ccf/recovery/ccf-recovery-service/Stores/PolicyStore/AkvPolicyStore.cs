@@ -170,7 +170,7 @@ public class AkvPolicyStore : IPolicyStore
         {
             policyBytes = Convert.FromBase64String(signedPolicy.Policy);
             policyJson = Encoding.UTF8.GetString(policyBytes);
-            var joinPolicy = JsonSerializer.Deserialize<NetworkJoinPolicy>(policyJson)!;
+            var joinPolicy = JsonSerializer.Deserialize<NetworkJoinPolicy>(policyJson);
             this.ValidateJoinPolicy(joinPolicy);
         }
         catch (Exception e)
@@ -274,13 +274,13 @@ public class AkvPolicyStore : IPolicyStore
 
     private async Task<string> PolicySignerKeyName()
     {
-        var hostData = await Attestation.GetHostData();
+        var hostData = await Attestation.GetCACIHostData();
         return string.Format(PolicySignerNameFormat, hostData);
     }
 
     private async Task<string> SignedPolicySecretName()
     {
-        var hostData = await Attestation.GetHostData();
+        var hostData = await Attestation.GetCACIHostData();
         return string.Format(SignedPolicySecretNameFormat, hostData);
     }
 }

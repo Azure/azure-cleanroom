@@ -16,6 +16,8 @@ internal class Startup : ApiStartup
     {
     }
 
+    public override bool EnableOpenTelemetry => false;
+
     public override void OnConfigureServices(IServiceCollection services)
     {
         var env = JsonSerializer.Serialize(
@@ -23,7 +25,7 @@ internal class Startup : ApiStartup
             new JsonSerializerOptions { WriteIndented = true });
         this.Logger.LogInformation($"Environment Variables: {env}");
 
-        if (!Attestation.IsSevSnp())
+        if (!Attestation.IsSnpCACI())
         {
             this.Logger.LogWarning(
                 "Running in insecure-virtual mode. This is for dev/test environment.");

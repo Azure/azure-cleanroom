@@ -85,3 +85,15 @@ runs:
         tenant-id: ${{ inputs.tenant-id }}
         subscription-id: ${{ inputs.subscription-id }}
         needs-attestation: ${{ inputs.needs-attestation }}
+
+    - uses: ./.github/actions/release-helm-chart
+      with:
+        name: workloads/helm/frontend-service
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: frontend-service-helm
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+        needs-attestation: ${{ inputs.needs-attestation }}

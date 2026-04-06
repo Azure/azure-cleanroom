@@ -14,6 +14,7 @@ class ErrorCode(StrEnum):
     DataStoreNotFound = "DataStoreNotFound"
     SecretStoreNotFound = "SecretStoreNotFound"
     IdentityConfigurationNotFound = "IdentityConfigurationNotFound"
+    CollaborationNotFound = "CollaborationNotFound"
     UnsupportedDekSecretStore = "UnsupportedDekSecretStore"
     UnsupportedKekSecretStore = "UnsupportedKekSecretStore"
     MultipleApplicationEndpointsNotSupported = (
@@ -23,6 +24,9 @@ class ErrorCode(StrEnum):
     DuplicatePort = "DuplicatePort"
     DataStoreAlreadyExists = "DataStoreAlreadyExists"
     SecretStoreAlreadyExists = "SecretStoreAlreadyExists"
+    CollaborationAlreadyExists = "CollaborationAlreadyExists"
+    BackingIdentityNotFound = "BackingIdentityNotFound"
+    CurrentCollaborationNotSet = "CurrentCollaborationNotSet"
 
 
 class CleanroomSpecificationError(Exception):

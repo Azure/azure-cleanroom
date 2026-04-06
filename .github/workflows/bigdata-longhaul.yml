@@ -1,0 +1,133 @@
+name: Big Data Analytics Longhaul
+run-name: Big Data Analytics Longhaul - ${{ inputs.durationMinutes }}m
+
+on:
+  workflow_dispatch:
+    inputs:
+      durationMinutes:
+        description: Total duration of the longhaul test in minutes
+        required: false
+        type: string
+        default: "240"
+      pauseMinutes:
+        description: Pause duration between cycles in minutes
+        required: false
+        type: string
+        default: "20"
+      enableChaos:
+        description: Enable chaos actions (CCF recovery / frontend restart) between cycles
+        required: false
+        type: boolean
+        default: true
+  schedule:
+    # Run daily at 00:00 UTC
+    - cron: "0 0 * * *"
+
+permissions:
+  contents: read
+  checks: write
+  id-token: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/pr_build_all.yml
+
+  longhaul-test:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    needs: [build]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Login to Azure
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Deploy CCF via CCF provider with confidential recovery enabled (1-node virtual).
+      - name: Deploy virtual CCF network with confidential recovery
+        run: >
+          pwsh ./samples/ccf/azcli/deploy-ccf.ps1
+          -infraType virtual
+          -nodeCount 1
+          -confidentialRecovery
+          -registry acr
+          -repo ${{ vars.ACR_URL }}
+          -tag ${{ github.run_id }}
+
+      # Setup the virtual environment (Kind cluster, frontend, governance).
+      - name: Setup environment
+        uses: ./.github/actions/test-workloads/setup-env
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+          infraType: virtual
+          outDir: ${{ github.workspace }}/test/onebox/workload-samples/generated
+
+      # Run the big-data-analytics scenario to create datasets, queries, and approvals.
+      - name: Run big data analytics tests
+        uses: ./.github/actions/test-workloads/test-big-data-analytics
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+          deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples/generated
+
+      # Run the longhaul test with chaos enabled.
+      - name: Run longhaul test
+        uses: ./.github/actions/test-workloads/test-big-data-analytics-longhaul
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+          deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples/generated
+          durationMinutes: ${{ inputs.durationMinutes || '240' }}
+          pauseMinutes: ${{ inputs.pauseMinutes || '20' }}
+          enableChaos: ${{ inputs.enableChaos == '' && 'true' || inputs.enableChaos }}
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bigdata-longhaul-results
+          path: ./test/onebox/workload-samples/generated
+          overwrite: true
+        if: ${{ !cancelled() }}
+
+      - name: Dump ccf-provider-client logs
+        shell: pwsh
+        if: ${{ !cancelled() }}
+        run: docker logs ccf-provider-client-1
+
+      - name: Dump ccf-recovery-agent logs
+        shell: pwsh
+        if: ${{ !cancelled() }}
+        run: pwsh ./samples/ccf/azcli/show-docker-logs.ps1 -label "ccf-network/type=recovery-agent"
+
+      - name: Dump ccf-recovery-service logs
+        shell: pwsh
+        if: ${{ !cancelled() }}
+        run: pwsh ./samples/ccf/azcli/show-docker-logs.ps1 -label "ccf-recovery-service/type=recovery-service"
+
+      - name: Delete AWS buckets
+        if: success()
+        shell: pwsh
+        run: |
+          pwsh ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-input-${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+          pwsh ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-output-${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+
+      - name: Delete resource groups
+        if: success()
+        shell: pwsh
+        run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}"

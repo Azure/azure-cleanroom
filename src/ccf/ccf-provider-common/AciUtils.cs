@@ -4,11 +4,11 @@
 using System.Net;
 using System.Text.Json.Nodes;
 using Azure.Core;
-using Azure.Identity;
 using Azure.ResourceManager;
 using Azure.ResourceManager.ContainerInstance;
 using Azure.ResourceManager.Resources;
 using LoadBalancerProvider;
+using TokenCredentials;
 
 namespace CcfProvider;
 
@@ -241,7 +241,7 @@ public static class AciUtils
         string containerGroupName,
         JsonObject providerConfig)
     {
-        var client = new ArmClient(new DefaultAzureCredential());
+        var client = new ArmClient(TokenCredentialFactory.GetTenantCredential(providerConfig));
         string subscriptionId = providerConfig["subscriptionId"]!.ToString();
         string resourceGroupName = providerConfig["resourceGroupName"]!.ToString();
         ResourceIdentifier resourceGroupResourceId =
@@ -259,7 +259,7 @@ public static class AciUtils
         string typeTag,
         JsonObject? providerConfig)
     {
-        var client = new ArmClient(new DefaultAzureCredential());
+        var client = new ArmClient(TokenCredentialFactory.GetTenantCredential(providerConfig));
         string subscriptionId = providerConfig!["subscriptionId"]!.ToString();
         string resourceGroupName = providerConfig["resourceGroupName"]!.ToString();
         ResourceIdentifier resourceGroupResourceId =

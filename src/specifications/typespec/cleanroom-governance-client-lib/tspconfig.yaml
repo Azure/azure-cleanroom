@@ -1,0 +1,8 @@
+output-dir: "{cwd}/generated"
+emit:
+  - "@typespec/http-server-csharp"
+options:
+  "@typespec/http-server-csharp":
+    emitter-output-dir: "{output-dir}/server/aspnet"
+    output-type: "models"
+    emit-mocks: "none"

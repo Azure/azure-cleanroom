@@ -14,38 +14,22 @@
 
 import argparse
 import json
-
-# other imports
-import os
 from pathlib import Path
-
-# torch related imports
-from typing import Optional
-
-import numpy as np
 
 # onnx related imports
 import onnx
 import pandas as pd
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 
 # from tqdm import tqdm
 import torch.utils.data as data
 from onnx2pytorch import ConvertModel
 from opacus import PrivacyEngine
-
-# opacus related imports
-from opacus.accountants import create_accountant
-from sklearn.metrics import accuracy_score
-
-# sklearn,pandas,numpy related imports
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
-from torchvision import datasets, transforms
 
 # debug_poc=True
 

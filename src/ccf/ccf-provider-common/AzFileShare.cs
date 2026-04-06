@@ -7,12 +7,12 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Azure;
 using Azure.Core;
-using Azure.Identity;
 using Azure.ResourceManager;
 using Azure.ResourceManager.Resources;
 using Azure.ResourceManager.Storage;
 using Azure.Storage.Files.Shares;
 using Azure.Storage.Files.Shares.Models;
+using TokenCredentials;
 
 namespace CcfProvider;
 
@@ -507,7 +507,7 @@ public static class AzFileShare
         string accountName = AzStorage.GetStorageAccountName(
             providerConfig.AzureFilesStorageAccountId());
 
-        var armClient = new ArmClient(new DefaultAzureCredential());
+        var armClient = new ArmClient(TokenCredentialFactory.GetTenantCredential(providerConfig));
         var resourceIdentifier = new ResourceIdentifier($"/subscriptions/{subscriptionId}");
         SubscriptionResource subscription = armClient.GetSubscriptionResource(resourceIdentifier);
 
@@ -543,7 +543,8 @@ public static class AzFileShare
         string accountName = AzStorage.GetStorageAccountName(
             providerConfig.AzureFilesStorageAccountId());
         string accountKey = await AzStorage.GetStorageAccountKey(
-            providerConfig.AzureFilesStorageAccountId());
+            providerConfig.AzureFilesStorageAccountId(),
+            providerConfig);
 
         string connectionString =
             $"DefaultEndpointsProtocol=https;AccountName={accountName};" +

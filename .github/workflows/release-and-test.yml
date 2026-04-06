@@ -11,7 +11,7 @@ on:
       release-type:
         description: The release type
         type: string
-        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client"
+        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client, frontend-service"
   workflow_call:
     inputs:
       tag:
@@ -21,7 +21,7 @@ on:
       release-type:
         description: The build type
         type: string
-        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client"
+        default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client, frontend-service"
       needs-attestation:
         description: Whether to attest released artefacts
         required: false
@@ -43,7 +43,7 @@ jobs:
       build-type: ${{ inputs.release-type }}
 
   release-to-test:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=release-to-test-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: test
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
@@ -279,6 +279,18 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           needs-attestation: ${{ inputs.needs-attestation }}
 
+      - name: Release Frontend Service container
+        if: ${{ contains(inputs.release-type, 'frontend-service') }}
+        uses: ./.github/actions/release-frontend-service
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+          environment: internal
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          needs-attestation: ${{ inputs.needs-attestation }}
+
       - name: Release version documents for cleanroom cluster provider client
         if: ${{ contains(inputs.release-type, 'cleanroom-cluster-provider-client') }}
         uses: ./.github/actions/release-cleanroom-cluster-provider-client-version-documents
@@ -327,6 +339,18 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           needs-attestation: ${{ inputs.needs-attestation }}
 
+      - name: Release Frontend Service Security Policy
+        if: ${{ contains(inputs.release-type, 'frontend-service') }}
+        uses: ./.github/actions/release-frontend-service-security-policy
+        with:
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+          environment: internal
+          registry-name: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          needs-attestation: ${{ inputs.needs-attestation }}
+
       - name: Release cleanroom workload infrastructure containers policy
         if: ${{ contains(inputs.release-type, 'cleanroom-workload-infra-containers') }}
         uses: ./.github/actions/release-cleanroom-workload-infra-containers-policy
@@ -362,8 +386,24 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
+  pick-location:
+    runs-on: ubuntu-latest
+    outputs:
+      location: ${{ steps.pick.outputs.location }}
+    steps:
+      - name: Pick a random Azure location
+        id: pick
+        shell: bash
+        run: |
+          # These are the locations where DC4as_v5 SKU is available that we use in Flex Node tests.
+          # "westus" is removed as it is being used by another PR validation flow.
+          locations=("westeurope" "northeurope" "germanywestcentral" "centralindia" "eastasia" "southeastasia" )
+          index=$((RANDOM % ${#locations[@]}))
+          echo "location=${locations[$index]}" >> "$GITHUB_OUTPUT"
+          echo "Selected location: ${locations[$index]}"
+
   bvt-ml-training:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=bvt-ml-training-${{ matrix.key-store }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: [build, release-to-test]
     environment: test
     env:
@@ -410,7 +450,7 @@ jobs:
           kvType: ${{ matrix.key-store }}
 
   bvt-encrypted-storage:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=bvt-encrypted-storage-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: [build, release-to-test]
     environment: test
     env:
@@ -447,7 +487,7 @@ jobs:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
 
   bvt-nginx-hello:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=bvt-nginx-hello-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: [build, release-to-test]
     environment: test
     env:
@@ -483,9 +523,9 @@ jobs:
           repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
 
-  bvt-big-data-query-analytics:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public"]
-    needs: [build, release-to-test]
+  bvt-setup-env-aks:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=bvt-setup-env-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    needs: [build, release-to-test, pick-location]
     environment: test
     env:
       RELEASE_ACR_NAME: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
@@ -513,8 +553,125 @@ jobs:
         id: get-short-commit-hash
         run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      - name: Run big-data-query-analytics test
-        uses: ./.github/actions/test-multi-party-collab/test-big-data-query-analytics-caci
+      - name: Setup environment
+        uses: ./.github/actions/test-workloads/setup-env
         with:
           repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+          infraType: aks
+          location: ${{ needs.pick-location.outputs.location }}
+          outDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
+
+      - name: Upload deployment artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanroom-deployment-artifacts-aks
+          path: ./test/onebox/workload-samples-aks/generated
+          overwrite: true
+        if: success()
+
+  bvt-big-data-query-analytics-aks:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=bvt-big-data-query-analytics-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    needs: [bvt-setup-env-aks, pick-location]
+    environment: test
+    env:
+      RELEASE_ACR_NAME: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      USE_PREPROVISIONED_OIDC: "true"
+    # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
+    permissions:
+      id-token: write
+      contents: read  # This is required for actions/checkout
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-tags: true
+          ref: ${{ inputs.tag }}
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Generate short commit hash
+        if: ${{ inputs.tag == ''}}
+        id: get-short-commit-hash
+        run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Download deployment artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cleanroom-deployment-artifacts-aks
+          path: ./test/onebox/workload-samples-aks/generated
+
+      - name: Run big data analytics tests
+        uses: ./.github/actions/test-workloads/test-big-data-analytics
+        with:
+          repo: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom
+          tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
+          deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
+          location: ${{ needs.pick-location.outputs.location }}
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: big-data-analytics-results-aks
+          path: ./test/onebox/workload-samples-aks/generated
+          overwrite: true
+        if: ${{ !cancelled() }}
+
+      - name: Delete AWS buckets
+        if: success()
+        shell: pwsh
+        run: |
+          pwsh ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-input-${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+          pwsh ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-output-${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+
+      - name: Delete resource groups
+        if: success()
+        shell: pwsh
+        run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+
+  bvt-cleanup-aks:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=bvt-cleanup-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    needs: [bvt-big-data-query-analytics-aks]
+    environment: test
+    env:
+      RELEASE_ACR_NAME: ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: bvt-setup-env-aks
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+    # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
+    permissions:
+      id-token: write
+      contents: read  # This is required for actions/checkout
+    if: success()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-tags: true
+          ref: ${{ inputs.tag }}
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Generate short commit hash
+        if: ${{ inputs.tag == ''}}
+        id: get-short-commit-hash
+        run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Login to Azure
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Delete resource groups
+        shell: pwsh
+        run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}"

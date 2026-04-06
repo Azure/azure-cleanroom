@@ -1,0 +1,14 @@
+services:
+  cvm-attestation-agent:
+    image: cvm/cvm-attestation-agent:test
+    container_name: cvm-attestation-agent
+    network_mode: host
+    devices:
+      - /dev/tpmrm0:/dev/tpmrm0
+
+  attestation-report-generator:
+    image: attestation-report-generator:test
+    container_name: attestation-report-generator
+    network_mode: host
+    depends_on:
+      - cvm-attestation-agent

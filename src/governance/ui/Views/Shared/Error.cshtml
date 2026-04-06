@@ -3,8 +3,180 @@
     ViewData["Title"] = "Error";
 }
 
-<h2 class="text-danger">An error occurred while processing your request.</h2>
+<div class="content-wrapper">
+    <!-- Error Page Header -->
+    <div class="text-center mb-5">
+        <div class="error-icon mb-4">
+            <i class="fas fa-exclamation-triangle text-warning" style="font-size: 4rem;"></i>
+        </div>
+        <h1 class="h2 text-gradient mb-3">Something Went Wrong</h1>
+        <p class="text-muted lead">We encountered an error while processing your request</p>
+    </div>
 
-<p>
-    <strong>Error:</strong> <code>@Model.Content</code>
-</p>
+    <!-- Error Details Card -->
+    <div class="row justify-content-center">
+        <div class="col-lg-8 col-xl-6">
+            <div class="card border-warning">
+                <div class="card-header bg-warning bg-opacity-10">
+                    <h5 class="card-title mb-0 text-warning">
+                        <i class="fas fa-bug me-2"></i>Error Details
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(Model?.Content))
+                    {
+                        <div class="alert alert-light border-warning">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-info-circle text-warning me-3 mt-1"></i>
+                                <div class="flex-grow-1">
+                                    <h6 class="alert-heading mb-2">Error Message</h6>
+                                    <code class="text-dark bg-light p-2 rounded d-block">@Model.Content</code>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center text-muted">
+                            <i class="fas fa-question-circle me-2"></i>
+                            No specific error details available
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions Section -->
+    <div class="row justify-content-center mt-4">
+        <div class="col-lg-8 col-xl-6">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-tools me-1"></i>What You Can Do
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="d-grid">
+                                <button type="button" class="btn btn-outline-primary" onclick="history.back()">
+                                    <i class="fas fa-arrow-left me-2"></i>Go Back
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="d-grid">
+                                <a href="/" class="btn btn-primary">
+                                    <i class="fas fa-home me-2"></i>Go to Dashboard
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="text-center">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copyErrorDetails()">
+                            <i class="fas fa-copy me-1"></i>Copy Error Details
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm ms-2" onclick="location.reload()">
+                            <i class="fas fa-redo me-1"></i>Refresh Page
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Section -->
+    <div class="row justify-content-center mt-4">
+        <div class="col-lg-8 col-xl-6">
+            <div class="card bg-light border-0">
+                <div class="card-body text-center">
+                    <div class="mb-3">
+                        <i class="fas fa-life-ring text-primary" style="font-size: 2rem;"></i>
+                    </div>
+                    <h6 class="card-title">Need Help?</h6>
+                    <p class="card-text small text-muted mb-3">
+                        If this error persists, please check the governance client container logs
+                        for more details.
+                    </p>
+                    <div class="d-flex justify-content-center gap-3 small">
+                        <span class="text-muted">
+                            <i class="fas fa-clock me-1"></i>
+                            @DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                        </span>
+                        @if (!string.IsNullOrEmpty(ViewData["RequestId"]?.ToString()))
+                        {
+                            <span class="text-muted">
+                                <i class="fas fa-fingerprint me-1"></i>
+                                Request ID: @ViewData["RequestId"]
+                            </span>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function copyErrorDetails() {
+            const errorContent = '@Html.Raw(Html.Encode(Model?.Content ?? "No error details available"))';
+            const requestId = '@ViewData["RequestId"]';
+            const timestamp = '@DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")';
+
+            const errorDetails = `Error Details:
+        Timestamp: ${timestamp}
+        ${requestId ? `Request ID: ${requestId}` : ''}
+        Error: ${errorContent}`;
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(errorDetails).then(() => {
+                    showCopyFeedback();
+                }).catch(() => {
+                    fallbackCopyText(errorDetails);
+                });
+            } else {
+                fallbackCopyText(errorDetails);
+            }
+        }
+
+        function fallbackCopyText(text) {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+
+            try {
+                document.execCommand('copy');
+                showCopyFeedback();
+            } catch (err) {
+                console.error('Failed to copy error details:', err);
+            }
+
+            document.body.removeChild(textArea);
+        }
+
+        function showCopyFeedback() {
+            const copyBtn = document.querySelector('[onclick="copyErrorDetails()"]');
+            const originalHTML = copyBtn.innerHTML;
+
+            copyBtn.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+            copyBtn.classList.remove('btn-outline-secondary');
+            copyBtn.classList.add('btn-success');
+
+            setTimeout(() => {
+                copyBtn.innerHTML = originalHTML;
+                copyBtn.classList.remove('btn-success');
+                copyBtn.classList.add('btn-outline-secondary');
+            }, 2000);
+        }
+    </script>
+}

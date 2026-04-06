@@ -5,13 +5,17 @@ Test script for error code functionality in the Azure Cleanroom CLI extension.
 Tests error code definitions, exception handling, and error code completeness.
 This test file covers:
 
-- ErrorCode enum completeness and expected values
+- ErrorCode enum completeness, properties, and automatic synchronization
 - CleanroomSpecificationError exception creation and functionality
-- Error code consistency across the codebase
-- Exception message handling and error reporting
+- Exception inheritance and error handling behavior
+- Collaboration-related error codes (CollaborationNotFound, CollaborationAlreadyExists)
+- Identity-related error codes (BackingIdentityNotFound)
+
+The test_error_code_completeness function automatically detects when error codes
+are added or removed and provides helpful messages for updating the test.
 
 This test file focuses on the error handling infrastructure that is shared
-across both DataStore and SecretStore functionality.
+across DataStore, SecretStore, Collaboration, and Identity functionality.
 """
 
 import sys
@@ -29,14 +33,18 @@ from cleanroom_common.azure_cleanroom_core.exceptions.exception import (
 
 
 def test_error_code_completeness():
-    """Test that all expected error codes are present"""
-    print("Testing error code completeness...")
+    """Test error code completeness, enum properties, and synchronization"""
+    print("Testing error code completeness and enum properties...")
+
+    # Get all actual error codes from the ErrorCode enum
+    actual_codes = set(e.value for e in ErrorCode)
 
     # Test all expected error codes exist
-    expected_codes = [
+    expected_codes = {
         "DataStoreNotFound",
         "SecretStoreNotFound",
         "IdentityConfigurationNotFound",
+        "CollaborationNotFound",
         "UnsupportedDekSecretStore",
         "UnsupportedKekSecretStore",
         "MultipleApplicationEndpointsNotSupported",
@@ -44,33 +52,63 @@ def test_error_code_completeness():
         "DuplicatePort",
         "DataStoreAlreadyExists",
         "SecretStoreAlreadyExists",
-    ]
+        "CollaborationAlreadyExists",
+        "BackingIdentityNotFound",
+        "CurrentCollaborationNotSet",
+    }
 
-    actual_codes = [e.value for e in ErrorCode]
-    for code in expected_codes:
-        assert code in actual_codes, f"Missing error code: {code}"
+    # Check for missing or extra error codes
+    missing_from_expected = actual_codes - expected_codes
+    extra_in_expected = expected_codes - actual_codes
 
-    print("✓ All expected error codes present")
+    # Report any discrepancies with helpful messages
+    if missing_from_expected:
+        print(
+            f"❌ New error codes found that need to be added to expected_codes: {sorted(missing_from_expected)}"
+        )
+        print(
+            "   Please add these codes to the expected_codes set in test_error_code_completeness()"
+        )
+
+    if extra_in_expected:
+        print(
+            f"❌ Error codes in expected_codes that no longer exist: {sorted(extra_in_expected)}"
+        )
+        print(
+            "   Please remove these codes from the expected_codes set in test_error_code_completeness()"
+        )
+
+    # Assert that the expected codes match actual codes exactly
+    assert (
+        not missing_from_expected
+    ), f"New error codes need to be added to test: {missing_from_expected}"
+    assert (
+        not extra_in_expected
+    ), f"Outdated error codes need to be removed from test: {extra_in_expected}"
+    assert (
+        expected_codes == actual_codes
+    ), "Expected error codes must match actual error codes exactly"
+
+    print("✓ All expected error codes present and synchronized")
     print(f"✓ Found {len(actual_codes)} total error codes")
 
+    # Test enum properties for key error codes (now that we know they all exist)
+    print("✓ Testing enum properties for key error codes...")
 
-def test_error_code_enum_properties():
-    """Test ErrorCode enum properties and values"""
-    print("\nTesting error code enum properties...")
+    # Test that ErrorCode enum has the expected attributes and values for all expected codes
+    for code_name in expected_codes:
+        # Test that the attribute exists
+        assert hasattr(
+            ErrorCode, code_name
+        ), f"ErrorCode should have attribute {code_name}"
 
-    # Test that ErrorCode is an enum with string values
-    assert hasattr(ErrorCode, "DataStoreNotFound")
-    assert hasattr(ErrorCode, "SecretStoreNotFound")
-    assert hasattr(ErrorCode, "DataStoreAlreadyExists")
-    assert hasattr(ErrorCode, "SecretStoreAlreadyExists")
+        # Test that the value matches the name
+        enum_value = getattr(ErrorCode, code_name)
+        assert (
+            enum_value.value == code_name
+        ), f"ErrorCode.{code_name}.value should be '{code_name}'"
 
-    # Test specific error code values
-    assert ErrorCode.DataStoreNotFound.value == "DataStoreNotFound"
-    assert ErrorCode.SecretStoreNotFound.value == "SecretStoreNotFound"
-    assert ErrorCode.DataStoreAlreadyExists.value == "DataStoreAlreadyExists"
-    assert ErrorCode.SecretStoreAlreadyExists.value == "SecretStoreAlreadyExists"
-
-    print("✓ Error code enum properties working correctly")
+    print("✓ Error code enum properties validated for all expected codes")
 
 
 def test_exception_creation():
@@ -90,6 +128,21 @@ def test_exception_creation():
     assert exc2.code == ErrorCode.SecretStoreAlreadyExists
     assert exc2.message == "Duplicate secret store"
     print("✓ Exception creation with different error codes working")
+
+    # Test new collaboration error codes
+    exc3 = CleanroomSpecificationError(
+        ErrorCode.CollaborationNotFound, "Collaboration not found"
+    )
+    assert exc3.code == ErrorCode.CollaborationNotFound
+    assert exc3.message == "Collaboration not found"
+    print("✓ Exception creation with CollaborationNotFound working")
+
+    exc4 = CleanroomSpecificationError(
+        ErrorCode.BackingIdentityNotFound, "Backing identity not found"
+    )
+    assert exc4.code == ErrorCode.BackingIdentityNotFound
+    assert exc4.message == "Backing identity not found"
+    print("✓ Exception creation with BackingIdentityNotFound working")
 
     # Test exception string representation
     exc_str = str(exc)
@@ -119,28 +172,6 @@ def test_exception_inheritance():
         assert False, "Exception was not caught as CleanroomSpecificationError"
 
 
-def test_error_code_consistency():
-    """Test error code naming consistency and patterns"""
-    print("\nTesting error code naming consistency...")
-
-    # Test that error codes follow naming patterns
-    datastore_codes = [code for code in ErrorCode if "DataStore" in code.value]
-    secretstore_codes = [code for code in ErrorCode if "SecretStore" in code.value]
-
-    assert len(datastore_codes) >= 2, "Should have DataStore-related error codes"
-    assert len(secretstore_codes) >= 2, "Should have SecretStore-related error codes"
-
-    # Test that paired error codes exist
-    assert ErrorCode.DataStoreNotFound.value == "DataStoreNotFound"
-    assert ErrorCode.SecretStoreNotFound.value == "SecretStoreNotFound"
-    assert ErrorCode.DataStoreAlreadyExists.value == "DataStoreAlreadyExists"
-    assert ErrorCode.SecretStoreAlreadyExists.value == "SecretStoreAlreadyExists"
-
-    print("✓ Error code naming consistency validated")
-    print(f"✓ Found {len(datastore_codes)} DataStore error codes")
-    print(f"✓ Found {len(secretstore_codes)} SecretStore error codes")
-
-
 def main():
     """Run all error code tests"""
     print("Running Azure Cleanroom Error Code Tests")
@@ -148,10 +179,8 @@ def main():
 
     try:
         test_error_code_completeness()
-        test_error_code_enum_properties()
         test_exception_creation()
         test_exception_inheritance()
-        test_error_code_consistency()
 
         print("\n" + "=" * 45)
         print("✅ ALL ERROR CODE TESTS PASSED!")

@@ -1,2 +1,35 @@
+[project]
+name = "azure-cleanroom"
+version = "0.1.0"
+description = "Azure Cleanroom sidecars repository"
+authors = [
+    {name = "azcleanroomdev",email = "azcleanroomdev@microsoft.com"}
+]
+requires-python = ">=3.10"
+dependencies = []
+
 [tool.black]
+target-version = ['py310']
 extend-exclude = 'vendored_sdks'
+
+[tool.uv.sources]
+cleanroom-sdk = {workspace = true}
+cleanroom-internal = {workspace = true}
+analytics-contracts = {workspace = true}
+frontend-internal = {workspace = true}
+
+[tool.uv.workspace]
+members = [
+    "src/sdk",
+    "src/workloads/analytics/cleanroom-spark-frontend",
+    "src/workloads/analytics/analytics-app",
+    "src/workloads/analytics/contracts",
+    "src/workloads/inferencing/kserve-inferencing-frontend",
+    "src/internal/cleanroom-internal",
+    "src/blobfuse-launcher",
+    "src/s3fs-launcher",
+    "src/code-launcher",
+    "test/onebox/multi-party-collab/big-data-query-analytics",
+    "test/onebox/model-serving/kserve-inferencing",
+    "src/internal/frontend-internal",
+]

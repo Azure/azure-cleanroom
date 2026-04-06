@@ -13,7 +13,7 @@ $root = git rev-parse --show-toplevel
 
 . $root/build/helpers.ps1
 
-# -allowAll below maps to the attestation report placed under samples/governance/insecure-virtual/attestation.
+# -allowAll below maps to the attestation report placed under samples/reports/insecure-virtual.
 Write-Output "Submitting clean room policy proposal under contract $contractId"
 $proposalId = (az cleanroom governance deployment policy propose --contract-id $contractId --allow-all --governance-client $projectName --query "proposalId" --output tsv)
 

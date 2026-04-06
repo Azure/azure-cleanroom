@@ -416,43 +416,11 @@
               },
               "securityContext": {
                 "privileged": true
-              },
-              "volumeMounts": [
-                {
-                  "mountPath": "/mnt/uds",
-                  "name": "uds"
-                }
-              ]
+              }
             }
           },
           {
-            "name": "ccr-attestation",
-            "properties": {
-              "command": [
-                "app",
-                "-socket-address",
-                "/mnt/uds/sock"
-              ],
-              "image": "mcr.microsoft.com/azurecleanroom/ccr-attestation@sha256:86ded47d0d7eca085617ee4549ab2c05df09b4a23c2e29cd5b6f1372bad6df3e",
-              "resources": {
-                "requests": {
-                  "cpu": 0.5,
-                  "memoryInGB": 0.2
-                }
-              },
-              "securityContext": {
-                "privileged": true
-              },
-              "volumeMounts": [
-                {
-                  "mountPath": "/mnt/uds",
-                  "name": "uds"
-                }
-              ]
-            }
-          },
-          {
-            "name": "skr-sidecar",
+            "name": "skr",
             "properties": {
               "command": [
                 "/skr.sh"
@@ -516,10 +484,6 @@
           {
             "emptyDir": {},
             "name": "remotemounts"
-          },
-          {
-            "emptyDir": {},
-            "name": "uds"
           },
           {
             "emptyDir": {},

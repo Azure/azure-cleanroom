@@ -39,12 +39,6 @@
           "mountPath": "/app/service",
           "mountType": "emptyDir",
           "readOnly": false
-        },
-        {
-          "name": "uds",
-          "mountPath": "/mnt/uds",
-          "mountType": "emptyDir",
-          "readOnly": false
         }
       ]
     }
@@ -111,26 +105,6 @@
     }
   },
   {
-    "name": "ccr-attestation",
-    "properties": {
-      "image": "$containerRegistryUrl/ccr-attestation@$digest",
-      "command": [
-        "app",
-        "-socket-address",
-        "/mnt/uds/sock"
-      ],
-      "environmentVariables": [],
-      "volumeMounts": [
-        {
-          "name": "uds",
-          "mountPath": "/mnt/uds",
-          "mountType": "emptyDir",
-          "readOnly": false
-        }
-      ]
-    }
-  },
-  {
     "name": "ccr-governance",
     "properties": {
       "image": "$containerRegistryUrl/ccr-governance@$digest",
@@ -168,19 +142,11 @@
           "name": "serviceCertDiscoveryJsappBundleDigest",
           "value": "$serviceCertDiscoveryJsappBundleDigest"
         }
-      ],
-      "volumeMounts": [
-        {
-          "name": "uds",
-          "mountPath": "/mnt/uds",
-          "mountType": "emptyDir",
-          "readOnly": false
-        }
       ]
     }
   },
   {
-    "name": "skr-sidecar",
+    "name": "skr",
     "properties": {
       "image": "$containerRegistryUrl/skr@$digest",
       "command": [

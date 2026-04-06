@@ -3,6 +3,7 @@
 
 using System.Net;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 
 namespace Controllers;
 
@@ -12,7 +13,8 @@ public static class BackgroundTaskQueueExtensions
         this BackgroundTaskQueue queue,
         IOperationStore operationStore,
         HttpContext httpContext,
-        Func<IProgress<string>, Task<TResource>> func)
+        Func<IProgress<string>, Task<TResource>> func,
+        ILogger logger)
     {
         var operationId = Guid.NewGuid().ToString();
         var operationStatus = new OperationStatus { OperationId = operationId };
@@ -45,6 +47,7 @@ public static class BackgroundTaskQueueExtensions
             }
             catch (Exception ex)
             {
+                logger.LogError(ex, $"Background operation {operationId} failed.");
                 operationStore.UpdateStatus(operationId, op =>
                 {
                     (var statusCode, var error) = ODataError.FromException(ex);

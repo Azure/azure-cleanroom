@@ -37,8 +37,26 @@ ccf_provider_compose_file: str = (
 ccf_provider_workspace_dir: str = tempfile.gettempdir() + os.path.sep + "ccf-provider"
 
 
-def ccf_provider_deploy(cmd, provider_client_name):
+def ccf_provider_deploy(cmd, provider_client_name, env_file=None):
     from python_on_whales import DockerClient
+
+    # Load environment variables from file if provided
+    if env_file:
+        if not os.path.exists(env_file):
+            raise CLIError(f"Environment file not found: {env_file}")
+
+        logger.warning(f"Loading environment variables from {env_file}")
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                # Skip empty lines and comments
+                if not line or line.startswith("#"):
+                    continue
+                # Parse KEY=VALUE
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    os.environ[key] = value
+                    logger.debug(f"Set environment variable: {key}={value}")
 
     docker = DockerClient(
         compose_files=[ccf_provider_compose_file],
@@ -54,7 +72,7 @@ def ccf_provider_deploy(cmd, provider_client_name):
 
     set_docker_compose_env_params()
     docker.compose.up(remove_orphans=True, detach=True)
-    (_, port) = docker.compose.port(service="client", private_port=8080)
+    _, port = docker.compose.port(service="client", private_port=8080)
 
     ccf_provider_endpoint = f"http://localhost:{port}"
     while True:
@@ -199,6 +217,7 @@ def ccf_network_up(
         f"storage account show --name {sa_name} --resource-group {resource_group} --query id --output tsv"
     )
     subscription_id = az_cli("account show --query id -o tsv")
+    tenant_id = az_cli("account show --query tenantId -o tsv")
     logger.warning(f"Creating operator member cert and key.")
     operator_name = "ccf-operator"
     operator_cert_pem_file = os.path.join(ws_folder, f"{operator_name}_cert.pem")
@@ -248,6 +267,7 @@ def ccf_network_up(
     provider_config = {
         "location": location,
         "subscriptionId": subscription_id,
+        "tenantId": tenant_id,
         "resourceGroupName": resource_group,
         "azureFiles": {"storageAccountId": sa_id},
     }
@@ -357,6 +377,52 @@ def ccf_network_up(
             + f"--provider-config {provider_config_file} "
             + f"--provider-client {provider_client_name}"
         )
+
+    # For SNP (caci) deployments, configure the join policy before opening the network
+    # so that nodes can join.
+    if infra_type == "caci":
+        platforms = [
+            {"cpuid": "00a00f11", "tcb_version": "0300000000000003"},  # Milan.
+            {"cpuid": "00a10f11", "tcb_version": "0300000000000003"},  # Genoa.
+            {"cpuid": "00b00f21", "tcb_version": "0300000000000003"},  # Turin.
+        ]
+        for platform in platforms:
+            try:
+                logger.warning(
+                    f"Setting minimum TCB version for CPUID {platform['cpuid']}."
+                )
+                az_cli(
+                    f"cleanroom ccf network join-policy set-snp-minimum-tcb-version "
+                    + f"--name {network_name} "
+                    + f"--infra-type {infra_type} "
+                    + f"--cpuid {platform['cpuid']} "
+                    + f"--tcb-version {platform['tcb_version']} "
+                    + f"--provider-config {provider_config_file} "
+                    + f"--provider-client {provider_client_name}"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to set minimum TCB version for CPUID {platform['cpuid']}."
+                    + f" The CCF version may not support this platform yet: {e}"
+                )
+
+        try:
+            logger.warning("Adding Azure UVM endorsement.")
+            az_cli(
+                f"cleanroom ccf network join-policy add-snp-uvm-endorsement "
+                + f"--name {network_name} "
+                + f"--infra-type {infra_type} "
+                + f"--did 'did:x509:0:sha256:I__iuL25oXEVFdTP_aBLx_eT1RPHbCQ_ECBQfYZpt9s::eku:1.3.6.1.4.1.311.76.59.1.2' "
+                + f"--feed ContainerPlat-AMD-UVM "
+                + f"--svn 0 "
+                + f"--provider-config {provider_config_file} "
+                + f"--provider-client {provider_client_name}"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to add Azure UVM endorsement."
+                + f" The CCF version may not support this feature: {e}"
+            )
 
     az_cli(
         f"cleanroom ccf network transition-to-open "
@@ -1053,6 +1119,118 @@ def ccf_network_join_policy_remove_snp_host_data(
     return r.json()
 
 
+def ccf_network_join_policy_set_snp_minimum_tcb_version(
+    cmd,
+    network_name,
+    infra_type,
+    cpuid,
+    tcb_version,
+    provider_config,
+    provider_client_name,
+):
+    provider_endpoint = get_provider_client_endpoint(cmd, provider_client_name)
+    provider_config = parse_provider_config(provider_config, infra_type)
+
+    content = {
+        "infraType": infra_type,
+        "providerConfig": provider_config,
+        "cpuid": cpuid,
+        "tcbVersion": tcb_version,
+    }
+
+    r = requests.post(
+        f"{provider_endpoint}/networks/{network_name}/setSnpMinimumTcbVersion",
+        json=content,
+    )
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def ccf_network_join_policy_remove_snp_minimum_tcb_version(
+    cmd,
+    network_name,
+    infra_type,
+    cpuid,
+    provider_config,
+    provider_client_name,
+):
+    provider_endpoint = get_provider_client_endpoint(cmd, provider_client_name)
+    provider_config = parse_provider_config(provider_config, infra_type)
+
+    content = {
+        "infraType": infra_type,
+        "providerConfig": provider_config,
+        "cpuid": cpuid,
+    }
+
+    r = requests.post(
+        f"{provider_endpoint}/networks/{network_name}/removeSnpMinimumTcbVersion",
+        json=content,
+    )
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def ccf_network_join_policy_add_snp_uvm_endorsement(
+    cmd,
+    network_name,
+    infra_type,
+    did,
+    feed,
+    svn,
+    provider_config,
+    provider_client_name,
+):
+    provider_endpoint = get_provider_client_endpoint(cmd, provider_client_name)
+    provider_config = parse_provider_config(provider_config, infra_type)
+
+    content = {
+        "infraType": infra_type,
+        "providerConfig": provider_config,
+        "did": did,
+        "feed": feed,
+        "svn": svn,
+    }
+
+    r = requests.post(
+        f"{provider_endpoint}/networks/{network_name}/addSnpUvmEndorsement",
+        json=content,
+    )
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
+def ccf_network_join_policy_remove_snp_uvm_endorsement(
+    cmd,
+    network_name,
+    infra_type,
+    did,
+    feed,
+    provider_config,
+    provider_client_name,
+):
+    provider_endpoint = get_provider_client_endpoint(cmd, provider_client_name)
+    provider_config = parse_provider_config(provider_config, infra_type)
+
+    content = {
+        "infraType": infra_type,
+        "providerConfig": provider_config,
+        "did": did,
+        "feed": feed,
+    }
+
+    r = requests.post(
+        f"{provider_endpoint}/networks/{network_name}/removeSnpUvmEndorsement",
+        json=content,
+    )
+    if r.status_code != 200:
+        raise CLIError(response_error_message(r))
+    return r.json()
+
+
 def ccf_network_join_policy_show(
     cmd,
     network_name,
@@ -1203,16 +1381,18 @@ def set_docker_compose_env_params():
         os.environ["AZCLI_CCF_PROVIDER_RUN_JS_APP_SNP_IMAGE"] = ""
     if "AZCLI_CCF_PROVIDER_RECOVERY_AGENT_IMAGE" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_RECOVERY_AGENT_IMAGE"] = ""
+    if "AZCLI_CCF_PROVIDER_CVM_ATTESTATION_VERIFIER_IMAGE" not in os.environ:
+        os.environ["AZCLI_CCF_PROVIDER_CVM_ATTESTATION_VERIFIER_IMAGE"] = ""
     if "AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_IMAGE" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_IMAGE"] = ""
     if "AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_IMAGE" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_IMAGE"] = ""
     if "AZCLI_CCF_PROVIDER_PROXY_IMAGE" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_PROXY_IMAGE"] = ""
-    if "AZCLI_CCF_PROVIDER_ATTESTATION_IMAGE" not in os.environ:
-        os.environ["AZCLI_CCF_PROVIDER_ATTESTATION_IMAGE"] = ""
     if "AZCLI_CCF_PROVIDER_SKR_IMAGE" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_SKR_IMAGE"] = ""
+    if "AZCLI_CCF_PROVIDER_LOCAL_SKR_IMAGE" not in os.environ:
+        os.environ["AZCLI_CCF_PROVIDER_LOCAL_SKR_IMAGE"] = ""
     if "AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL"] = ""
     if (

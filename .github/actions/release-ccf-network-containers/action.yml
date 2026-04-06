@@ -64,10 +64,10 @@ runs:
 
     - uses: ./.github/actions/release-container
       with:
-        name: ccr-attestation
+        name: skr
         tag: ${{ inputs.tag }}
         environment: ${{ inputs.environment }}
-        artefact-name: ccr-attestation
+        artefact-name: skr
         registry-name: ${{ inputs.registry-name }}
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
@@ -80,6 +80,18 @@ runs:
         tag: ${{ inputs.tag }}
         environment: ${{ inputs.environment }}
         artefact-name: ccf-recovery-agent
+        registry-name: ${{ inputs.registry-name }}
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+        needs-attestation: ${{ inputs.needs-attestation }}
+
+    - uses: ./.github/actions/release-container
+      with:
+        name: cvm/cvm-attestation-verifier
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        artefact-name: cvm-attestation-verifier
         registry-name: ${{ inputs.registry-name }}
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}

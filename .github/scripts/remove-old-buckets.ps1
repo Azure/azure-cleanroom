@@ -1,7 +1,7 @@
 # Requires: AWS Tools for PowerShell (Install-Module AWS.Tools.S3 -Scope CurrentUser)
 
 param (
-    [string]$Prefix = "consumer-output-big-data-query-analytics-",        # Bucket name prefix
+    [string]$Prefix = "consumer-output-big-data-",        # Bucket name prefix
     [int]$MaxAgeDays = 2              # Maximum age in days
 )
 

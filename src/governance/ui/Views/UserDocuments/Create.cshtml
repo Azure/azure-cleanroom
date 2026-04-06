@@ -1,42 +1,284 @@
-﻿@model UserDocument
+﻿@model CreateUserDocumentViewModel
 @{
-    ViewData["Title"] = "Create";
+    ViewData["Title"] = "Create User Document";
 }
 
-<h1>Create</h1>
-<hr />
-<div class="row">
-    <div class="col-md-4">
-        <form asp-action="Create">
-            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
-            <div class="form-group">
-                <label asp-for="Id" class="control-label"></label>
-                <input asp-for="Id" class="form-control" />
-                <span asp-validation-for="Id" class="text-danger"></span>
-            </div>
-            <div class="form-group">
-                <label asp-for="ContractId" class="control-label"></label>
-                <input asp-for="ContractId" class="form-control" />
-                <span asp-validation-for="ContractId" class="text-danger"></span>
-            </div>
-            <div class="form-group">
-                    <label asp-for="Data" class="control-label"></label>
-                    <textarea asp-for="Data" class="form-control" rows="4"></textarea>
-                    <span asp-validation-for="Data" class="text-danger"></span>
-                </div>
-            <div class="form-group">
-                <input type="submit" value="Create" class="btn btn-primary" />
-            </div>
-        </form>
+<div class="content-wrapper">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 text-gradient mb-1">
+                <i class="fas fa-plus-circle me-2"></i>Create New User Document
+            </h1>
+            <p class="text-muted mb-0">Create a new user document within the governance framework</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearForm()">
+                <i class="fas fa-eraser me-1"></i>Clear Form
+            </button>
+            <a asp-action="Index" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Documents
+            </a>
+        </div>
     </div>
-</div>
 
-<div>
-    <a asp-action="Index">Back to User Documents</a>
+    @if (!Model.AvailableContracts.Any())
+    {
+        <!-- No Contracts Warning -->
+        <div class="alert alert-warning d-flex align-items-start" role="alert">
+            <i class="fas fa-exclamation-triangle me-3 mt-1 fa-2x"></i>
+            <div class="flex-grow-1">
+                <h5 class="alert-heading mb-2">No Contracts Available</h5>
+                <p class="mb-3">
+                    You need to create at least one contract before you can create a user document.
+                    User documents must be associated with an existing contract.
+                </p>
+                <a asp-controller="Contracts" asp-action="Create" class="btn btn-warning">
+                    <i class="fas fa-file-contract me-1"></i>Create a Contract First
+                </a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Help Alert -->
+        <div class="alert alert-info d-flex align-items-start" role="alert">
+            <i class="fas fa-info-circle me-3 mt-1"></i>
+            <div>
+                <h6 class="alert-heading mb-1">User Document Creation Guidelines</h6>
+                <small>
+                    Provide a unique document ID, select an existing contract, and enter the document data.
+                    The document will be submitted for governance approval and requires consensus from approvers.
+                </small>
+            </div>
+        </div>
+
+        <!-- Document Form Card -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-file-alt me-2"></i>Document Details
+                </h5>
+            </div>
+            <div class="card-body">
+                <form asp-action="Create" id="documentForm">
+                    @if (!ViewData.ModelState.IsValid)
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <h6 class="alert-heading">
+                                <i class="fas fa-exclamation-circle me-2"></i>Validation Errors
+                            </h6>
+                            <div asp-validation-summary="All" class="mb-0"></div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    }
+
+                    <!-- Document ID Field -->
+                    <div class="mb-4">
+                        <label asp-for="Document.Id" class="form-label fw-semibold">
+                            <i class="fas fa-tag me-1"></i>Document ID
+                            <span class="text-danger">*</span>
+                        </label>
+                        <input asp-for="Document.Id" class="form-control form-control-lg"
+                            placeholder="Enter a unique document identifier" autocomplete="off" />
+                        <div class="form-text">
+                            <i class="fas fa-lightbulb me-1"></i>
+                            Use a descriptive, unique identifier (e.g., "user-data-policy-v1", "access-rules-doc")
+                        </div>
+                        <span asp-validation-for="Document.Id" class="text-danger"></span>
+                    </div>
+
+                    <!-- Contract ID Dropdown -->
+                    <div class="mb-4">
+                        <label asp-for="Document.ContractId" class="form-label fw-semibold">
+                            <i class="fas fa-file-contract me-1"></i>Contract ID
+                            <span class="text-danger">*</span>
+                        </label>
+                        <select asp-for="Document.ContractId" class="form-select form-select-lg">
+                            <option value="">-- Select a Contract --</option>
+                            @foreach (var contractId in Model.AvailableContracts)
+                            {
+                                <option value="@contractId">@contractId</option>
+                            }
+                        </select>
+                        <div class="form-text">
+                            <i class="fas fa-link me-1"></i>
+                            Select the contract that this document will be associated with
+                        </div>
+                        <span asp-validation-for="Document.ContractId" class="text-danger"></span>
+                    </div>
+
+                    <!-- Document Data Field -->
+                    <div class="mb-4">
+                        <label asp-for="Document.Data" class="form-label fw-semibold">
+                            <i class="fas fa-code me-1"></i>Document Data
+                            <span class="text-danger">*</span>
+                        </label>
+                        <div>
+                            <textarea asp-for="Document.Data" class="form-control font-monospace" rows="12"
+                            placeholder="Enter document data..."
+                            style="resize: vertical; min-height: 300px;"></textarea>
+                        </div>
+                        <span asp-validation-for="Document.Data" class="text-danger"></span>
+                    </div>
+
+                    <!-- Labels Field -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">
+                            <i class="fas fa-tags me-1"></i>Labels
+                            <span class="text-muted fw-normal">(Optional)</span>
+                        </label>
+                        <div id="labelsContainer">
+                            @if (Model.Labels != null && Model.Labels.Any())
+                            {
+                                @for (int i = 0; i < Model.Labels.Count; i++)
+                                {
+                                    <div class="label-pair row g-2 mb-2" data-index="@i">
+                                        <div class="col-md-5">
+                                            <input type="text" name="Labels[@i].Key" value="@Model.Labels[i].Key"
+                                                class="form-control" placeholder="Label key (e.g., env)" />
+                                        </div>
+                                        <div class="col-md-5">
+                                            <input type="text" name="Labels[@i].Value" value="@Model.Labels[i].Value"
+                                                class="form-control" placeholder="Label value (e.g., prod)" />
+                                        </div>
+                                        <div class="col-md-2">
+                                            <button type="button" class="btn btn-outline-danger w-100 remove-label-btn">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="label-pair row g-2 mb-2" data-index="0">
+                                    <div class="col-md-5">
+                                        <input type="text" name="Labels[0].Key" class="form-control"
+                                            placeholder="Label key (e.g., env)" />
+                                    </div>
+                                    <div class="col-md-5">
+                                        <input type="text" name="Labels[0].Value" class="form-control"
+                                            placeholder="Label value (e.g., prod)" />
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button type="button" class="btn btn-outline-danger w-100 remove-label-btn">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="addLabelBtn">
+                            <i class="fas fa-plus me-1"></i>Add Another Label
+                        </button>
+                        <div class="form-text mt-2">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Add key-value pairs to label your document with metadata (e.g., environment: production, owner: team1)
+                        </div>
+                        <span asp-validation-for="Labels" class="text-danger"></span>
+                    </div>
+
+                    <!-- Form Actions -->
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+                            <i class="fas fa-paper-plane me-1"></i>Create Document
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    }
 </div>
 
 @section Scripts {
     @{
         await Html.RenderPartialAsync("_ValidationScriptsPartial");
     }
+
+    <script>
+        var labelIndex = $('.label-pair').length;
+
+        function clearForm() {
+            if (confirm('Are you sure you want to clear all form data?')) {
+                document.getElementById('documentForm').reset();
+                // Clear validation messages
+                $('.text-danger').text('');
+                $('.is-invalid').removeClass('is-invalid');
+                // Reset labels to one empty pair
+                $('#labelsContainer').html(createLabelPairHtml(0));
+                labelIndex = 1;
+            }
+        }
+
+        function createLabelPairHtml(index) {
+            return `
+                <div class="label-pair row g-2 mb-2" data-index="${index}">
+                    <div class="col-md-5">
+                        <input type="text" name="Labels[${index}].Key" class="form-control"
+                            placeholder="Label key (e.g., env)" />
+                    </div>
+                    <div class="col-md-5">
+                        <input type="text" name="Labels[${index}].Value" class="form-control"
+                            placeholder="Label value (e.g., prod)" />
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-outline-danger w-100 remove-label-btn">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function reindexLabels() {
+            $('.label-pair').each(function(index) {
+                $(this).attr('data-index', index);
+                $(this).find('input[name*=".Key"]').attr('name', `Labels[${index}].Key`);
+                $(this).find('input[name*=".Value"]').attr('name', `Labels[${index}].Value`);
+            });
+            labelIndex = $('.label-pair').length;
+        }
+
+        $(document).ready(function () {
+            // Scroll to validation errors if present
+            if ($('.alert-danger').length > 0) {
+                $('html, body').animate({
+                    scrollTop: $('.alert-danger').offset().top - 100
+                }, 500);
+            }
+
+            // Add is-invalid class to fields with errors on page load
+            $('span.text-danger').each(function () {
+                if ($(this).text().trim() !== '') {
+                    $(this).prev('input, select, textarea').addClass('is-invalid');
+                }
+            });
+
+            // Remove is-invalid class when user starts typing/selecting
+            $('input, select, textarea').on('input change', function () {
+                if ($(this).hasClass('is-invalid')) {
+                    $(this).removeClass('is-invalid');
+                    $(this).next('.form-text').next('.text-danger').text('');
+                }
+            });
+
+            // Add label button
+            $('#addLabelBtn').on('click', function() {
+                $('#labelsContainer').append(createLabelPairHtml(labelIndex));
+                labelIndex++;
+            });
+
+            // Remove label button (using event delegation for dynamically added elements)
+            $(document).on('click', '.remove-label-btn', function() {
+                if ($('.label-pair').length > 1) {
+                    $(this).closest('.label-pair').remove();
+                    reindexLabels();
+                } else {
+                    // Clear the last pair instead of removing it
+                    $(this).closest('.label-pair').find('input').val('');
+                }
+            });
+        });
+    </script>
 }

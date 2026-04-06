@@ -14,6 +14,9 @@ public abstract class ServiceCertLocator
     private const string AllowAll =
         "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20";
 
+    private const string AllowAll2 =
+        "7ec5120f0f497e22b18e59ed702ed82e2732562245c9a944f54cd41db4f491af";
+
     public ServiceCertLocator(
         ILogger logger,
         string certificateDiscoveryEndpoint,
@@ -61,7 +64,7 @@ public abstract class ServiceCertLocator
         var reportDataPayloadBytes = Convert.FromBase64String(serviceCertReport.ReportDataPayload);
         if (attestationReport == null &&
             this.HostData.Count == 1 &&
-            this.HostData[0] == AllowAll)
+            (this.HostData[0] == AllowAll || this.HostData[0] == AllowAll2))
         {
             // Skip validation if no report was presented and the expected hostData was also an
             // allow all (insecure) policy.

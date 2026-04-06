@@ -1,11 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json.Nodes;
-using Azure.Core;
 using CoseUtils;
 using Microsoft.Extensions.Http;
 
@@ -17,17 +15,26 @@ public class CcfClientManager
     private static readonly CcfClientManagerDefaults Defaults = new();
     private readonly CcfConfiguration? ccfConfig;
     private readonly ILogger logger;
+    private readonly IHttpContextAccessor httpContextAccessor;
 
     public CcfClientManager(
         ILogger logger,
         string? ccfEndpoint,
         string? serviceCertPem,
-        CcfServiceCertLocator? serviceCertDoc)
+        CcfServiceCertLocator? serviceCertDoc,
+        string? authMode,
+        IHttpContextAccessor httpContextAccessor)
     {
         this.logger = logger;
         this.ccfConfig = string.IsNullOrEmpty(ccfEndpoint) ?
             Defaults.CcfConfiguration :
             new CcfConfiguration(ccfEndpoint, serviceCertPem, serviceCertDoc);
+        if (!string.IsNullOrEmpty(authMode))
+        {
+            Defaults.JwtTokenConfiguration = new JwtTokenConfiguration(authMode);
+        }
+
+        this.httpContextAccessor = httpContextAccessor;
     }
 
     private enum EndpointAuthType
@@ -51,13 +58,13 @@ public class CcfClientManager
     }
 
     public static void SetAppAuthDefaults(
-        CcfTokenCredential userTokenCredential,
+        CcfTokenCredential tokenCredential,
         string scope,
-        JsonObject userTokenClaimsCopy,
+        JsonObject tokenClaimsCopy,
         string authMode)
     {
-        Defaults.UserTokenConfiguration =
-            new UserTokenConfiguration(scope, userTokenCredential, userTokenClaimsCopy, authMode);
+        Defaults.JwtTokenConfiguration =
+            new JwtTokenConfiguration(scope, tokenCredential, tokenClaimsCopy, authMode);
     }
 
     public static void SetCcfDefaults(
@@ -93,11 +100,11 @@ public class CcfClientManager
             ws.MemberId = Defaults.SigningConfiguration.MemberId;
         }
 
-        if (Defaults.UserTokenConfiguration != null)
+        if (Defaults.JwtTokenConfiguration != null)
         {
             ws.IsUser = true;
-            ws.UserTokenClaims = Defaults.UserTokenConfiguration.UserTokenClaims;
-            ws.AuthMode = Defaults.UserTokenConfiguration.AuthMode;
+            ws.JwtClaims = Defaults.JwtTokenConfiguration.TokenClaims;
+            ws.AuthMode = Defaults.JwtTokenConfiguration.AuthMode;
         }
 
         return ws;
@@ -128,7 +135,7 @@ public class CcfClientManager
 
     public HttpClient GetAppClient()
     {
-        if (Defaults.HttpsClientCert == null && Defaults.UserTokenConfiguration == null)
+        if (Defaults.HttpsClientCert == null && Defaults.JwtTokenConfiguration == null)
         {
             throw new Exception("Client cert or user token credential is mandatory. Invoke " +
                 "/configure to setup the user authentication configuration.");
@@ -196,12 +203,22 @@ public class CcfClientManager
         //     certValidationHandler: [AutoRenewingCertHandler] -> ServerCertValidationHandler.
         var retryPolicyHandler = new PolicyHttpMessageHandler(
             HttpRetries.Policies.DefaultRetryPolicy(this.logger));
-        if (epType == EndpointAuthType.App && Defaults.UserTokenConfiguration != null)
+        DelegatingHandler authenticationHandler;
+        if (epType == EndpointAuthType.App && Defaults.JwtTokenConfiguration != null)
         {
-            // jwt based auth.
-            var authenticationHandler = new AuthenticationDelegatingHandler(
-                Defaults.UserTokenConfiguration.UserTokenCredential,
-                Defaults.UserTokenConfiguration.UserTokenCredentialScope);
+            if (Defaults.JwtTokenConfiguration.AuthMode == AuthMode.FromAuthHeader)
+            {
+                authenticationHandler = new ForwardAuthHeaderDelegatingHandler(
+                    this.httpContextAccessor);
+            }
+            else
+            {
+                // jwt based auth.
+                authenticationHandler = new TokenCredentialDelegatingHandler(
+                    Defaults.JwtTokenConfiguration.TokenCredential,
+                    Defaults.JwtTokenConfiguration.TokenCredentialScope);
+            }
+
             authenticationHandler.InnerHandler = certValidationHandler;
             retryPolicyHandler.InnerHandler = authenticationHandler;
         }
@@ -216,31 +233,6 @@ public class CcfClientManager
         };
         return client;
     }
-
-    internal class AuthenticationDelegatingHandler
-    : DelegatingHandler
-    {
-        private CcfTokenCredential tokenCredential;
-        private string scope;
-
-        public AuthenticationDelegatingHandler(CcfTokenCredential tokenCredential, string scope)
-        {
-            this.tokenCredential = tokenCredential;
-            this.scope = scope;
-        }
-
-        protected override async Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            var ctx = new TokenRequestContext(new string[] { this.scope });
-            string token = await this.tokenCredential.GetTokenAsync(
-                ctx,
-                cancellationToken);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            return await base.SendAsync(request, cancellationToken);
-        }
-    }
 }
 
 public class CcfClientManagerDefaults
@@ -249,7 +241,7 @@ public class CcfClientManagerDefaults
 
     public SigningConfiguration? SigningConfiguration { get; set; }
 
-    public UserTokenConfiguration? UserTokenConfiguration { get; set; }
+    public JwtTokenConfiguration? JwtTokenConfiguration { get; set; }
 
     public X509Certificate2? HttpsClientCert { get; set; }
 }
@@ -273,17 +265,39 @@ public class CcfConfiguration(
     public CcfServiceCertLocator? CertLocator { get; set; } = certLocator;
 }
 
-public class UserTokenConfiguration(
-    string userTokenCredentialScope,
-    CcfTokenCredential userTokenCredential,
-    JsonObject userTokenClaims,
-    string authMode)
+public class JwtTokenConfiguration
 {
-    public string UserTokenCredentialScope { get; set; } = userTokenCredentialScope;
+    public JwtTokenConfiguration(
+        string tokenCredentialScope,
+        CcfTokenCredential tokenCredential,
+        JsonObject tokenClaims,
+        string authMode)
+    {
+        this.TokenCredentialScope = tokenCredentialScope;
+        this.TokenCredential = tokenCredential;
+        this.TokenClaims = tokenClaims;
+        this.AuthMode = authMode;
+    }
 
-    public CcfTokenCredential UserTokenCredential { get; set; } = userTokenCredential;
+    public JwtTokenConfiguration(string authMode)
+    {
+        if (authMode != "FromAuthHeader")
+        {
+            throw new ArgumentException(
+                $"Only FromAuthHeader auth mode is supported in this ctor. Input was '{authMode}'.");
+        }
 
-    public JsonObject? UserTokenClaims { get; set; } = userTokenClaims;
+        this.TokenCredentialScope = null!;
+        this.TokenCredential = null!;
+        this.TokenClaims = null!;
+        this.AuthMode = authMode;
+    }
 
-    public string AuthMode { get; set; } = authMode;
+    public string TokenCredentialScope { get; set; }
+
+    public CcfTokenCredential TokenCredential { get; set; }
+
+    public JsonObject? TokenClaims { get; set; }
+
+    public string AuthMode { get; set; }
 }

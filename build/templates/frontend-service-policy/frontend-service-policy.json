@@ -1,0 +1,148 @@
+[
+  {
+    "name": "frontend-service",
+    "properties": {
+      "image": "$containerRegistryUrl/frontend-service@$digest",
+      "command": [],
+      "environmentVariables": [
+        {
+          "name": "ASPNETCORE_URLS",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CONSORTIUM_MANAGER_ENDPOINT",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "MEMBERSHIP_MANAGER_ENDPOINT",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CGS_CLIENT_ENDPOINT",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "FIRST_PARTY_APP_ID",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "ANALYTICS_WORKLOAD_ID",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "TENANT_ID",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "FIRST_PARTY_APP_CERTIFICATE_NAME",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "KEY_VAULT_URL",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "FIRST_PARTY_APP_TOKEN_SCOPE",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CCR_SERVICE_CERT_PATH",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "SKR_PORT",
+          "value": ".*",
+          "regex": true
+        }
+      ],
+      "volumeMounts": [
+        {
+          "name": "shared",
+          "mountPath": "/app/service",
+          "mountType": "emptyDir",
+          "readOnly": true
+        }
+      ]
+    }
+  },
+  {
+    "name": "cgs-client",
+    "properties": {
+      "image": "$containerRegistryUrl/cgs-client@$digest",
+      "command": [],
+      "environmentVariables": []
+    }
+  },
+  {
+    "name": "ccr-proxy",
+    "properties": {
+      "image": "$containerRegistryUrl/ccr-proxy@$digest",
+      "command": ["/bin/bash", "https-http/bootstrap.sh", "--ca-type", "local"],
+      "environmentVariables": [
+        {
+          "name": "CCR_ENVOY_DESTINATION_PORT",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CCR_FQDN",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CCR_ENVOY_SERVICE_CERT_OUTPUT_FILE",
+          "value": ".*",
+          "regex": true
+        }
+      ],
+      "volumeMounts": [
+        {
+          "name": "shared",
+          "mountPath": "/app/service",
+          "mountType": "emptyDir",
+          "readOnly": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "skr",
+    "properties": {
+      "image": "$containerRegistryUrl/skr@$digest",
+      "command": [
+        "/skr.sh"
+      ],
+      "environmentVariables": [
+        {
+          "name": "SkrSideCarArgs",
+          "value": "ewogICAiY2VydGNhY2hlIjogewogICAgICAiZW5kcG9pbnQiOiAiYW1lcmljYXMuYWNjY2FjaGUuYXp1cmUubmV0IiwKICAgICAgInRlZV90eXBlIjogIlNldlNucFZNIiwKICAgICAgImFwaV92ZXJzaW9uIjogImFwaS12ZXJzaW9uPTIwMjAtMTAtMTUtcHJldmlldyIKICAgfQp9"
+        },
+        {
+          "name": "Port",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "LogFile",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "LogLevel",
+          "value": "Info"
+        }
+      ]
+    }
+  }
+]

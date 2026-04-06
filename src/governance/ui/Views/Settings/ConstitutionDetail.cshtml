@@ -1,7 +1,152 @@
 ﻿@model ConstitutionViewModel
 @{
-    ViewData["Title"] = "Constitution";
+    ViewData["Title"] = "Constitution Details";
 }
 
-<h2>Constitution</h2>
-<pre>@Model.Content</pre>
+<div class="content-wrapper">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 text-gradient mb-1">
+                <i class="fas fa-gavel me-2"></i>Constitution
+            </h1>
+            <p class="text-muted mb-0">View the system constitution and governance rules</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshConstitution()">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+            <a href="/Settings" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Settings
+            </a>
+        </div>
+    </div>
+
+    <!-- Constitution Content -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-scroll me-2"></i>Constitution Content
+            </h5>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copyConstitution()"
+                    title="Copy content to clipboard">
+                    <i class="fas fa-copy me-1"></i>Copy
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            @if (!string.IsNullOrEmpty(Model.Content))
+            {
+                <div class="code-container">
+                    <pre class="bg-light p-3 rounded" id="constitutionContent"
+                        style="max-height: 600px; overflow-y: auto;"><code>@Model.Content</code></pre>
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-5">
+                    <i class="fas fa-scroll fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No Constitution Content</h5>
+                    <p class="text-muted mb-4">Constitution content is not available at the moment.</p>
+                    <button type="button" class="btn btn-primary" onclick="refreshConstitution()">
+                        <i class="fas fa-sync-alt me-1"></i>Reload Constitution
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Actions Card -->
+    @if (!string.IsNullOrEmpty(Model.Content))
+    {
+        <div class="row mt-4">
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <i class="fas fa-tools me-2"></i>Actions
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="downloadConstitution()">
+                                <i class="fas fa-download me-2"></i>Download Constitution
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+</div>
+
+<script>
+    function copyConstitution() {
+        const contentElement = document.getElementById('constitutionContent');
+        const copyButton = document.querySelector('[onclick="copyConstitution()"]');
+        const originalText = copyButton.innerHTML;
+
+        if (contentElement) {
+            const textContent = contentElement.textContent || contentElement.innerText || '';
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(textContent).then(() => {
+                    copyButton.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+                    copyButton.classList.remove('btn-outline-secondary');
+                    copyButton.classList.add('btn-success');
+
+                    setTimeout(() => {
+                        copyButton.innerHTML = originalText;
+                        copyButton.classList.remove('btn-success');
+                        copyButton.classList.add('btn-outline-secondary');
+                    }, 2000);
+                });
+            }
+        }
+    }
+
+    function refreshConstitution() {
+        const refreshBtn = document.querySelector('[onclick="refreshConstitution()"]');
+        const icon = refreshBtn.querySelector('i');
+
+        icon.classList.add('fa-spin');
+        refreshBtn.disabled = true;
+
+        setTimeout(() => {
+            icon.classList.remove('fa-spin');
+            refreshBtn.disabled = false;
+            location.reload();
+        }, 1000);
+    }
+
+    function downloadConstitution() {
+        const contentElement = document.getElementById('constitutionContent');
+        if (contentElement) {
+            const content = contentElement.textContent || contentElement.innerText || '';
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'constitution.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+
+            // Show feedback
+            const downloadBtn = document.querySelector('[onclick="downloadConstitution()"]');
+            const originalHTML = downloadBtn.innerHTML;
+            downloadBtn.innerHTML = '<i class="fas fa-check me-2"></i>Downloaded!';
+            downloadBtn.classList.remove('btn-outline-primary');
+            downloadBtn.classList.add('btn-success');
+
+            setTimeout(() => {
+                downloadBtn.innerHTML = originalHTML;
+                downloadBtn.classList.remove('btn-success');
+                downloadBtn.classList.add('btn-outline-primary');
+            }, 2000);
+        }
+    }
+</script>

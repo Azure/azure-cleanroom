@@ -52,7 +52,7 @@ function Deploy-MongoDB {
     az container create `
         -g $resourceGroup `
         --name $aciName `
-        --image cleanroomsamples.azurecr.io/mongo:latest `
+        --image cleanroomsamples.azurecr.io/mongo:6.0.27 `
         --environment-variables MONGO_INITDB_ROOT_USERNAME=$user `
         --secure-environment-variables MONGO_INITDB_ROOT_PASSWORD=$password `
         --ports 27017 `
@@ -98,6 +98,9 @@ function Deploy-MongoDB {
         }
         elseif ($ubuntuVersion -eq "20.04") {
             $toolsVersion = "ubuntu2004-x86_64-100.11.0"
+        }
+        elseif ($ubuntuVersion -eq "24.04") {
+            $toolsVersion = "ubuntu2404-x86_64-100.11.0"
         }
         else {
             throw "Unsupported OS version: $ubuntuVersion"

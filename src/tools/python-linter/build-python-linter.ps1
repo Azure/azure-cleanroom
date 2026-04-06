@@ -1,0 +1,1 @@
+docker build -f $PSScriptRoot/Dockerfile.python-linter -t python-linter $PSScriptRoot

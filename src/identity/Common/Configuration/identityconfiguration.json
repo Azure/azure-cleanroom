@@ -16,31 +16,5 @@
         }
       }
     ]
-  },
-  "Diagnostics": {
-    "Logs": {
-      "Exporters": [
-        {
-          "Type": "Console",
-          "Endpoint": ""
-        }
-      ]
-    },
-    "Traces": {
-      "Exporters": [
-        {
-          "Type": "Console",
-          "Endpoint": ""
-        }
-      ]
-    },
-    "Metrics": {
-      "Exporters": [
-        {
-          "Type": "Console",
-          "Endpoint":  ""
-        }
-      ]
-    }
   }
 }

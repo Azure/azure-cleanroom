@@ -1,5 +1,5 @@
 import * as ccfapp from "@microsoft/ccf-app";
-import { DiscoveryResponse } from "../../models/openidmodels";
+import { DiscoveryResponse } from "../../models";
 import { getGovIssuerUrl } from "./issuer";
 
 export function getConfiguration(): ccfapp.Response<DiscoveryResponse> {

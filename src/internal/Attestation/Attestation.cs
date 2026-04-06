@@ -2,14 +2,13 @@
 // Licensed under the MIT License.
 
 using System.Net;
+using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json.Nodes;
-using Google.Protobuf;
-using Grpc.Net.Client;
-using GrpcAttestationContainerClient;
+using System.Text.Json.Serialization;
 using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Parameters;
 
@@ -20,47 +19,56 @@ public class Attestation
     private const string AllowAllHostData =
         "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20";
 
-    public static async Task<AttestationReport> GetReportAsync(byte[] reportData)
+    // Fixed 32-byte nonce (SHA-256 of "azure-cleanroom") used for TPM quotes.
+    private static readonly string TpmQuoteNonce =
+        Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes("azure-cleanroom")));
+
+    private static readonly HttpClient SkrClient = new()
     {
-        var udsEndPoint = new UnixDomainSocketEndPoint("/mnt/uds/sock");
-        var connectionFactory = new UnixDomainSocketsConnectionFactory(udsEndPoint);
-        using var channel = GrpcChannel.ForAddress("http://localhost", new GrpcChannelOptions
-        {
-            HttpHandler = new SocketsHttpHandler
-            {
-                ConnectCallback = connectionFactory.ConnectAsync
-            }
-        });
+        BaseAddress = new Uri(
+            $"http://localhost:{Environment.GetEnvironmentVariable("SKR_PORT") ?? "8284"}")
+    };
 
-        var client = new AttestationContainer.AttestationContainerClient(channel);
-        FetchAttestationReply reply = await client.FetchAttestationAsync(new FetchAttestationRequest
-        {
-            ReportData = ByteString.CopyFrom(reportData)
-        });
+    private static readonly HttpClient CvmAttestationAgentClient = new()
+    {
+        BaseAddress = new Uri(
+            $"http://localhost:{Environment.GetEnvironmentVariable("CVM_ATTESTATION_AGENT_PORT")
+                ?? "8900"}")
+    };
 
-        return new AttestationReport
-        {
-            Attestation = Convert.ToBase64String(reply.Attestation.ToByteArray()),
-            PlatformCertificates = Convert.ToBase64String(reply.PlatformCertificates.ToByteArray()),
-            UvmEndorsements = Convert.ToBase64String(reply.UvmEndorsements.ToByteArray())
-        };
+    private static readonly bool IsUvmSecurityContextDirPresent =
+     !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("UVM_SECURITY_CONTEXT_DIR"));
+
+    public static string ToReportDataHashValue(byte[] reportData)
+    {
+        return BitConverter.ToString(SHA256.HashData(reportData)).Replace("-", string.Empty);
     }
 
-    public static bool IsSevSnp()
+    public static bool IsSnpCACI()
     {
-        return !IsVirtualEnvironment();
-    }
-
-    public static bool IsVirtualEnvironment()
-    {
-        return Environment.GetEnvironmentVariable("INSECURE_VIRTUAL_ENVIRONMENT") == "true";
-    }
-
-    public static async Task<string> GetHostData()
-    {
-        if (IsSevSnp())
+        if (IsVirtualEnvironment())
         {
-            var hostData = await GetHostDataAsync();
+            return false;
+        }
+
+        if (!IsUvmSecurityContextDirPresent)
+        {
+            throw new Exception("UVM_SECURITY_CONTEXT_DIR is not set. Are you running in CACI?");
+        }
+
+        return true;
+
+        static bool IsVirtualEnvironment()
+        {
+            return Environment.GetEnvironmentVariable("INSECURE_VIRTUAL_ENVIRONMENT") == "true";
+        }
+    }
+
+    public static async Task<string> GetCACIHostData()
+    {
+        if (IsSnpCACI())
+        {
+            var hostData = await GetCACIHostDataAsync();
             return hostData;
         }
         else
@@ -69,17 +77,24 @@ public class Attestation
         }
     }
 
-    public static async Task<AttestationReportKey>
-        GenerateRsaKeyPairAndReportAsync()
+    public static KeyPair GenerateRsaKeyPair()
     {
         using var rsa = RSA.Create(2048);
         string privateKeyPem = rsa.ExportPkcs8PrivateKeyPem();
         string publicKeyPem = rsa.ExportSubjectPublicKeyInfoPem();
+        return new KeyPair(publicKeyPem, privateKeyPem);
+    }
 
-        var reportData = AsReportDataBytes(publicKeyPem);
-        var report = await GetReportAsync(reportData);
+    public static async Task<AttestationReportKey>
+        GenerateRsaKeyPairAndReportAsync()
+    {
+        var keyPair = GenerateRsaKeyPair();
 
-        return new AttestationReportKey(publicKeyPem, privateKeyPem, report);
+        var reportData = Encoding.UTF8.GetBytes(keyPair.PublicKey);
+        AttestationReport report = IsUvmSecurityContextDirPresent ?
+            await GetCACIReportAsync(reportData) : await GetCvmReportAsync(reportData);
+
+        return new AttestationReportKey(keyPair.PublicKey, keyPair.PrivateKey, report);
     }
 
     public static async Task<AttestationReportKeyCert>
@@ -93,15 +108,16 @@ public class Attestation
         string certPem = cert.ExportCertificatePem();
         string publicKeyPem = ecdsa.ExportSubjectPublicKeyInfoPem();
 
-        var reportData = AsReportDataBytes(publicKeyPem);
-        var report = await GetReportAsync(reportData);
+        var reportData = Encoding.UTF8.GetBytes(publicKeyPem);
+        AttestationReport report = IsUvmSecurityContextDirPresent ?
+            await GetCACIReportAsync(reportData) : await GetCvmReportAsync(reportData);
 
         return new AttestationReportKeyCert(certPem, publicKeyPem, privateKeyPem, report);
     }
 
     public static JsonObject PrepareRequestContent(
         string publicKey,
-        AttestationReport attestationReport)
+        AttestationReport? attestationReport)
     {
         var content = new JsonObject
         {
@@ -111,7 +127,10 @@ public class Attestation
             }
         };
 
-        content["attestation"] = CcfAttestationReport.ConvertFrom(attestationReport).AsObject();
+        if (attestationReport != null)
+        {
+            AddAttestationToContent(content, attestationReport);
+        }
 
         return content;
     }
@@ -120,7 +139,7 @@ public class Attestation
         byte[] data,
         byte[] signature,
         string publicKey,
-        AttestationReport attestationReport)
+        AttestationReport? attestationReport)
     {
         var content = new JsonObject
         {
@@ -138,17 +157,21 @@ public class Attestation
             ["publicKey"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(publicKey))
         };
 
-        content["attestation"] = CcfAttestationReport.ConvertFrom(attestationReport).AsObject();
+        if (attestationReport != null)
+        {
+            AddAttestationToContent(content, attestationReport);
+        }
 
         return content;
     }
 
-    public static JsonObject PrepareRequestContent(AttestationReport attestationReport)
+    public static JsonObject PrepareRequestContent(AttestationReport? attestationReport)
     {
-        var content = new JsonObject
+        var content = new JsonObject();
+        if (attestationReport != null)
         {
-            ["attestation"] = CcfAttestationReport.ConvertFrom(attestationReport).AsObject()
-        };
+            AddAttestationToContent(content, attestationReport);
+        }
 
         return content;
     }
@@ -196,18 +219,90 @@ public class Attestation
         return unwrappedValue;
     }
 
-    public static string AsReportData(string publicKey)
+    public static async Task<AttestationReport> GetCACIReportAsync(byte[] reportData)
     {
-        return BitConverter.ToString(AsReportDataBytes(publicKey)).Replace("-", string.Empty);
+        using var response = await SkrClient.PostAsync("/attest/combined", JsonContent.Create(new
+        {
+            runtime_data = Convert.ToBase64String(reportData)
+        }));
+        if (!response.IsSuccessStatusCode)
+        {
+            var content = await response.Content.ReadAsStringAsync();
+            throw new Azure.RequestFailedException((int)response.StatusCode, content);
+        }
+
+        var combinedReport = (await response.Content.ReadFromJsonAsync<CombinedReport>())!;
+        return new AttestationReport
+        {
+            SnpCaci = new SnpCACIAttestationReport
+            {
+                Attestation = combinedReport.Evidence,
+                PlatformCertificates = combinedReport.Endorsements,
+                UvmEndorsements = combinedReport.UvmEndorsements
+            }
+        };
     }
 
-    public static byte[] AsReportDataBytes(string publicKey)
+    private static void AddAttestationToContent(
+        JsonObject content,
+        AttestationReport attestationReport)
     {
-        return SHA256.HashData(Encoding.UTF8.GetBytes(Convert.ToBase64String(
-            Encoding.UTF8.GetBytes(publicKey))));
+        if (attestationReport.SnpCaci != null && attestationReport.SnpCvm != null)
+        {
+            throw new ArgumentException("Attestation report contains multiple report types.");
+        }
+
+        if (attestationReport.SnpCaci != null)
+        {
+            content["platform"] = "snp-caci";
+            content["attestation"] =
+                CcfSnpCACIAttestationReport.ConvertFrom(attestationReport.SnpCaci).AsObject();
+        }
+        else if (attestationReport.SnpCvm != null)
+        {
+            content["platform"] = "snp-cvm";
+            var attestationObject =
+                CcfSnpCvmAttestationReport.ConvertFrom(attestationReport.SnpCvm).AsObject();
+
+            // runtimeClaims are not sent over as any verifier should extract it from the HCL
+            //  report blob post verification and rely on that.
+            attestationObject.Remove("runtimeClaims");
+            content["attestation"] = attestationObject;
+        }
+        else
+        {
+            throw new ArgumentException(
+                $"Unsupported attestation report type: " +
+                $"{attestationReport.GetType().FullName}");
+        }
     }
 
-    private static async Task<string> GetHostDataAsync()
+    private static async Task<AttestationReport> GetCvmReportAsync(byte[] reportData)
+    {
+        using var response = await CvmAttestationAgentClient.PostAsync(
+            "/snp/attest",
+            JsonContent.Create(new
+            {
+                nonce = TpmQuoteNonce,
+
+                // SNP report_data is 64 bytes: SHA-256(reportData) (32 bytes) + 32 zero bytes.
+                reportData = Convert.ToBase64String(
+                    SHA256.HashData(reportData).Concat(new byte[32]).ToArray())
+            }));
+        if (!response.IsSuccessStatusCode)
+        {
+            var content = await response.Content.ReadAsStringAsync();
+            throw new Azure.RequestFailedException((int)response.StatusCode, content);
+        }
+
+        var report = await response.Content.ReadFromJsonAsync<SnpCvmAttestationReport>();
+        return new AttestationReport
+        {
+            SnpCvm = report
+        };
+    }
+
+    private static async Task<string> GetCACIHostDataAsync()
     {
         var securityContextDir = Environment.GetEnvironmentVariable("UVM_SECURITY_CONTEXT_DIR");
         if (string.IsNullOrEmpty(securityContextDir))
@@ -262,4 +357,10 @@ public class Attestation
             }
         }
     }
+
+    internal record CombinedReport(
+        [property: JsonPropertyName("endorsed_tcb")] string EndorsedTcb,
+        [property: JsonPropertyName("endorsements")] string Endorsements,
+        [property: JsonPropertyName("evidence")] string Evidence,
+        [property: JsonPropertyName("uvm_endorsements")] string UvmEndorsements);
 }

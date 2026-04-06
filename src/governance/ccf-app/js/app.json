@@ -25,7 +25,7 @@
         "mode": "readwrite",
         "openapi": {}
       },
-      "get": {
+      "post": {
         "js_module": "endpoints/contracts.js",
         "js_function": "getContract",
         "forwarding_required": "sometimes",
@@ -38,82 +38,25 @@
         "openapi": {}
       }
     },
-    "/contracts/{contractId}/checkstatus/execution": {
+    "/contracts/{contractId}/runtimeoptions/{option}/status": {
       "post": {
         "js_module": "endpoints/contractruntimeoptions.js",
-        "js_function": "checkContractExecutionStatus",
-        "forwarding_required": "always",
+        "js_function": "checkContractRuntimeOption",
+        "forwarding_required": "sometimes",
         "authn_policies": [
           "member_cert",
           "user_cert",
-          "jwt"
+          "jwt",
+          "no_auth"
         ],
         "mode": "readonly",
         "openapi": {}
       }
     },
-    "/contracts/{contractId}/checkstatus/logging": {
+    "/contracts/{contractId}/runtimeoptions/{option}/enable": {
       "post": {
         "js_module": "endpoints/contractruntimeoptions.js",
-        "js_function": "checkContractLoggingStatus",
-        "forwarding_required": "always",
-        "authn_policies": [
-          "member_cert",
-          "user_cert",
-          "jwt"
-        ],
-        "mode": "readonly",
-        "openapi": {}
-      }
-    },
-    "/contracts/{contractId}/checkstatus/telemetry": {
-      "post": {
-        "js_module": "endpoints/contractruntimeoptions.js",
-        "js_function": "checkContractTelemetryStatus",
-        "forwarding_required": "always",
-        "authn_policies": [
-          "member_cert",
-          "user_cert",
-          "jwt"
-        ],
-        "mode": "readonly",
-        "openapi": {}
-      }
-    },
-    "/contracts/{contractId}/consentcheck/execution": {
-      "post": {
-        "js_module": "endpoints/contractruntimeoptions.js",
-        "js_function": "consentCheckExecution",
-        "forwarding_required": "always",
-        "authn_policies": [],
-        "mode": "readonly",
-        "openapi": {}
-      }
-    },
-    "/contracts/{contractId}/consentcheck/logging": {
-      "post": {
-        "js_module": "endpoints/contractruntimeoptions.js",
-        "js_function": "consentCheckLogging",
-        "forwarding_required": "always",
-        "authn_policies": [],
-        "mode": "readonly",
-        "openapi": {}
-      }
-    },
-    "/contracts/{contractId}/consentcheck/telemetry": {
-      "post": {
-        "js_module": "endpoints/contractruntimeoptions.js",
-        "js_function": "consentCheckTelemetry",
-        "forwarding_required": "always",
-        "authn_policies": [],
-        "mode": "readonly",
-        "openapi": {}
-      }
-    },
-    "/contracts/{contractId}/enable": {
-      "post": {
-        "js_module": "endpoints/contractruntimeoptions.js",
-        "js_function": "enableContract",
+        "js_function": "enableContractRuntimeOption",
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert"
@@ -122,10 +65,10 @@
         "openapi": {}
       }
     },
-    "/contracts/{contractId}/disable": {
+    "/contracts/{contractId}/runtimeoptions/{option}/disable": {
       "post": {
         "js_module": "endpoints/contractruntimeoptions.js",
-        "js_function": "disableContract",
+        "js_function": "disableContractRuntimeOption",
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert"
@@ -137,8 +80,8 @@
     "/contracts/{contractId}/events": {
       "get": {
         "js_module": "endpoints/events.js",
-        "js_function": "getEvent",
-        "forwarding_required": "always",
+        "js_function": "listEvents",
+        "forwarding_required": "sometimes",
         "authn_policies": [
           "member_cert",
           "user_cert",
@@ -151,7 +94,10 @@
         "js_module": "endpoints/events.js",
         "js_function": "putEvent",
         "forwarding_required": "always",
-        "authn_policies": [],
+        "authn_policies": [
+          "jwt",
+          "no_auth"
+        ],
         "mode": "readwrite",
         "openapi": {}
       }
@@ -160,7 +106,7 @@
       "get": {
         "js_module": "endpoints/secrets.js",
         "js_function": "listSecrets",
-        "forwarding_required": "always",
+        "forwarding_required": "sometimes",
         "authn_policies": [
           "member_cert",
           "user_cert",
@@ -187,39 +133,17 @@
       "post": {
         "js_module": "endpoints/secrets.js",
         "js_function": "getSecret",
-        "forwarding_required": "always",
+        "forwarding_required": "sometimes",
         "authn_policies": [],
-        "mode": "readonly",
-        "openapi": {}
-      }
-    },
-    "/contracts/{contractId}/secrets/{secretName}/cleanroompolicy": {
-      "post": {
-        "js_module": "endpoints/secrets.js",
-        "js_function": "setSecretCleanRoomPolicy",
-        "forwarding_required": "always",
-        "authn_policies": [],
-        "mode": "readwrite",
-        "openapi": {}
-      },
-      "get": {
-        "js_module": "endpoints/secrets.js",
-        "js_function": "getSecretCleanRoomPolicy",
-        "forwarding_required": "always",
-        "authn_policies": [
-          "member_cert",
-          "user_cert",
-          "jwt"
-        ],
         "mode": "readonly",
         "openapi": {}
       }
     },
     "/contracts/{contractId}/cleanroompolicy": {
-      "get": {
+      "post": {
         "js_module": "endpoints/cleanroompolicy.js",
         "js_function": "getCleanRoomPolicy",
-        "forwarding_required": "always",
+        "forwarding_required": "sometimes",
         "authn_policies": [
           "member_cert",
           "user_cert",
@@ -229,11 +153,57 @@
         "openapi": {}
       }
     },
-    "/contracts/{contractId}/deploymentspec": {
+    "/contracts/{contractId}/cleanroompolicy/delegates": {
       "get": {
+        "js_module": "endpoints/cleanroompolicy.js",
+        "js_function": "listDelegatePolicies",
+        "forwarding_required": "sometimes",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/contracts/{contractId}/cleanroompolicy/delegates/{delegateType}/{delegateId}": {
+      "post": {
+        "js_module": "endpoints/cleanroompolicy.js",
+        "js_function": "getDelegatePolicy",
+        "forwarding_required": "sometimes",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      },
+      "put": {
+        "js_module": "endpoints/cleanroompolicy.js",
+        "js_function": "setDelegatePolicy",
+        "forwarding_required": "always",
+        "authn_policies": [],
+        "mode": "readwrite",
+        "openapi": {}
+      }
+    },
+    "/contracts/{contractId}/deploymentspec": {
+      "post": {
         "js_module": "endpoints/deploymentspecs.js",
         "js_function": "getDeploymentSpec",
-        "forwarding_required": "always",
+        "forwarding_required": "sometimes",
+        "authn_policies": [],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/contracts/{contractId}/deploymentinfo": {
+      "post": {
+        "js_module": "endpoints/deploymentinfo.js",
+        "js_function": "getDeploymentInfo",
+        "forwarding_required": "sometimes",
         "authn_policies": [],
         "mode": "readonly",
         "openapi": {}
@@ -243,25 +213,27 @@
       "post": {
         "js_module": "endpoints/token.js",
         "js_function": "getToken",
-        "forwarding_required": "always",
+        "forwarding_required": "sometimes",
         "authn_policies": [],
         "mode": "readonly",
         "openapi": {}
       }
     },
-    "/contracts/{contractId}/oauth/federation/subjects/{subjectName}/cleanroompolicy": {
+    "/contracts/{contractId}/signing/sign": {
       "post": {
-        "js_module": "endpoints/token.js",
-        "js_function": "setTokenSubjectCleanRoomPolicy",
-        "forwarding_required": "always",
+        "js_module": "endpoints/signing/sign.js",
+        "js_function": "signPayload",
+        "forwarding_required": "sometimes",
         "authn_policies": [],
-        "mode": "readwrite",
+        "mode": "readonly",
         "openapi": {}
-      },
+      }
+    },
+    "/contracts/{contractId}/memberdocuments": {
       "get": {
-        "js_module": "endpoints/token.js",
-        "js_function": "getTokenSubjectCleanRoomPolicy",
-        "forwarding_required": "always",
+        "js_module": "endpoints/memberdocuments.js",
+        "js_function": "listMemberDocuments",
+        "forwarding_required": "sometimes",
         "authn_policies": [
           "member_cert",
           "user_cert",
@@ -271,7 +243,31 @@
         "openapi": {}
       }
     },
-    "/contracts/{contractId}/acceptedMemberDocuments/{documentId}": {
+    "/contracts/{contractId}/memberdocuments/{documentId}": {
+      "put": {
+        "js_module": "endpoints/memberdocuments.js",
+        "js_function": "putMemberDocument",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert"
+        ],
+        "mode": "readwrite",
+        "openapi": {}
+      },
+      "post": {
+        "js_module": "endpoints/memberdocuments.js",
+        "js_function": "getMemberDocument",
+        "forwarding_required": "sometimes",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/contracts/{contractId}/memberdocuments/accepted/{documentId}": {
       "post": {
         "js_module": "endpoints/memberdocuments.js",
         "js_function": "getAcceptedMemberDocument",
@@ -281,7 +277,47 @@
         "openapi": {}
       }
     },
-    "/contracts/{contractId}/acceptedUserDocuments/{documentId}": {
+    "/contracts/{contractId}/userdocuments": {
+      "get": {
+        "js_module": "endpoints/userdocuments.js",
+        "js_function": "listUserDocuments",
+        "forwarding_required": "sometimes",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/contracts/{contractId}/userdocuments/{documentId}": {
+      "put": {
+        "js_module": "endpoints/userdocuments.js",
+        "js_function": "putUserDocument",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readwrite",
+        "openapi": {}
+      },
+      "post": {
+        "js_module": "endpoints/userdocuments.js",
+        "js_function": "getUserDocument",
+        "forwarding_required": "sometimes",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/contracts/{contractId}/userdocuments/accepted/{documentId}": {
       "post": {
         "js_module": "endpoints/userdocuments.js",
         "js_function": "getAcceptedUserDocument",
@@ -313,13 +349,15 @@
         "openapi": {}
       }
     },
-    "/contracts/{contractId}/ca/info": {
-      "get": {
+    "/contracts/{contractId}/ca/status": {
+      "post": {
         "js_module": "endpoints/ca/info.js",
         "js_function": "getCAInfo",
         "forwarding_required": "always",
         "authn_policies": [
-          "member_cert"
+          "member_cert",
+          "user_cert",
+          "jwt"
         ],
         "mode": "readonly",
         "openapi": {}
@@ -336,7 +374,10 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "deprecated": true,
+          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/memberdocuments instead."
+        }
       }
     },
     "/memberdocuments/{documentId}": {
@@ -348,7 +389,10 @@
           "member_cert"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "deprecated": true,
+          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/memberdocuments/{documentId} instead."
+        }
       },
       "get": {
         "js_module": "endpoints/memberdocuments.js",
@@ -360,7 +404,10 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "deprecated": true,
+          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/memberdocuments/{documentId} instead."
+        }
       }
     },
     "/users/identities": {
@@ -377,11 +424,11 @@
         "openapi": {}
       }
     },
-    "/contracts/{contractId}/users/isactive": {
+    "/users/identities/self/status": {
       "post": {
         "js_module": "endpoints/useridentities.js",
-        "js_function": "isActiveUser",
-        "forwarding_required": "always",
+        "js_function": "checkUserIdentity",
+        "forwarding_required": "sometimes",
         "authn_policies": [
           "jwt"
         ],
@@ -390,10 +437,10 @@
       }
     },
     "/users/identities/{identityId}": {
-      "get": {
+      "post": {
         "js_module": "endpoints/useridentities.js",
         "js_function": "getUserIdentity",
-        "forwarding_required": "always",
+        "forwarding_required": "sometimes",
         "authn_policies": [
           "member_cert",
           "user_cert",
@@ -418,7 +465,7 @@
       }
     },
     "/users/invitations/{invitationId}": {
-      "get": {
+      "post": {
         "js_module": "endpoints/userinvitations.js",
         "js_function": "getInvitation",
         "forwarding_required": "sometimes",
@@ -454,7 +501,10 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "deprecated": true,
+          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/userdocuments instead."
+        }
       }
     },
     "/userdocuments/{documentId}": {
@@ -468,7 +518,10 @@
           "jwt"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "deprecated": true,
+          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/userdocuments/{documentId} instead."
+        }
       },
       "get": {
         "js_module": "endpoints/userdocuments.js",
@@ -480,7 +533,10 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "deprecated": true,
+          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/userdocuments/{documentId} instead."
+        }
       }
     },
     "/proposals/{proposalId}/historical": {
@@ -497,31 +553,22 @@
         "openapi": {}
       }
     },
-    "/contracts/{contractId}/userdocuments/{documentId}/consentcheck/{option}": {
+    "/contracts/{contractId}/userdocuments/{documentId}/runtimeoptions/{option}/status": {
       "post": {
         "js_module": "endpoints/userdocumentruntimeoptions.js",
-        "js_function": "consentCheckUserDocumentRuntimeOption",
-        "forwarding_required": "always",
-        "authn_policies": [],
-        "mode": "readonly",
-        "openapi": {}
-      }
-    },
-    "/userdocuments/{documentId}/checkstatus/{option}": {
-      "post": {
-        "js_module": "endpoints/userdocumentruntimeoptions.js",
-        "js_function": "checkUserDocumentRuntimeOptionStatus",
-        "forwarding_required": "always",
+        "js_function": "checkUserDocumentRuntimeOption",
+        "forwarding_required": "sometimes",
         "authn_policies": [
           "member_cert",
           "user_cert",
-          "jwt"
+          "jwt",
+          "no_auth"
         ],
         "mode": "readonly",
         "openapi": {}
       }
     },
-    "/userdocuments/{documentId}/runtimeoptions/{option}/enable": {
+    "/contracts/{contractId}/userdocuments/{documentId}/runtimeoptions/{option}/enable": {
       "post": {
         "js_module": "endpoints/userdocumentruntimeoptions.js",
         "js_function": "enableUserDocumentRuntimeOption",
@@ -535,7 +582,7 @@
         "openapi": {}
       }
     },
-    "/userdocuments/{documentId}/runtimeoptions/{option}/disable": {
+    "/contracts/{contractId}/userdocuments/{documentId}/runtimeoptions/{option}/disable": {
       "post": {
         "js_module": "endpoints/userdocumentruntimeoptions.js",
         "js_function": "disableUserDocumentRuntimeOption",
@@ -550,10 +597,10 @@
       }
     },
     "/users/proposals/{proposalId}": {
-      "get": {
+      "post": {
         "js_module": "endpoints/userproposals.js",
-        "js_function": "getProposal",
-        "forwarding_required": "always",
+        "js_function": "getUserProposal",
+        "forwarding_required": "sometimes",
         "authn_policies": [
           "member_cert",
           "user_cert",
@@ -564,7 +611,7 @@
       },
       "put": {
         "js_module": "endpoints/userproposals.js",
-        "js_function": "putProposal",
+        "js_function": "putUserProposal",
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert",
@@ -576,10 +623,10 @@
       }
     },
     "/users/proposals/{proposalId}/status": {
-      "get": {
+      "post": {
         "js_module": "endpoints/userproposals.js",
-        "js_function": "getProposalStatus",
-        "forwarding_required": "always",
+        "js_function": "checkUserProposal",
+        "forwarding_required": "sometimes",
         "authn_policies": [
           "member_cert",
           "user_cert",
@@ -592,7 +639,7 @@
     "/users/proposals/{proposalId}/withdraw": {
       "post": {
         "js_module": "endpoints/userproposals.js",
-        "js_function": "withdrawProposal",
+        "js_function": "withdrawUserProposal",
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert",
@@ -606,7 +653,7 @@
     "/users/proposals/{proposalId}/ballots/submit": {
       "post": {
         "js_module": "endpoints/userproposals.js",
-        "js_function": "submitBallotProposal",
+        "js_function": "submitUserProposalBallot",
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert",
@@ -621,7 +668,7 @@
       "get": {
         "js_module": "endpoints/oidc/discovery.js",
         "js_function": "getConfiguration",
-        "forwarding_required": "always",
+        "forwarding_required": "sometimes",
         "authn_policies": [],
         "mode": "readonly",
         "openapi": {}
@@ -631,7 +678,7 @@
       "get": {
         "js_module": "endpoints/oidc/jwks.js",
         "js_function": "getJwks",
-        "forwarding_required": "always",
+        "forwarding_required": "sometimes",
         "authn_policies": [],
         "mode": "readonly",
         "openapi": {}
@@ -640,7 +687,7 @@
     "/oidc/generateSigningKey": {
       "post": {
         "js_module": "endpoints/oidc/signingkey.js",
-        "js_function": "generateSigningKey",
+        "js_function": "generateIssuerSigningKey",
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert"
@@ -655,14 +702,16 @@
         "js_function": "setIssuerUrl",
         "forwarding_required": "always",
         "authn_policies": [
-          "member_cert"
+          "member_cert",
+          "user_cert",
+          "jwt"
         ],
         "mode": "readwrite",
         "openapi": {}
       }
     },
     "/oidc/issuerInfo": {
-      "get": {
+      "post": {
         "js_module": "endpoints/oidc/info.js",
         "js_function": "getOidcIssuerInfo",
         "forwarding_required": "always",
@@ -675,11 +724,37 @@
         "openapi": {}
       }
     },
-    "/runtimeoptions/checkstatus/{option}": {
+    "/signing/generateSigningKey": {
+      "post": {
+        "js_module": "endpoints/signing/signingkey.js",
+        "js_function": "generateSigningKey",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert"
+        ],
+        "mode": "readwrite",
+        "openapi": {}
+      }
+    },
+    "/signing/info": {
+      "post": {
+        "js_module": "endpoints/signing/info.js",
+        "js_function": "getSigningInfo",
+        "forwarding_required": "always",
+        "authn_policies": [
+          "member_cert",
+          "user_cert",
+          "jwt"
+        ],
+        "mode": "readonly",
+        "openapi": {}
+      }
+    },
+    "/runtimeoptions/{option}/status": {
       "post": {
         "js_module": "endpoints/runtimeoptions.js",
-        "js_function": "checkRuntimeOptionStatus",
-        "forwarding_required": "always",
+        "js_function": "checkRuntimeOption",
+        "forwarding_required": "sometimes",
         "authn_policies": [
           "member_cert",
           "user_cert",

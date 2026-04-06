@@ -39,6 +39,9 @@ public class ConsortiumManagersController : CCfClientController
         CcfConsortiumManager manager =
             await provider.CreateConsortiumManager(
                 consortiumManagerName,
+                content.AkvEndpoint,
+                content.MaaEndpoint,
+                content.ManagedIdentityId,
                 SecurityPolicyConfigInput.Convert(content.SecurityPolicy),
                 content.ProviderConfig);
         return this.Ok(manager);

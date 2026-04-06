@@ -1,0 +1,26 @@
+# Use the official .NET Core SDK as the base image
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS base
+
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip python3-venv pipx && \
+    pipx ensurepath
+
+USER 1000:1000
+WORKDIR /app
+ENV HOME=/app
+
+# Install node.js & TypeSpec compiler
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && \
+    export NVM_DIR="$HOME/.nvm" && \
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && \
+    nvm install 24 && \
+    nvm use 24 && \
+    npm install -g @typespec/compiler
+
+COPY tsp-codegen.sh .
+USER root
+RUN chmod +x ./tsp-codegen.sh
+
+ENV TSP_FOLDER=/tsp
+
+ENTRYPOINT ["bash", "-c","export NVM_DIR=/app/.nvm; . /app/.nvm/nvm.sh && /app/tsp-codegen.sh"]

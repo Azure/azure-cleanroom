@@ -94,6 +94,7 @@ public class RoleTests : TestBase
 
         // Enabling auto-approve deployment spec/clean room policy option.
         await this.SetRuntimeOption(RuntimeOption.AutoApproveDeploymentSpec, ActionName.Enable);
+        await this.SetRuntimeOption(RuntimeOption.AutoApproveDeploymentInfo, ActionName.Enable);
         await this.SetRuntimeOption(RuntimeOption.AutoApproveCleanRoomPolicy, ActionName.Enable);
 
         // Update member1 to become a contractOperator.
@@ -134,6 +135,33 @@ public class RoleTests : TestBase
                 $"proposals/{proposalId}"))!;
         Assert.AreEqual("Accepted", proposalResponse["proposalState"]!.ToString());
 
+        // And for deployment info.
+        var infoInput = new JsonObject
+        {
+            ["armId"] = "somethingElse"
+        };
+        proposalId =
+            await this.ProposeContractProposal(
+                contractId,
+                "deploymentinfo",
+                infoInput,
+                asMember: Members.Member0);
+        proposalResponse =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
+                $"proposals/{proposalId}"))!;
+        Assert.AreEqual("Open", proposalResponse["proposalState"]!.ToString());
+
+        proposalId =
+            await this.ProposeContractProposal(
+                contractId,
+                "deploymentinfo",
+                infoInput,
+                asMember: Members.Member1);
+        proposalResponse =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
+                $"proposals/{proposalId}"))!;
+        Assert.AreEqual("Accepted", proposalResponse["proposalState"]!.ToString());
+
         // Update member1 to no longer be a cgsOperator.
         await this.SetRole(Members.Member1, RoleName.ContractOperator, "false");
 
@@ -152,11 +180,23 @@ public class RoleTests : TestBase
                 $"proposals/{proposalId}"))!;
         Assert.AreEqual("Open", proposalResponse["proposalState"]!.ToString());
 
+        proposalId =
+            await this.ProposeContractProposal(
+                contractId,
+                "deploymentinfo",
+                infoInput,
+                asMember: Members.Member1);
+        proposalResponse =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
+                $"proposals/{proposalId}"))!;
+        Assert.AreEqual("Open", proposalResponse["proposalState"]!.ToString());
+
         // Update member1 to again become be a cgsOperator.
         await this.SetRole(Members.Member1, RoleName.ContractOperator, "true");
 
         // Disabling the auto-approve options.
         await this.SetRuntimeOption(RuntimeOption.AutoApproveDeploymentSpec, ActionName.Disable);
+        await this.SetRuntimeOption(RuntimeOption.AutoApproveDeploymentInfo, ActionName.Disable);
         await this.SetRuntimeOption(RuntimeOption.AutoApproveCleanRoomPolicy, ActionName.Disable);
 
         // Now a proposal from member1 should remain open as auto-approve was disabled.
@@ -169,6 +209,17 @@ public class RoleTests : TestBase
 
         proposalId =
             await this.ProposeDeploymentSpec(contractId, specInput, asMember: Members.Member1);
+        proposalResponse =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
+                $"proposals/{proposalId}"))!;
+        Assert.AreEqual("Open", proposalResponse["proposalState"]!.ToString());
+
+        proposalId =
+            await this.ProposeContractProposal(
+                contractId,
+                "deploymentinfo",
+                infoInput,
+                asMember: Members.Member1);
         proposalResponse =
             (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
                 $"proposals/{proposalId}"))!;
@@ -556,6 +607,7 @@ public class RoleTests : TestBase
     {
         public const string AutoApproveCleanRoomPolicy = "autoapprove-cleanroompolicy-proposal";
         public const string AutoApproveDeploymentSpec = "autoapprove-deploymentspec-proposal";
+        public const string AutoApproveDeploymentInfo = "autoapprove-deploymentinfo-proposal";
         public const string AutoApproveConstitution = "autoapprove-constitution-proposal";
         public const string AutoApproveJsApp = "autoapprove-jsapp-proposal";
     }

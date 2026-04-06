@@ -1,13 +1,18 @@
-FROM python:3-slim
+FROM python:3.12-slim
 
-RUN apt-get update && apt-get install build-essential -y
+RUN apt-get update && apt-get install build-essential jq default-jre-headless -y
+
+ENV JAVA_HOME=/usr/lib/jvm/default-java
 
 WORKDIR /app
 COPY train/requirements.txt .
-RUN pip install -r requirements.txt --no-cache-dir
+RUN pip install -r requirements.txt --no-cache-dir \
+    --extra-index-url https://download.pytorch.org/whl/cpu
 
 COPY train/ccr_join.py ccr_join.py 
 COPY train/ccr_train.py ccr_train.py
 COPY train/run.sh run.sh
+RUN chmod +x run.sh && mkdir -p /app/artifacts /tmp/spark && chmod 777 /app/artifacts /tmp/spark
 
 ENV SPARK_LOCAL_IP='localhost'
+ENV SPARK_LOCAL_DIRS='/tmp/spark'

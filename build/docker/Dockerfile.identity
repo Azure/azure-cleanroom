@@ -1,12 +1,29 @@
 # Use the official .NET Core SDK as the base image
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 # Set the working directory
 WORKDIR /app
 
-# Copy the entire directory to the container
+# copy csproj and restore as distinct layers
+# https://blog.nimbleways.com/docker-build-caching-for-dotnet-applications-done-right-with-dotnet-subset/
 COPY Directory.Packages.props /app
 COPY Directory.Build.props /app
+COPY src/identity/*.sln /app/src/identity/
+COPY src/identity/Application/Sidecar/*.csproj /app/src/identity/Application/Sidecar/
+COPY src/identity/Managers/CredentialManager/*.csproj /app/src/identity/Managers/CredentialManager/
+COPY src/identity/CredentialStore/*.csproj /app/src/identity/CredentialStore/
+COPY src/identity/Utils/*.csproj /app/src/identity/Utils/
+COPY src/identity/Telemetry/MetricEmitter/*.csproj /app/src/identity/Telemetry/MetricEmitter/
+COPY src/identity/Telemetry/Telemetry.Metrics/*.csproj /app/src/identity/Telemetry/Telemetry.Metrics/
+COPY src/identity/Common/Configuration/*.csproj /app/src/identity/Common/Configuration/
+COPY src/identity/Common/Constants/*.csproj /app/src/identity/Common/Constants/
+COPY src/identity/Common/Utilities/*.csproj /app/src/identity/Common/Utilities/
+COPY src/identity/Common/CredentialStore/*.csproj /app/src/identity/Common/CredentialStore/
+COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
+COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
+RUN dotnet restore /app/src/identity/Identity.sln
+
+# copy everything else and build app
 COPY stylecop.json /app
 COPY Menees.Analyzers.Settings.xml /app
 COPY .editorconfig /app
@@ -14,11 +31,10 @@ COPY src/identity /app/src/identity
 COPY src/internal /app/src/internal
 
 # Publish the application
-RUN dotnet restore /app/src/identity/Identity.sln
 RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/identity/Application/Sidecar/IdentitySidecar.csproj
 
 # Use the official .NET Core runtime as the base image for the final stage
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
 # Set the working directory
 WORKDIR /app
