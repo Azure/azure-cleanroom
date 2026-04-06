@@ -11,6 +11,10 @@ inputs:
     description: Infrastructure type (virtual or aks)
     required: false
     default: virtual
+  location:
+    description: Azure region for resource deployment
+    required: false
+    default: centralindia
   outDir:
     description: Output directory for deployment artifacts
     required: false
