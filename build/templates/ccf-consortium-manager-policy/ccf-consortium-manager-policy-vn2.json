@@ -1,0 +1,135 @@
+[
+  {
+    "name": "ccr-proxy",
+    "properties": {
+      "image": "$containerRegistryUrl/ccr-proxy@$digest",
+      "environmentVariables": [
+        {
+          "name": "CCR_ENVOY_DESTINATION_PORT",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CCR_ENVOY_SERVICE_CERT_OUTPUT_FILE",
+          "value": ".*",
+          "regex": true
+        }
+      ],
+      "volumeMounts": [
+        {
+          "name": "certs",
+          "mountPath": "/app/certs",
+          "mountType": "emptyDir",
+          "readOnly": false
+        }
+      ],
+      "command": [
+        "/bin/bash",
+        "https-http/bootstrap.sh",
+        "--ca-type",
+        "local"
+      ]
+    }
+  },
+  {
+    "name": "ccf-consortium-manager",
+    "properties": {
+      "image": "$containerRegistryUrl/ccf/ccf-consortium-manager@$digest",
+      "command": [],
+      "environmentVariables": [
+        {
+          "name": "ASPNETCORE_URLS",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "AUTH_CONFIGURATIONS",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "AKV_ENDPOINT",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "MAA_ENDPOINT",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "SKR_ENDPOINT",
+          "value": "http://localhost:.*",
+          "regex": true
+        },
+        {
+          "name": "SERVICE_ENDPOINT",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "SERVICE_CERT_LOCATION",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "SPARK_CONTAINER_REGISTRY_URL",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "SPARK_ANALYTICS_AGENT_CHART_URL",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "SPARK_ANALYTICS_AGENT_SECURITY_POLICY_DOCUMENT_URL",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "SPARK_FRONTEND_SECURITY_POLICY_DOCUMENT_URL",
+          "value": ".*",
+          "regex": true
+        }
+      ],
+      "volumeMounts": [
+        {
+          "name": "certs",
+          "mountPath": "/app/certs",
+          "mountType": "emptyDir",
+          "readOnly": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "skr",
+    "properties": {
+      "image": "$containerRegistryUrl/skr@$digest",
+      "command": [
+        "/skr.sh"
+      ],
+      "environmentVariables": [
+        {
+          "name": "SkrSideCarArgs",
+          "value": "ewogICAiY2VydGNhY2hlIjogewogICAgICAiZW5kcG9pbnQiOiAiYW1lcmljYXMuYWNjY2FjaGUuYXp1cmUubmV0IiwKICAgICAgInRlZV90eXBlIjogIlNldlNucFZNIiwKICAgICAgImFwaV92ZXJzaW9uIjogImFwaS12ZXJzaW9uPTIwMjAtMTAtMTUtcHJldmlldyIKICAgfQp9"
+        },
+        {
+          "name": "Port",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "LogFile",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "LogLevel",
+          "value": "Info"
+        }
+      ]
+    }
+  }
+]

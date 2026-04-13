@@ -267,14 +267,11 @@ async def write_dataset_async(
     spark.conf.set("mapreduce.fileoutputcommitter.algorithm.version", "2")
     tracer = trace.get_tracer("write_dataset")
     logger = logging.getLogger("write_dataset")
+    dataset_format = str(dataset.format.value)
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    output_path = f"{dataset.path}/{current_date}/{job_id}"
     with tracer.start_as_current_span(f"write_dataset-{dataset.name}") as span:
         try:
-            dataset_schema = parse_json_schema(dataset.schema_)
-            if not is_schema_compatible(df.schema, dataset_schema):
-                raise ValueError(
-                    "DataFrame schema does not match expected dataset schema."
-                )
-
             logger.info(
                 f"Filtering datasink {dataset.name} to allowed fields: {dataset.allowedFields}."
                 + f" Original columns: {df.columns}."
@@ -282,10 +279,14 @@ async def write_dataset_async(
             df = df.select(
                 [field for field in dataset.allowedFields if field in df.columns]
             )
+
+            dataset_schema = parse_json_schema(dataset.schema_)
+            if not is_schema_compatible(df.schema, dataset_schema):
+                raise ValueError(
+                    "DataFrame schema does not match expected dataset schema."
+                )
+
             row_count = df.count()
-            dataset_format = str(dataset.format.value)
-            current_date = datetime.now().strftime("%Y-%m-%d")
-            output_path = f"{dataset.path}/{current_date}/{job_id}"
             os.makedirs(output_path, exist_ok=True)
             df.write.option("header", True).format(dataset_format).mode(
                 "overwrite"

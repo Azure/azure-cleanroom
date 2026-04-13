@@ -8,12 +8,15 @@ using FrontendSvc.Utils.Encryption;
 
 namespace FrontendSvc.Models.CCF;
 
+[RequireAWSSecretForAWSS3]
 public class DatasetStore
 {
     [JsonPropertyName("containerName")]
+    [RequiredNotNullOrWhiteSpace]
     public required string ContainerName { get; set; }
 
     [JsonPropertyName("storageAccountUrl")]
+    [RequiredNotNullOrWhiteSpace]
     public required string StorageAccountUrl { get; set; }
 
     [JsonPropertyName("storageAccountType")]

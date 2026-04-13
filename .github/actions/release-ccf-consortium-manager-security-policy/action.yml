@@ -62,3 +62,11 @@ runs:
         tag: ${{ inputs.tag }}
         environment: ${{ inputs.environment }}
         registry-name: ${{ inputs.registry-name }}
+
+    - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
+      with:
+        name: policies/ccf/ccf-consortium-manager-security-policy-vn2
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        registry-name: ${{ inputs.registry-name }}

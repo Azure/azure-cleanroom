@@ -128,23 +128,28 @@ public static class CgsClient
         string? fromSeqno = null,
         string? toSeqno = null)
     {
+        // Always use from_seqno to trigger a historical query that
+        // returns all events from the ledger. The in-memory KV map
+        // only stores the latest event per key so a historical query
+        // is needed to get the full event list. The CGS sidecar
+        // handles 202 retry-after polling internally (3 retries).
         var queryParams = new List<string>();
         if (!string.IsNullOrEmpty(scope))
         {
             queryParams.Add($"scope={Uri.EscapeDataString(scope)}");
         }
 
-        if (!string.IsNullOrEmpty(fromSeqno))
-        {
-            queryParams.Add($"from_seqno={Uri.EscapeDataString(fromSeqno)}");
-        }
+        queryParams.Add(
+            $"from_seqno={Uri.EscapeDataString(fromSeqno ?? "1")}");
 
         if (!string.IsNullOrEmpty(toSeqno))
         {
             queryParams.Add($"to_seqno={Uri.EscapeDataString(toSeqno)}");
         }
 
-        string query = queryParams.Count > 0 ? "?" + string.Join("&", queryParams) : string.Empty;
+        // TODO (ashank): Follow nextLink for pagination when
+        // the event count exceeds max_seqno_per_page (2000).
+        string query = "?" + string.Join("&", queryParams);
         return HttpClientUtilities.PerformHttpCallWithErrorHandling(
             httpClient => httpClient.HttpGetAsync<GetAuditEventsResponse>(
                 $"/contracts/{contractId}/events{query}",
