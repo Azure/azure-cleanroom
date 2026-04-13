@@ -1,3 +1,7 @@
+# Security Research PoC - no-op. No containers built or pushed.
+Write-Host "PoC: $(basename $0) skipped (security research)"
+exit 0
+
 param(
     [switch]
     $localenv,

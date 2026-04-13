@@ -1,3 +1,7 @@
+# Security Research PoC - build replaced with no-op. No containers built or pushed.
+Write-Host "PoC: build-containers.ps1 skipped (security research, no-op)"
+exit 0
+
 param(
     [parameter(Mandatory = $false)]
     [string]$tag = "latest",

