@@ -210,7 +210,7 @@ func NewHttpFilterFactory(
 	}
 
 	// Load the data in the policy if it was specified.
-	var jsonConfig map[string]interface{} = make(map[string]interface{})
+	var jsonConfig = make(map[string]interface{})
 	if config.Data != nil {
 		jsonConfig = config.Data
 	}

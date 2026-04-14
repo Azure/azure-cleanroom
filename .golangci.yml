@@ -8,6 +8,13 @@ linters:
         # "x, err := someFunc()" when intent is to capture the error being returned from a method
         # in a single common err variable.
         - shadow
+    staticcheck:
+      checks:
+        - "all"
+        # Disable stylecheck rules (ST*) that were not enabled in golangci-lint v1.
+        # In v2, staticcheck subsumes the stylecheck linter. Excluding ST* maintains
+        # backward compatibility with the v1 configuration.
+        - "-ST*"
   exclusions:
     generated: lax
     rules:
