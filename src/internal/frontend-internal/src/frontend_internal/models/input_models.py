@@ -5,7 +5,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 DEFAULT_MCR_URL = "mcr.microsoft.com/azurecleanroom"
-DEFAULT_MCR_VERSION = "6.0.0"
+DEFAULT_MCR_VERSION = "7.0.0"
 
 
 class AttestationType(StrEnum):

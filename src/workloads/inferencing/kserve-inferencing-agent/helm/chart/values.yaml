@@ -7,11 +7,11 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 images:
-  inferencingagentUrl: "mcr.microsoft.com/azurecleanroom/workloads/kserve-inferencing-agent:6.0.0"
-  ccrproxyUrl: "mcr.microsoft.com/azurecleanroom/ccr-proxy:6.0.0"
-  ccrgovernanceUrl: "mcr.microsoft.com/azurecleanroom/ccr-governance:6.0.0"
-  otelCollectorUrl: "mcr.microsoft.com/azurecleanroom/otel-collector:6.0.0"
-  ccrskrUrl: "mcr.microsoft.com/azurecleanroom/skr:6.0.0"
+  inferencingagentUrl: "mcr.microsoft.com/azurecleanroom/workloads/kserve-inferencing-agent:7.0.0"
+  ccrproxyUrl: "mcr.microsoft.com/azurecleanroom/ccr-proxy:7.0.0"
+  ccrgovernanceUrl: "mcr.microsoft.com/azurecleanroom/ccr-governance:7.0.0"
+  otelCollectorUrl: "mcr.microsoft.com/azurecleanroom/otel-collector:7.0.0"
+  ccrskrUrl: "mcr.microsoft.com/azurecleanroom/skr:7.0.0"
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
 

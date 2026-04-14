@@ -7,10 +7,10 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 images:
-  frontendUrl: "mcr.microsoft.com/azurecleanroom/cleanroom-spark-frontend:6.0.0"
-  ccrproxyUrl: "mcr.microsoft.com/azurecleanroom/ccr-proxy:6.0.0"
-  otelCollectorUrl: "mcr.microsoft.com/azurecleanroom/otel-collector:6.0.0"
-  ccrskrUrl: "mcr.microsoft.com/azurecleanroom/skr:6.0.0"
+  frontendUrl: "mcr.microsoft.com/azurecleanroom/cleanroom-spark-frontend:7.0.0"
+  ccrproxyUrl: "mcr.microsoft.com/azurecleanroom/ccr-proxy:7.0.0"
+  otelCollectorUrl: "mcr.microsoft.com/azurecleanroom/otel-collector:7.0.0"
+  ccrskrUrl: "mcr.microsoft.com/azurecleanroom/skr:7.0.0"
 # This sets the pull policy for images.
   pullPolicy: IfNotPresent
 
