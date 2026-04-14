@@ -29,15 +29,15 @@ import requests
 import yaml
 from azure.cli.core.util import CLIError, get_file_json, shell_safe_json_parse
 from cleanroom_common.azure_cleanroom_core.models.network import *
+from cleanroom_common.azure_cleanroom_core.utilities.helpers import (
+    DEFAULT_CLEANROOM_CONTAINER_VERSION,
+)
 
 from .collaboration_cmd import *
 from .config_cmd import *
 from .datastore_cmd import *
 from .secretstore_cmd import *
 from .utilities._azcli_helpers import az_cli, logger
-from cleanroom_common.azure_cleanroom_core.utilities.helpers import (
-    DEFAULT_CLEANROOM_CONTAINER_VERSION,
-)
 
 MCR_CLEANROOM_VERSIONS_REGISTRY = "mcr.microsoft.com/azurecleanroom"
 MCR_CGS_REGISTRY = "mcr.microsoft.com/azurecleanroom"
