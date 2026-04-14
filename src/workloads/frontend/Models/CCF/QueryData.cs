@@ -17,6 +17,7 @@ public class QueryData
     public required int ExecutionSequence { get; set; }
 
     [JsonPropertyName("data")]
+    [RequiredNotNullOrWhiteSpace]
     public required string Data { get; set; }
 
     public static QueryData FromQuerySegment(QuerySegment segment)

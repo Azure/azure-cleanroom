@@ -5,7 +5,7 @@ param
 
     [string]$subscriptionName = "AzureCleanRoom-NonProd",
 
-    [string]$storageAccountName = "azcleanroomemusa",
+    [string]$storageAccountName = "azcleanroompublicsa",
 
     [string]$containerName = "kfserving-examples",
 

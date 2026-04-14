@@ -6,7 +6,7 @@ Azure Confidential VM.
 ## Prerequisites
 
 - Azure CLI (`az`) logged in with a subscription that can create VMs.
-- Access to the `azcleanroomemukv` Key Vault (SSH keys are downloaded from it).
+- Access to the `azcleanroompublickv` Key Vault (SSH keys are downloaded from it).
 - Docker, `jq`, `openssl`, and `pwsh` installed locally.
 
 ## Quick start
@@ -19,7 +19,7 @@ Azure Confidential VM.
 
 - Auto-generate a VM name and resource group based on your `$env:USER`
   (e.g. `cvm-admin` / `rg-cvm-admin`) value.
-- Download SSH keys from the `azcleanroomemukv` Key Vault.
+- Download SSH keys from the `azcleanroompublickv` Key Vault.
 - Create an Azure Confidential VM (`Standard_DC4as_v5`, Ubuntu 22.04 CVM).
 - Write deployment info to `generated/cvm-deploy.json`.
 

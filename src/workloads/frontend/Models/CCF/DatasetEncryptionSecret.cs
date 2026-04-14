@@ -11,9 +11,11 @@ namespace FrontendSvc.Models.CCF;
 public class DatasetEncryptionSecret
 {
     [JsonPropertyName("secretId")]
+    [RequiredNotNullOrWhiteSpace]
     public required string SecretId { get; set; }
 
     [JsonPropertyName("keyVaultUrl")]
+    [RequiredNotNullOrWhiteSpace]
     public required string KeyVaultUrl { get; set; }
 
     [JsonPropertyName("maaUrl")]

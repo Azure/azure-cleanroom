@@ -13,9 +13,11 @@ public class QueryDetails
     public required List<QueryData> QueryData { get; set; }
 
     [JsonPropertyName("inputDatasets")]
+    [RequiredNotNullOrWhiteSpace]
     public required string InputDatasets { get; set; }
 
     [JsonPropertyName("outputDataset")]
+    [RequiredNotNullOrWhiteSpace]
     public required string OutputDataset { get; set; }
 
     public static QueryDetails FromSparkSQLApplication(SparkSQLApplication sparkSQLApplication)

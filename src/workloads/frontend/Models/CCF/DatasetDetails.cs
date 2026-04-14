@@ -6,9 +6,11 @@ using System.Text.Json.Serialization;
 namespace FrontendSvc.Models.CCF;
 
 [RequireIdentityForAzureStore]
+[RequiredSecretsAndConfigurations]
 public class DatasetDetails
 {
     [JsonPropertyName("name")]
+    [RequiredNotNullOrWhiteSpace]
     public required string Name { get; set; }
 
     [JsonPropertyName("datasetSchema")]

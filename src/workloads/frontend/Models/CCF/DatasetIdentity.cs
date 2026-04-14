@@ -8,15 +8,19 @@ namespace FrontendSvc.Models.CCF;
 public class DatasetIdentity
 {
     [JsonPropertyName("clientId")]
+    [RequiredNotNullOrWhiteSpace]
     public required string ClientId { get; set; }
 
     [JsonPropertyName("issuerUrl")]
+    [RequiredNotNullOrWhiteSpace]
     public required string IssuerUrl { get; set; }
 
     [JsonPropertyName("tenantId")]
+    [RequiredNotNullOrWhiteSpace]
     public required string TenantId { get; set; }
 
     [JsonPropertyName("name")]
+    [RequiredNotNullOrWhiteSpace]
     public required string Name { get; set; }
 
     public static DatasetIdentity? FromIdentity(Identity? identity)

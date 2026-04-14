@@ -829,8 +829,8 @@ foreach ($format in $formats) {
 
 # Create a datastore entry for the AWS S3 storage to be used as a datasink with CGS secret Id as
 # its configuration.
-$awsAccessKeyId = az keyvault secret show  --vault-name azcleanroomemukv -n aws-access-key-id --query value -o tsv
-$awsSecretAccessKey = az keyvault secret show  --vault-name azcleanroomemukv -n aws-secret-access-key --query value -o tsv
+$awsAccessKeyId = az keyvault secret show  --vault-name azcleanroompublickv -n aws-access-key-id --query value -o tsv
+$awsSecretAccessKey = az keyvault secret show  --vault-name azcleanroompublickv -n aws-secret-access-key --query value -o tsv
 $secretConfig = @{
     awsAccessKeyId     = $awsAccessKeyId
     awsSecretAccessKey = $awsSecretAccessKey
