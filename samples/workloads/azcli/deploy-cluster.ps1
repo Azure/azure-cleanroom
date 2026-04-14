@@ -480,16 +480,16 @@ if ($enableFlexNode) {
             # chmod 600 $sshPrivateKeyPath
             # Write-Host "SSH key pair generated at: $sshPrivateKeyPath"
 
-            Write-Host "Downloading SSH keys from Key Vault 'azcleanroomemukv'..."
+            Write-Host "Downloading SSH keys from Key Vault 'azcleanroompublickv'..."
             $privateKeyContent = az keyvault secret show `
-                --vault-name "azcleanroomemukv" `
+                --vault-name "azcleanroompublickv" `
                 --name "flex-node-ssh-private-key" `
                 --query "value" -o tsv
             $privateKeyContent | Out-File -FilePath $sshPrivateKeyPath
             chmod 600 $sshPrivateKeyPath
 
             $publicKeyContent = az keyvault secret show `
-                --vault-name "azcleanroomemukv" `
+                --vault-name "azcleanroompublickv" `
                 --name "flex-node-ssh-public-key" `
                 --query "value" -o tsv
             $publicKeyContent | Out-File -FilePath $sshPublicKeyPath

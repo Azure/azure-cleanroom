@@ -35,7 +35,7 @@ jobs:
           
   aks-cleanroom-cluster:
     needs: [pick-location]
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=aks-cleanroom-cluster-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=aks-cleanroom-cluster-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -96,7 +96,7 @@ jobs:
         run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=cleanroom-cluster-${{ github.job }}-${{ github.run_id }}"
 
   virtual-cleanroom-cluster:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=virtual-cleanroom-cluster-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=virtual-cleanroom-cluster-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -144,7 +144,7 @@ jobs:
 
   aks-cleanroom-cluster-flexnode:
     needs: [pick-location]
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=aks-cleanroom-cluster-flexnode-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=aks-cleanroom-cluster-flexnode-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -205,7 +205,7 @@ jobs:
         run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=cleanroom-cluster-${{ github.job }}-${{ github.run_id }}"
 
   virtual-cleanroom-cluster-flexnode:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=virtual-cleanroom-cluster-flexnode-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=virtual-cleanroom-cluster-flexnode-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
