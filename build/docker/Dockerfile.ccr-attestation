@@ -1,5 +1,5 @@
 # Build
-FROM mcr.microsoft.com/oss/go/microsoft/golang:1.24.4 AS builder-app
+FROM mcr.microsoft.com/oss/go/microsoft/golang:1.25.9 AS builder-app
 WORKDIR /usr/src/app
 
 COPY go.mod .
