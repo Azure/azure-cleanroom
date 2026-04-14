@@ -29,6 +29,9 @@ import requests
 import yaml
 from azure.cli.core.util import CLIError, get_file_json, shell_safe_json_parse
 from cleanroom_common.azure_cleanroom_core.models.network import *
+from cleanroom_common.azure_cleanroom_core.utilities.helpers import (
+    DEFAULT_CLEANROOM_CONTAINER_VERSION,
+)
 
 from .collaboration_cmd import *
 from .config_cmd import *
@@ -38,8 +41,12 @@ from .utilities._azcli_helpers import az_cli, logger
 
 MCR_CLEANROOM_VERSIONS_REGISTRY = "mcr.microsoft.com/azurecleanroom"
 MCR_CGS_REGISTRY = "mcr.microsoft.com/azurecleanroom"
-mcr_cgs_constitution_url = f"{MCR_CGS_REGISTRY}/cgs-constitution:6.0.0"
-mcr_cgs_jsapp_url = f"{MCR_CGS_REGISTRY}/cgs-js-app:6.0.0"
+mcr_cgs_constitution_url = (
+    f"{MCR_CGS_REGISTRY}/cgs-constitution:{DEFAULT_CLEANROOM_CONTAINER_VERSION}"
+)
+mcr_cgs_jsapp_url = (
+    f"{MCR_CGS_REGISTRY}/cgs-js-app:{DEFAULT_CLEANROOM_CONTAINER_VERSION}"
+)
 
 cgs_client_compose_file = f"{os.path.dirname(__file__)}{os.path.sep}data{os.path.sep}cgs-client{os.path.sep}docker-compose.yaml"
 aspire_dashboard_compose_file = f"{os.path.dirname(__file__)}{os.path.sep}data{os.path.sep}aspire-dashboard{os.path.sep}docker-compose.yaml"
