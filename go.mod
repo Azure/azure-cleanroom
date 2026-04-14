@@ -1,6 +1,8 @@
 module github.com/azure/azure-cleanroom
 
-go 1.25.0
+go 1.24.3
+
+toolchain go1.24.4
 
 require (
 	github.com/Azure/azure-storage-fuse/v2 v2.0.0-20250115044140-32ba9ccff233
