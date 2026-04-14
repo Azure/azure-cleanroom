@@ -35,11 +35,18 @@ from .config_cmd import *
 from .datastore_cmd import *
 from .secretstore_cmd import *
 from .utilities._azcli_helpers import az_cli, logger
+from cleanroom_common.azure_cleanroom_core.utilities.helpers import (
+    DEFAULT_CLEANROOM_CONTAINER_VERSION,
+)
 
 MCR_CLEANROOM_VERSIONS_REGISTRY = "mcr.microsoft.com/azurecleanroom"
 MCR_CGS_REGISTRY = "mcr.microsoft.com/azurecleanroom"
-mcr_cgs_constitution_url = f"{MCR_CGS_REGISTRY}/cgs-constitution:7.0.0"
-mcr_cgs_jsapp_url = f"{MCR_CGS_REGISTRY}/cgs-js-app:7.0.0"
+mcr_cgs_constitution_url = (
+    f"{MCR_CGS_REGISTRY}/cgs-constitution:{DEFAULT_CLEANROOM_CONTAINER_VERSION}"
+)
+mcr_cgs_jsapp_url = (
+    f"{MCR_CGS_REGISTRY}/cgs-js-app:{DEFAULT_CLEANROOM_CONTAINER_VERSION}"
+)
 
 cgs_client_compose_file = f"{os.path.dirname(__file__)}{os.path.sep}data{os.path.sep}cgs-client{os.path.sep}docker-compose.yaml"
 aspire_dashboard_compose_file = f"{os.path.dirname(__file__)}{os.path.sep}data{os.path.sep}aspire-dashboard{os.path.sep}docker-compose.yaml"

@@ -4,8 +4,21 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+
+def _read_release_version() -> str:
+    """Read the release version from the MCR_RELEASE_VERSION file."""
+    current = os.path.dirname(os.path.realpath(__file__))
+    for _ in range(10):
+        candidate = os.path.join(current, "MCR_RELEASE_VERSION")
+        if os.path.exists(candidate):
+            with open(candidate, "r") as f:
+                return f.read().strip()
+        current = os.path.dirname(current)
+    return "7.0.0"
+
+
 DEFAULT_MCR_URL = "mcr.microsoft.com/azurecleanroom"
-DEFAULT_MCR_VERSION = "7.0.0"
+DEFAULT_MCR_VERSION = _read_release_version()
 
 
 class AttestationType(StrEnum):

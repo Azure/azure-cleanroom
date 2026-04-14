@@ -13,8 +13,22 @@ import yaml
 from ..exceptions.exception import CleanroomSpecificationError, ErrorCode
 from ..models.cleanroom import *
 
+
+def _read_release_version() -> str:
+    """Read the release version from the MCR_RELEASE_VERSION file."""
+    # Walk up from this file to find the repo root containing MCR_RELEASE_VERSION.
+    current = os.path.dirname(os.path.realpath(__file__))
+    for _ in range(10):
+        candidate = os.path.join(current, "MCR_RELEASE_VERSION")
+        if os.path.exists(candidate):
+            with open(candidate, "r") as f:
+                return f.read().strip()
+        current = os.path.dirname(current)
+    return "7.0.0"
+
+
 DEFAULT_CLEANROOM_CONTAINER_REGISTRY_URL = "mcr.microsoft.com/azurecleanroom"
-DEFAULT_CLEANROOM_CONTAINER_VERSION = "7.0.0"
+DEFAULT_CLEANROOM_CONTAINER_VERSION = _read_release_version()
 DEFAULT_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = (
     "mcr.microsoft.com/azurecleanroom/sidecar-digests:"
     + DEFAULT_CLEANROOM_CONTAINER_VERSION

@@ -133,10 +133,11 @@ if ($LASTEXITCODE -gt 0) {
         # Install clean room extension for MCR images
         $version = (az extension show --name cleanroom --query "version" --output tsv 2>$null)
         if ($version -ne "0.0.1") {
-            oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:7.0.0
+            $releaseVersion = (Get-Content "$root/MCR_RELEASE_VERSION").Trim()
+            oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:$releaseVersion
             Write-Host "Installing az cleanroom cli"
             & { $PSNativeCommandUseErrorActionPreference = $false; az extension remove --name cleanroom 2>$null }
-            az extension add --allow-preview true --source ./cleanroom-7.0.0-py2.py3-none-any.whl -y
+            az extension add --allow-preview true --source ./cleanroom-$releaseVersion-py2.py3-none-any.whl -y
         }
         else {
             Write-Host "az cleanroom cli version: $version already installed."
