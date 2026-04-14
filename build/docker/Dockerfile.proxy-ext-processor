@@ -6,7 +6,7 @@ RUN apt-get update -y && \
     DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install \
     software-properties-common build-essential
 
-RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.64.8
+RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.11.4
 
 
 # Set the working directory

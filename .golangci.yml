@@ -1,21 +1,29 @@
-linters-settings:
-  govet:
-    # Report about shadowed variables. We avoid shadowed variables as it can create confusion
-    # around its uage around which err variable is getting used in statements like 
-    #"x, err := someFunc()"" when intent is to capture the error being returned from a method in a
-    # single common err variable.
-    # Default: false
-    check-shadowing: true
-run:
-  timeout: 5m
-
-issues:
-  # Don't turn off any checks by default. We can do this explicitly if needed.
-  exclude-use-default: false
-
-  exclude-rules:
-    # TODO (HPrabh): Fix the following issues separately.
-    - linters: 
-        - staticcheck
-      # Some packages [go.opentelemetry.io/otel/trace] are using deprecated APIs.
-      text: "SA1019:"
+version: "2"
+linters:
+  settings:
+    govet:
+      enable:
+        # Report about shadowed variables. We avoid shadowed variables as it can create confusion
+        # around its usage around which err variable is getting used in statements like
+        # "x, err := someFunc()" when intent is to capture the error being returned from a method
+        # in a single common err variable.
+        - shadow
+  exclusions:
+    generated: lax
+    rules:
+      # TODO (HPrabh): Fix the following issues separately.
+      - linters:
+          - staticcheck
+        # Some packages [go.opentelemetry.io/otel/trace] are using deprecated APIs.
+        text: 'SA1019:'
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
