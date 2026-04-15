@@ -35,7 +35,10 @@ $principalIdsToExclude = @(
     "6afcd0e0-8db1-45c1-932a-f22c7a035647", # azcleanroom-ctest-mi
     "b058a7d3-92d3-482a-9ad5-f3089598fb41", # cleanroom-public-bvt-mi
     "d3d0ba3a-1d41-48a5-af04-8d4130770780", # cleanroom-public-pr-mi
-    "27f2974f-1e56-497c-b780-4782c71853b8" # cleanroomprivaterpapp
+    "27f2974f-1e56-497c-b780-4782c71853b8", # cleanroomprivaterpapp
+    "9e2fe87c-07da-4003-ac0e-c35393572315", # SpnAlice (AliceTestCert002)
+    "369921c5-5b60-4190-8a97-3a4ccfae8187", # SpnBob (BobTestCert001)
+    "f4d51848-bd62-40b5-bf06-ea50f833e2ec" # SpnClark
 )
 
 $resourceGroups = az group list --query "[?tags.SkipCleanup != 'true']" | ConvertFrom-Json
@@ -199,7 +202,7 @@ function Remove-ManagedResources {
         [int] $retentionDays
     )
 
-    $listUrl = "https://eastus2euap.management.azure.com/subscriptions/$subscriptionId/providers/Private.CleanRoom/$($resourceType)?api-version=$apiVersion"
+    $listUrl = "https://management.azure.com/subscriptions/$subscriptionId/providers/Private.CleanRoom/$($resourceType)?api-version=$apiVersion"
     $response = az rest `
         --method get `
         --resource "https://management.azure.com/" `
@@ -207,6 +210,18 @@ function Remove-ManagedResources {
     | ConvertFrom-Json
 
     $items = @($response.value)
+
+    # Also check Microsoft.CleanRoom provider.
+    $publicListUrl = "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.CleanRoom/$($resourceType)?api-version=$apiVersion"
+    $publicResponse = az rest `
+        --method get `
+        --resource "https://management.azure.com/" `
+        --url $publicListUrl `
+    2>$null | ConvertFrom-Json
+
+    if ($publicResponse -and $publicResponse.value) {
+        $items += @($publicResponse.value)
+    }
     foreach ($item in $items) {
         if ([string]::IsNullOrWhiteSpace($item.systemData.createdAt)) {
             # Some resources with missing data were found hence adding a created time for such resources to ensure deletion.
@@ -221,7 +236,7 @@ function Remove-ManagedResources {
             az rest `
                 --method delete `
                 --resource "https://management.azure.com/" `
-                --url "https://eastus2euap.management.azure.com$($item.id)?api-version=$apiVersion"
+                --url "https://management.azure.com$($item.id)?api-version=$apiVersion"
         }
     }
 
@@ -230,7 +245,7 @@ function Remove-ManagedResources {
 
 # Cleanup managed resources older than retention days.
 $subscriptionId = az account show --query "id" -o tsv
-$cleanRoomApiVersion = "2025-10-31-preview"
+$cleanRoomApiVersion = "2026-03-31-preview"
 
 Remove-ManagedResources `
     -subscriptionId $subscriptionId `
