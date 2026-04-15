@@ -58,7 +58,7 @@ runs:
     - uses: ./.github/actions/attest-artefact
       if: ${{ inputs.needs-attestation == 'true' }}
       with:
-        name: policies/frontend-service-security-policy
+        name: policies/workloads/frontend-service-security-policy
         tag: ${{ inputs.tag }}
         environment: ${{ inputs.environment }}
         registry-name: ${{ inputs.registry-name }}
