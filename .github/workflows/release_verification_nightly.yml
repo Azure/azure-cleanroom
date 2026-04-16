@@ -184,7 +184,7 @@ jobs:
         run: az config set core.collect_telemetry=true
 
       - name: Run big-data-query-analytics test
-        uses: ./.github/actions/test-multi-party-collab/test-big-data-query-analytics-caci
+        uses: ./.github/actions/test-workloads/test-big-data-analytics
         with:
           repo: mcr.microsoft.com/azurecleanroom
           tag: ${{ env.MCR_RELEASE_VERSION }}
