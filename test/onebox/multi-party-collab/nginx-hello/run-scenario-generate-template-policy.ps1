@@ -156,7 +156,7 @@ az cleanroom config add-application `
     --memory 4
 
 # Use a pre-built policy bundle if the registry is 'mcr'.
-$policyBundleUrl = "cleanroomsamples.azurecr.io/nginx-hello/nginx-hello-policy@sha256:d7b91031287ca532acbc8fa9117f982f694d9412adfd186800edef2adfb2b0e3"
+$policyBundleUrl = "cleanroomsamples.azurecr.io/nginx-hello/nginx-hello-policy@sha256:6c2133e896121f753964ec42d91bee3308dd6887279f3246137868d569c3d812"
 if ($registry -ne "mcr") {
     pwsh $PSScriptRoot/build-policy-bundle.ps1 -tag $tag -repo $repo
     $policyBundleUrl = "${repo}/nginx-hello-policy:$tag"
