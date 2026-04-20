@@ -160,7 +160,7 @@ jobs:
         run: |
           # These are the locations where DC4as_v5 SKU is available that we use in Flex Node tests.
           # "westus" is removed as it is being used by another PR validation flow.
-          locations=("westeurope" "northeurope" "germanywestcentral" "centralindia" "eastasia" "southeastasia" )
+          locations=("westeurope" "northeurope" "germanywestcentral" "centralindia" "southeastasia" )
           index=$((RANDOM % ${#locations[@]}))
           echo "location=${locations[$index]}" >> "$GITHUB_OUTPUT"
           echo "Selected location: ${locations[$index]}"
