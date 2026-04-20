@@ -149,7 +149,24 @@ jobs:
           repo: mcr.microsoft.com/azurecleanroom
           tag: ${{ env.MCR_RELEASE_VERSION }}
 
+  pick-location:
+    runs-on: ubuntu-latest
+    outputs:
+      location: ${{ steps.pick.outputs.location }}
+    steps:
+      - name: Pick a random Azure location
+        id: pick
+        shell: bash
+        run: |
+          # These are the locations where DC4as_v5 SKU is available that we use in Flex Node tests.
+          # "westus" is removed as it is being used by another PR validation flow.
+          locations=("westeurope" "northeurope" "germanywestcentral" "centralindia" "eastasia" "southeastasia" )
+          index=$((RANDOM % ${#locations[@]}))
+          echo "location=${locations[$index]}" >> "$GITHUB_OUTPUT"
+          echo "Selected location: ${locations[$index]}"
+
   setup-env-aks-nightly:
+    needs: [pick-location]
     runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=setup-env-aks-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: test
     env:
@@ -178,7 +195,7 @@ jobs:
           repo: mcr.microsoft.com/azurecleanroom
           tag: ${{ env.MCR_RELEASE_VERSION }}
           infraType: aks
-          location: centralindia
+          location: ${{ needs.pick-location.outputs.location }}
           outDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
 
       - name: Upload deployment artifacts
@@ -191,7 +208,7 @@ jobs:
 
   big-data-query-analytics-nightly:
     runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=big-data-query-analytics-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
-    needs: [setup-env-aks-nightly]
+    needs: [setup-env-aks-nightly, pick-location]
     environment: test
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -224,7 +241,7 @@ jobs:
         with:
           repo: mcr.microsoft.com/azurecleanroom
           tag: ${{ env.MCR_RELEASE_VERSION }}
-          location: centralindia
+          location: ${{ needs.pick-location.outputs.location }}
           deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
 
       - name: Upload test results
