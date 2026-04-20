@@ -149,8 +149,25 @@ jobs:
           repo: mcr.microsoft.com/azurecleanroom
           tag: ${{ env.MCR_RELEASE_VERSION }}
 
-  big-data-query-analytics-nightly:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=big-data-query-analytics-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
+  pick-location:
+    runs-on: ubuntu-latest
+    outputs:
+      location: ${{ steps.pick.outputs.location }}
+    steps:
+      - name: Pick a random Azure location
+        id: pick
+        shell: bash
+        run: |
+          # These are the locations where DC4as_v5 SKU is available that we use in Flex Node tests.
+          # "westus" is removed as it is being used by another PR validation flow.
+          locations=("northeurope" "germanywestcentral" "centralindia" "southeastasia" )
+          index=$((RANDOM % ${#locations[@]}))
+          echo "location=${locations[$index]}" >> "$GITHUB_OUTPUT"
+          echo "Selected location: ${locations[$index]}"
+
+  setup-env-aks-nightly:
+    needs: [pick-location]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=setup-env-aks-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: test
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -170,21 +187,115 @@ jobs:
           submodules: recursive
           fetch-tags: true
 
-      - name: Check prerequisites
-        run: |
-          az version
-          openssl version
+      - uses: ./.github/actions/setup-docker-on-data-disk
 
-      - name: Install az cleanroom CLI
-        run: |
-          oras pull mcr.microsoft.com/azurecleanroom/cli/cleanroom-whl:${{ env.MCR_RELEASE_VERSION }}
-          az extension add --source ./cleanroom-*-py2.py3-none-any.whl -y --allow-preview true
+      - name: Setup environment
+        uses: ./.github/actions/test-workloads/setup-env
+        with:
+          repo: mcr.microsoft.com/azurecleanroom
+          tag: ${{ env.MCR_RELEASE_VERSION }}
+          infraType: aks
+          location: ${{ needs.pick-location.outputs.location }}
+          outDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
 
-      - name: Enabling az cli telemetry collection
-        run: az config set core.collect_telemetry=true
+      - name: Upload deployment artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanroom-deployment-artifacts-aks-nightly
+          path: ./test/onebox/workload-samples-aks/generated
+          overwrite: true
+        if: success()
+
+  big-data-query-analytics-nightly:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=big-data-query-analytics-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
+    needs: [setup-env-aks-nightly, pick-location]
+    environment: test
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      USE_PREPROVISIONED_OIDC: "true"
+    # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
+    permissions:
+      id-token: write
+      contents: read  # This is required for actions/checkout
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-tags: true
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Download deployment artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cleanroom-deployment-artifacts-aks-nightly
+          path: ./test/onebox/workload-samples-aks/generated
 
       - name: Run big-data-query-analytics test
         uses: ./.github/actions/test-workloads/test-big-data-analytics
         with:
           repo: mcr.microsoft.com/azurecleanroom
           tag: ${{ env.MCR_RELEASE_VERSION }}
+          location: ${{ needs.pick-location.outputs.location }}
+          deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: big-data-analytics-results-aks-nightly
+          path: ./test/onebox/workload-samples-aks/generated
+          overwrite: true
+        if: ${{ !cancelled() }}
+
+      - name: Delete AWS buckets
+        if: success()
+        shell: pwsh
+        run: |
+          pwsh ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-input-${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+          pwsh ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-output-${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+
+      - name: Delete resource groups
+        if: success()
+        shell: pwsh
+        run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}"
+
+  cleanup-aks-nightly:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=cleanup-aks-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
+    needs: [big-data-query-analytics-nightly]
+    environment: test
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: setup-env-aks-nightly
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+    # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
+    permissions:
+      id-token: write
+      contents: read  # This is required for actions/checkout
+    if: success()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-tags: true
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Login to Azure
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Delete resource groups
+        shell: pwsh
+        run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}"
