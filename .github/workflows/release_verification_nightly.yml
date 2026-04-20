@@ -170,6 +170,8 @@ jobs:
           submodules: recursive
           fetch-tags: true
 
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
       - name: Check prerequisites
         run: |
           az version
@@ -183,8 +185,19 @@ jobs:
       - name: Enabling az cli telemetry collection
         run: az config set core.collect_telemetry=true
 
+      - name: Setup environment
+        uses: ./.github/actions/test-workloads/setup-env
+        with:
+          repo: mcr.microsoft.com/azurecleanroom
+          tag: ${{ env.MCR_RELEASE_VERSION }}
+          infraType: virtual
+          location: centralindia
+          outDir: ${{ github.workspace }}/test/onebox/workload-samples/generated
+
       - name: Run big-data-query-analytics test
         uses: ./.github/actions/test-workloads/test-big-data-analytics
         with:
           repo: mcr.microsoft.com/azurecleanroom
           tag: ${{ env.MCR_RELEASE_VERSION }}
+          location: centralindia
+          deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples/generated
