@@ -54,5 +54,3 @@ if ($push) {
         ./ccr-governance-opa-policy.tar.gz:application/vnd.oci.image.layer.v1.tar+gzip
     Pop-Location
 }
-
-cleanup
