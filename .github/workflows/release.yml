@@ -706,7 +706,7 @@ jobs:
         if: ${{ contains(inputs.release-type, 'cleanroom-containers') }}
         run: |
           gh release upload ${{ inputs.tag }} \
-          ${{ steps.download-ccr-artefacts.outputs.download-path }}/ccr-artefacts/ccr-governance-opa-policy.tar.gz
+          ${{ steps.download-ccr-artefacts.outputs.download-path }}/ccr-artefacts-unlisted/ccr-governance-opa-policy.tar.gz
 
       # TODO (anrdesai): Re-add cleanroom-client.tar attachment to the release once we figure out a way to make it smaller than 2GB.
       - name: Upload cleanroom-client assets
