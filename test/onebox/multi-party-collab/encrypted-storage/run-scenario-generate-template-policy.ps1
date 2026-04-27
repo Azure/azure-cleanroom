@@ -327,7 +327,7 @@ $sample_code = $(cat $PSScriptRoot/consumer/application/main.go | base64 -w 0)
 az cleanroom config add-application `
     --cleanroom-config $consumerConfig `
     --name demo-app `
-    --image "cleanroomsamplesprivate.azurecr.io/golang@sha256:4304d944c421bb279ad1faada14d03ac7e7edca61793d2f6a7ad94681c457887" `
+    --image "cleanroomsamplesprivate.azurecr.io/golang@sha256:7095ad02810845fa35d1fb090b8e57dd20dce4ca36b29b42951802350d2ec90e" `
     --command "bash -c 'echo `$CODE | base64 -d > main.go; go run main.go'" `
     --datasources "publisher-input=/mnt/remote/input" `
     --datasinks "consumer-output=/mnt/remote/output" `
