@@ -78,6 +78,10 @@ spec:
               value: {{ .Values.ccrProxy.serviceCertOutputFile | quote }}
             - name: SKR_PORT
               value: {{ .Values.skr.port | quote }}
+            {{- if .Values.frontendService.otelEndpoint }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.frontendService.otelEndpoint | quote }}
+            {{- end }}
         - name: cgs-client
           {{- with .Values.securityContext }}
           securityContext:
