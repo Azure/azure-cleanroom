@@ -13,7 +13,7 @@ internal class Startup : ApiStartup
     {
     }
 
-    public override bool EnableOpenTelemetry => false;
+    public override bool EnableOpenTelemetry => true;
 
     public override void OnConfigureServices(IServiceCollection services)
     {
