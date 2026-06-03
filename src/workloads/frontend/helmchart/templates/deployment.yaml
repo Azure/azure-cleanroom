@@ -81,6 +81,8 @@ spec:
             {{- if .Values.frontendService.otelEndpoint }}
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ .Values.frontendService.otelEndpoint | quote }}
+            - name: DEPLOYMENT_NAME
+              value: "frontend-service"
             {{- end }}
         - name: cgs-client
           {{- with .Values.securityContext }}
@@ -107,6 +109,8 @@ spec:
               value: {{ .Values.frontendService.otelEndpoint | quote }}
             - name: CGS_CLIENT_ENABLE_OPEN_TELEMETRY
               value: "true"
+            - name: DEPLOYMENT_NAME
+              value: "cgs-client"
             {{- end }}
             {{- with .Values.cgsClient.env }}
             {{- toYaml . | nindent 12 }}

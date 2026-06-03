@@ -44,8 +44,7 @@ public abstract class ApiStartup
             {
                 builder.AddOpenTelemetry(options =>
                 {
-                    options.SetResourceBuilder(ResourceBuilder.CreateDefault()
-                        .AddService(this.OTelServiceName ?? this.ServiceName));
+                    options.SetResourceBuilder(this.CreateResourceBuilder());
                     options.AddOtlpExporter();
                 });
             }
@@ -86,9 +85,7 @@ public abstract class ApiStartup
                 .WithTracing(tracing =>
                 {
                     tracing
-                        .SetResourceBuilder(
-                            ResourceBuilder.CreateDefault()
-                                .AddService(this.OTelServiceName ?? this.ServiceName))
+                        .SetResourceBuilder(this.CreateResourceBuilder())
                         .AddAspNetCoreInstrumentation()
                         .AddHttpClientInstrumentation()
                         .AddProcessor(new BaggageSpanProcessor())
@@ -97,9 +94,7 @@ public abstract class ApiStartup
                 .WithMetrics(metrics =>
                 {
                     metrics
-                        .SetResourceBuilder(
-                            ResourceBuilder.CreateDefault()
-                                .AddService(this.OTelServiceName ?? this.ServiceName))
+                        .SetResourceBuilder(this.CreateResourceBuilder())
                         .AddAspNetCoreInstrumentation()
                         .AddHttpClientInstrumentation()
                         .AddMeter(this.OTelServiceName ?? this.ServiceName)
@@ -136,5 +131,23 @@ public abstract class ApiStartup
 
     public virtual void OnConfigure(WebApplication app, IWebHostEnvironment env)
     {
+    }
+
+    private ResourceBuilder CreateResourceBuilder()
+    {
+        var serviceName = this.OTelServiceName ?? this.ServiceName;
+        var builder = ResourceBuilder.CreateDefault()
+            .AddService(serviceName);
+
+        var deploymentName = Environment.GetEnvironmentVariable("DEPLOYMENT_NAME");
+        if (!string.IsNullOrEmpty(deploymentName))
+        {
+            builder.AddAttributes(new Dictionary<string, object>
+            {
+                ["k8s.deployment.name"] = deploymentName
+            });
+        }
+
+        return builder;
     }
 }
