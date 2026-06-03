@@ -101,10 +101,16 @@ spec:
           volumeMounts:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.cgsClient.env }}
           env:
+            {{- if .Values.frontendService.otelEndpoint }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.frontendService.otelEndpoint | quote }}
+            - name: CGS_CLIENT_ENABLE_OPEN_TELEMETRY
+              value: "true"
+            {{- end }}
+            {{- with .Values.cgsClient.env }}
             {{- toYaml . | nindent 12 }}
-          {{- end }}
+            {{- end }}
         {{- if .Values.skr.enabled }}
         - name: skr
           image: {{ .Values.skr.image | quote }}
