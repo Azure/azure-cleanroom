@@ -63,16 +63,16 @@ if ($infraType -ne "virtual") {
         # chmod 600 $sshPrivateKeyPath
         # Write-Host "SSH key pair generated at: $sshPrivateKeyPath"
 
-        Write-Host "Downloading SSH keys from Key Vault 'azcleanroompublickv'..."
+        Write-Host "Downloading SSH keys from Key Vault 'azcleanroomemukv'..."
         $privateKeyContent = az keyvault secret show `
-            --vault-name "azcleanroompublickv" `
+            --vault-name "azcleanroomemukv" `
             --name "flex-node-ssh-private-key" `
             --query "value" -o tsv
         $privateKeyContent | Out-File -FilePath $sshPrivateKeyPath
         chmod 600 $sshPrivateKeyPath
 
         $publicKeyContent = az keyvault secret show `
-            --vault-name "azcleanroompublickv" `
+            --vault-name "azcleanroomemukv" `
             --name "flex-node-ssh-public-key" `
             --query "value" -o tsv
         $publicKeyContent | Out-File -FilePath $sshPublicKeyPath

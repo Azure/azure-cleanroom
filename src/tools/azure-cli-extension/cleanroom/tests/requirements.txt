@@ -5,7 +5,7 @@
 #   pip install -r requirements.txt
 #
 # Core Azure CLI dependencies
-azure-cli-core==2.60.0
+azure-cli-core==2.84.0
 azure-core==1.38.0
 
 # Additional Azure CLI packages that may be needed
@@ -14,7 +14,7 @@ azure-common
 
 # Cryptography dependencies (for configuration encryption/decryption)
 pycryptodome==3.19.1
-cryptography==46.0.7
+cryptography==48.0.1
 
 # Development and testing utilities
 azdev==0.1.67

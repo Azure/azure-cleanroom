@@ -28,6 +28,7 @@ public abstract class ApiStartup
         Action<ILoggingBuilder>? configure = null)
     {
         this.ServiceName = name;
+        this.Configuration = config;
         this.loggerFactory = LoggerFactory.Create(builder =>
         {
             builder.ClearProviders();
@@ -53,7 +54,6 @@ public abstract class ApiStartup
             configure?.Invoke(builder);
         });
         this.Logger = this.loggerFactory.CreateLogger(name);
-        this.Configuration = config;
     }
 
     public ILogger Logger { get; }

@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   cleanup-stale-resources:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=cleanup-stale-bvt-resources-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=cleanup-stale-bvt-resources-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: test
     steps:
     - uses: actions/checkout@v4

@@ -107,7 +107,7 @@ else {
     Write-Host "Frontend Service deployed successfully to AKS cluster in namespace $ns"
     Write-Host "Waiting for frontend-service pod to become ready..." -ForegroundColor Yellow
 
-    $maxRetries = 30
+    $maxRetries = 60
     $retryInterval = 10
     $retryCount = 0
 

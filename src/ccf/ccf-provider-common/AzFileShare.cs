@@ -508,11 +508,10 @@ public static class AzFileShare
             providerConfig.AzureFilesStorageAccountId());
 
         var armClient = new ArmClient(TokenCredentialFactory.GetTenantCredential(providerConfig));
-        var resourceIdentifier = new ResourceIdentifier($"/subscriptions/{subscriptionId}");
-        SubscriptionResource subscription = armClient.GetSubscriptionResource(resourceIdentifier);
-
+        ResourceIdentifier resourceGroupResourceId =
+            ResourceGroupResource.CreateResourceIdentifier(subscriptionId, resourceGroupName);
         ResourceGroupResource resourceGroup =
-            await subscription.GetResourceGroupAsync(resourceGroupName);
+            armClient.GetResourceGroupResource(resourceGroupResourceId);
         StorageAccountResource storageAccount =
             await resourceGroup.GetStorageAccountAsync(accountName);
         FileServiceResource fileService = storageAccount.GetFileService();

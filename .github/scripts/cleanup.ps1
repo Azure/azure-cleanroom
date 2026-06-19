@@ -19,13 +19,13 @@ param (
 if ($environment -eq "pr") {
     $mhsms = @(
         "prcovidtrainingmhsm4",
-        "azcleanroompublichsm"
+        "azcleanroomemuhsm2"
     )
 }
 else {
     $mhsms = @(
         "bvthsm2sea",
-        "azcleanroombvthsm2"
+        "azcleanroomemubvthsm"
     )
 }
 
@@ -48,7 +48,7 @@ $rgsToDelete = @()
 
 foreach ($rg in $resourceGroups) {
     $createdDate = [DateTime]::ParseExact("$($rg.tags.Created)", "yyyyMMdd", $null)
-    if ($($currentDate - $createdDate).Days -ge $retentionDays) {
+    if ($($currentDate - $createdDate).Days -gt $retentionDays) {
         $rgsToDelete += $rg.name
     }
 }
@@ -202,7 +202,7 @@ function Remove-ManagedResources {
         [int] $retentionDays
     )
 
-    $listUrl = "https://management.azure.com/subscriptions/$subscriptionId/providers/Private.CleanRoom/$($resourceType)?api-version=$apiVersion"
+    $listUrl = "https://eastus2euap.management.azure.com/subscriptions/$subscriptionId/providers/Private.CleanRoom/$($resourceType)?api-version=$apiVersion"
     $response = az rest `
         --method get `
         --resource "https://management.azure.com/" `
@@ -210,18 +210,6 @@ function Remove-ManagedResources {
     | ConvertFrom-Json
 
     $items = @($response.value)
-
-    # Also check Microsoft.CleanRoom provider.
-    $publicListUrl = "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.CleanRoom/$($resourceType)?api-version=$apiVersion"
-    $publicResponse = az rest `
-        --method get `
-        --resource "https://management.azure.com/" `
-        --url $publicListUrl `
-    2>$null | ConvertFrom-Json
-
-    if ($publicResponse -and $publicResponse.value) {
-        $items += @($publicResponse.value)
-    }
     foreach ($item in $items) {
         if ([string]::IsNullOrWhiteSpace($item.systemData.createdAt)) {
             # Some resources with missing data were found hence adding a created time for such resources to ensure deletion.
@@ -236,7 +224,7 @@ function Remove-ManagedResources {
             az rest `
                 --method delete `
                 --resource "https://management.azure.com/" `
-                --url "https://management.azure.com$($item.id)?api-version=$apiVersion"
+                --url "https://eastus2euap.management.azure.com$($item.id)?api-version=$apiVersion"
         }
     }
 

@@ -272,6 +272,7 @@ class AccessPoint(BaseModel):
     store: Resource
     identity: Identity | None = None
     protection: PrivacyProxySettings
+    subdirectory: str | None = ""
 
 
 class PrivacyProxySettings(BaseModel):
@@ -379,19 +380,19 @@ class ExternalPolicy(Document):
     pass
 
 
-CleanRoomSpecification.update_forward_refs()
-NetworkSettings.update_forward_refs()
-Inbound.update_forward_refs()
-Outbound.update_forward_refs()
-SandboxSettings.update_forward_refs()
-Policy.update_forward_refs()
-Document.update_forward_refs()
-AccessPoint.update_forward_refs()
-PrivacyProxySettings.update_forward_refs()
-Application.update_forward_refs()
-ContractValidationEndpoint.update_forward_refs()
-Identity.update_forward_refs()
-ApplicationTelemetry.update_forward_refs()
-InfrastructureTelemetry.update_forward_refs()
-GovernanceSettings.update_forward_refs()
-ExternalPolicy.update_forward_refs()
+CleanRoomSpecification.model_rebuild()
+NetworkSettings.model_rebuild()
+Inbound.model_rebuild()
+Outbound.model_rebuild()
+SandboxSettings.model_rebuild()
+Policy.model_rebuild()
+Document.model_rebuild()
+AccessPoint.model_rebuild()
+PrivacyProxySettings.model_rebuild()
+Application.model_rebuild()
+ContractValidationEndpoint.model_rebuild()
+Identity.model_rebuild()
+ApplicationTelemetry.model_rebuild()
+InfrastructureTelemetry.model_rebuild()
+GovernanceSettings.model_rebuild()
+ExternalPolicy.model_rebuild()

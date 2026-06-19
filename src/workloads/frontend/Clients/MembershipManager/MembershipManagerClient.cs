@@ -145,6 +145,41 @@ public static class MembershipManagerClientExtensions
             ODataErrorCode);
     }
 
+    public static async Task<ListCollaboratorsOutput> ListCollaboratorsAsync(
+        this HttpClient client,
+        string userToken,
+        string collaborationId,
+        ILogger logger)
+    {
+        var (userIdentity, userEmail) = TokenUtilities.ExtractUserInfoFromToken(userToken, logger);
+        var headers = GetHeaders(userEmail, userIdentity);
+
+        var path = $"collaborations/{collaborationId}/collaborators";
+        try
+        {
+            var result = await HttpClientUtilities.PerformHttpCallWithErrorHandling(
+                httpClient => httpClient.HttpGetAsync<ListCollaboratorsOutput>(
+                    path,
+                    logger,
+                    headers: headers),
+                client,
+                ODataErrorCode);
+
+            return result ?? new ListCollaboratorsOutput
+            {
+                Collaborators = new List<CollaboratorOutput>()
+            };
+        }
+        catch (ApiException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            throw new ApiException(
+                HttpStatusCode.NotFound,
+                new ODataError(
+                    "CollaborationNotFound",
+                    $"Collaboration {collaborationId} not found or caller is not a member."));
+        }
+    }
+
     private static Dictionary<string, string?> GetHeaders(
         string? userEmail,
         UserIdentity? userIdentity)

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.IdentityModel.Tokens.Jwt;
@@ -12,6 +12,7 @@ using Azure.Core;
 using Azure.ResourceManager;
 using Azure.ResourceManager.Authorization;
 using Azure.ResourceManager.Authorization.Models;
+using Azure.ResourceManager.ContainerInstance;
 using Azure.ResourceManager.ContainerService;
 using Azure.ResourceManager.ContainerService.Models;
 using Azure.ResourceManager.ManagedServiceIdentities;
@@ -36,6 +37,11 @@ public class AksClusterProvider : ICleanRoomClusterProvider
     private const string AksSubnetName = "aks";
     private const string AciSubnetName = "cg";
     private const string FlexNodeSubnetName = "flexnode";
+
+    /// <summary>
+    /// Azure resource group names cannot exceed 80 characters.
+    /// </summary>
+    private const int MaxResourceGroupNameLength = 80;
 
     private const string ExternalDnsWorkloadMiName = "external-dns-identity";
 
@@ -131,17 +137,26 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         // cluster.
         progressReporter.Report("Creating vnet...");
         var vnet = await CreateVnetAsync(location, resourceGroupResource, clClusterName);
+
         progressReporter.Report("Creating aks cluster...");
         var aks = await CreateAksClusterAsync(location, resourceGroupResource, clClusterName, vnet);
 
-        // Update AKS agent pool MI to have permissions to create ACI container groups in the MC
-        // resource group and to inject container groups in the vnet.
-        await UpdateAgentPoolMiPermissionsOnMCRgAsync(aks);
-        await UpdateAgentPoolMiPermissionsOnVNetRgAsync(aks, vnet);
+        // If vn2AciResourceGroupName is specified, use that RG for VN2 ACI resources.
+        // Otherwise default to the AKS node resource group (MC_*) which is VN2's
+        // default behavior.
+        string vn2AciResourceGroupName =
+            providerConfig["vn2AciResourceGroupName"]?.ToString() ?? aks.Data.NodeResourceGroup;
+
+        // Assign the kubelet MI permissions so it can create ACI container groups
+        // and inject them into the cg subnet. Permissions are assigned on the VN2
+        // target RG. The kubelet MI principal ID is read from
+        // aks.Data.IdentityProfile on the AKS resource.
+        await UpdateKubeletMiPermissionsAsync(aks, vnet, vn2AciResourceGroupName);
 
         string kubeConfigFile = await GetKubeConfigFile(aks);
         progressReporter.Report("Installing VN2...");
-        await this.InstallVN2OnAksAsync(aks, kubeConfigFile);
+        await this.InstallVN2OnAksAsync(
+            aks, kubeConfigFile, vn2AciResourceGroupName, clClusterName);
 
         // In some cases the workload identity deployment takes a significant amount of time
         // causing failures further downstream. To avoid this, wait for the deployment to be
@@ -438,10 +453,10 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 },
                 DnsPrefix = $"{aksClusterName}-dns",
 
-                // Pin K8s version to 1.33 to match VN2 kubelet compatibility.
-                // VN2 chart ships kubelet 1.33.x which doesn't support AKS 1.34+.
-                // See: https://github.com/microsoft/virtualnodesOnAzureContainerInstances/blob/main/README.md#aks-basics-tab
-                KubernetesVersion = "1.33",
+                // Pin K8s version to 1.34. VN2 chart 1.3307.26033004+
+                // supports AKS 1.34. See:
+                // https://github.com/azure-core-compute/VirtualNodesOnACI-1P/blob/main/Docs/VersionCompatibility.md
+                KubernetesVersion = "1.34",
                 AgentPoolProfiles =
                 {
                     new ManagedClusterAgentPoolProfile(AgentPoolName)
@@ -498,7 +513,11 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 ServicePrincipalProfile = new ManagedClusterServicePrincipalProfile("msi"),
                 EnableRbac = true,
                 Identity = new ManagedServiceIdentity("SystemAssigned"),
-                AadProfile = aadProfile
+                AadProfile = aadProfile,
+                NodeResourceGroup = GetNodeResourceGroupName(
+                    resourceGroupResource.Id.Name,
+                    aksClusterName,
+                    location)
             };
 
             ArmOperation<ContainerServiceManagedClusterResource> lro =
@@ -514,74 +533,26 @@ public class AksClusterProvider : ICleanRoomClusterProvider
             return result;
         }
 
-        async Task UpdateAgentPoolMiPermissionsOnMCRgAsync(
-            ContainerServiceManagedClusterResource aks)
-        {
-            var mcResourceGroup = aks.Data.NodeResourceGroup;
-            var agentPoolMiName = aks.Data.Name + "-" + AgentPoolName;
-
-            ResourceIdentifier mcResourceGroupResourceId =
-                ResourceGroupResource.CreateResourceIdentifier(subscriptionId, mcResourceGroup);
-            ResourceGroupResource mcResourceGroupResource =
-                client.GetResourceGroupResource(mcResourceGroupResourceId);
-
-            UserAssignedIdentityResource uid =
-                await mcResourceGroupResource.GetUserAssignedIdentityAsync(agentPoolMiName);
-
-            // TODO (gsinha): Avoid contributor role and use a more targeted role defn.
-            string contributorRoleDefinitionId = $"/subscriptions/{subscriptionId}/providers/" +
-                $"Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c";
-            string roleAssignmentId = Guid.NewGuid().ToString();
-
-            var roleAssignmentData =
-                new RoleAssignmentCreateOrUpdateContent(
-                    new ResourceIdentifier(contributorRoleDefinitionId),
-                    uid.Data.PrincipalId!.Value)
-                {
-                    PrincipalType = "ServicePrincipal",
-                };
-
-            var collection = mcResourceGroupResource.GetRoleAssignments();
-            try
-            {
-                await collection.CreateOrUpdateAsync(
-                    WaitUntil.Completed,
-                    roleAssignmentId,
-                    roleAssignmentData);
-            }
-            catch (RequestFailedException rfe) when (rfe.ErrorCode == "RoleAssignmentExists")
-            {
-                // Already exists. Ignore failure.
-            }
-
-            this.logger.LogInformation(
-                $"Contributor role assignment over rg {mcResourceGroup} succeeded.");
-        }
-
-        async Task UpdateAgentPoolMiPermissionsOnVNetRgAsync(
+        async Task UpdateKubeletMiPermissionsAsync(
             ContainerServiceManagedClusterResource aks,
-            VirtualNetworkResource vnet)
+            VirtualNetworkResource vnet,
+            string targetResourceGroupName)
         {
-            var mcResourceGroup = aks.Data.NodeResourceGroup;
-            var agentPoolMiName = aks.Data.Name + "-" + AgentPoolName;
-
-            ResourceIdentifier mcResourceGroupResourceId =
-                ResourceGroupResource.CreateResourceIdentifier(subscriptionId, mcResourceGroup);
-            ResourceGroupResource mcResourceGroupResource =
-                client.GetResourceGroupResource(mcResourceGroupResourceId);
-
-            UserAssignedIdentityResource uid =
-                await mcResourceGroupResource.GetUserAssignedIdentityAsync(agentPoolMiName);
+            // Get the kubelet MI principal ID from the AKS identity profile instead
+            // of reading from the MC_ resource group (which the caller may not have access to).
+            Guid kubeletPrincipalId = this.GetKubeletIdentityPrincipalId(aks);
 
             // TODO (gsinha): Avoid contributor role and use a more targeted role defn.
-            string contributorRoleDefinitionId = $"/subscriptions/{subscriptionId}/providers/" +
-                $"Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c";
+            string contributorRoleDefinitionId =
+                $"/subscriptions/{subscriptionId}/providers/" +
+                $"Microsoft.Authorization/roleDefinitions/" +
+                $"b24988ac-6180-42a0-ab88-20f7382dd24c";
             string roleAssignmentId = Guid.NewGuid().ToString();
 
             var roleAssignmentData =
                 new RoleAssignmentCreateOrUpdateContent(
                     new ResourceIdentifier(contributorRoleDefinitionId),
-                    uid.Data.PrincipalId!.Value)
+                    kubeletPrincipalId)
                 {
                     PrincipalType = "ServicePrincipal",
                 };
@@ -599,13 +570,43 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                     roleAssignmentId,
                     roleAssignmentData);
             }
-            catch (RequestFailedException rfe) when (rfe.ErrorCode == "RoleAssignmentExists")
+            catch (RequestFailedException rfe)
+            when (rfe.ErrorCode == "RoleAssignmentExists")
             {
                 // Already exists. Ignore failure.
             }
 
             this.logger.LogInformation(
                 $"Contributor role assignment over rg {vnetResourceGroup} succeeded.");
+
+            // If VN2 target RG differs from the VNet RG, also grant permissions there.
+            if (!string.Equals(
+                targetResourceGroupName,
+                vnetResourceGroup,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                roleAssignmentId = Guid.NewGuid().ToString();
+                ResourceIdentifier targetRgId =
+                    ResourceGroupResource.CreateResourceIdentifier(
+                        subscriptionId, targetResourceGroupName);
+                ResourceGroupResource targetRgResource = client.GetResourceGroupResource(targetRgId);
+                var targetCollection = targetRgResource.GetRoleAssignments();
+                try
+                {
+                    await targetCollection.CreateOrUpdateAsync(
+                        WaitUntil.Completed,
+                        roleAssignmentId,
+                        roleAssignmentData);
+                }
+                catch (RequestFailedException rfe)
+                when (rfe.ErrorCode == "RoleAssignmentExists")
+                {
+                    // Already exists. Ignore failure.
+                }
+
+                this.logger.LogInformation(
+                $"Contributor role assignment over rg {targetResourceGroupName} succeeded.");
+            }
         }
     }
 
@@ -818,8 +819,8 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 };
             }
 
-            string? agentPoolMiPrincipalId =
-                await this.TryGetAgentPoolMiPrincipalIdAsync(client, subscriptionId, aks);
+            string? kubeletMiPrincipalId =
+                this.TryGetKubeletMiPrincipalId(aks);
 
             return this.ToCleanRoomCluster(
                 clClusterName,
@@ -834,7 +835,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 kserveInferencingAgentEndpoint,
                 flexNodeEnabled,
                 flexNodes,
-                agentPoolMiPrincipalId);
+                kubeletMiPrincipalId);
         }
 
         return null;
@@ -888,7 +889,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         {
             deleteTasks.Add(Task.Run(async () =>
             {
-                this.logger.LogInformation($"Deleting virtual network zone {resource.Id}");
+                this.logger.LogInformation($"Deleting virtual network {resource.Id}");
                 await resource.DeleteAsync(WaitUntil.Completed);
             }));
         }
@@ -1146,6 +1147,36 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         };
     }
 
+    /// <summary>
+    /// Compute the node resource group name for AKS. The default auto-generated name
+    /// MC_{rgName}_{aksName}_{location} can exceed the max RG name length when the
+    /// parent resource group name is long (e.g. CleanRoom_Collaborations_{name}).
+    /// Progressively shorten using a unique hash of the default name.
+    /// </summary>
+    private static string GetNodeResourceGroupName(
+        string resourceGroupName,
+        string aksClusterName,
+        string location)
+    {
+        // Default AKS pattern: MC_{resourceGroupName}_{aksClusterName}_{location}.
+        string defaultName = $"MC_{resourceGroupName}_{aksClusterName}_{location}";
+        if (defaultName.Length <= MaxResourceGroupNameLength)
+        {
+            return defaultName;
+        }
+
+        // Shorten by replacing the full RG name with a deterministic hash.
+        string uniqueHash = Utils.GetUniqueString(defaultName.ToLower());
+        string shortened = $"MC_{aksClusterName}_{uniqueHash}";
+        if (shortened.Length <= MaxResourceGroupNameLength)
+        {
+            return shortened;
+        }
+
+        // Final fallback: just the hash to guarantee it fits.
+        return $"MC_{uniqueHash}";
+    }
+
     private static ODataError? ValidateInput(JsonObject? providerConfig)
     {
         if (providerConfig == null)
@@ -1198,35 +1229,36 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         return kubeConfigFile;
     }
 
-    private async Task<string?> TryGetAgentPoolMiPrincipalIdAsync(
-        ArmClient client,
-        string subscriptionId,
+    private string? TryGetKubeletMiPrincipalId(
         ContainerServiceManagedClusterResource aks)
     {
-        try
+        // Read the kubelet identity principal ID from the AKS identity profile.
+        // This avoids accessing the MC_ resource group which the caller may not have
+        // permissions on.
+        var principalId = this.GetKubeletIdentityPrincipalId(aks);
+        return principalId.ToString();
+    }
+
+    // Returns the principal ID of the AKS agent pool managed identity (the
+    // "<cluster>-agentpool" MI in the MC_ RG). This is the same identity that
+    // VN2 docs refer to as the "AKS managed identity" in Step 4. The kubelet
+    // identity in aks.Data.IdentityProfile["kubeletidentity"] points to this
+    // same MI, so we read it from the AKS resource directly instead of
+    // querying the MC_ resource group (which the caller may not have access to).
+    private Guid GetKubeletIdentityPrincipalId(ContainerServiceManagedClusterResource aks)
+    {
+        if (aks.Data.IdentityProfile != null &&
+            aks.Data.IdentityProfile.TryGetValue(
+                "kubeletidentity",
+                out ContainerServiceUserAssignedIdentity? kubeletIdentity) &&
+            kubeletIdentity?.ObjectId != null)
         {
-            var mcResourceGroup = aks.Data.NodeResourceGroup;
-            var agentPoolMiName = aks.Data.Name + "-" + AgentPoolName;
-
-            ResourceIdentifier mcResourceGroupResourceId =
-                ResourceGroupResource.CreateResourceIdentifier(
-                    subscriptionId, mcResourceGroup);
-            ResourceGroupResource mcResourceGroupResource =
-                client.GetResourceGroupResource(mcResourceGroupResourceId);
-
-            UserAssignedIdentityResource uid =
-                await mcResourceGroupResource.GetUserAssignedIdentityAsync(
-                    agentPoolMiName);
-
-            return uid.Data.PrincipalId?.ToString();
+            return kubeletIdentity.ObjectId.Value;
         }
-        catch (Exception ex)
-        {
-            this.logger.LogError(
-                ex,
-                "Failed to get agent pool MI principal ID.");
-            throw;
-        }
+
+        throw new InvalidOperationException(
+            "Kubelet identity not found in AKS cluster identity profile. " +
+            $"Cluster: {aks.Data.Name}.");
     }
 
     private async Task CreateNamespaceAsync(string ns, string kubeConfigFile)
@@ -1247,12 +1279,15 @@ public class AksClusterProvider : ICleanRoomClusterProvider
 
     private async Task InstallVN2OnAksAsync(
         ContainerServiceManagedClusterResource aks,
-        string kubeConfigFile)
+        string kubeConfigFile,
+        string aciResourceGroupName,
+        string clClusterName)
     {
         this.logger.LogInformation(
             $"Starting installation of VN2 helm chart on: {aks.Data.Name}");
+        string customTags = $"{CleanRoomClusterTag}={clClusterName}";
         var helmClient = new HelmClient(this.logger, this.configuration, kubeConfigFile);
-        await helmClient.InstallVN2Chart("vn2");
+        await helmClient.InstallVN2Chart("vn2", aciResourceGroupName, customTags);
         this.logger.LogInformation($"VN2 helm chart installation succeeded.");
 
         // Wait for the VN2 virtual node to register and become ready. This guards
@@ -1319,7 +1354,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
             {
                 {
                     "service.beta.kubernetes.io/azure-load-balancer-resource-group",
-                    aks.Data.NodeResourceGroup
+                    publicIP.Id.ResourceGroupName!
                 },
                 {
                     "service.beta.kubernetes.io/azure-pip-name",
@@ -1804,14 +1839,36 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                     };
 
                     var collection = mi.GetFederatedIdentityCredentials();
-                    fc = (await collection.CreateOrUpdateAsync(
-                        WaitUntil.Completed,
-                        fcName,
-                        data)).Value;
+
+                    // Retry FIC creation to handle MS Graph replication lag after
+                    // managed identity creation. Graph may return 404 if the MI
+                    // hasn't been indexed yet.
+                    int maxRetries = 10;
+                    for (int attempt = 1; attempt <= maxRetries; attempt++)
+                    {
+                        try
+                        {
+                            fc = (await collection.CreateOrUpdateAsync(
+                                WaitUntil.Completed,
+                                fcName,
+                                data)).Value;
+                            break;
+                        }
+                        catch (RequestFailedException rfe) when
+                            (rfe.Status == (int)HttpStatusCode.NotFound &&
+                             attempt < maxRetries)
+                        {
+                            this.logger.LogWarning(
+                                $"Federated credential creation attempt {attempt}/{maxRetries}" +
+                                $" failed with 404 (MS Graph replication lag)." +
+                                $" Retrying in 15s...");
+                            await Task.Delay(TimeSpan.FromSeconds(15));
+                        }
+                    }
 
                     this.logger.LogInformation(
                         $"Federated credential creation for workload identity succeeded. id:" +
-                        $" {fc.Data.Id}");
+                        $" {fc!.Data.Id}");
                 }
                 else
                 {
@@ -2577,6 +2634,24 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         return resources;
     }
 
+    private async Task<List<ContainerGroupResource>> GetContainerGroups(
+        string clClusterName,
+        ResourceGroupResource resourceGroupResource)
+    {
+        var collection = resourceGroupResource.GetContainerGroups();
+        List<ContainerGroupResource> resources = new();
+        await foreach (var item in collection.GetAllAsync())
+        {
+            if (item.Data.Tags.TryGetValue(CleanRoomClusterTag, out var clusterNameTagValue) &&
+                clusterNameTagValue == clClusterName)
+            {
+                resources.Add(item);
+            }
+        }
+
+        return resources;
+    }
+
     private async Task<List<VirtualNetworkResource>> GetVirtualNetworks(
         string clClusterName,
         ResourceGroupResource resourceGroupResource)
@@ -2644,7 +2719,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         string? kserveInferencingAgentEndpoint,
         bool flexNodeEnabled,
         List<FlexNode>? flexNodes = null,
-        string? agentPoolMiPrincipalId = null)
+        string? kubeletMiPrincipalId = null)
     {
         var providerProperties = new JsonObject
         {
@@ -2653,9 +2728,9 @@ public class AksClusterProvider : ICleanRoomClusterProvider
             ["kubernetesMasterFqdn"] = aks.Data.Fqdn
         };
 
-        if (!string.IsNullOrEmpty(agentPoolMiPrincipalId))
+        if (!string.IsNullOrEmpty(kubeletMiPrincipalId))
         {
-            providerProperties["agentPoolMiPrincipalId"] = agentPoolMiPrincipalId;
+            providerProperties["kubeletMiPrincipalId"] = kubeletMiPrincipalId;
         }
 
         var clusterMiPrincipalId = aks.Data.ClusterIdentity?.PrincipalId?.ToString();
@@ -2842,23 +2917,20 @@ public class AksClusterProvider : ICleanRoomClusterProvider
             SetupPublicIPForAnalyticsEndpoint()
         {
             // https://learn.microsoft.com/en-us/azure/aks/static-ip
-            ResourceIdentifier nodeRgId = ResourceGroupResource.CreateResourceIdentifier(
-                aks.Id.SubscriptionId,
-                aks.Data.NodeResourceGroup);
-            ResourceGroupResource nodeResourceGroupResource =
-                client.GetResourceGroupResource(nodeRgId);
+            // Create the public IP in the target RG (not the MC_ RG) so the caller
+            // does not need access to the AKS-managed node resource group.
             string ipName = "analytics-agent-ip";
             var publicIP = await this.CreatePublicIP(
-                nodeResourceGroupResource,
+                resourceGroupResource,
                 aks.Data.Location,
                 clClusterName,
                 ipName,
                 forceCreate);
-            await this.UpdateAksMiPermissionsForPublicIPMgmtAsync(nodeResourceGroupResource, aks);
+            await this.UpdateAksMiPermissionsForPublicIPMgmtAsync(resourceGroupResource, aks);
             string dnsLabel = this.GenerateDnsName(
                 prefix: "analytics",
                 clClusterName,
-                nodeResourceGroupResource);
+                resourceGroupResource);
             return (publicIP, dnsLabel);
         }
     }
@@ -2895,8 +2967,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         await helmClient.InstallKServe();
         this.logger.LogInformation($"KServe helm chart installation succeeded.");
 
-        var telemetryCollectionEnabled =
-            input.TelemetryProfile != null &&
+        var telemetryCollectionEnabled = input.TelemetryProfile != null &&
             input.TelemetryProfile.CollectionEnabled;
         var deploymentTemplate =
             await this.httpClientManager.GetDeploymentTemplate<KServeInferencingDeploymentTemplate>(

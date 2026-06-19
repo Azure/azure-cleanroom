@@ -137,6 +137,7 @@ def config_add_datasource_cmd(
     secretstore_config_file=SecretStoreConfiguration.default_secretstore_config_file(),
     kek_name="",
     access_name="",
+    subdirectory="",
 ):
     from cleanroom_common.azure_cleanroom_core.models.datastore import DataStoreEntry
 
@@ -155,6 +156,7 @@ def config_add_datasource_cmd(
         kek_secret_store,
         kek_name,
         access_name,
+        subdirectory,
     )
 
 
@@ -169,6 +171,7 @@ def config_add_datasink_cmd(
     secretstore_config_file=SecretStoreConfiguration.default_secretstore_config_file(),
     kek_name="",
     access_name="",
+    subdirectory="",
 ):
     from cleanroom_common.azure_cleanroom_core.models.datastore import DataStoreEntry
 
@@ -187,6 +190,7 @@ def config_add_datasink_cmd(
         kek_secret_store,
         kek_name,
         access_name,
+        subdirectory,
     )
 
 

@@ -639,6 +639,10 @@ foreach ($format in $formats) {
     $publisherDatasets["${format}_input"] = $publisherInputDatasetName
 
     if (-not $useFrontendService) {
+        # Scenario A: CPK + subdirectory.
+        # Publisher data is laid out under date subfolders (2025-09-01, 2025-09-02, ...).
+        # Restricting blobfuse to "2025-09-01" proves that a CPK-encrypted datastore
+        # can be mounted with only the requested partition exposed.
         az cleanroom collaboration dataset publish `
             --contract-id $contractId `
             --dataset-name $publisherInputDatasetName `
@@ -649,10 +653,15 @@ foreach ($format in $formats) {
             --policy-access-mode read `
             --policy-allowed-fields "date,author,mentions" `
             --datastore-config-file $publisherDatastoreConfig `
-            --secretstore-config-file $publisherSecretStoreConfig
+            --secretstore-config-file $publisherSecretStoreConfig `
+            --subdirectory "2025-09-01"
     }
     else {
         # Build dataset specification using build-dataset-spec.py
+        # Scenario A: CPK + subdirectory via the frontend service path.
+        # Publisher data is laid out under date subfolders (2025-09-01, 2025-09-02, ...).
+        # Restricting blobfuse to "2025-09-01" proves that a CPK-encrypted datastore
+        # can be mounted with only the requested partition exposed.
         $datastoreName = "publisher-input-$format"
         $dekName = "${publisherInputDatasetName}-dek"
         $kekName = "${publisherInputDatasetName}-kek"
@@ -671,7 +680,8 @@ foreach ($format in $formats) {
             --dek-kv-url $publisherResult.dek.kv.properties.vaultUri `
             --kek-secret-id $kekName `
             --kek-kv-url $publisherResult.kek.kv.properties.vaultUri `
-            --kek-maa-url $publisherResult.maa_endpoint
+            --kek-maa-url $publisherResult.maa_endpoint `
+            --subdirectory "2025-09-01"
         
         $datasetInputDetails = $datasetSpecJson | ConvertFrom-Json
 
@@ -751,10 +761,14 @@ foreach ($format in $formats) {
             --identity-name publisher-identity `
             --policy-access-mode read `
             --policy-allowed-fields "date,time,author,mentions" `
-            --datastore-config-file $publisherDatastoreConfig
+            --datastore-config-file $publisherDatastoreConfig `
+            --subdirectory "2025-09-01"
     }
     else {
         # Build dataset specification for SSE dataset (no encryption keys needed)
+        # Scenario B: Using --subdirectory to test blobfuse subdirectory mounting.
+        # The data has date-based subfolders (2025-09-01, 2025-09-02, etc.).
+        # Setting subdirectory to "2025-09-01" restricts blobfuse to only that subtree.
         $datastoreName = "publisher-input-sse-$format"
         
         $datasetSpecJson = python3 $PSScriptRoot/build-dataset-spec.py `
@@ -766,7 +780,8 @@ foreach ($format in $formats) {
             --identity-name "publisher-identity" `
             --client-id $identity.clientId `
             --tenant-id $identity.tenantId `
-            --issuer-url $publisherIssuerUrl
+            --issuer-url $publisherIssuerUrl `
+            --subdirectory "2025-09-01"
         
         $datasetInputDetails = $datasetSpecJson | ConvertFrom-Json
         
@@ -829,8 +844,8 @@ foreach ($format in $formats) {
 
 # Create a datastore entry for the AWS S3 storage to be used as a datasink with CGS secret Id as
 # its configuration.
-$awsAccessKeyId = az keyvault secret show  --vault-name azcleanroompublickv -n aws-access-key-id --query value -o tsv
-$awsSecretAccessKey = az keyvault secret show  --vault-name azcleanroompublickv -n aws-secret-access-key --query value -o tsv
+$awsAccessKeyId = az keyvault secret show  --vault-name azcleanroomemukv -n aws-access-key-id --query value -o tsv
+$awsSecretAccessKey = az keyvault secret show  --vault-name azcleanroomemukv -n aws-secret-access-key --query value -o tsv
 $secretConfig = @{
     awsAccessKeyId     = $awsAccessKeyId
     awsSecretAccessKey = $awsSecretAccessKey

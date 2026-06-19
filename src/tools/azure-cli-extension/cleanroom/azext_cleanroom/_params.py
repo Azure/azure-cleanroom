@@ -1062,6 +1062,12 @@ def load_arguments(self, _):
             help="The configuration file storing information about the secret store.",
             options_list=["--secretstore-config"],
         )
+        c.argument(
+            "subdirectory",
+            help="Optional subdirectory/prefix inside the storage container to mount.",
+            required=False,
+            default="",
+        )
 
     with self.argument_context("cleanroom config add-datasink") as c:
         c.argument(
@@ -1090,6 +1096,12 @@ def load_arguments(self, _):
             "secretstore_config_file",
             help="The configuration file storing information about the secret store.",
             options_list=["--secretstore-config"],
+        )
+        c.argument(
+            "subdirectory",
+            help="Optional subdirectory/prefix inside the storage container to mount.",
+            required=False,
+            default="",
         )
 
     with self.argument_context("cleanroom config set-telemetry") as c:
@@ -2740,11 +2752,21 @@ def load_arguments(self, _):
             help="The local path from which data should be encrypted and uploaded.",
             options_list=["--source-path", "--src"],
         )
+        c.argument(
+            "subdirectory",
+            help="The subdirectory within the container to scope the upload to.",
+            options_list=["--subdirectory"],
+        )
     with self.argument_context("cleanroom datastore download") as c:
         c.argument(
             "destination_path",
             help="The local path to which decrypted data should be downloaded.",
             options_list=["--destination-path", "--dst"],
+        )
+        c.argument(
+            "subdirectory",
+            help="The subdirectory within the container to scope the download to.",
+            options_list=["--subdirectory"],
         )
 
     with self.argument_context("cleanroom secretstore") as c:

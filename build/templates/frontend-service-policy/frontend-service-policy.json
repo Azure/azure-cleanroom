@@ -64,6 +64,16 @@
           "name": "SKR_PORT",
           "value": ".*",
           "regex": true
+        },
+        {
+          "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CR_FRONTEND_ENABLE_OPEN_TELEMETRY",
+          "value": ".*",
+          "regex": true
         }
       ],
       "volumeMounts": [

@@ -190,7 +190,7 @@ func (e *Encryptor) GetAttr(options exported.GetAttrOptions) (attr *exported.Obj
 
 	if fileAttr.IsDir() {
 		attr.Size = fileAttr.Size()
-		attr.Flags.Set(exported.PropFlagIsDir)
+		attr.Flags.Set(uint64(exported.PropFlagIsDir))
 	} else {
 		_, fileHandleExist := e.handleMap.Load(options.Name)
 		if !fileHandleExist {
@@ -275,7 +275,7 @@ func (e *Encryptor) StageData(opt exported.StageDataOptions) error {
 }
 
 // Read the block of data from the cipher mount, decrypt and return the plain text buffer.
-func (e *Encryptor) ReadInBuffer(options exported.ReadInBufferOptions) (length int, err error) {
+func (e *Encryptor) ReadInBuffer(options *exported.ReadInBufferOptions) (length int, err error) {
 	log.Trace("Encryptor::ReadInBuffer : Read %s from %d offset", options.Handle.Path, options.Offset)
 
 	if options.Offset > atomic.LoadInt64(&options.Handle.Size) {

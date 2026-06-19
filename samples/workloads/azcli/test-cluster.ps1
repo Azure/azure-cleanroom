@@ -137,7 +137,7 @@ function Test-ReadonlyK8sCredentials {
 
 $clusterInfo = Get-Content $sandbox_common/cl-cluster.json | ConvertFrom-Json
 Test-ReadonlyK8sCredentials -sandbox_common $sandbox_common -clCluster $clCluster
-$observabilityEnabled = $clusterInfo.observabilityWorkloadProfile -ne $null -and $clusterInfo.observabilityWorkloadProfile.enabled -eq $true
+$observabilityEnabled = $clusterInfo.observabilityProfile -ne $null -and $clusterInfo.observabilityProfile.enabled -eq $true
 if ($observabilityEnabled) {
   Write-Host "Testing diagnostic k8s credentials...."
   Test-DiagnosticK8sCredentials -sandbox_common $sandbox_common -clCluster $clCluster -observabilityEnabled:$observabilityEnabled

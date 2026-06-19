@@ -391,7 +391,12 @@ def main():
             else:
                 os.environ["ENCRYPTION_KEY"] = encryption_key_base64
                 returncode = launch_blobfuse_encrypted(
-                    logger, tracer, args.mount_path, args.read_only, telemetry_path
+                    logger,
+                    tracer,
+                    args.mount_path,
+                    args.read_only,
+                    args.sub_directory,
+                    telemetry_path,
                 )
 
             if returncode == 0:

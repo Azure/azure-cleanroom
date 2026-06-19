@@ -12,11 +12,43 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: cluster-pod-reader-binding
+  name: cluster-pod-reader-binding-<NAME>
 subjects:
 - kind: User
   name: <NAME>
 roleRef:
   kind: ClusterRole
   name: cluster-pod-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: grafana-access
+  namespace: <NAMESPACE>
+rules:
+- apiGroups: [""]
+  resources: ["pods/portforward"]
+  verbs: ["create"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: grafana-access-binding-<NAME>
+  namespace: <NAMESPACE>
+subjects:
+- kind: User
+  name: <NAME>
+roleRef:
+  kind: Role
+  name: grafana-access
   apiGroup: rbac.authorization.k8s.io

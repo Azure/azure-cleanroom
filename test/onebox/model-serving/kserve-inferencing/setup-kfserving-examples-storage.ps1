@@ -1,11 +1,11 @@
 [CmdletBinding()]
 param
 (
-    [string]$resourceGroup = "azcleanroom-public-pr-rg",
+    [string]$resourceGroup = "azcleanroom-emu-pr-rg",
 
     [string]$subscriptionName = "AzureCleanRoom-NonProd",
 
-    [string]$storageAccountName = "azcleanroompublicsa",
+    [string]$storageAccountName = "azcleanroomemusa",
 
     [string]$containerName = "kfserving-examples",
 

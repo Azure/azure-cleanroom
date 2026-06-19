@@ -203,15 +203,15 @@ create_vm() {
     local ssh_public_key_file="$GENERATED_DIR/${VM_NAME}-ssh.pub"
 
     # Always download SSH keys from Azure Key Vault.
-    log_info "Downloading SSH keys from Key Vault 'azcleanroompublickv'..."
+    log_info "Downloading SSH keys from Key Vault 'azcleanroomemukv'..."
     az keyvault secret show \
-        --vault-name "azcleanroompublickv" \
+        --vault-name "azcleanroomemukv" \
         --name "flex-node-ssh-private-key" \
         --query "value" -o tsv > "$SSH_PRIVATE_KEY_FILE"
     chmod 600 "$SSH_PRIVATE_KEY_FILE"
 
     az keyvault secret show \
-        --vault-name "azcleanroompublickv" \
+        --vault-name "azcleanroomemukv" \
         --name "flex-node-ssh-public-key" \
         --query "value" -o tsv > "$ssh_public_key_file"
     log_info "SSH keys downloaded from Key Vault."

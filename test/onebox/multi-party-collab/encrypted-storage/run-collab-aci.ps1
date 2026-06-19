@@ -136,7 +136,8 @@ $resultsDir = "$outDir/results"
 az cleanroom datastore download `
     --config $datastoreOutdir/encrypted-storage-consumer-datastore-config `
     --name consumer-output `
-    --dst $resultsDir
+    --dst $resultsDir `
+    --subdirectory output-data
 
 az cleanroom telemetry download `
     --cleanroom-config $outDir/configurations/publisher-config `

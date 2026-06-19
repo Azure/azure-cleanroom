@@ -15,7 +15,8 @@ internal class Startup : ApiStartup
     {
     }
 
-    public override bool EnableOpenTelemetry => false;
+    public override bool EnableOpenTelemetry =>
+        this.Configuration.GetValue<bool>("CR_CLUSTER_PROVIDER_ENABLE_OPEN_TELEMETRY");
 
     public override void OnConfigureServices(IServiceCollection services)
     {
