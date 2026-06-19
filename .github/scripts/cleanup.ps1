@@ -48,7 +48,7 @@ $rgsToDelete = @()
 
 foreach ($rg in $resourceGroups) {
     $createdDate = [DateTime]::ParseExact("$($rg.tags.Created)", "yyyyMMdd", $null)
-    if ($($currentDate - $createdDate).Days -gt $retentionDays) {
+    if ($($currentDate - $createdDate).Days -ge $retentionDays) {
         $rgsToDelete += $rg.name
     }
 }
