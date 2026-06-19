@@ -10,8 +10,8 @@ Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted
 Install-Module AWS.Tools.S3 -Scope CurrentUser
 
 Write-Host "Fetching AWS credentials..."
-$awsAccessKeyId = az keyvault secret show  --vault-name azcleanroomemukv -n aws-access-key-id --query value -o tsv
-$awsSecretAccessKey = az keyvault secret show  --vault-name azcleanroomemukv -n aws-secret-access-key --query value -o tsv
+$awsAccessKeyId = az keyvault secret show  --vault-name azcleanroompublickv -n aws-access-key-id --query value -o tsv
+$awsSecretAccessKey = az keyvault secret show  --vault-name azcleanroompublickv -n aws-secret-access-key --query value -o tsv
 Set-AWSCredential -AccessKey $awsAccessKeyId -SecretKey $awsSecretAccessKey -StoreAs default
 
 Import-Module AWS.Tools.S3

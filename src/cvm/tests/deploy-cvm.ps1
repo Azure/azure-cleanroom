@@ -8,7 +8,7 @@
     Creates an Azure CVM with vTPM enabled for SNP attestation testing.
     VM name and resource group are auto-generated: from JOB_ID / RUN_ID in
     GitHub Actions, or from the current user name otherwise. SSH keys are
-    downloaded from the azcleanroomemukv Key Vault. Deployment info is written
+    downloaded from the azcleanroompublickv Key Vault. Deployment info is written
     to generated/cvm-deploy.json for use by the test script.
 .EXAMPLE
     ./src/cvm/tests/deploy-cvm.ps1
@@ -26,7 +26,7 @@ $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $true
 
 $AdminUser = "azureuser"
-$KeyVault = "azcleanroomemukv"
+$KeyVault = "azcleanroompublickv"
 $GeneratedDir = $OutDir ? $OutDir : (Join-Path $PSScriptRoot "generated")
 
 # --- Auto-generate VM and RG names ---

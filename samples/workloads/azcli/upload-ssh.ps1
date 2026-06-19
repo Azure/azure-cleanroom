@@ -10,7 +10,7 @@ param
     $sshPublicKeyPath,
 
     [string]
-    $keyVaultName = "azcleanroomemukv"
+    $keyVaultName = "azcleanroompublickv"
 )
 
 #https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference

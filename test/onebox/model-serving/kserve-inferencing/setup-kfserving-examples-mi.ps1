@@ -7,7 +7,7 @@ param
     [Parameter(Mandatory = $true)]
     [string]$storageAccountName,
 
-    [string]$storageAccountResourceGroup = "azcleanroom-emu-pr-rg",
+    [string]$storageAccountResourceGroup = "azcleanroom-public-pr-rg",
 
     [string]$subscriptionName = "AzureCleanRoom-NonProd",
 
