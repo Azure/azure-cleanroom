@@ -24,7 +24,7 @@ def _read_release_version() -> str:
             with open(candidate, "r") as f:
                 return f.read().strip()
         current = os.path.dirname(current)
-    return "7.0.0"
+    return "8.0.0"
 
 
 DEFAULT_CLEANROOM_CONTAINER_REGISTRY_URL = "mcr.microsoft.com/azurecleanroom"

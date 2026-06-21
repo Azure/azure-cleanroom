@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MCR_RELEASE_VERSION: "7.0.0" # Bump this for each release.
+  MCR_RELEASE_VERSION: "8.0.0" # Bump this for each release.
 
 jobs:
   ml-training-nightly:
