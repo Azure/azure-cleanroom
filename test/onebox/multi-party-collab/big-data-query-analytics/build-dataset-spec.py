@@ -48,6 +48,7 @@ def build_dataset_specification(
     kek_secret_id: Optional[str] = None,
     kek_kv_url: Optional[str] = None,
     kek_maa_url: Optional[str] = None,
+    subdirectory: Optional[str] = None,
 ) -> dict:
     """
     Build dataset specification object for frontend service.
@@ -66,6 +67,7 @@ def build_dataset_specification(
     :param kek_secret_id: KEK secret ID.
     :param kek_kv_url: KEK Key Vault URL.
     :param kek_maa_url: MAA URL for KEK.
+    :param subdirectory: Optional subdirectory/prefix inside the container.
     :return: Dataset specification object.
     """
 
@@ -108,6 +110,10 @@ def build_dataset_specification(
             "encryptionMode": datastore.get("encryptionMode") or "None",
         },
     }
+
+    # Add subdirectory if provided.
+    if subdirectory:
+        dataset_spec["store"]["subdirectory"] = subdirectory
 
     # Add AWS CGS secret ID from storeProviderConfiguration if present.
     store_config = datastore.get("storeProviderConfiguration")
@@ -170,6 +176,10 @@ def main():
     parser.add_argument("--kek-secret-id", help="KEK secret ID")
     parser.add_argument("--kek-kv-url", help="KEK Key Vault URL")
     parser.add_argument("--kek-maa-url", help="MAA URL for KEK")
+    parser.add_argument(
+        "--subdirectory",
+        help="Optional subdirectory/prefix inside the storage container",
+    )
 
     args = parser.parse_args()
 
@@ -192,6 +202,7 @@ def main():
         kek_secret_id=args.kek_secret_id,
         kek_kv_url=args.kek_kv_url,
         kek_maa_url=args.kek_maa_url,
+        subdirectory=args.subdirectory,
     )
 
     # Output as JSON.

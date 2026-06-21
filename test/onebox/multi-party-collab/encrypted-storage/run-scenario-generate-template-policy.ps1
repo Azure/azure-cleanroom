@@ -184,10 +184,15 @@ pwsh $root/test/onebox/multi-party-collab/wait-for-container-access.ps1 `
 
 mkdir -p $outDir/publisher/input-encrypted
 # Encrypt and upload content.
+# Place input under a multilevel subdirectory to test subdirectory support with CSE.
+$publisherInputSubdir = "$outDir/publisher/input-with-subdir/mydata/level2"
+mkdir -p $publisherInputSubdir
+Copy-Item "$PSScriptRoot/publisher/input/*" $publisherInputSubdir
+
 az cleanroom datastore encrypt `
     --config $publisherDatastoreConfig `
     --name publisher-input `
-    --source-path $PSScriptRoot/publisher/input `
+    --source-path $outDir/publisher/input-with-subdir `
     --destination-path $outDir/publisher/input-encrypted
 
 az cleanroom datastore upload `
@@ -230,7 +235,8 @@ az cleanroom config add-datasource `
     --secretstore-config $publisherSecretStoreConfig `
     --dek-secret-store publisher-dek-store `
     --kek-secret-store publisher-kek-store `
-    --identity publisher-identity 
+    --identity publisher-identity `
+    --subdirectory mydata/level2
 
 $containerSuffix = $($($(New-Guid).Guid) -replace '-').ToLower()
 Write-Host "Using container suffix {$containerSuffix} for application-telemetry"
@@ -320,7 +326,8 @@ az cleanroom config add-datasink `
     --secretstore-config $consumerSecretStoreConfig `
     --dek-secret-store consumer-dek-store `
     --kek-secret-store consumer-kek-store `
-    --identity consumer-identity
+    --identity consumer-identity `
+    --subdirectory output-data
 
 # --image "cleanroomsamplesprivate.azurecr.io/golang@sha256:8c64602c2eb46348eee4411edd37eede291f77d0186703e8cbda4dba2af12a51" `
 $sample_code = $(cat $PSScriptRoot/consumer/application/main.go | base64 -w 0)

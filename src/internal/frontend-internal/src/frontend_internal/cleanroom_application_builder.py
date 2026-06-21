@@ -522,7 +522,7 @@ class CleanroomApplicationBuilder(
         storage_account_name = urlparse(access_point.store.provider.url).hostname.split(
             "."
         )[0]
-        subdirectory = ""
+        subdirectory = access_point.subdirectory or ""
         storageBlobEndpoint = access_point.store.provider.url
         storageContainerName = access_point.store.name
         use_adls = (
@@ -539,7 +539,8 @@ class CleanroomApplicationBuilder(
             parsed_onelake_url = urlparse(access_point.store.provider.url)
             storageBlobEndpoint = parsed_onelake_url.hostname
             storageContainerName = parsed_onelake_url.path.split("/")[1]
-            subdirectory = "/".join(parsed_onelake_url.path.split("/")[2:])
+            if not subdirectory:
+                subdirectory = "/".join(parsed_onelake_url.path.split("/")[2:])
 
         if self._trace_context:
             trace_context_json_b64 = base64.b64encode(
@@ -592,9 +593,14 @@ class CleanroomApplicationBuilder(
         if subdirectory != "":
             sidecar.container.command.append("--sub-directory")
             sidecar.container.command.append(subdirectory)
-            sidecar.virtual_node_policy["command"].extend(
-                ["--sub-directory", subdirectory]
-            )
+            if isinstance(sidecar.virtual_node_policy, str):
+                policy = json.loads(sidecar.virtual_node_policy)
+            else:
+                policy = sidecar.virtual_node_policy
+            if "command" in policy:
+                policy["command"].extend(["--sub-directory", subdirectory])
+            sidecar.virtual_node_policy = policy
+
         return sidecar
 
     def _get_s3fs_sidecar(

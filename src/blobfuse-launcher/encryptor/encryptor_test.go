@@ -158,7 +158,7 @@ func (s *encryptorTestSuite) TestCreateFile() {
 func (s *encryptorTestSuite) TestCreateDir() {
 	var paths = []string{generateDirectoryName(), generateDirectoryName() + "/"}
 	for _, path := range paths {
-		log.Debug(path)
+		log.Debug("%s", path)
 		s.Run(path, func() {
 			err := s.encryptor.CreateDir(exported.CreateDirOptions{Name: path})
 
@@ -230,7 +230,7 @@ func (s *encryptorTestSuite) TestReadInbuffer() {
 
 	chunk := make([]byte, 1*MB)
 	for i := 0; i < totalBlocks; i++ {
-		n, err := s.encryptor.ReadInBuffer(exported.ReadInBufferOptions{Handle: h, Offset: int64(i * BlockSize), Data: chunk})
+		n, err := s.encryptor.ReadInBuffer(&exported.ReadInBufferOptions{Handle: h, Offset: int64(i * BlockSize), Data: chunk})
 		s.assert.Nil(err)
 		s.assert.True(bytes.Equal(chunk[:n], dataWritten[i*MB:i*MB+n]))
 	}

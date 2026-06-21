@@ -339,6 +339,7 @@ def collaboration_dataset_publish_cmd(
     datastore_config_file: str = DataStoreConfiguration.default_datastore_config_file(),
     secretstore_config_file: str = SecretStoreConfiguration.default_secretstore_config_file(),
     kek_name: str = "",
+    subdirectory: str = "",
 ):
     """Publish a dataset to the collaboration.
 
@@ -356,6 +357,7 @@ def collaboration_dataset_publish_cmd(
     :param datastore_config_file: Path of the datastore configuration file.
     :param secretstore_config_file: Path of the secret store configuration file.
     :param kek_name: Name of the Key Encryption Key to be generated.
+    :param subdirectory: Optional subdirectory/prefix inside the storage container.
     """
 
     from cleanroom_common.azure_cleanroom_core.models.dataset import (
@@ -451,6 +453,9 @@ def collaboration_dataset_publish_cmd(
         dek_secret_store_entry=dek_secret_store_entry,
         kek_secret_store_entry=kek_secret_store_entry,
     )
+
+    if subdirectory:
+        dataset_accesspoint.subdirectory = subdirectory
 
     if dataset_accesspoint.protection.encryptionSecrets is not None:
         assert (

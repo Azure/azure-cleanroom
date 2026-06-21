@@ -1,6 +1,6 @@
 #!/bin/bash
 work_dir=$(echo $1 | sed 's:/*$::')
-version="1.23.8"
+version="1.26.2"
 arch="amd64"
 
 echo "Installing on : " $arch " Version : " $version

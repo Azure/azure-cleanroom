@@ -140,6 +140,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/collaborations/{collaborationId}/collaborators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all collaborators in a collaboration */
+        get: operations["collaboration_collaborators_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/collaborations/{collaborationId}/invitations": {
         parameters: {
             query?: never;
@@ -462,6 +479,17 @@ export interface components {
             collaborationId?: string;
             collaborationName?: string;
             userStatus?: components["schemas"]["UserStatus"];
+        };
+        /** CollaboratorOutput */
+        CollaboratorOutput: {
+            /** @description The user identifier (email or SPN client ID). */
+            userIdentifier?: string;
+            /** @description Whether this collaborator is the owner of the collaboration. */
+            isOwner?: boolean;
+        };
+        /** ListCollaboratorsResponse */
+        ListCollaboratorsResponse: {
+            collaborators?: components["schemas"]["CollaboratorOutput"][];
         };
         /** Contract */
         Contract: {
@@ -1229,6 +1257,47 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OidcKeys"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+        };
+    };
+    collaboration_collaborators_get: {
+        parameters: {
+            query: {
+                /** @description The API version to use for this request. */
+                "api-version": components["parameters"]["ApiVersion"];
+            };
+            header?: never;
+            path: {
+                collaborationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListCollaboratorsResponse"];
+                };
+            };
+            /** @description Collaboration not found or caller is not a member */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

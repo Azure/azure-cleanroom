@@ -61,6 +61,7 @@ def launch_blobfuse_encrypted(
     tracer: trace.Tracer,
     mountPath: str,
     readOnly: bool,
+    subdirectory: str,
     telemetryPath: str,
 ) -> int:
     with tracer.start_as_current_span("launch_blobfuse") as span:
@@ -83,19 +84,24 @@ def launch_blobfuse_encrypted(
         with open("config.yaml", "w") as file:
             yaml.dump(config, file)
 
+        cmd = [
+            "blobfuse2",
+            "mount",
+            mountPath,
+            "--config-file=config.yaml",
+            "--read-only=" + str(readOnly).lower(),
+            "--log-file-path",
+            f"{telemetryPath}/infrastructure/{os.path.basename(mountPath)}-blobfuse.log",
+        ]
+
+        if subdirectory:
+            cmd.extend(["--subdirectory", subdirectory])
+
         proc = internal_utilities.subprocess_launch(
             logger,
             tracer,
             "blobfuse-mount",
-            [
-                "blobfuse2",
-                "mount",
-                mountPath,
-                "--config-file=config.yaml",
-                "--read-only=" + str(readOnly).lower(),
-                "--log-file-path",
-                f"{telemetryPath}/infrastructure/{os.path.basename(mountPath)}-blobfuse.log",
-            ],
+            cmd,
         )
 
         return proc.returncode

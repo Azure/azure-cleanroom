@@ -28,6 +28,9 @@ public class DatasetStore
     [JsonPropertyName("awsCgsSecretId")]
     public string AWSCgsSecretId { get; set; } = string.Empty;
 
+    [JsonPropertyName("subdirectory")]
+    public string Subdirectory { get; set; } = string.Empty;
+
     public static DatasetStore FromDatasetAccessPoint(
         AccessPoint datasetAccessPoint)
     {
@@ -41,6 +44,7 @@ public class DatasetStore
             StorageAccountType = datasetAccessPoint.Store.Type,
             EncryptionMode = GetEncryptionMode(datasetAccessPoint.Protection.Configuration),
             AWSCgsSecretId = awsCgsSecretId,
+            Subdirectory = datasetAccessPoint.Subdirectory ?? string.Empty,
         };
     }
 

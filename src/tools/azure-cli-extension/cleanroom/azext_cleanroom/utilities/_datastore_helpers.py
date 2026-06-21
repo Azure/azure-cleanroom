@@ -89,6 +89,7 @@ def config_add_datastore_internal(
     kek_secret_store="",
     kek_name="",
     access_name="",
+    subdirectory="",
 ):
     from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (
         config_add_datastore,
@@ -107,6 +108,7 @@ def config_add_datastore_internal(
             kek_secret_store,
             kek_name,
             access_name,
+            subdirectory,
         )
     except CleanroomSpecificationError as e:
         match e.code:
@@ -309,7 +311,7 @@ def cryptocopy(
     blockSize = int(blockSize)
     blockSize *= 1024 * 1024
 
-    for source_file_path in Path(source_path).glob("*"):
+    for source_file_path in Path(source_path).rglob("*"):
         source_file = str(source_file_path)
         if os.path.isfile(source_file):
             source_rel_path = os.path.relpath(source_file, start=source_path)

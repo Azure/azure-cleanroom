@@ -109,7 +109,7 @@ export interface components {
             protection: components["schemas"]["PrivacyProxySettings"];
         };
         /** @enum {string} */
-        ProxyType: "SecureVolume__ReadOnly__Azure__OneLake" | "SecureVolume__ReadOnly__Azure__BlobStorage" | "SecureVolume__ReadOnly__Azure__BlobStorage__DataLakeGen2" | "SecureVolume__ReadOnly__Aws__S3" | "SecureVolume__ReadWrite__Azure__OneLake" | "SecureVolume__ReadWrite__Azure__BlobStorage" | "SecureVolume__ReadWrite__Azure__BlobStorage_DataLakeGen2" | "SecureVolume__ReadWrite__Aws__S3" | "API" | "SecureAPI";
+        ProxyType: "SecureVolume__ReadOnly__Azure__OneLake" | "SecureVolume__ReadOnly__Azure__BlobStorage" | "SecureVolume__ReadOnly__Azure__BlobStorage__DataLakeGen2" | "SecureVolume__ReadOnly__Aws__S3" | "SecureVolume__ReadWrite__Azure__OneLake" | "SecureVolume__ReadWrite__Azure__BlobStorage" | "SecureVolume__ReadWrite__Azure__BlobStorage__DataLakeGen2" | "SecureVolume__ReadWrite__Aws__S3" | "API" | "SecureAPI";
         /** @enum {string} */
         ProxyMode: "Secure" | "Open";
         PrivacyProxySettings: {

@@ -22,11 +22,10 @@ internal static class AzStorage
         JsonObject providerConfig)
     {
         var armClient = new ArmClient(TokenCredentialFactory.GetTenantCredential(providerConfig));
-        var resourceIdentifier = new ResourceIdentifier($"/subscriptions/{subscriptionId}");
-        SubscriptionResource subscription = armClient.GetSubscriptionResource(resourceIdentifier);
-
+        ResourceIdentifier resourceGroupResourceId =
+            ResourceGroupResource.CreateResourceIdentifier(subscriptionId, resourceGroupName);
         ResourceGroupResource resourceGroup =
-            await subscription.GetResourceGroupAsync(resourceGroupName);
+            armClient.GetResourceGroupResource(resourceGroupResourceId);
 
         var sku = new StorageSku(StorageSkuName.StandardGrs);
         StorageKind kind = StorageKind.StorageV2;
@@ -52,11 +51,10 @@ internal static class AzStorage
         string resourceGroupName = accountId.ResourceGroupName!;
 
         var armClient = new ArmClient(TokenCredentialFactory.GetTenantCredential(providerConfig));
-        var resourceIdentifier = new ResourceIdentifier($"/subscriptions/{subscriptionId}");
-        SubscriptionResource subscription = armClient.GetSubscriptionResource(resourceIdentifier);
-
+        ResourceIdentifier resourceGroupResourceId =
+            ResourceGroupResource.CreateResourceIdentifier(subscriptionId, resourceGroupName);
         ResourceGroupResource resourceGroup =
-            await subscription.GetResourceGroupAsync(resourceGroupName);
+            armClient.GetResourceGroupResource(resourceGroupResourceId);
         string accountName = GetStorageAccountName(storageAccountId);
 
         StorageAccountResource storageAccount =

@@ -684,6 +684,7 @@ public class KubectlClient : RunCommand
     {
         var roleYaml = await File.ReadAllTextAsync(
             "readonlyrole/role.yaml");
+        roleYaml = roleYaml.Replace("<NAMESPACE>", Constants.ObservabilityNamespace);
         roleYaml = roleYaml.Replace("<NAME>", userName);
         var yamlFile = Path.GetTempFileName();
         await File.WriteAllTextAsync(yamlFile, roleYaml);
@@ -987,6 +988,35 @@ spec:
         return serializer.Serialize(kubeConfigDoc);
     }
 
+    public async Task<K8sEvents> GetPodFailureEventsByName(
+        string ns,
+        string podName)
+    {
+        // Query all Warning-type events for this pod. Warning events cover
+        // all failure scenarios: FailedCreatePodSandBox, FailedScheduling,
+        // FailedMount, BackOff, Unhealthy, Failed, etc.
+        var allPodsEvents = new K8sEvents();
+        allPodsEvents.Items = new List<K8sEvents.K8sEvent>();
+        try
+        {
+            var events = await this.Kubectl("get events " +
+                $"-n {ns} --field-selector " +
+                $"involvedObject.name={podName},type=Warning " +
+                $"-o json --kubeconfig={this.kubeConfigFile}");
+            var k8sEvents = JsonSerializer.Deserialize<K8sEvents>(events)!;
+            k8sEvents.Items.ForEach(i => allPodsEvents.Items.Add(i));
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError(
+                ex,
+                $"Failed to get warning events for pod {podName}. " +
+                $"Ignoring.");
+        }
+
+        return allPodsEvents;
+    }
+
     private static string ToPem(string label, byte[] data)
     {
         var builder = new StringBuilder();
@@ -1148,10 +1178,19 @@ spec:
         {
             [JsonPropertyName("name")]
             public string Name { get; set; } = default!;
+
+            [JsonPropertyName("creationTimestamp")]
+            public string CreationTimestamp { get; set; } = default!;
         }
 
         public class K8sPodStatus
         {
+            // Pod lifecycle phase (Pending, Running, Succeeded, Failed, Unknown).
+            // Used to skip completed (Succeeded) pods during health checks so
+            // that finished Spark jobs don't cause false positive health issues.
+            [JsonPropertyName("phase")]
+            public string Phase { get; set; } = default!;
+
             [JsonPropertyName("containerStatuses")]
             public List<K8sContainerStatus> ContainerStatuses { get; set; } = default!;
 
@@ -1161,6 +1200,19 @@ spec:
 
         public class K8sContainerStatus
         {
+            // Waiting reasons that indicate a real error rather than normal
+            // transient startup states (ContainerCreating, PodInitializing).
+            private static readonly HashSet<string> ErrorWaitingReasons = new(
+                StringComparer.OrdinalIgnoreCase)
+            {
+                "CrashLoopBackOff",
+                "ImagePullBackOff",
+                "ErrImagePull",
+                "CreateContainerConfigError",
+                "InvalidImageName",
+                "RunContainerError",
+            };
+
             [JsonPropertyName("name")]
             public string Name { get; set; } = default!;
 
@@ -1169,6 +1221,37 @@ spec:
 
             [JsonPropertyName("state")]
             public JsonObject State { get; set; } = default!;
+
+            // Returns true if container is in an error state that should be
+            // reported as a health issue. Skips normal transient states like
+            // ContainerCreating and PodInitializing to avoid false positives.
+            public bool IsInErrorState()
+            {
+                if (this.Ready)
+                {
+                    return false;
+                }
+
+                // Terminated containers with non-zero exit code are errors.
+                var terminated = this.State["terminated"];
+                if (terminated != null)
+                {
+                    int exitCode = terminated["exitCode"]?.GetValue<int>() ?? 0;
+                    return exitCode != 0;
+                }
+
+                // Waiting containers are errors only if the reason is a known
+                // error reason. Normal reasons like ContainerCreating and
+                // PodInitializing are skipped.
+                var waiting = this.State["waiting"];
+                if (waiting != null)
+                {
+                    string? reason = waiting["reason"]?.ToString();
+                    return reason != null && ErrorWaitingReasons.Contains(reason);
+                }
+
+                return false;
+            }
 
             public (string ReasonCode, string ReasonMessage) GetReason()
             {

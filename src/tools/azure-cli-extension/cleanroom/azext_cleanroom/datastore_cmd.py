@@ -168,6 +168,7 @@ def datastore_upload_cmd(
     datastore_name,
     source_path,
     datastore_config_file=DataStoreConfiguration.default_datastore_config_file(),
+    subdirectory="",
 ):
     import os
 
@@ -179,6 +180,8 @@ def datastore_upload_cmd(
 
     # Get the key path.
     container_url = datastore.storeProviderUrl + datastore.storeName
+    if subdirectory:
+        container_url = f"{container_url}/{subdirectory}"
     source_path = source_path + f"{os.path.sep}*"
 
     if datastore.storeType in [
@@ -206,6 +209,7 @@ def datastore_download_cmd(
     destination_path,
     datastore_name,
     datastore_config_file=DataStoreConfiguration.default_datastore_config_file(),
+    subdirectory="",
 ):
     import re
 
@@ -215,6 +219,7 @@ def datastore_download_cmd(
     datastore = DataStoreConfiguration.get_datastore(
         datastore_name, datastore_config_file
     )
+
     datastore_path = os.path.join(destination_path, datastore_name)
     os.makedirs(datastore_path, exist_ok=True)
 
@@ -242,7 +247,10 @@ def datastore_download_cmd(
         ), f"Encryption key for datastore {datastore_name} is None."
 
     if datastore.storeType == DataStoreEntry.StoreType.Azure_OneLake:
-        azcopy(container_url, datastore_path, use_cpk, encryption_key)
+        source_url = container_url
+        if subdirectory:
+            source_url = f"{container_url}/{subdirectory}"
+        azcopy(source_url, datastore_path, use_cpk, encryption_key)
         return
 
     assert datastore.storeType in [
@@ -257,10 +265,11 @@ def datastore_download_cmd(
         "https://(.*?).blob.core.windows.net", datastore.storeProviderUrl
     ).group(1)
 
+    prefix_arg = f"--prefix {subdirectory}/ " if subdirectory else "--delimiter / "
     result = az_cli(
         f"storage blob list --container-name {datastore.storeName} "
         f"--account-name {storage_account_name} "
-        f"--auth-mode login --delimiter / --output json"
+        f"--auth-mode login {prefix_arg}--output json"
     )
 
     if len(result) > 0:
@@ -272,8 +281,15 @@ def datastore_download_cmd(
                     f"Skipping blob '{name}' with invalid content length {content_length}."
                 )
                 continue
-            if "/" in name:
-                folder = name.split("/")[0]
+            # Strip the subdirectory prefix from the blob name so that local
+            # paths mirror the structure the application sees at runtime.
+            local_name = name
+            if subdirectory:
+                prefix = f"{subdirectory}/"
+                if local_name.startswith(prefix):
+                    local_name = local_name[len(prefix) :]
+            if "/" in local_name:
+                folder = local_name.split("/")[0]
                 folder_path = datastore_path + "/" + folder
                 os.makedirs(folder_path, exist_ok=True)
             else:
