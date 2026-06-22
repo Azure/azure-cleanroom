@@ -98,6 +98,9 @@ frontendService:
   firstPartyAppTokenScope: "FIRST_PARTY_APP_TOKEN_SCOPE"
   # Azure AD tenant ID.
   tenantId: "TENANT_ID"
+  # OTLP endpoint for OpenTelemetry logs/traces/metrics (e.g. http://geneva-otlp:4317).
+  # Leave empty to disable OTLP export.
+  otelEndpoint: ""
 
 # SKR (Secure Key Release) sidecar configuration for attestation.
 skr:

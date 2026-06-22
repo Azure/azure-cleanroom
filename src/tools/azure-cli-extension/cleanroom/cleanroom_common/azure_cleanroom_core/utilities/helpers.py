@@ -24,7 +24,7 @@ def _read_release_version() -> str:
             with open(candidate, "r") as f:
                 return f.read().strip()
         current = os.path.dirname(current)
-    return "7.0.0"
+    return "8.0.0"
 
 
 DEFAULT_CLEANROOM_CONTAINER_REGISTRY_URL = "mcr.microsoft.com/azurecleanroom"
@@ -502,7 +502,7 @@ def get_blobfuse_sidecar(
     storage_account_name = urlparse(access_point.store.provider.url).hostname.split(
         "."
     )[0]
-    subdirectory = ""
+    subdirectory = access_point.subdirectory or ""
     storageBlobEndpoint = access_point.store.provider.url
     storageContainerName = access_point.store.name
     use_adls = (
@@ -520,7 +520,8 @@ def get_blobfuse_sidecar(
         parsed_onelake_url = urlparse(access_point.store.provider.url)
         storageBlobEndpoint = parsed_onelake_url.hostname
         storageContainerName = parsed_onelake_url.path.split("/")[1]
-        subdirectory = "/".join(parsed_onelake_url.path.split("/")[2:])
+        if not subdirectory:
+            subdirectory = "/".join(parsed_onelake_url.path.split("/")[2:])
 
     # TODO (HPrabh): Change the plain volume access name to "access_name" and cipher one to "access_name-cipher".
     blobfuse_sidecar_replacement_vars = {

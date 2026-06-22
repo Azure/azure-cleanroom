@@ -39,6 +39,7 @@ def config_add_datastore(
     kek_secret_store="",
     kek_name="",
     access_name="",
+    subdirectory="",
 ):
     from .configuration_helpers import (
         read_cleanroom_spec,
@@ -68,6 +69,7 @@ def config_add_datastore(
     import uuid
 
     encryption_mode = datastore_entry.encryptionMode
+
     encryption_secrets = None
     proxy_config = {"EncryptionMode": str(encryption_mode)}
     if encryption_mode in [
@@ -213,6 +215,7 @@ def config_add_datastore(
         store=store,
         identity=protection_identity,
         protection=privacyProxySettings,
+        subdirectory=subdirectory,
     )
 
     index = next(
@@ -227,6 +230,7 @@ def config_add_datastore(
         candidate_list[index] = access_point
 
     write_cleanroom_spec(cleanroom_config_file, cleanroom_spec, logger)
+
     logger.warning(f"'{datastore_name}' added to '{node}' in cleanroom configuration.")
 
 

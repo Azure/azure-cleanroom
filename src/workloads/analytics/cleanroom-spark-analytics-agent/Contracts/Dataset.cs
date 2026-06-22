@@ -113,7 +113,8 @@ public record AccessPoint(
     [property: JsonPropertyName("store")] Resource Store,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("path")] string Path,
-    [property: JsonPropertyName("identity")] Identity Identity);
+    [property: JsonPropertyName("identity")] Identity Identity,
+    [property: JsonPropertyName("subdirectory")] string Subdirectory = "");
 
 public record PrivacyProxySettings(
     [property: JsonPropertyName("proxyType")] ProxyType ProxyType,

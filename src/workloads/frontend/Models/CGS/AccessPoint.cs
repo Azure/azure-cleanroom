@@ -26,6 +26,9 @@ public class AccessPoint
     [JsonPropertyName("protection")]
     public required PrivacyProxySettings Protection { get; set; }
 
+    [JsonPropertyName("subdirectory")]
+    public string? Subdirectory { get; set; }
+
     public static AccessPoint FromDatasetDetails(
         DatasetDetails datasetDetails)
     {
@@ -40,6 +43,7 @@ public class AccessPoint
             Identity = Identity.FromDatasetIdentity(
                 datasetDetails.Identity),
             Protection = PrivacyProxySettings.FromDatasetDetails(datasetDetails),
+            Subdirectory = datasetDetails.Store.Subdirectory,
         };
     }
 

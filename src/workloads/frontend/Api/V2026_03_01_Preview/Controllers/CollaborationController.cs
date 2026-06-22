@@ -741,6 +741,28 @@ public class CollaborationController : CollaborationControllerBase
         return this.Ok(result);
     }
 
+    [HttpGet("/collaborations/{collaborationId}/collaborators")]
+    public async Task<IActionResult> ListCollaborators(
+        [FromRoute] string collaborationId)
+    {
+        var idToken = ValidateAndGetToken(this.Request.Headers.Authorization);
+        this.logger.LogInformation(
+            $"Listing collaborators for collaboration: {collaborationId}");
+
+        var membershipMgrClient = await this.clientManager.GetMembershipManagerClientAsync();
+
+        var result = await membershipMgrClient.ListCollaboratorsAsync(
+            idToken,
+            collaborationId,
+            this.logger);
+
+        this.logger.LogInformation(
+            $"Fetched {result.Collaborators.Count} collaborators " +
+            $"for collaboration {collaborationId}.");
+
+        return this.Ok(result);
+    }
+
     [HttpPost("/collaborations/{collaborationId}/analytics/queries/{documentId}/publish")]
     public async Task<IActionResult> PublishQuery(
         [FromRoute] string collaborationId,

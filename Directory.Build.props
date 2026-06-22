@@ -15,7 +15,7 @@
   <PropertyGroup>
     <!-- Generate documentation file unless it has been explicitly suppressed. -->
     <DocumentationFile Condition="'$(SuppressDocumentation)' != 'true'">obj\$(MSBuildProjectName).xml</DocumentationFile>
-    <NoWarn>$(NoWarn),1573,1591,1712,NU1507</NoWarn>
+    <NoWarn>$(NoWarn),1573,1591,1712,NU1507,IDE0390</NoWarn>
   </PropertyGroup>
 
   <!-- Add StyleCop Analyzers for all projects -->

@@ -486,7 +486,7 @@ az cleanroom config add-datasink `
 az cleanroom config add-application `
     --cleanroom-config $tdcConfig `
     --name depa-training `
-    --image "cleanroomsamples.azurecr.io/depa-training@sha256:58cc4180bbfac4fd6f981b476c5cad6702ac3474b09424d6305bbd62c40a37fb" `
+    --image "cleanroomsamples.azurecr.io/depa-training@sha256:e3be41ded455696dbc6186e77a135a0dadd3cf287df16ba532b7411077878a4c" `
     --command "/bin/bash run.sh" `
     --datasources "config=/mnt/remote/config" `
     "cowin=/mnt/remote/cowin" `

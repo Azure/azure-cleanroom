@@ -272,6 +272,7 @@ class AccessPoint(BaseModel):
     store: Resource
     identity: Identity | None = None
     protection: PrivacyProxySettings
+    subdirectory: str | None = ""
 
 
 class PrivacyProxySettings(BaseModel):

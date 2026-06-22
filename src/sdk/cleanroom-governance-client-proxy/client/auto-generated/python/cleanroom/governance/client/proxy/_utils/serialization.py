@@ -1763,14 +1763,11 @@ class Deserializer:
                 ):
                     return data
 
-                is_a_text_parsing_type = (
-                    lambda x: x
-                    not in [  # pylint: disable=unnecessary-lambda-assignment
-                        "object",
-                        "[]",
-                        r"{}",
-                    ]
-                )
+                is_a_text_parsing_type = lambda x: x not in [  # pylint: disable=unnecessary-lambda-assignment
+                    "object",
+                    "[]",
+                    r"{}",
+                ]
                 if (
                     isinstance(data, ET.Element)
                     and is_a_text_parsing_type(data_type)

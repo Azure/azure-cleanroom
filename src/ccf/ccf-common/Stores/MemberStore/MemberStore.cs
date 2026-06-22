@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Concurrent;
 using AttestationClient;
 
 namespace CcfCommon;
@@ -12,6 +13,8 @@ public class MemberStore : IMemberStore
     private const string MemberNameTagName = "member-name";
 
     private readonly IKeyStore keyStore;
+    private readonly ConcurrentDictionary<string, SigningPrivateKeyInfo>
+        cachedSigningKeys = new();
 
     public MemberStore(IKeyStore keyStore)
     {
@@ -87,8 +90,15 @@ public class MemberStore : IMemberStore
 
     public async Task<SigningPrivateKeyInfo> ReleaseSigningKey(string memberName)
     {
+        if (this.cachedSigningKeys.TryGetValue(memberName, out var cached))
+        {
+            return cached;
+        }
+
         var memberKeyName = await ToMemberKeyName(memberName);
-        return await this.keyStore.ReleaseSigningKey(memberKeyName);
+        var signingKeyInfo = await this.keyStore.ReleaseSigningKey(memberKeyName);
+        this.cachedSigningKeys.TryAdd(memberName, signingKeyInfo);
+        return signingKeyInfo;
     }
 
     private static async Task<string> ToMemberKeyName(string memberName)

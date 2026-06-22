@@ -26,7 +26,10 @@ public class HelmClient : RunCommand
         this.kubeConfigFile = kubeConfigFile;
     }
 
-    public async Task InstallVN2Chart(string release)
+    public async Task InstallVN2Chart(
+        string release,
+        string aciResourceGroupName,
+        string customTags)
     {
         // https://github.com/microsoft/virtualnodesOnAzureContainerInstances/blob/main/Docs/NodeCustomizations.md#node-customizations
         await this.HelmRepoAdd(
@@ -34,7 +37,9 @@ public class HelmClient : RunCommand
         var command = $"upgrade {release} " +
             $"vn2/virtualnode " +
             $"--install " +
-            $"--version 1.3307.26011601 " +
+            $"--version 1.3307.26033004 " +
+            $"--set aciResourceGroupName={aciResourceGroupName} " +
+            $"--set customTags={customTags} " +
             $"--namespace vn2-release " +
             $"--create-namespace " +
             $"--kubeconfig {this.kubeConfigFile}";
