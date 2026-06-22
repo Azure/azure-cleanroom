@@ -900,5 +900,6 @@ jobs:
           frontend-service-sbom.spdx.json
 
       - name: Upload AZ CLI extension
-        run: gh release upload ${{ inputs.tag }} \
+        run: |
+          gh release upload ${{ inputs.tag }} \
           ${{ steps.download-az-cli-artefact.outputs.download-path }}/cleanroom-${{ inputs.tag }}-py2.py3-none-any.whl
