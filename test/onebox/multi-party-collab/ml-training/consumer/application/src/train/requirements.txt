@@ -5,5 +5,5 @@ opacus==1.4.1
 pandas==2.2.2
 pyspark==4.0.0
 scikit_learn==1.5.0
-torch==2.8.0+cpu
+torch==2.12.1
 torchvision==0.23.0+cpu
