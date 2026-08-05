@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Concurrent;
 using Azure.Core;
 using Controllers;
 using Identity.Configuration;
@@ -15,7 +16,8 @@ public class CredentialManager
 {
     private readonly ILogger logger;
     private readonly IdentityConfiguration config;
-    private readonly Dictionary<string, ICredential<AccessToken>> credentialDictionary = new();
+    private readonly ConcurrentDictionary<string, ICredential<AccessToken>>
+        credentialDictionary = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CredentialManager"/> class.
@@ -55,18 +57,24 @@ public class CredentialManager
             message: $"Invalid client ID specified: {clientId}"));
     }
 
+    public bool RegisterCredential(ApplicationIdentity identity)
+    {
+        var credential = new ApplicationCredential(identity, this.logger);
+        return this.credentialDictionary.TryAdd(identity.ClientId, credential);
+    }
+
     private void InitializeCredentials()
     {
         foreach (ManagedIdentity identity in this.config.Identities.ManagedIdentities)
         {
-            this.credentialDictionary.Add(
+            this.credentialDictionary.TryAdd(
                 identity.ClientId,
                 new ManagedIdentityCredential(identity, this.logger));
         }
 
         foreach (ApplicationIdentity identity in this.config.Identities.ApplicationIdentities)
         {
-            this.credentialDictionary.Add(
+            this.credentialDictionary.TryAdd(
                 identity.ClientId,
                 new ApplicationCredential(identity, this.logger));
         }

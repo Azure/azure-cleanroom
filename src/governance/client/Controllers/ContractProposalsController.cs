@@ -18,6 +18,7 @@ public class ContractProposalsController : ClientControllerBase
     }
 
     [HttpGet("/contracts/{contractId}/{proposalType}")]
+    [HttpPost("/contracts/{contractId}/{proposalType}")]
     public async Task<JsonObject> GetProposal(
         [FromRoute] string contractId,
         [FromRoute] string proposalType)

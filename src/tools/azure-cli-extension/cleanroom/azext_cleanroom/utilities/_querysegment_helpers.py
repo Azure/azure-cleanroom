@@ -9,7 +9,6 @@ from cleanroom_common.azure_cleanroom_core.utilities.configuration_helpers impor
 )
 
 from ..utilities._azcli_helpers import logger
-from ._configuration_helpers import get_default_config_file
 
 
 class QuerySegmentHelper:

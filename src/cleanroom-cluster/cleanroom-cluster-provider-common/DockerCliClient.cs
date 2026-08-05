@@ -25,6 +25,19 @@ public class DockerCliClient : RunCommand
         await this.Docker($"cp {sourcePath} {containerId}:{containerPath}");
     }
 
+    public async Task CopyFromContainer(
+        string containerId,
+        string containerPath,
+        string destinationPath)
+    {
+        await this.Docker($"cp {containerId}:{containerPath} {destinationPath}");
+    }
+
+    public async Task RemoveContainer(string containerName)
+    {
+        await this.Docker($"rm -f {containerName}");
+    }
+
     public async Task<(int exitCode, string output, string error)> ExecWithOutput(
         string containerId,
         string command)

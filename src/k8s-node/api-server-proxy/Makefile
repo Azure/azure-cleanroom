@@ -62,40 +62,16 @@ release: clean
 	sha256sum $(DIST_DIR)/api-server-proxy-linux-amd64.tar.gz | cut -d' ' -f1 > $(DIST_DIR)/api-server-proxy-linux-amd64.tar.gz.sha256
 	@rm $(DIST_DIR)/api-server-proxy
 	
-	@# Build api-server-proxy linux/arm64
-	@echo "Building api-server-proxy linux/arm64..."
-	cd $(REPO_ROOT) && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(GO) build $(LDFLAGS) -o $(DIST_DIR)/api-server-proxy $(GO_PKG_PREFIX)/cmd/api-server-proxy
-	tar -czf $(DIST_DIR)/api-server-proxy-linux-arm64.tar.gz -C $(DIST_DIR) api-server-proxy
-	sha256sum $(DIST_DIR)/api-server-proxy-linux-arm64.tar.gz | cut -d' ' -f1 > $(DIST_DIR)/api-server-proxy-linux-arm64.tar.gz.sha256
-	@rm $(DIST_DIR)/api-server-proxy
-	
 	@echo "Release artifacts created in $(DIST_DIR)/"
 	@ls -la $(DIST_DIR)/
 
-## deploy-kind: Deploy api-server-proxy to a kind cluster for testing
-deploy-kind:
-	@./scripts/kind/deploy-kind.sh
+## test-kind: Run api-server-proxy integration tests against the kind cluster
+test-kind:
+	cd $(REPO_ROOT) && $(GO) test -tags "kind,integration,api_server_proxy" -v -timeout 30m $(GO_PKG_PREFIX)/../test/integration
 
-## teardown-kind: Remove the kind test cluster
-teardown-kind:
-	@./scripts/kind/teardown-kind.sh
-
-## test-kind: Run pod policy verification tests against the kind cluster
-test-kind: test-pod-policies
-
-## test-pod-policies: Run pod policy verification tests against the kind cluster
-test-pod-policies:
-	@./scripts/kind/test-pod-policies.sh
-
-## deploy-aks: Deploy AKS cluster with flex node and api-server-proxy
-deploy-aks:
-	@./scripts/aks/deploy-cluster.sh
-	@./scripts/aks/deploy-flex-node-vm.sh
-	@./scripts/aks/deploy-api-server-proxy.sh
-
-## test-aks: Run pod policy verification tests against the AKS cluster
+## test-aks: Run api-server-proxy integration tests against the AKS cluster
 test-aks:
-	@./scripts/aks/test-pod-policies.sh
+	cd $(REPO_ROOT) && $(GO) test -tags "aks,integration,api_server_proxy" -v -timeout 30m $(GO_PKG_PREFIX)/../test/integration
 
 ## help: Show this help message
 help:

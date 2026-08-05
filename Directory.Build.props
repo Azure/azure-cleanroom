@@ -3,6 +3,9 @@
     <!-- Opt-in to centrally managed package versions. -->
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
 
+    <!-- Pin transitive dependencies to versions in Directory.Packages.props. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+
     <!-- Suppress MSB3270 'There was a mismatch between the processor architecture of the project being built "MSIL" and the processor architecture of the reference..." -->
     <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
 
@@ -13,7 +16,6 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <!-- Generate documentation file unless it has been explicitly suppressed. -->
     <DocumentationFile Condition="'$(SuppressDocumentation)' != 'true'">obj\$(MSBuildProjectName).xml</DocumentationFile>
     <NoWarn>$(NoWarn),1573,1591,1712,NU1507,IDE0390</NoWarn>
   </PropertyGroup>
@@ -51,5 +53,15 @@
   <PropertyGroup>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisModeStyle>All</AnalysisModeStyle>
+  </PropertyGroup>
+
+  <!-- VS on Windows cannot write to \\wsl.localhost paths. Redirect obj/bin to %TEMP%.
+       Placed last so it overrides defaults set above. No-op on native Windows/Linux. -->
+  <PropertyGroup Condition="$([System.String]::Copy('$(MSBuildProjectFullPath)').Contains('wsl.localhost'))">
+    <_WslSlug>$([System.IO.Path]::GetFileNameWithoutExtension('$(MSBuildProjectFullPath)'))</_WslSlug>
+    <BaseIntermediateOutputPath>$(TEMP)\azure-cleanroom-obj\$(_WslSlug)\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(TEMP)\azure-cleanroom-bin\$(_WslSlug)\</BaseOutputPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj\**;bin\**</DefaultItemExcludes>
+    <DocumentationFile>$(BaseIntermediateOutputPath)$(MSBuildProjectName).xml</DocumentationFile>
   </PropertyGroup>
 </Project>

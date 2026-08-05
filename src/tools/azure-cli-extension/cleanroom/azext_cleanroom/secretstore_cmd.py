@@ -3,7 +3,6 @@ import json
 
 from cleanroom_common.azure_cleanroom_core.models.secretstore import (
     SecretStoreEntry,
-    SecretStoreSpecification,
 )
 
 from .utilities._secretstore_helpers import SecretStoreConfiguration
@@ -36,9 +35,9 @@ def secretstore_add_cmd(
         return
 
     if backingstore_type == SecretStoreEntry.SecretStoreType.Local_File:
-        assert (
-            backingstore_path != ""
-        ), "backingstore_path is required for Local_File secret store."
+        assert backingstore_path != "", (
+            "backingstore_path is required for Local_File secret store."
+        )
         storeProviderUrl = backingstore_path
         configuration = ""
         supported_secret_types = [
@@ -54,12 +53,14 @@ def secretstore_add_cmd(
                 if kv_details["type"] == "Microsoft.KeyVault/managedHSMs":
                     storeProviderUrl = kv_details["properties"]["hsmUri"]
                 else:
-                    assert (
-                        kv_details["type"] == "Microsoft.KeyVault/vaults"
-                    ), f"Unknown KeyVault type: {kv_details['type']}"
+                    assert kv_details["type"] == "Microsoft.KeyVault/vaults", (
+                        f"Unknown KeyVault type: {kv_details['type']}"
+                    )
                     assert (
                         kv_details["properties"]["sku"]["name"].lower() == "premium"
-                    ), f"Unsupported SKU for Managed HSM: {kv_details['properties']['sku']['name']}"
+                    ), (
+                        f"Unsupported SKU for Managed HSM: {kv_details['properties']['sku']['name']}"
+                    )
                     storeProviderUrl = kv_details["properties"]["vaultUri"]
 
                 assert attestation_endpoint != "", "attestation_endpoint is required."
@@ -70,9 +71,9 @@ def secretstore_add_cmd(
                     SecretStoreEntry.SupportedSecretTypes.Key,
                 ]
             case SecretStoreEntry.SecretStoreType.Azure_KeyVault:
-                assert (
-                    kv_details["type"] == "Microsoft.KeyVault/vaults"
-                ), f"Unknown KeyVault type: {kv_details['type']}"
+                assert kv_details["type"] == "Microsoft.KeyVault/vaults", (
+                    f"Unknown KeyVault type: {kv_details['type']}"
+                )
                 storeProviderUrl = kv_details["properties"]["vaultUri"]
                 configuration = ""
                 supported_secret_types = [

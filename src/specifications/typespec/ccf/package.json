@@ -1,0 +1,16 @@
+{
+  "name": "ccf",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@typespec/compiler": "*",
+    "@typespec/http": "*",
+    "@typespec/rest": "*",
+    "@typespec/versioning": "*",
+    "@typespec/openapi3": "*",
+    "@typespec/http-client-csharp": "*",
+    "@azure-tools/typespec-azure-core": "*",
+    "@azure-tools/typespec-client-generator-core": "*"
+  }
+}

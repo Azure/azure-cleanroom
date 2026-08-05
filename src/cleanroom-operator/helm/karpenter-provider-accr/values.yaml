@@ -1,0 +1,33 @@
+# Karpenter provider (runs Karpenter controllers +
+# FlexNodeClaim reconciler)
+karpenterProvider:
+  image:
+    repository: karpenter-provider-accr
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Cluster provider client (stateless REST API for flex
+# node add/remove)
+providerClient:
+  image:
+    repository: cleanroom-cluster/cleanroom-cluster-provider-client
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: "2"
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  virtual:
+    enabled: true
+    sharedDir: /tmp/cleanroom-shared
+  env: {}

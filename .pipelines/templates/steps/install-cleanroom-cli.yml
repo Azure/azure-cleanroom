@@ -1,0 +1,21 @@
+# Step template: install the `az cleanroom` CLI extension from the built wheel.
+# Migrated from the repeated composite step in the test-* actions:
+#   oras pull <repo>/cli/cleanroom-whl:<tag>
+#   az extension add --allow-preview true --source ./cleanroom-*-py2.py3-none-any.whl -y
+#
+# Assumes an authenticated az/acr session (call steps/login-to-azure.yml first).
+
+parameters:
+  - name: repo
+    type: string
+    default: "$(ACR_URL)"
+  - name: tag
+    type: string
+    default: "$(Build.BuildId)"
+
+steps:
+  - bash: |
+      set -euo pipefail
+      oras pull ${{ parameters.repo }}/cli/cleanroom-whl:${{ parameters.tag }}
+      az extension add --allow-preview true --source ./cleanroom-*-py2.py3-none-any.whl -y
+    displayName: Install az cleanroom extension

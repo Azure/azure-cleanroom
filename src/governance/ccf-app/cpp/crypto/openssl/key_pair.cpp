@@ -164,7 +164,7 @@ namespace cleanroom::crypto
       md_type = get_md_for_ec(get_curve_id());
     }
     OpenSSLHashProvider hp;
-    HashBytes hash = hp.Hash(d.data(), d.size(), md_type);
+    HashBytes hash = hp.hash(d.data(), d.size(), md_type);
     return sign_hash(hash.data(), hash.size());
   }
 
@@ -179,7 +179,7 @@ namespace cleanroom::crypto
       md_type = get_md_for_ec(get_curve_id());
     }
     OpenSSLHashProvider hp;
-    HashBytes hash = hp.Hash(d.data(), d.size(), md_type);
+    HashBytes hash = hp.hash(d.data(), d.size(), md_type);
     return sign_hash(hash.data(), hash.size(), sig_size, sig);
   }
 
@@ -458,7 +458,7 @@ namespace cleanroom::crypto
   }
 
   std::vector<uint8_t> KeyPair_OpenSSL::derive_shared_secret(
-    const PublicKey& peer_key)
+    const ECPublicKey& peer_key)
   {
     ccf::crypto::CurveID cid = peer_key.get_curve_id();
     int nid = PublicKey_OpenSSL::get_openssl_group_id(cid);
@@ -478,7 +478,7 @@ namespace cleanroom::crypto
     return shared_secret;
   }
 
-  PublicKey::Coordinates KeyPair_OpenSSL::coordinates() const
+  ECPublicKey::Coordinates KeyPair_OpenSSL::coordinates() const
   {
     return PublicKey_OpenSSL::coordinates();
   }

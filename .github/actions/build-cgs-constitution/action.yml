@@ -19,7 +19,7 @@ runs:
         Get-ChildItem $cgsConstitutionDir -Filter *.js | Foreach-Object { $content += Get-Content $_.FullName -Raw }
         $content | ConvertTo-Json | Out-File ./constitution.json
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: cgs-constitution-${{ inputs.tag }}.json
         path: ./constitution.json

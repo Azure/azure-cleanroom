@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc;
+using OpenTelemetry;
 
 namespace Controllers;
 
@@ -14,12 +15,12 @@ public class InferenceServiceController : InferencingClientBaseController
 {
     private readonly ILogger logger;
     private readonly IConfiguration configuration;
-    private readonly InferencingFrontendClientManager frontendClientManager;
+    private readonly FrontendClientManager frontendClientManager;
 
     public InferenceServiceController(
         ILogger logger,
         IConfiguration configuration,
-        InferencingFrontendClientManager clientManager,
+        FrontendClientManager clientManager,
         ActiveUserChecker activeUserChecker,
         GovernanceClientManager governanceClientManager)
         : base(logger, configuration, activeUserChecker, governanceClientManager)
@@ -39,33 +40,49 @@ public class InferenceServiceController : InferencingClientBaseController
 
         await this.CheckCallerAuthorized();
 
-        // TODO (gsinha): Enable consortium membership check if required.
-        ////await this.CheckConsortiumMembership();
+        await this.CheckConsortiumMembership();
 
         ValidateInputs(input);
+
+        Baggage.SetBaggage(BaggageItemName.ModelDocumentId, input.ModelId);
+
+        // Run the approval/consent gate before any other governance work so
+        // that authorization errors take precedence over input-shape errors.
+        // The model and dataset documents fetched here are reused by the
+        // conversion step to avoid a second round trip.
+        var (modelDoc, datasetDocs) = await this.CheckModelApproved(input.ModelId, name);
 
         var frontendClient = await this.frontendClientManager.GetClient();
 
         FrontendJobInput frontendJob =
-            await this.ConvertToFrontendJob(input);
+            await this.ConvertToFrontendJob(input, modelDoc, datasetDocs, name);
 
-        await this.SetupInferencingServicePodsAccess(frontendJob);
+        var telemetryStatus = await this.GetRuntimeConsent(input.ModelId, "telemetry");
+        if (telemetryStatus.Status != "enabled")
+        {
+            this.logger.LogWarning(
+                $"Telemetry runtime consent for model '{name}' " +
+                $"is disabled: {telemetryStatus.Reason.Code}: {telemetryStatus.Reason.Message}");
+        }
+
+        bool enableTelemetry = telemetryStatus.Status == "enabled";
+
+        await this.SetupInferencingServicePodsAccess(frontendJob, enableTelemetry);
 
         await this.SetInferencingFrontendAsPodPolicyAdmin();
 
         await this.GovernanceClientManager.GetClient().LogAuditEventAsync(
-            $"Starting inference service deployment for: {name}.",
-            this.logger);
+            $"Starting inference service deployment for '{name}' bound to " +
+            $"model document '{input.ModelId}'.",
+            this.logger,
+            "kserve-inferencing-agent");
 
-        // TODO (gsinha): Figure out baggage items.
-        ////Baggage.SetBaggage(BaggageItemName.RunId, runId);
-        ////Baggage.SetBaggage(BaggageItemName.QueryId, queryId);
         using var response = await frontendClient.PostAsync(
             "/inferencing/deployModel",
             JsonContent.Create(new
             {
                 Job = frontendJob,
-                enableTelemetryCollection = true
+                enableTelemetryCollection = enableTelemetry
             }));
         await response.ValidateStatusCodeAsync(this.logger);
         var submissionResult =
@@ -107,12 +124,11 @@ public class InferenceServiceController : InferencingClientBaseController
                     "The predictor model 'protocolVersion' cannot be empty.");
             }
 
-            if (input.Predictor.Model.Runtime != null &&
-                string.IsNullOrWhiteSpace(input.Predictor.Model.Runtime))
+            if (string.IsNullOrWhiteSpace(input.Predictor.Model.Runtime))
             {
                 ThrowBadRequest(
-                    "RuntimeInvalid",
-                    "The predictor model 'runtime' cannot be empty.");
+                    "RuntimeMissing",
+                    "The predictor model 'runtime' must be specified.");
             }
 
             if (input.Predictor.Model.StorageUri != null &&
@@ -244,21 +260,174 @@ public class InferenceServiceController : InferencingClientBaseController
         return content;
     }
 
-    // Converts the API input to the frontend's expected shape,
-    // enriching with governance data from CGS documents.
-    private async Task<FrontendJobInput> ConvertToFrontendJob(
-        ModelInput input)
+    // Verifies that the model document has been approved by the owner of
+    // the dataset it references and that 'execution' runtime consent is
+    // enabled on the model and dataset documents. Mirrors the analytics
+    // agent's CheckQueryApproved gate. Returns the fetched model and
+    // dataset documents so callers don't need to refetch them.
+    private async Task<(
+        UserDocument<InferencingModelSpecification> ModelDoc,
+        List<UserDocument<Dataset>> DatasetDocs)>
+        CheckModelApproved(
+            string modelDocumentId,
+            string name)
     {
-        string name = input.Name;
+        var modelDoc = await this.GetUserDocument<InferencingModelSpecification>(modelDocumentId);
 
-        var govJobInput = await this.GetGovernanceJobInput();
+        this.logger.LogInformation(
+            $"Checking if model document '{modelDocumentId}' is approved by " +
+            "the dataset owners.");
+
+        var datasetRefs = modelDoc.Data.Application.ModelDatasets;
+        if (datasetRefs == null || datasetRefs.Count == 0)
+        {
+            throw new ApiException(
+                HttpStatusCode.BadRequest,
+                new ODataError(
+                    code: "ModelDatasetsMissing",
+                    message: $"Model document '{modelDocumentId}' must " +
+                    "specify at least one 'modelDatasets[].specification'."));
+        }
+
+        foreach (var datasetRef in datasetRefs)
+        {
+            if (datasetRef == null ||
+                string.IsNullOrWhiteSpace(datasetRef.Specification))
+            {
+                throw new ApiException(
+                    HttpStatusCode.BadRequest,
+                    new ODataError(
+                        code: "ModelDatasetsMissing",
+                        message: $"Model document '{modelDocumentId}' has a " +
+                        "'modelDatasets' entry without 'specification'."));
+            }
+        }
+
+        var datasetDocs = new List<UserDocument<Dataset>>(datasetRefs.Count);
+        foreach (var datasetRef in datasetRefs)
+        {
+            datasetDocs.Add(await this.GetUserDocument<Dataset>(datasetRef.Specification));
+        }
+
+        List<string> documentsToConsentCheck = [modelDocumentId];
+        documentsToConsentCheck.AddRange(datasetDocs.Select(d => d.Id));
+
+        var approvedBy = modelDoc.FinalVotes
+            .Where(x => x.Ballot == Ballot.Accepted)
+            .Select(x => x.ApproverId)
+            .ToHashSet();
+        var missingOwners = datasetDocs
+            .Where(d => !approvedBy.Contains(d.ProposerId))
+            .Select(d => d.Id)
+            .ToList();
+        if (missingOwners.Count > 0)
+        {
+            var missingList = string.Join("', '", missingOwners);
+            await this.GovernanceClientManager.GetClient().LogAuditEventAsync(
+                $"Inference service deployment denied for '{name}': missing " +
+                $"approval from dataset owner(s) of '{missingList}'.",
+                this.logger,
+                "kserve-inferencing-agent");
+            throw new ApiException(
+                HttpStatusCode.BadRequest,
+                new ODataError(
+                    code: "ModelMissingApprovalFromDatasetOwner",
+                    message: $"Model '{modelDocumentId}' requires approval from " +
+                    $"the owner(s) of dataset(s) '{missingList}'."));
+        }
+
+        this.logger.LogInformation(
+            $"Checking model '{modelDocumentId}' and its datasets have " +
+            "execution consent enabled.");
+        foreach (var docId in documentsToConsentCheck)
+        {
+            var status = await this.GetRuntimeConsent(docId, "execution");
+            if (status.Status != "enabled")
+            {
+                await this.GovernanceClientManager.GetClient().LogAuditEventAsync(
+                    $"Inference service deployment denied for '{name}'. " +
+                    $"Reason: {status.Reason.Message}.",
+                    this.logger,
+                    "kserve-inferencing-agent");
+                throw new ApiException(
+                    HttpStatusCode.BadRequest,
+                    new ODataError(
+                        code: status.Reason.Code,
+                        message: status.Reason.Message));
+            }
+        }
+
+        return (modelDoc, datasetDocs);
+    }
+
+    // Converts the API input to the frontend's expected shape using the
+    // governed model and dataset documents previously fetched by the
+    // approval gate. The runtime is supplied by the REST input (required)
+    // and, if the model document also pins a runtime name, the two must
+    // match. The implementing image+digest is resolved by the frontend
+    // from its bundled digest table (operationally pinned by release
+    // version), not user-supplied input.
+    private async Task<FrontendJobInput> ConvertToFrontendJob(
+        ModelInput input,
+        UserDocument<InferencingModelSpecification> modelDoc,
+        List<UserDocument<Dataset>> datasetDocs,
+        string name)
+    {
+        string callerRuntime = input.Predictor.Model.Runtime;
+
+        // If the model document carries an 'application.runtime' object,
+        // it must have a non-empty 'name' — a present-but-empty entry is
+        // treated as a malformed governance document, never as "no
+        // pinned runtime", so it cannot silently bypass the match check.
+        var runtime = modelDoc.Data.Application.Runtime;
+        if (runtime != null)
+        {
+            if (string.IsNullOrWhiteSpace(runtime.Name))
+            {
+                throw new ApiException(
+                    HttpStatusCode.BadRequest,
+                    new ODataError(
+                        code: "ModelRuntimeInvalid",
+                        message: $"Model document '{modelDoc.Id}' has " +
+                        "'application.runtime' set without a non-empty 'name'."));
+            }
+
+            if (!string.Equals(callerRuntime, runtime.Name, StringComparison.Ordinal))
+            {
+                throw new ApiException(
+                    HttpStatusCode.BadRequest,
+                    new ODataError(
+                        code: "RuntimeMismatch",
+                        message: $"Predictor runtime '{callerRuntime}' does " +
+                        $"not match runtime '{runtime.Name}' " +
+                        $"bound by model document '{modelDoc.Id}'."));
+            }
+        }
+
+        // The REST input is authoritative for the runtime selected at
+        // deploy time; the model document (when it pins one) is a
+        // governance constraint that the caller's choice must satisfy.
+        string resolvedRuntime = callerRuntime;
+
+        var datasets = datasetDocs
+            .Select(d => new DatasetInfo(
+                Name: d.Data.Name,
+                ViewName: d.Data.Name,
+                OwnerId: d.ProposerId,
+                Format: d.Data.Schema.Format,
+                Schema: d.Data.Schema.Fields.ToDictionary(
+                    k => k.Name,
+                    v => new SchemaFieldType(v.Type)),
+                AccessPoint: d.Data.AccessPoint,
+                AllowedFields: d.Data.Policy.AllowedFields?.ToList() ?? []))
+            .ToList();
 
         var frontendModel = new FrontendModelInput(
             new FrontendModelFormatInput(
                 input.Predictor.Model.ModelFormat.Name,
                 input.Predictor.Model.ModelFormat.Version),
             input.Predictor.Model.ProtocolVersion,
-            input.Predictor.Model.Runtime,
+            resolvedRuntime,
             input.Predictor.Model.StorageUri,
             input.Predictor.Model.Args,
             input.Predictor.Model.Resources,
@@ -282,7 +451,8 @@ public class InferenceServiceController : InferencingClientBaseController
             frontendBatcher,
             input.Predictor.DeploymentStrategy,
             input.Predictor.ScaleMetricType,
-            input.Predictor.AutoScaling);
+            input.Predictor.AutoScaling,
+            input.Predictor.Affinity);
 
         // Map placement from platform placement + predictor spec.
         FrontendPlacementInput? frontendPlacement = null;
@@ -292,58 +462,13 @@ public class InferenceServiceController : InferencingClientBaseController
             frontendPlacement = new FrontendPlacementInput(hostNetwork);
         }
 
-        // Retrieve model document and datasets from CGS if modelId
-        // is provided.
-        string? contractId = null;
-        string? modelDir = null;
-        List<DatasetInfo> datasets = [];
-
-        if (!string.IsNullOrEmpty(input.ModelId))
-        {
-            var modelDoc =
-                await this.GetUserDocument<InferencingModelSpecification>(
-                    input.ModelId);
-            contractId = modelDoc.ContractId;
-            modelDir = modelDoc.Data.Application.ModelDir;
-
-            foreach (var datasetRef in
-                modelDoc.Data.Application.InputDataset)
-            {
-                var datasetDoc =
-                    await this.GetUserDocument<Dataset>(
-                        datasetRef.Specification);
-                DatasetInfo datasetInfo = new(
-                    Name: datasetDoc.Data.Name,
-                    ViewName: datasetDoc.Data.Name,
-                    OwnerId: datasetDoc.ProposerId,
-                    Format: datasetDoc.Data.Schema.Format,
-                    Schema: datasetDoc.Data.Schema.Fields.ToDictionary(
-                        k => k.Name,
-                        v => new SchemaFieldType(v.Type)),
-                    AccessPoint: datasetDoc.Data.AccessPoint,
-                    AllowedFields:
-                        datasetDoc.Data.Policy.AllowedFields?.ToList()
-                        ?? []);
-                datasets.Add(datasetInfo);
-            }
-        }
-
-        if (string.IsNullOrEmpty(contractId))
-        {
-            throw new ApiException(
-                HttpStatusCode.BadRequest,
-                new ODataError(
-                    code: "ContractIdMissing",
-                    message: "Could not determine contractId. " +
-                    "Provide a modelId that references a governance " +
-                    "document with a contractId."));
-        }
+        var govJobInput = await this.GetGovernanceJobInput();
 
         var frontendJobInput = new FrontendJobInput(
-            contractId,
+            modelDoc.ContractId,
             name,
             frontendPredictor,
-            modelDir,
+            modelDoc.Data.Application.ModelDir,
             datasets,
             govJobInput,
             frontendPlacement);
@@ -395,13 +520,14 @@ public class InferenceServiceController : InferencingClientBaseController
             gc.ServiceCertDiscovery);
     }
 
-    private async Task SetupInferencingServicePodsAccess(FrontendJobInput job)
+    private async Task SetupInferencingServicePodsAccess(
+        FrontendJobInput job, bool enableTelemetryCollection)
     {
         List<Task> setupTasks = [];
         HashSet<string> subjects = [];
         HashSet<string> secretIds = [];
         InferencingServicePolicy svcPolicy =
-            await this.GetInferencingPodsPolicy(job);
+            await this.GetInferencingPodsPolicy(job, enableTelemetryCollection);
         List<DatasetInfo> datasets = [.. job.Datasets];
         foreach (var dataset in datasets)
         {
@@ -468,24 +594,21 @@ public class InferenceServiceController : InferencingClientBaseController
     }
 
     private async Task<InferencingServicePolicy>
-        GetInferencingPodsPolicy(FrontendJobInput job)
+        GetInferencingPodsPolicy(FrontendJobInput job, bool enableTelemetryCollection)
     {
-        var frontendClient =
-            await this.frontendClientManager.GetClient();
+        var frontendClient = await this.frontendClientManager.GetClient();
 
-        // TODO (GSinha): Check the model documents runtime options
-        // to see if telemetry is enabled and pass it in.
         using var response = await frontendClient.PostAsync(
             "inferencing/generateSecurityPolicy",
             JsonContent.Create(new
             {
                 Job = job,
-                enableTelemetryCollection = true
+                enableTelemetryCollection
             }));
 
         await response.ValidateStatusCodeAsync(this.logger);
-        var jobPolicy = (await response.Content
-            .ReadFromJsonAsync<InferencingServicePolicy>())!;
+        var jobPolicy =
+            (await response.Content.ReadFromJsonAsync<InferencingServicePolicy>())!;
         return jobPolicy;
     }
 }

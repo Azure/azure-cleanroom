@@ -1,0 +1,196 @@
+{{define "topology.html"}}
+<div class="detail-view"
+  hx-ext="sse"
+  sse-connect="/api/stream"
+  hx-get="/api/topology/{{.Resource.Name}}"
+  hx-trigger="sse:resource-change delay:500ms"
+  hx-swap="outerHTML">
+
+  {{/* Topology panel */}}
+  <div class="panel">
+    <h2>Resource Topology</h2>
+    <ul class="topo-tree">
+      <li>
+        <div class="topo-node"
+          onclick="toggleDetail(this)">
+          <span class="topo-chevron">▶</span>
+          <span class="topo-icon">
+            {{kindIcon .Resource.Kind}}</span>
+          <span class="topo-name">
+            {{.Resource.Name}}</span>
+          <span class="topo-kind">
+            {{.Resource.Kind}}</span>
+          <span class="topo-phase phase-badge
+            {{phaseClass .Resource.Phase}}">
+            {{.Resource.Phase}}</span>
+        </div>
+        <div class="topo-detail">
+          {{template "resource-detail" .Resource}}
+        </div>
+        {{if .Children}}
+        <ul>
+          {{range .Children}}
+          <li>
+            <div class="topo-node"
+              onclick="toggleDetail(this)">
+              <span class="topo-chevron">▶</span>
+              <span class="topo-icon">
+                {{kindIcon .Resource.Kind}}</span>
+              <span class="topo-name">
+                {{.Resource.Name}}</span>
+              <span class="topo-kind">
+                {{.Resource.Kind}}</span>
+              <span class="topo-phase phase-badge
+                {{phaseClass .Resource.Phase}}">
+                {{.Resource.Phase}}</span>
+            </div>
+            <div class="topo-detail">
+              {{template "resource-detail"
+                .Resource}}
+            </div>
+            {{if .Children}}
+            <ul>
+              {{range .Children}}
+              <li>
+                <div class="topo-node"
+                  onclick="toggleDetail(this)">
+                  <span class="topo-chevron">▶</span>
+                  <span class="topo-icon">
+                    {{kindIcon .Resource.Kind}}</span>
+                  <span class="topo-name">
+                    {{.Resource.Name}}</span>
+                  <span class="topo-kind">
+                    {{.Resource.Kind}}</span>
+                  <span class="topo-phase phase-badge
+                    {{phaseClass .Resource.Phase}}">
+                    {{.Resource.Phase}}</span>
+                </div>
+                <div class="topo-detail">
+                  {{template "resource-detail"
+                    .Resource}}
+                </div>
+              </li>
+              {{end}}
+            </ul>
+            {{end}}
+          </li>
+          {{end}}
+        </ul>
+        {{end}}
+      </li>
+    </ul>
+  </div>
+
+  {{/* Conditions panel */}}
+  <div class="panel">
+    <h2>Conditions</h2>
+    <table class="cond-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Condition</th>
+          <th>Reason</th>
+          <th>Message</th>
+          <th>Since</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Resource.Conditions}}
+        <tr>
+          <td>
+            <span class="status-icon
+              {{statusClass .Status .Reason}}">
+              {{statusIcon .Status}}</span>
+          </td>
+          <td>{{.Type}}</td>
+          <td>{{.Reason}}</td>
+          <td class="cond-msg"
+            title="{{.Message}}">
+            {{.Message}}</td>
+          <td style="color:var(--text-muted);
+            white-space:nowrap">
+            {{timeAgo .LastTransitionTime}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  {{/* Actions */}}
+  <div class="panel panel-full">
+    <h2>Actions</h2>
+    <div class="actions">
+      <button class="btn btn-primary"
+        hx-post="/api/reconcile/{{.Resource.Name}}"
+        hx-swap="innerHTML"
+        hx-target="#action-result">
+        ↻ Reconcile
+      </button>
+      <button class="btn btn-danger"
+        onclick="showDeleteModal(
+          '{{.Resource.Name}}',
+          '{{specField .Resource.RawObject
+            "deletionPolicy"}}')">
+        🗑 Delete
+      </button>
+      <span id="action-result"></span>
+    </div>
+  </div>
+
+  {{/* Events panel */}}
+  <div class="panel panel-full"
+    hx-get="/api/events/{{.Resource.Name}}"
+    hx-trigger="load, sse:resource-change delay:1s"
+    hx-swap="innerHTML">
+    <div style="text-align:center;padding:24px;
+      color:var(--text-muted)">
+      Loading events...</div>
+  </div>
+</div>
+{{end}}
+
+{{define "waterfall"}}
+<div class="cond-stepper">
+  {{range .Conditions}}
+  <div class="cond-step">
+    <span class="cond-dot
+      {{if eq .Status "True"}}cond-dot-ready
+      {{else if eq .Reason "Failed"}}cond-dot-failed
+      {{else}}cond-dot-pending{{end}}"></span>
+    <span class="cond-step-type">{{.Type}}</span>
+    <span class="cond-step-reason">
+      {{.Reason}}</span>
+    <span class="cond-step-time">
+      {{timeAgo .LastTransitionTime}}</span>
+  </div>
+  {{end}}
+  {{if not .Conditions}}
+  <div style="color:var(--text-muted);
+    font-size:13px;padding:8px">
+    No conditions yet
+  </div>
+  {{end}}
+</div>
+{{end}}
+
+{{define "resource-detail"}}
+{{if .Message}}
+<div class="topo-detail-msg">{{.Message}}</div>
+{{end}}
+<div class="topo-detail-meta">
+  Created {{timeAgo .Age}}</div>
+{{if .Conditions}}
+<div class="topo-detail-conds">
+  {{range .Conditions}}
+  <div class="topo-cond-row">
+    <span class="status-icon
+      {{statusClass .Status .Reason}}">
+      {{statusIcon .Status}}</span>
+    <span>{{.Type}}</span>
+    <span class="topo-cond-reason">
+      {{.Reason}}</span>
+  </div>
+  {{end}}
+</div>
+{{end}}
+{{end}}

@@ -168,6 +168,11 @@ public class FederationConfiguration
     /// Gets or sets the issuer for the federated credential.
     /// </summary>
     public string? Issuer { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional governance API path prefix override.
+    /// </summary>
+    public string? GovernanceApiPathPrefix { get; set; }
 }
 
 /// <summary>

@@ -1,9 +1,10 @@
 from enum import Enum
 from typing import Dict, List, Optional
 
-from cleanroom_sdk.models.cleanroom import DatasetFormat
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
+
+from cleanroom_sdk.models.cleanroom import DatasetFormat
 
 
 class DatasetInfo(BaseModel):

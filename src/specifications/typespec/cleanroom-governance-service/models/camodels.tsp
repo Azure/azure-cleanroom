@@ -2,7 +2,7 @@ import "./snpattestation.tsp";
 import "./encrypt.tsp";
 import "./sign.tsp";
 
-namespace Cleanroom.Governance;
+namespace Azure.Cleanroom.Governance;
 
 /**
  * CA config item
@@ -50,6 +50,14 @@ model CAInfo {
 }
 
 /**
+ * Generate CA signing key response
+ */
+model GenerateCASigningKeyResponse {
+  /** Request ID */
+  requestId: string;
+}
+
+/**
  * Generate endorsed cert request
  */
 model GenerateEndorsedCertRequest {
@@ -81,4 +89,12 @@ model GenerateEndorsedCertRequestData {
 
   /** Validity period in days */
   validityPeriodDays: int32;
+}
+
+/**
+ * Generate endorsed cert response
+ */
+model GenerateEndorsedCertResponse {
+  /** base64 wrapped certificate */
+  value: string;
 }

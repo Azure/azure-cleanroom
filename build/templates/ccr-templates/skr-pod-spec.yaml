@@ -8,7 +8,7 @@ spec:
     - /skr.sh
     resources:
       requests:
-        cpu: 200m
+        cpu: 100m
         memory: 512Mi
     env:
     - name: SkrSideCarArgs

@@ -52,8 +52,7 @@ def trigger_ccf_recovery(node_count: int = 1):
     """Trigger CCF confidential recovery using recover-ccf.ps1."""
     script = str(Path(_git_root) / "samples" / "ccf" / "azcli" / "recover-ccf.ps1")
     print(
-        f"{Colors.YELLOW}[Chaos] Triggering CCF confidential "
-        f"recovery...{Colors.RESET}"
+        f"{Colors.YELLOW}[Chaos] Triggering CCF confidential recovery...{Colors.RESET}"
     )
     run_command(
         [
@@ -69,20 +68,16 @@ def trigger_ccf_recovery(node_count: int = 1):
         Path(_git_root) / "samples" / "ccf" / "azcli" / "validate-cgs-recovery.ps1"
     )
     print(
-        f"{Colors.YELLOW}[Chaos] Validating CGS state after "
-        f"recovery...{Colors.RESET}"
+        f"{Colors.YELLOW}[Chaos] Validating CGS state after recovery...{Colors.RESET}"
     )
     run_command(["pwsh", validate_script])
-    print(
-        f"{Colors.GREEN}[Chaos] CCF recovery completed and " f"validated.{Colors.RESET}"
-    )
+    print(f"{Colors.GREEN}[Chaos] CCF recovery completed and validated.{Colors.RESET}")
 
 
 def trigger_frontend_restart():
     """Restart the frontend-service Docker container."""
     print(
-        f"{Colors.YELLOW}[Chaos] Restarting frontend-service "
-        f"container...{Colors.RESET}"
+        f"{Colors.YELLOW}[Chaos] Restarting frontend-service container...{Colors.RESET}"
     )
     run_command(["docker", "restart", "frontend-service"])
 
@@ -102,10 +97,7 @@ def trigger_frontend_restart():
         try:
             resp = requests.get(ready_url, timeout=5)
             if resp.status_code == 200:
-                print(
-                    f"{Colors.GREEN}[Chaos] Frontend service is "
-                    f"ready.{Colors.RESET}"
-                )
+                print(f"{Colors.GREEN}[Chaos] Frontend service is ready.{Colors.RESET}")
                 return
         except Exception:
             pass
@@ -134,6 +126,7 @@ def run_longhaul_cycle(
     kube_config: str,
     frontend_endpoint: str | None,
     collaboration_id: str,
+    scale_sku: str | None,
 ):
     """Run a single longhaul cycle: execute an existing approved query."""
     print(
@@ -143,7 +136,7 @@ def run_longhaul_cycle(
         f"\n{Colors.CYAN}{'=' * 80}{Colors.RESET}"
     )
 
-    print(f"\n{Colors.CYAN}[Cycle {cycle_number}] Executing " f"query...{Colors.RESET}")
+    print(f"\n{Colors.CYAN}[Cycle {cycle_number}] Executing query...{Colors.RESET}")
     result = execute_sql_test_parallel(
         test_name=f"Longhaul Cycle {cycle_number}",
         query_document_id=query_document_id,
@@ -152,6 +145,7 @@ def run_longhaul_cycle(
         frontend_endpoint=frontend_endpoint,
         collaboration_id=collaboration_id,
         cgs_client=consumer_cgs_client,
+        scale_sku=scale_sku,
     )
 
     if result["success"]:
@@ -198,6 +192,12 @@ def main():
         "--enable-chaos",
         action="store_true",
         help="Enable chaos actions (CCF recovery or frontend restart) between cycles",
+    )
+    parser.add_argument(
+        "--scale-sku",
+        choices=["small", "medium", "large"],
+        default="small",
+        help="Spark scale SKU to use for submitted SQL jobs (default: small)",
     )
     args = parser.parse_args()
 
@@ -295,6 +295,7 @@ def main():
             kube_config=kube_config,
             frontend_endpoint=frontend_endpoint,
             collaboration_id=collaboration_id,
+            scale_sku=args.scale_sku,
         )
         results.append(result)
 
@@ -345,15 +346,13 @@ def main():
             if r["success"]
             else f"{Colors.RED}FAILED{Colors.RESET}"
         )
-        print(f"  Cycle {r['name']}: {status} " f"({r['duration']:.2f}s)")
+        print(f"  Cycle {r['name']}: {status} ({r['duration']:.2f}s)")
 
     if failed > 0:
         print(f"\n{Colors.RED}{failed} cycle(s) failed.{Colors.RESET}")
         sys.exit(1)
 
-    print(
-        f"\n{Colors.GREEN}All {passed} cycle(s) passed " f"successfully!{Colors.RESET}"
-    )
+    print(f"\n{Colors.GREEN}All {passed} cycle(s) passed successfully!{Colors.RESET}")
 
 
 if __name__ == "__main__":

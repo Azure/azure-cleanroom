@@ -1,0 +1,19 @@
+image:
+  repository: localhost:5000/local-idp
+  tag: latest
+  pullPolicy: IfNotPresent
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+namespace: cleanroom-system
+
+# When set, mounts the named Secret at /keys so the local-IDP
+# loads pre-existing signing keys on startup instead of generating
+# new ones. Used by `dev restore` for cluster recreation.
+existingKeysSecret: ""

@@ -3,7 +3,7 @@ import json
 import os
 import tempfile
 import uuid
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 from typing import Callable
 from urllib.parse import urlparse
 
@@ -88,9 +88,9 @@ class AzureSecureSecretStore(ISecretStore):
 
         from ._azcli_helpers import az_cli, logger
 
-        assert (
-            security_policy is not None
-        ), "Security policy is required for secure store."
+        assert security_policy is not None, (
+            "Security policy is required for secure store."
+        )
 
         logger.warning(
             f"Creating secret {secret_name} in store {self._entry.storeProviderUrl}"
@@ -102,9 +102,9 @@ class AzureSecureSecretStore(ISecretStore):
         try:
             private_key = generate_secret()
 
-            assert isinstance(
-                private_key, rsa.RSAPrivateKey
-            ), f"Invalid private key type {type(private_key)}"
+            assert isinstance(private_key, rsa.RSAPrivateKey), (
+                f"Invalid private key type {type(private_key)}"
+            )
             private_key_bytes = private_key.private_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.TraditionalOpenSSL,
@@ -237,7 +237,6 @@ class AzureSecretStore(ISecretStore):
             )
             return
         try:
-
             az_cli(
                 f"keyvault secret download --file {secret_file_path} --encoding base64 "
                 + f"--name {secret_name} --vault-name {kv_name}"

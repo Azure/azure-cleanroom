@@ -1,6 +1,6 @@
 import "./snpattestation.tsp";
 
-namespace Cleanroom.Governance;
+namespace Azure.Cleanroom.Governance;
 
 /**
  * Get runtime option response

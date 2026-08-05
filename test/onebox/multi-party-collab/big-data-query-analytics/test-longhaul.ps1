@@ -5,7 +5,10 @@ param
     [string]$outDir = "$PSScriptRoot/generated",
     [int]$durationMinutes = 120,
     [int]$pauseMinutes = 30,
-    [switch]$enableChaos
+    [switch]$enableChaos,
+
+    [ValidateSet('small', 'medium', 'large')]
+    [string]$scaleSku = "small"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,6 +28,11 @@ if ($enableChaos) {
     $chaosArgs = @("--enable-chaos")
 }
 
+$scaleSkuArgs = @()
+if ($scaleSku) {
+    $scaleSkuArgs = @("--scale-sku", $scaleSku)
+}
+
 # Run the longhaul test in an isolated environment using uv
 uv run --package test-big-data-query-analytics --frozen --isolated python3 -u `
     $PSScriptRoot/longhaul-test.py `
@@ -32,4 +40,5 @@ uv run --package test-big-data-query-analytics --frozen --isolated python3 -u `
     --out-dir $outDir `
     --duration-minutes $durationMinutes `
     --pause-minutes $pauseMinutes `
-    @chaosArgs
+    @chaosArgs `
+    @scaleSkuArgs

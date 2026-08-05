@@ -1,9 +1,9 @@
-from azext_cleanroom._help import helps  # pylint: disable=unused-import
 from azure.cli.core import AzCommandsLoader
+
+from azext_cleanroom._help import helps  # noqa: F401  # pylint: disable=unused-import
 
 
 class CleanRoomCommandsLoader(AzCommandsLoader):
-
     def __init__(self, cli_ctx=None):
         from azure.cli.core.commands import CliCommandType
 

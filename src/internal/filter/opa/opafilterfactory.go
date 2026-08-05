@@ -11,14 +11,14 @@ import (
 
 	"github.com/azure/azure-cleanroom/src/internal/configuration"
 	"github.com/azure/azure-cleanroom/src/internal/filter"
-	"github.com/open-policy-agent/opa/bundle"
-	"github.com/open-policy-agent/opa/download"
-	"github.com/open-policy-agent/opa/keys"
-	"github.com/open-policy-agent/opa/plugins"
-	"github.com/open-policy-agent/opa/plugins/rest"
-	"github.com/open-policy-agent/opa/rego"
-	"github.com/open-policy-agent/opa/storage"
-	"github.com/open-policy-agent/opa/storage/inmem"
+	"github.com/open-policy-agent/opa/v1/bundle"
+	"github.com/open-policy-agent/opa/v1/download"
+	"github.com/open-policy-agent/opa/v1/keys"
+	"github.com/open-policy-agent/opa/v1/plugins"
+	"github.com/open-policy-agent/opa/v1/plugins/rest"
+	"github.com/open-policy-agent/opa/v1/rego"
+	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/storage/inmem"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -46,11 +46,11 @@ type opaFilterFactory struct {
 	tracer        trace.Tracer
 }
 
-func (self *opaFilterFactory) CreateFilter() filter.HttpFilter {
+func (f *opaFilterFactory) CreateFilter() filter.HttpFilter {
 	return &opaFilter{
-		policyQueries: self.policyQueries,
-		teeType:       self.teeType,
-		tracer:        self.tracer,
+		policyQueries: f.policyQueries,
+		teeType:       f.teeType,
+		tracer:        f.tracer,
 	}
 }
 
@@ -150,8 +150,9 @@ func NewHttpFilterFactory(
 
 		var update *download.Update
 		d := download.NewOCI(dlConfig, client, config.BundleResource, "/tmp/opa/oci/").
-			WithCallback(func(_ context.Context, u download.Update) {
+			WithCallback(func(_ context.Context, u download.Update) error {
 				update = &u
+				return nil
 			})
 
 		log.Infof("Triggering policy bundle download from oci registry.")
@@ -192,7 +193,7 @@ func NewHttpFilterFactory(
 			"allow-all.rego": module,
 		}
 	} else {
-		return nil, fmt.Errorf("Need to specify a bundle_resource.")
+		return nil, fmt.Errorf("need to specify a bundle_resource")
 	}
 
 	factory := &opaFilterFactory{

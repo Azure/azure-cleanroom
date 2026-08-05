@@ -144,7 +144,7 @@ func (result *evalResult) GetResponseHTTPStatus() (int, error) {
 		}
 
 		if http.StatusText(int(httpStatusCode)) == "" {
-			return status, fmt.Errorf("Invalid HTTP status code %v", httpStatusCode)
+			return status, fmt.Errorf("invalid HTTP status code %v", httpStatusCode)
 		}
 
 		return int(httpStatusCode), nil
@@ -163,7 +163,7 @@ func (result *evalResult) GetResponseEnvoyHTTPStatus() (typev3.StatusCode, error
 
 	//This check is partially redundant but might be more strict than http.StatusText()
 	if _, ok := typev3.StatusCode_name[int32(httpStatusCode)]; !ok {
-		return code, fmt.Errorf("Invalid HTTP status code %v", httpStatusCode)
+		return code, fmt.Errorf("invalid HTTP status code %v", httpStatusCode)
 	}
 
 	code = typev3.StatusCode(int32(httpStatusCode))

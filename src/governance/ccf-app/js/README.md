@@ -7,6 +7,9 @@
   - [Secrets](#secrets)
   - [Oidc](#oidc)
   - [CA](#ca)
+  - [Endpoint naming conventions](#endpoint-naming-conventions)
+- [Model generation](#model-generation)
+  - [Generated output](#generated-output)
 - [OpenID Connect Issuer](#openid-connect-issuer)
   - [Issuer URL endpoint security](#issuer-url-endpoint-security)
   - [Setup a public, secured OIDC issuer URL using Azure Blob Storage](#setup-a-public-secured-oidc-issuer-url-using-azure-blob-storage)
@@ -18,7 +21,7 @@ The CGS CCF app exposes the following app endpoints. See [app.json](app.json) fo
 Nodejs/npm install instructions via nvm: https://nodejs.org/en/download/package-manager
 
 ### Contracts
-[src/endpoints/contracts.ts](src/endpoints/contracts.ts)  
+[./src/endpoints/contracts.ts](src/endpoints/contracts.ts)  
 Members can create/update contract instances.
 - Exposes contracts in Draft/Proposed/Accepted states.
 - Contracts in Draft state can be PUT/PATCH.
@@ -27,28 +30,94 @@ Members can create/update contract instances.
 See [contract management](../../../../samples/governance/README.md#contract-management) samples section for more details.
 
 #### Deployment spec
-[src/endpoints/deploymentspecs.ts](src/endpoints/deploymentspecs.ts)  
+[./src/endpoints/deployment-spec.ts](src/endpoints/deployment-spec.ts)  
 Deployment spec endpoint running in CGS.
 
 #### Clean room policy
-[src/endpoints/cleanroompolicy.ts](src/endpoints/cleanroompolicy.ts)  
+[./src/endpoints/clean-room-policy.ts](src/endpoints/clean-room-policy.ts)  
 Clean room policy endpoint running in CGS. The claims specified in this policy is used to authenticate calls coming from a clean room instance for the secrets/events/token APIs that are meant for clean room's consumption.
 
 ### Events
-[src/endpoints/events.ts](src/endpoints/events.ts)  
+[./src/endpoints/events.ts](src/endpoints/events.ts)  
 Clean room instances can insert events while members can query events. The clean room instance must present a valid attestation report with expected host data and report data values (as set via the clean room policy) for the governance service to accept the event. This ensures that only trusted code running in clean rooms can create audit events in CGS.
 
 ### Secrets
-[src/endpoints/secrets.ts](src/endpoints/secrets.ts)  
+[./src/endpoints/secrets.ts](src/endpoints/secrets.ts)  
 Members can create/update secrets while only clean room instances can get the secerts. The clean room instance must present a valid attestation report with expected host data and report data values (as set via the clean room policy) for the governance service to release secrets. This ensures that only trusted code running in clean rooms can read the secrets stored in CGS.
 
 ### Oidc
-[src/endpoints/oidc](src/endpoints/oidc)  
+[./src/endpoints/oidc](src/endpoints/oidc)  
 OIDC issuer endpoint for the IdP running in CGS. The clean room instance must present a valid attestation report with expected host data and report data values (as set via the clean room policy) for the governance service to create a token. This ensures that only trusted code running in clean rooms can get tokens issued from CGS.
 
 ### CA
-[src/endpoints/ca](src/endpoints/ca/)
+[./src/endpoints/certificate-authority](src/endpoints/certificate-authority/)
 Clean room instances can request CGS CA endorsed certificates for starting any SSL servers. The clean room instance must present a valid attestation report with expected host data and report data values (as set via the clean room policy) for the governance service to accept the request and generate a CGS CA endorsed certificate.
+
+### Endpoint naming conventions
+
+- **Kebab-case** for all files and folders (e.g., `clean-room-policy.ts`, `certificate-authority/ca-key.ts`).
+- **Plural** for collection endpoints (`contracts.ts`, `secrets.ts`, `user-documents.ts`).
+- **Singular** for single-concept endpoints (`token.ts`, `deployment-info.ts`).
+
+## Model generation
+
+> `<root>` refers to the repository root directory.
+
+The generator reads [app.json](app.json) and produces per-interface TypeSpec files for both the
+service API and client library. The top-level folder or file name after `./src/endpoints/` in each
+`js_module` entry is the **module key**:
+
+```
+./src/endpoints/certificate-authority/ca-key.ts  →  module key: certificate-authority
+./src/endpoints/contracts.ts                     →  module key: contracts
+```
+
+Running the generator compiles the TypeSpec and copies the emitted code to the target projects:
+
+```bash
+pwsh <root>/src/specifications/generate_models.ps1
+```
+
+This script calls `<root>/src/specifications/generate_typespec.py` (to produce `.tsp` files from
+`app.json`), then runs the TypeSpec compiler via Docker and copies the generated code to the
+appropriate SDK and CCF app folders.
+
+The module key is converted to a PascalCase interface name by splitting on `-` and capitalizing each word:
+
+```
+certificate-authority  →  CertificateAuthority
+clean-room-policy      →  CleanRoomPolicy
+user-documents         →  UserDocuments
+oidc                   →  Oidc
+```
+
+If this produces an undesirable name, add an override in `<root>/src/specifications/generate_typespec.py`:
+
+```python
+MODULE_NAME_OVERRIDES: Dict[str, str] = {
+    "my-module": "MyCustomName",
+}
+```
+
+### Generated output
+
+Output is written to `<root>/src/specifications/typespec/`:
+
+```
+<root>/src/specifications/typespec/cleanroom-governance-service/
+├── api.tsp                          # import hub
+├── api/
+│   ├── certificate-authority.tsp    # interface CertificateAuthority { ... }
+│   ├── contracts.tsp                # interface Contracts { ... }
+│   └── ...
+
+<root>/src/specifications/typespec/cleanroom-governance-client-lib/
+├── interfaces.tsp                   # import hub + GovernanceClient
+├── interfaces/
+│   ├── certificate-authority.tsp    # interface CertificateAuthority { ... }
+│   ├── contracts.tsp                # interface Contracts { ... }
+│   └── ...
+```
 
 ## OpenID Connect Issuer
 CGS can act as an Identity provider (IdP)/OIDC issuer and one can leverage [federated identity credential with external identity provider](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation-create-trust-user-assigned-managed-identity?pivots=identity-wif-mi-methods-azp#other) to create a trust relationship between a user-assigned managed identity and CGS as the external identity provider. Microsoft Entra leverages OpenID Connect (OIDC) to discover public signing keys and verify the authenticity of the token issued by CGS before exchanging it for an access token. You can then consume the Microsoft Entra access token to access Azure cloud resources via the Azure Identity SDKs or the Microsoft Authentication Library (MSAL).

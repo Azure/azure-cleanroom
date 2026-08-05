@@ -10,10 +10,15 @@ import { cleanroom } from "../global.cleanroom";
 import { CvmSnpAttestationInput } from "../models";
 import { verifyPolicyClaims } from "../utils/utils";
 import { SnpCvmAttestationClaims } from "./SnpCvmAttestationClaims";
+import { Base64 } from "js-base64";
+
+const cvmReportDataHexLength = 128;
+const cvmPayloadHashHexLength = 64;
 
 // Attestation verifier for the CVM (Confidential VM) TEE platform.
-// Delegates to cleanroom.attestation.verifyCvmSnpAttestation for evidence
-// verification and compares runtimeClaims["user-data"] for report data.
+// Delegates to cleanroom.attestation.verifyCvmSnpAttestation for all evidence
+// verification (vTPM/SNP, GPU, and user data document binding). The CGS app
+// only handles policy matching and payload binding.
 export class CvmAttestationVerifier implements IAttestationVerifier {
   verifyAttestation(
     contractId: string,
@@ -25,78 +30,79 @@ export class CvmAttestationVerifier implements IAttestationVerifier {
     );
 
     if (!result.verified) {
-      const failedChecks = Object.entries(result.checks)
-        .filter(([, v]) => !v.passed)
-        .map(([k, v]) => `${k}: ${v.detail}`)
+      const failedChecks = result.checks
+        .filter((c) => !c.result.passed)
+        .map((c) => `${c.id}: ${c.result.error || c.result.detail || "unknown"}`)
         .join("; ");
       throw new Error(
         `CVM SNP attestation verification failed. Failed checks: ${failedChecks}`
       );
     }
 
-    // The PCR values are the attestation claims for CVM. After verification
-    // succeeds the PCR values from the evidence are trusted (pcrDigest check
-    // confirms they match the TPM quote). Match them against the cleanroom
-    // policy which contains key/value pairs like pcr0->value, pcr1->value.
-    const claimsProvider = new SnpCvmAttestationClaims(attestation);
+    // The PCR values and GPU claims are the attestation claims for CVM. After
+    // verification succeeds the PCR values from the evidence are trusted
+    // (pcrDigest check confirms they match the TPM quote) and GPU claims are
+    // verifier-owned (user data document binding + RIM appraisal).
+    const claimsProvider = new SnpCvmAttestationClaims(attestation, result);
     const attestationClaims = claimsProvider.getClaims();
     verifyPolicyClaims(contractId, attestationClaims, delegatedPolicies);
 
-    const userData = result.runtimeClaims["user-data"];
-    if (typeof userData !== "string") {
+    // Use the validated report data from the verifier result. The verifier
+    // has already proven the user data document is bound to the hardware-
+    // signed SNP report via the metadataBinding check.
+    if (!result.reportData) {
       throw new Error(
-        "CVM SNP attestation result is missing runtimeClaims 'user-data'."
+        "CVM SNP attestation result is missing reportData."
       );
     }
 
+    const reportDataBytes = Base64.toUint8Array(result.reportData);
+    const reportDataHex = hex(reportDataBytes.buffer as ArrayBuffer).toUpperCase();
+
     return {
-      reportData: userData as string
+      reportData: reportDataHex,
+      gpuCount: result.gpuClaims?.gpuCount
     };
   }
 
   verifyReportData(attestationResult: AttestationResult, data: string): void {
-    // For CVM attestation the report data carried in runtimeClaims["user-data"]
-    // is compared against sha256(data) zero-padded to 128 hex chars, identical
-    // to the CACI report data comparison logic.
-    const reportData = attestationResult.reportData.toUpperCase();
+    // The report data is the payload from the /snp/attest request.
+    // The first 32 bytes (64 hex chars) are the payload hash.
+    const reportDataHex = attestationResult.reportData.toUpperCase();
 
-    if (reportData.length !== 128) {
+    if (reportDataHex.length !== cvmReportDataHexLength) {
       throw new Error(
-        "Unexpected string length of runtimeClaims user-data: " +
-          reportData.length
+        "Unexpected report data hex length: " + reportDataHex.length
       );
     }
 
-    let expectedReportData = hex(
+    const hashHex = hex(
       ccf.crypto.digest("SHA-256", ccf.strToBuf(data))
     ).toUpperCase();
-
-    if (expectedReportData.length !== 64) {
+    if (hashHex.length !== cvmPayloadHashHexLength) {
       throw new Error(
-        "Unexpected string length of expectedReportData: " +
-          expectedReportData.length
+        "Unexpected SHA-256 digest hex length: " + hashHex.length
       );
     }
 
-    expectedReportData = expectedReportData.padEnd(128, "0");
-
-    if (reportData !== expectedReportData) {
+    const actualPayloadHash = reportDataHex.slice(0, cvmPayloadHashHexLength);
+    if (actualPayloadHash !== hashHex) {
       console.log(
-        "Report data value mismatch. runtimeClaims user-data: '" +
-          reportData +
-          "', calculated report_data: '" +
-          expectedReportData +
-          "',"
+        "Payload hash mismatch. reportData[0:32]: '" +
+          actualPayloadHash +
+          "', SHA256(data): '" +
+          hashHex +
+          "'"
       );
       throw new Error(
-        "Attestation runtimeClaims user-data value did not match calculated value."
+        "Attestation report data payload hash did not match calculated value."
       );
     }
 
     console.log(
-      "Successfully verified expected report data value against CVM " +
-        "runtimeClaims user-data. report_data: " +
-        reportData
+      "Successfully verified expected payload hash against CVM " +
+        "report data. reportData: " +
+        reportDataHex
     );
   }
 }

@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List
 
 from kubernetes.client import models as k8smodels
 

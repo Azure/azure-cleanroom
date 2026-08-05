@@ -1,10 +1,11 @@
 """Pod scheduler for managing pod placement on Kubernetes nodes."""
 
 import logging
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, List, Optional
+
+from kubernetes.client import V1Node, V1Pod
 
 from cleanroom_spark_frontend.config.configuration import SchedulerSettings
-from kubernetes.client import V1Node, V1Pod
 
 from .constraint_enforcer_factory import ConstraintEnforcerFactory
 
@@ -115,7 +116,7 @@ class PodScheduler:
         ranked_nodes = schedulable_nodes
         for i, enforcer in enumerate(self.enforcers):
             logger.debug(
-                f"Applying enforcer {i+1}/{len(self.enforcers)}: {enforcer.name}"
+                f"Applying enforcer {i + 1}/{len(self.enforcers)}: {enforcer.name}"
             )
             ranked_nodes = enforcer.rank_nodes(ranked_nodes, self.k8s_client)
 

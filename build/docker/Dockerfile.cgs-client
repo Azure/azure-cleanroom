@@ -17,6 +17,9 @@ COPY src/internal/Cose/*.csproj /app/src/internal/Cose/
 COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
 COPY src/internal/governance-common/*.csproj /app/src/internal/governance-common/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
+COPY src/sdk/cleanroom-sdk/Azure.Cleanroom.Sdk.csproj /app/src/sdk/cleanroom-sdk/Azure.Cleanroom.Sdk.csproj
+COPY src/sdk/clients/cgs-client/Azure.Cleanroom.Governance.Client.csproj /app/src/sdk/clients/cgs-client/Azure.Cleanroom.Governance.Client.csproj
+COPY src/sdk/clients/ccf-client/Microsoft.Ccf.Client.csproj /app/src/sdk/clients/ccf-client/Microsoft.Ccf.Client.csproj
 RUN dotnet restore /app/src/governance/governance.sln
 
 # copy everything else and build app
@@ -24,7 +27,11 @@ COPY stylecop.json /app
 COPY Menees.Analyzers.Settings.xml /app
 COPY .editorconfig /app
 COPY src/governance /app/src/governance
-COPY src/internal /app/src/internal
+COPY src/internal/Attestation /app/src/internal/Attestation
+COPY src/internal/Cose /app/src/internal/Cose
+COPY src/internal/governance-common /app/src/internal/governance-common
+COPY src/internal/restapi-common /app/src/internal/restapi-common
+COPY src/sdk /app/src/sdk
 
 # Publish the application
 RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/governance/client/cgs-client.csproj

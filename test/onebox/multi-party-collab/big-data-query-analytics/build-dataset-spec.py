@@ -27,7 +27,6 @@ Usage from PowerShell:
 import argparse
 import base64
 import json
-from pathlib import Path
 from typing import Optional
 
 import yaml

@@ -30,7 +30,7 @@ public abstract class RunCommand
         string? stdinContent = null,
         int? timeout = null)
     {
-        this.Logger.LogInformation($"Executing command: {binary} {args}");
+        this.Logger.LogDebug($"Executing command: {binary} {args}");
 
         // https://stackoverflow.com/questions/139593/processstartinfo-hanging-on-waitforexit-why
         var source = new TaskCompletionSource<int>();

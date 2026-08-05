@@ -58,6 +58,22 @@ helps["cleanroom datastore initialize"] = """
 """
 
 
+helps["cleanroom operator"] = """
+    type: group
+    short-summary: Commands to manage the cleanroom operator.
+"""
+
+helps["cleanroom operator install-cli"] = """
+    type: command
+    short-summary: Download and install the kubectl-cleanroom plugin binary.
+    long-summary: |
+        Downloads the kubectl-cleanroom binary from an OCI artifact using
+        oras and installs it to the specified location. The artifact source
+        defaults to the registry URL set via
+        AZCLI_CLEANROOM_CLUSTER_PROVIDER_CONTAINER_REGISTRY_URL in the
+        environment file, or can be overridden with --source.
+"""
+
 helps["cleanroom ccf network up"] = """
     type: command
     short-summary: Deploys the simplest possible CACI based CCF network, with a single operator, further members can be added later. The key benefit of this command is it's a single call to get an entire network created with all relevant configuration options, and identities stored in a workspace directory.

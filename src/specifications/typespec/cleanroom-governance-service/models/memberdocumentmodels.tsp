@@ -2,7 +2,7 @@ import "./snpattestation.tsp";
 import "./encrypt.tsp";
 import "./contractmodels.tsp";
 
-namespace Cleanroom.Governance;
+namespace Azure.Cleanroom.Governance;
 
 /**
  * Put member document request

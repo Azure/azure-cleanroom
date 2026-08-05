@@ -37,7 +37,7 @@ namespace cleanroomapp
 
     // Insert functions into the JS environment, called at
     // my_object.<function_name>
-    crypto_object.set(
+    JS_CHECK_OR_THROW(crypto_object.set(
       // Name of field on object
       "generateSelfSignedCert",
       ctx.new_c_function(
@@ -46,9 +46,9 @@ namespace cleanroomapp
         // Repeated name of function, used in callstacks
         "generateSelfSignedCert",
         // Number of arguments to this function
-        6));
+        6)));
 
-    crypto_object.set(
+    JS_CHECK_OR_THROW(crypto_object.set(
       // Name of field on object
       "generateEndorsedCert",
       ctx.new_c_function(
@@ -57,21 +57,22 @@ namespace cleanroomapp
         // Repeated name of function, used in callstacks
         "generateEndorsedCert",
         // Number of arguments to this function
-        8));
+        8)));
 
     auto attestation_object = ctx.new_obj();
 
-    attestation_object.set(
+    JS_CHECK_OR_THROW(attestation_object.set(
       "verifyCvmSnpAttestation",
       ctx.new_c_function(
         cleanroomapp::js::extensions::js_verify_cvm_snp_attestation,
         "verifyCvmSnpAttestation",
-        1));
+        1)));
 
     auto cleanroom_object =
       ctx.get_or_create_global_property("cleanroom", ctx.new_obj());
-    cleanroom_object.set("crypto", std::move(crypto_object));
-    cleanroom_object.set("attestation", std::move(attestation_object));
+    JS_CHECK_OR_THROW(cleanroom_object.set("crypto", std::move(crypto_object)));
+    JS_CHECK_OR_THROW(
+      cleanroom_object.set("attestation", std::move(attestation_object)));
   }
 
   class CleanRoomHandlers : public ccf::js::GovernanceDrivenJSRegistry

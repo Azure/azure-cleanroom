@@ -7,11 +7,13 @@ param
     [Parameter(Mandatory = $true)]
     [string]$storageAccountName,
 
-    [string]$storageAccountResourceGroup = "azcleanroom-public-pr-rg",
+    [string]$storageAccountResourceGroup = "azcleanroom-emu-pr-rg",
 
     [string]$subscriptionName = "AzureCleanRoom-NonProd",
 
     [string]$resourceGroupTags = "",
+
+    [string]$location = "centralindia",
 
     [Parameter(Mandatory = $true)]
     [string]$outDir
@@ -25,6 +27,8 @@ function Get-UniqueString ([string]$id, $length = 13) {
 
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
+
+. $PSScriptRoot/helpers.ps1
 
 Write-Host "Setting subscription to '$subscriptionName'..."
 az account set --subscription $subscriptionName
@@ -43,7 +47,7 @@ if ($null -ne $rgExists) {
 }
 else {
     Write-Host "Creating resource group '$resourceGroup'..."
-    az group create --location westus --name $resourceGroup --tags $resourceGroupTags
+    az group create --location $location --name $resourceGroup --tags $resourceGroupTags
 }
 
 # Check if the managed identity already exists; create only if it does not.
@@ -82,25 +86,11 @@ $storageAccount = (az storage account show `
         --resource-group $storageAccountResourceGroup) | ConvertFrom-Json
 
 # Assign Storage Blob Data Contributor on the storage account if not already assigned.
-$miRole = "Storage Blob Data Contributor"
-$miRoleAssignment = (az role assignment list `
-        --assignee-object-id $miResult.principalId `
-        --scope $storageAccount.id `
-        --role $miRole `
-        --fill-principal-name false `
-        --fill-role-definition-name false) | ConvertFrom-Json
-
-if ($miRoleAssignment.Length -eq 1) {
-    Write-Host "'$miRole' permission for MI already exists, skipping assignment."
-}
-else {
-    Write-Host "Assigning '$miRole' to managed identity '$managedIdentityName'..."
-    az role assignment create `
-        --role $miRole `
-        --scope $storageAccount.id `
-        --assignee-object-id $miResult.principalId `
-        --assignee-principal-type ServicePrincipal
-}
+Ensure-RoleAssignment `
+    -assigneeObjectId $miResult.principalId `
+    -scope $storageAccount.id `
+    -role "Storage Blob Data Contributor" `
+    -principalType "ServicePrincipal"
 
 Write-Host "Managed identity setup complete."
 

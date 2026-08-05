@@ -2,7 +2,7 @@ import * as ccfapp from "@microsoft/ccf-app";
 import { isSigningEnabled } from "./config";
 import { validateCallerAuthorized } from "../../utils/utils";
 import { ErrorResponse } from "../../utils/ErrorResponse";
-import { getSigningKey } from "./signingkey";
+import { getSigningKey } from "./signing-key";
 
 export interface SigningInfo {
   enabled: boolean;

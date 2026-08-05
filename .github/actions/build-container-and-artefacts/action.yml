@@ -62,7 +62,7 @@ runs:
       if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
       run: docker save --output ${{ inputs.name }}-${{ inputs.tag }}.tar ${{ inputs.name }}:${{ inputs.tag }}
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
       with:
         name: ${{ inputs.name }}
@@ -90,7 +90,7 @@ runs:
       if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
       run: echo "${{ inputs.name }}" >> built-containers.txt
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
       with:
         name: built-containers

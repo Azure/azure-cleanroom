@@ -1344,6 +1344,13 @@ components:
           type: boolean
         useOptimizer:
           type: boolean
+        scaleSku:
+          type: string
+          enum:
+            - small
+            - medium
+            - large
+          default: small
       title: QueryRunInput
       required:
       - runId

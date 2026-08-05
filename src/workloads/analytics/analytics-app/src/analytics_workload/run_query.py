@@ -1,12 +1,15 @@
 import asyncio
 import base64
-import concurrent.futures
 import json
 import logging
 import os
 import time
 from collections import defaultdict
 from typing import List
+
+from dependency_injector.wiring import Provide, inject
+from opentelemetry import context, trace
+from pyspark.sql import DataFrame, SparkSession, functions
 
 from analytics_contracts.audit import AuditRecordFactory, IAuditRecordLogger
 from analytics_contracts.events import IEventEmitter, OperationalEventFactory
@@ -23,12 +26,9 @@ from analytics_workload.config.query import (
     QuerySegment,
 )
 from analytics_workload.servicelocators import ServiceLocator
-from analytics_workload.utilities import dataset_loader
+from analytics_workload.utilities import dataset_loader, query_plan, spark_metrics
 from cleanroom_internal.utilities import otel_utilities
 from cleanroom_internal.utilities.otel_setup_utilities import TelemetryConfig
-from dependency_injector.wiring import Provide, inject
-from opentelemetry import context, trace
-from pyspark.sql import DataFrame, SparkSession, functions
 
 config: QueryConfiguration
 job_id: str | None = None
@@ -242,6 +242,7 @@ async def run_query(
                 row_count_written = await dataset_loader.write_dataset_async(
                     job_id, spark, output, config.datasink, event_emitter, audit_logger
                 )
+                query_plan.dump_formatted_plan(output, job_id, logger)
             end_time = time.monotonic_ns()
             duration_sec = (end_time - start_time) / 1e9
 
@@ -301,6 +302,10 @@ def main(
     )
     telemetry_config.setup_telemetry()
 
+    # py4j logs every Python<->JVM protocol frame at DEBUG; with the root
+    # logger at NOTSET these flood the OTLP->Loki pipeline
+    logging.getLogger("py4j").setLevel(logging.WARNING)
+
     # Get the tracer after telemetry setup
     tracer = trace.get_tracer("analytics-app")
 
@@ -340,18 +345,22 @@ def main(
         f"Clean Room Spark Analytics-{job_id}"
     ).getOrCreate()
 
-    asyncio.run(
-        run_query(
-            spark,
-            config,
-            query,
-            start_date,
-            end_date,
-            adapter_factory.event_emitter,
-            adapter_factory.statistics_recorder,
-            adapter_factory.audit_logger,
+    try:
+        asyncio.run(
+            run_query(
+                spark,
+                config,
+                query,
+                start_date,
+                end_date,
+                adapter_factory.event_emitter,
+                adapter_factory.statistics_recorder,
+                adapter_factory.audit_logger,
+            )
         )
-    )
+    finally:
+        spark_metrics.dump_spark_metrics(spark, job_id, logger)
+        query_plan.dump_query_plan(spark, job_id, logger)
 
 
 if __name__ == "__main__":

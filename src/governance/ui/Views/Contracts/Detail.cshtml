@@ -62,7 +62,7 @@
                     This contract is in draft state and ready to be proposed.
                 </div>
                 <a asp-controller="Contracts" asp-action="Propose" asp-route-id="@Model.Id" asp-route-version="@Model.Version"
-                    class="btn btn-primary">
+                       class="btn btn-primary">
                     <i class="fas fa-paper-plane me-1"></i>
                     Propose Contract
                 </a>
@@ -79,12 +79,12 @@
                 </div>
                 <div>
                     <a asp-controller="Contracts" asp-action="VoteAccept" asp-route-id="@Model.Id"
-                        asp-route-proposalId="@Model.ProposalId" class="btn btn-success me-2">
+                           asp-route-proposalId="@Model.ProposalId" class="btn btn-success me-2">
                         <i class="fas fa-check me-1"></i>
                         Accept
                     </a>
                     <a asp-controller="Contracts" asp-action="VoteReject" asp-route-id="@Model.Id"
-                        asp-route-proposalId="@Model.ProposalId" class="btn btn-danger">
+                           asp-route-proposalId="@Model.ProposalId" class="btn btn-danger">
                         <i class="fas fa-times me-1"></i>
                         Reject
                     </a>
@@ -101,7 +101,7 @@
                     This contract has been accepted.
                 </div>
                 <a asp-controller="Contracts" asp-action="RuntimeOptionsDetail" asp-route-id="@Model.Id"
-                    class="btn btn-primary">
+                       class="btn btn-primary">
                     <i class="fas fa-cogs me-1"></i>
                     Runtime Options
                 </a>
@@ -148,8 +148,8 @@
                                             <small class="text-muted">
                                                 Proposal ID:
                                                 <a asp-controller="Proposals" asp-action="Detail"
-                                                    asp-route-proposalId="@Model.ProposalId" asp-route-version="@Model.Version"
-                                                    class="text-decoration-none">@Model.ProposalId</a>
+                                                   asp-route-proposalId="@Model.ProposalId" asp-route-version="@Model.Version"
+                                                   class="text-decoration-none">@Model.ProposalId</a>
                                             </small>
                                         </div>
                                     }
@@ -173,27 +173,27 @@
             <div class="card-body">
                 <div class="d-grid gap-2">
                     <a asp-controller="Contracts" asp-action="PolicyDetail" asp-route-id="@Model.Id"
-                        class="btn btn-outline-primary">
+                           class="btn btn-outline-primary">
                         <i class="fas fa-shield-alt me-2"></i>
                         View Policy
                     </a>
                     <a asp-controller="Contracts" asp-action="DelegatePoliciesDetail" asp-route-id="@Model.Id"
-                        class="btn btn-outline-primary">
+                           class="btn btn-outline-primary">
                         <i class="fas fa-user-shield me-2"></i>
                         View Delegate Policies
                     </a>
                     <a asp-controller="Contracts" asp-action="DeploymentSpecDetail" asp-route-id="@Model.Id"
-                        class="btn btn-outline-primary">
+                           class="btn btn-outline-primary">
                         <i class="fas fa-rocket me-2"></i>
                         Deployment Spec
                     </a>
                     <a asp-controller="Contracts" asp-action="SecretsDetail" asp-route-id="@Model.Id"
-                        class="btn btn-outline-primary">
+                           class="btn btn-outline-primary">
                         <i class="fas fa-key me-2"></i>
                         Secrets
                     </a>
                     <a asp-controller="Contracts" asp-action="EventsDetail" asp-route-id="@Model.Id"
-                        class="btn btn-outline-primary">
+                           class="btn btn-outline-primary">
                         <i class="fas fa-history me-2"></i>
                         Events
                     </a>
@@ -211,19 +211,35 @@
             Contract Content
         </h5>
         <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copyContractContent()"
-            title="Copy content to clipboard">
+                title="Copy content to clipboard">
             <i class="fas fa-copy me-1"></i>
             Copy
         </button>
     </div>
     <div class="card-body">
         <div class="code-container">
-            <pre class="bg-light p-3 rounded" id="contractContent"><code>@Model.Data</code></pre>
+            <pre class="bg-light p-3 rounded" style="white-space: pre-wrap; max-height: 600px; overflow-y: auto;"
+                 id="contractContent"><code>@Model.Data</code></pre>
         </div>
     </div>
 </div>
 
 <script>
+    // Pretty-print contract content if it looks like JSON.
+    (function () {
+        const el = document.getElementById('contractContent');
+        if (el) {
+            const raw = el.textContent || '';
+            try {
+                const obj = JSON.parse(raw);
+                el.querySelector('code').textContent =
+                    JSON.stringify(obj, null, 2);
+            } catch (e) {
+                // Not valid JSON — leave as-is.
+            }
+        }
+    })();
+
     function copyContractContent() {
         const contentElement = document.getElementById('contractContent');
         const copyButton = document.querySelector('[onclick="copyContractContent()"]');

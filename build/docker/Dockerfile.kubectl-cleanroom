@@ -1,0 +1,41 @@
+# Stage 1: Build
+FROM mcr.microsoft.com/oss/go/microsoft/golang:1.26.4 AS build-image
+
+WORKDIR /app
+
+# Download dependencies (cached unless go.mod/go.sum change).
+COPY src/cleanroom-operator/go.mod src/cleanroom-operator/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+# Copy helm charts first (embedded via //go:embed, changes less often than Go code).
+COPY src/cleanroom-operator/helm/ ./helm/
+
+# Copy Go source last (changes more often than helm charts).
+COPY src/cleanroom-operator/api/ ./api/
+COPY src/cleanroom-operator/client/ ./client/
+COPY src/cleanroom-operator/internal/ ./internal/
+COPY src/cleanroom-operator/kubectl-plugin/ ./kubectl-plugin/
+
+# Build kubectl plugin binary with build and module caches.
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=1 GOOS=linux go build -o /app/kubectl-cleanroom ./kubectl-plugin
+
+# Dist stage: export just the binary for OCI artifact distribution.
+FROM scratch AS dist
+COPY --from=build-image /app/kubectl-cleanroom ./
+
+# Stage 2: Final image
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:24.04
+
+RUN apt-get -y update && \
+    DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install \
+    ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=build-image --chmod=755 /app/kubectl-cleanroom /kubectl-cleanroom
+
+USER 65532:65532
+
+ENTRYPOINT ["/kubectl-cleanroom"]

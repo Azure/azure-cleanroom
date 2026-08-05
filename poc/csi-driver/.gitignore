@@ -1,0 +1,5 @@
+# Compiled binary
+csi-driver
+
+# Generated deployment manifests
+deploy/onebox/daemonset-generated.yaml

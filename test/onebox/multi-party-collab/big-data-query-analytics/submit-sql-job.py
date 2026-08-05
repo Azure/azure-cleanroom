@@ -42,6 +42,10 @@ ANALYTICS_ENDPOINT_READY_TIMEOUT_SECONDS = 60
 MAX_RETRIES = 3
 RETRY_DELAY_SECONDS = 5
 RUN_HISTORY_MIN_EXPECTED_RUNS = 2
+SPARK_APPLICATION_NAMESPACE = "analytics"
+SPARK_APPLICATION_API_RESOURCE = "sparkapplications.sparkoperator.k8s.io"
+SPARK_APPLICATION_LOOKUP_TIMEOUT_SECONDS = 60
+SPARK_APPLICATION_LOOKUP_INTERVAL_SECONDS = 5
 
 # Global variable to track kubectl proxy process
 _kubectl_proxy_process: Optional[subprocess.Popen] = None
@@ -97,15 +101,15 @@ def print_kubectl_proxy_log() -> None:
     """Print the kubectl proxy log file contents."""
     log_file_path = Path("kubectl-proxy.log")
     if log_file_path.exists():
-        print(f"\n{Colors.CYAN}{'='*80}{Colors.RESET}")
+        print(f"\n{Colors.CYAN}{'=' * 80}{Colors.RESET}")
         print(f"{Colors.CYAN}kubectl proxy log contents:{Colors.RESET}")
-        print(f"{Colors.CYAN}{'='*80}{Colors.RESET}")
+        print(f"{Colors.CYAN}{'=' * 80}{Colors.RESET}")
         try:
             with open(log_file_path, "r") as f:
                 print(f.read())
         except Exception as e:
             print(f"{Colors.RED}Error reading log file: {e}{Colors.RESET}")
-        print(f"{Colors.CYAN}{'='*80}{Colors.RESET}\n")
+        print(f"{Colors.CYAN}{'=' * 80}{Colors.RESET}\n")
     else:
         print(f"{Colors.YELLOW}kubectl proxy log file not found{Colors.RESET}")
 
@@ -611,6 +615,45 @@ def validate_run_history_response(
     return errors
 
 
+def get_persisted_job_events(
+    job_id: str,
+    cgs_client: str,
+    frontend_endpoint: Optional[str] = None,
+    collaboration_id: Optional[str] = None,
+    analytics_endpoint: Optional[str] = None,
+) -> list:
+    """Fetch the persisted operational events for a job via the status endpoint.
+
+    These events are served from the JobEventRecord CRD, so they remain
+    retrievable after the underlying Kubernetes core events are
+    garbage-collected.
+    """
+    token = get_access_token(cgs_client)
+    if frontend_endpoint and collaboration_id:
+        url = frontend_url(
+            f"{frontend_endpoint}/collaborations/{collaboration_id}/analytics/runs/{job_id}"
+        )
+        headers = build_api_headers(token, use_frontend=True)
+    elif analytics_endpoint:
+        url = f"{analytics_endpoint}/status/{job_id}"
+        headers = build_api_headers(token, use_frontend=False)
+    else:
+        raise ValueError(
+            "Either frontend_endpoint with collaboration_id, or analytics_endpoint "
+            "must be provided to fetch persisted job events"
+        )
+
+    response = requests.get(url, headers=headers, verify=False)
+    response.raise_for_status()
+    return response.json().get("events", [])
+
+
+# Representative operational/statistics event reasons that must be present (and
+# thus persisted / still served) for a seeded run of each query.
+_PERSISTED_SUCCESS_EVENT_REASONS = ["QUERY_EXECUTION_COMPLETED", "QUERY_STATISTICS"]
+_PERSISTED_FAILURE_EVENT_REASONS = ["QUERY_EXECUTION_FAILED"]
+
+
 def submit_sql_job(
     query_document_id: str,
     start_date: Optional[str] = None,
@@ -620,7 +663,8 @@ def submit_sql_job(
     frontend_endpoint: Optional[str] = None,
     collaboration_id: Optional[str] = None,
     cgs_client: Optional[str] = None,
-) -> Optional[str]:
+    scale_sku: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Execute a SQL job and wait for completion.
 
@@ -633,6 +677,7 @@ def submit_sql_job(
         expect_failure: Whether the job is expected to fail
         dry_run: Whether to perform a dry run (returns SKU settings without execution)
         use_optimizer: Whether to use AI optimizer for Spark configuration
+        scale_sku: Optional Spark scale SKU (small, medium, or large)
     """
     run_id = str(uuid.uuid4())[:8]
 
@@ -653,6 +698,8 @@ def submit_sql_job(
             request_body["dryRun"] = dry_run
         if use_optimizer:
             request_body["useOptimizer"] = use_optimizer
+        if scale_sku:
+            request_body["scaleSku"] = scale_sku
 
         url = frontend_url(
             f"{frontend_endpoint}/collaborations/{collaboration_id}/analytics/queries/{query_document_id}/run"
@@ -674,6 +721,8 @@ def submit_sql_job(
             query_params["dryRun"] = dry_run
         if use_optimizer:
             query_params["useOptimizer"] = use_optimizer
+        if scale_sku:
+            query_params["scaleSku"] = scale_sku
 
         query_params_json = json.dumps(query_params)
         result = run_command(
@@ -691,11 +740,100 @@ def submit_sql_job(
         )
 
         submission_result = json.loads(result.stdout)
-    if dry_run:
-        print(f"Dry run completed for {query_document_id}. SKU settings returned.")
-        print(json.dumps(submission_result, indent=2))
 
-    return submission_result["id"]
+    return submission_result
+
+
+def get_scale_sku_settings(submission_result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract effective scale settings from a product submission response."""
+    try:
+        sku_settings = submission_result["skuSettings"]
+        return {
+            "driver_memory": sku_settings["driver"]["memory"],
+            "executor_memory": sku_settings["executor"]["memory"],
+            "max_executors": sku_settings["executor"]["instances"]["max"],
+        }
+    except KeyError as e:
+        raise ValueError(
+            f"Submission response is missing expected SKU settings field: {e}"
+        ) from e
+
+
+def validate_scale_sku_applied(
+    job_id: str,
+    kube_config: str,
+    scale_sku: str,
+    expected: Dict[str, Any],
+) -> None:
+    """Validate that the submitted SparkApplication spec reflects scaleSku."""
+    normalized_sku = scale_sku.lower()
+    deadline = time.time() + SPARK_APPLICATION_LOOKUP_TIMEOUT_SECONDS
+    last_error = None
+
+    print(
+        f"{get_timestamp()} Validating scaleSku '{normalized_sku}' "
+        f"on SparkApplication '{job_id}'..."
+    )
+
+    while time.time() < deadline:
+        try:
+            result = subprocess.run(
+                [
+                    "kubectl",
+                    "get",
+                    SPARK_APPLICATION_API_RESOURCE,
+                    job_id,
+                    "-n",
+                    SPARK_APPLICATION_NAMESPACE,
+                    "--kubeconfig",
+                    kube_config,
+                    "-o",
+                    "json",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                last_error = result.stderr.strip() or result.stdout.strip()
+                time.sleep(SPARK_APPLICATION_LOOKUP_INTERVAL_SECONDS)
+                continue
+
+            spark_app = json.loads(result.stdout)
+            spec = spark_app["spec"]
+            actual = {
+                "driver_memory": spec["driver"]["memory"],
+                "executor_memory": spec["executor"]["memory"],
+                "max_executors": spec["dynamicAllocation"]["maxExecutors"],
+            }
+
+            mismatches = [
+                f"{key}: expected {expected[key]}, got {actual[key]}"
+                for key in expected
+                if actual[key] != expected[key]
+            ]
+            if mismatches:
+                raise RuntimeError(
+                    f"scaleSku '{normalized_sku}' was not applied to {job_id}: "
+                    + "; ".join(mismatches)
+                )
+
+            print(
+                f"{Colors.GREEN}scaleSku '{normalized_sku}' validated: "
+                f"driver={actual['driver_memory']}, "
+                f"executor={actual['executor_memory']}, "
+                f"maxExecutors={actual['max_executors']}{Colors.RESET}"
+            )
+            return
+        except (json.JSONDecodeError, KeyError) as e:
+            last_error = e
+
+        time.sleep(SPARK_APPLICATION_LOOKUP_INTERVAL_SECONDS)
+
+    raise TimeoutError(
+        f"Timed out waiting to validate scaleSku '{normalized_sku}' on "
+        f"SparkApplication '{job_id}'. Last error: {last_error}"
+    )
 
 
 def wait_for_job_completion(
@@ -1006,6 +1144,7 @@ def execute_sql_test_parallel(
     frontend_endpoint: Optional[str] = None,
     collaboration_id: Optional[str] = None,
     cgs_client: Optional[str] = None,
+    scale_sku: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Execute a single SQL test (used for parallel execution).
@@ -1025,28 +1164,29 @@ def execute_sql_test_parallel(
     start_time = time.time()
     try:
         print(f"[{test_name}] Starting execution...")
-        if frontend_endpoint:
-            job_id = submit_sql_job(
-                query_document_id=query_document_id,
-                start_date=start_date,
-                end_date=end_date,
-                dry_run=dry_run,
-                use_optimizer=use_optimizer,
-                frontend_endpoint=frontend_endpoint,
-                collaboration_id=collaboration_id,
-                cgs_client=cgs_client,
-            )
-        else:
-            job_id = submit_sql_job(
-                query_document_id=query_document_id,
-                start_date=start_date,
-                end_date=end_date,
-                dry_run=dry_run,
-                use_optimizer=use_optimizer,
-            )
+        submission_args = {
+            "query_document_id": query_document_id,
+            "start_date": start_date,
+            "end_date": end_date,
+            "use_optimizer": use_optimizer,
+            "frontend_endpoint": frontend_endpoint,
+            "collaboration_id": collaboration_id,
+            "cgs_client": cgs_client,
+            "scale_sku": scale_sku,
+        }
+
+        submission_result = submit_sql_job(**submission_args, dry_run=dry_run)
+        job_id = submission_result["id"]
 
         result["job_id"] = job_id
         if not dry_run:
+            expected_scale_settings = get_scale_sku_settings(submission_result)
+            validate_scale_sku_applied(
+                job_id=job_id,
+                kube_config=kube_config,
+                scale_sku=scale_sku or "small",
+                expected=expected_scale_settings,
+            )
             if frontend_endpoint:
                 wait_for_job_completion(
                     job_id=job_id,
@@ -1157,6 +1297,81 @@ def run_history_validation_test(
     print(f"\n{Colors.GREEN}✅ Job Run history validation passed!{Colors.RESET}")
 
 
+def job_events_validation_test(
+    successful_job_ids: list[str],
+    failing_job_ids: list[str],
+    cgs_client: str,
+    frontend_endpoint: str,
+    collaboration_id: str,
+    analytics_endpoint: str,
+) -> None:
+    """Validate that operational events persist (via the JobEventRecord CRD)
+    for prior runs, not just the most recent one.
+
+    The JobEventRecord CRD exists so a job's operational/statistics events
+    survive the ~1h Kubernetes core-event garbage collection. This test
+    re-fetches the events for a seeded run of each query and asserts the status
+    endpoint still serves them, proving they are read back from the CRD rather
+    than from live (and now stale) Kubernetes events.
+
+    Args:
+        successful_job_ids: Job ids of seeded successful runs.
+        failing_job_ids: Job ids of seeded failing runs.
+        cgs_client: The CGS client name.
+        frontend_endpoint: The frontend endpoint URL.
+        collaboration_id: The collaboration ID.
+        analytics_endpoint: The analytics endpoint URL.
+    """
+    print("\n=== Job Events Persistence Validation Test ===")
+
+    validation_targets = [
+        (successful_job_ids, _PERSISTED_SUCCESS_EVENT_REASONS, "successful"),
+        (failing_job_ids, _PERSISTED_FAILURE_EVENT_REASONS, "failing"),
+    ]
+
+    all_errors = []
+    for job_ids, expected_reasons, label in validation_targets:
+        if not job_ids:
+            all_errors.append(f"No seeded {label} runs available for events validation")
+            continue
+
+        # Any one seeded run is enough - runs are short-lived, so we only need to
+        # confirm a run's events are persisted and served back.
+        job_id = job_ids[0]
+        print(
+            f"\n{Colors.CYAN}Validating persisted events for {label} run "
+            f"{job_id}...{Colors.RESET}"
+        )
+        events = get_persisted_job_events(
+            job_id=job_id,
+            cgs_client=cgs_client,
+            frontend_endpoint=frontend_endpoint,
+            collaboration_id=collaboration_id,
+            analytics_endpoint=analytics_endpoint,
+        )
+        print(format_operational_events(events))
+        if not events:
+            all_errors.append(
+                f"[{job_id}] No persisted events returned for {label} run"
+            )
+            continue
+        reasons = {e.get("reason") for e in events}
+        for expected_reason in expected_reasons:
+            if expected_reason not in reasons:
+                all_errors.append(
+                    f"[{job_id}] Expected persisted event '{expected_reason}' for "
+                    f"{label} run, but it was not found"
+                )
+
+    if all_errors:
+        print(f"\n{Colors.RED}Job events persistence validation failed:{Colors.RESET}")
+        for error in all_errors:
+            print(f"{Colors.RED}  - {error}{Colors.RESET}")
+        sys.exit(1)
+
+    print(f"\n{Colors.GREEN}✅ Job events persistence validation passed!{Colors.RESET}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Submit and monitor SQL jobs for cleanroom analytics"
@@ -1201,6 +1416,12 @@ def main():
         default=["csv"],
         help="Data formats to test (default: csv only)",
     )
+    parser.add_argument(
+        "--scale-sku",
+        choices=["small", "medium", "large"],
+        default="small",
+        help="Spark scale SKU to use for submitted SQL jobs (default: small)",
+    )
     args = parser.parse_args()
 
     # Define all available tests
@@ -1215,6 +1436,7 @@ def main():
         "s3-kmin-query-with-dates",
         "low-kmin-query",
         "run-history-validation",
+        "job-events-validation",
     ]
 
     # Handle --list option
@@ -1257,6 +1479,7 @@ def main():
     consumer_output_s3_bucket_name = job_config["consumerOutputS3BucketName"]
     frontend_endpoint = job_config["frontendEndpoint"]
     collaboration_id = job_config["collaborationId"]
+    infra_type = job_config["infraType"]
     os.environ["CLEANROOM_COLLABORATION_CONFIG_FILE"] = job_config[
         "collaborationConfigFile"
     ]
@@ -1524,8 +1747,6 @@ def main():
             "start_date": None,
             "end_date": None,
             "expect_failure": False,
-            "dry_run": args.dry_run,
-            "use_optimizer": args.use_optimizer,
             "expected_events": {
                 "operational": {
                     "DATASET_LOAD_STARTED": 2,
@@ -1545,6 +1766,7 @@ def main():
             },
             "dry_run": args.dry_run,
             "use_optimizer": args.use_optimizer,
+            "scale_sku": args.scale_sku,
         }
         for format_name in args.formats
     ]
@@ -1583,6 +1805,7 @@ def main():
             },
             "dry_run": args.dry_run,
             "use_optimizer": args.use_optimizer,
+            "scale_sku": args.scale_sku,
         }
         for format_name in args.formats
     ]
@@ -1622,6 +1845,10 @@ def main():
             },
             "dry_run": args.dry_run,
             "use_optimizer": args.use_optimizer,
+            # AKS nodes have enough memory for a medium executor. Virtual Kind
+            # workers share the CI host's memory, and the executor must fit on
+            # one worker, so use small there to avoid an unschedulable pod.
+            "scale_sku": "medium" if infra_type == "aks" else "small",
         }
     ]
 
@@ -1649,6 +1876,7 @@ def main():
             },
             "dry_run": args.dry_run,
             "use_optimizer": args.use_optimizer,
+            "scale_sku": args.scale_sku,
         }
     ]
 
@@ -1684,6 +1912,7 @@ def main():
                     kube_config=kube_config,
                     start_date=test_case["start_date"],
                     end_date=test_case["end_date"],
+                    scale_sku=test_case["scale_sku"],
                     expect_failure=test_case["expect_failure"],
                     expected_events=test_case.get("expected_events"),
                     validate_output=test_case.get("validate_output"),
@@ -1710,6 +1939,7 @@ def main():
                 kube_config=kube_config,
                 start_date=test_case["start_date"],
                 end_date=test_case["end_date"],
+                scale_sku=test_case["scale_sku"],
                 expect_failure=test_case["expect_failure"],
                 expected_events=test_case.get("expected_events"),
                 validate_output=test_case.get("validate_output"),
@@ -1746,30 +1976,51 @@ def main():
             f"\n{Colors.GREEN}✅ All {len(results)} tests passed successfully!{Colors.RESET}"
         )
 
-    # Run history validation test.
-    if "run-history-validation" in selected_tests:
-        print("\n=== Preparing Runs for Run History Validation ===")
-        run_history_seed_cases = [
+    # Run history (JobRecord CRD) and job events (JobEventRecord CRD) validation
+    # tests. Both need multiple seeded runs of the same successful/failing
+    # queries, so seed once and share the resulting job ids.
+    run_history_selected = "run-history-validation" in selected_tests
+    job_events_selected = "job-events-validation" in selected_tests
+    if run_history_selected or job_events_selected:
+        print("\n=== Preparing Runs for Run History / Job Events Validation ===")
+        seed_cases = [
             {
-                "name": "Run History Seed - Successful (CSV Standard)",
+                "name": "Seed - Successful (CSV Standard)",
                 "query_document_id": queries["csv_standard"],
                 "expect_failure": False,
             },
             {
-                "name": "Run History Seed - Failing (CSV Low Kmin)",
+                "name": "Seed - Failing (CSV Low Kmin)",
                 "query_document_id": queries["csv_lowkmin"],
                 "expect_failure": True,
             },
         ]
 
+        # Job ids per query, oldest first, used to prove that runs/events
+        # persist for prior (non-latest) runs.
+        successful_job_ids: list[str] = []
+        failing_job_ids: list[str] = []
+
+        def _record_seed(seed_result: Dict[str, Any]) -> None:
+            if not seed_result["success"]:
+                print(
+                    f"{Colors.RED}Seed execution failed: {seed_result['error']}{Colors.RESET}"
+                )
+                sys.exit(1)
+            job_id = seed_result.get("job_id")
+            if not job_id:
+                return
+            if seed_result["query_document_id"] == queries["csv_lowkmin"]:
+                failing_job_ids.append(job_id)
+            else:
+                successful_job_ids.append(job_id)
+
         for run_number in range(1, RUN_HISTORY_MIN_EXPECTED_RUNS + 1):
             print(
-                f"\nExecuting run-history seed pass {run_number}/{RUN_HISTORY_MIN_EXPECTED_RUNS}..."
+                f"\nExecuting seed pass {run_number}/{RUN_HISTORY_MIN_EXPECTED_RUNS}..."
             )
             if args.parallel:
-                with ThreadPoolExecutor(
-                    max_workers=len(run_history_seed_cases)
-                ) as executor:
+                with ThreadPoolExecutor(max_workers=len(seed_cases)) as executor:
                     futures = [
                         executor.submit(
                             execute_sql_test_parallel,
@@ -1786,47 +2037,52 @@ def main():
                             frontend_endpoint=frontend_endpoint,
                             collaboration_id=collaboration_id,
                             cgs_client=consumer_cgs_client,
+                            scale_sku=args.scale_sku,
                         )
-                        for seed_case in run_history_seed_cases
+                        for seed_case in seed_cases
                     ]
                     for future in as_completed(futures):
-                        seed_result = future.result()
-                        if not seed_result["success"]:
-                            print(
-                                f"{Colors.RED}Run-history seed execution failed: {seed_result['error']}{Colors.RESET}"
-                            )
-                            sys.exit(1)
+                        _record_seed(future.result())
             else:
-                for seed_case in run_history_seed_cases:
-                    seed_result = execute_sql_test_parallel(
-                        test_name=(
-                            f"{seed_case['name']} "
-                            f"[run {run_number}/{RUN_HISTORY_MIN_EXPECTED_RUNS}]"
-                        ),
-                        query_document_id=seed_case["query_document_id"],
-                        contract_id=contract_id,
-                        kube_config=kube_config,
-                        expect_failure=seed_case["expect_failure"],
-                        dry_run=args.dry_run,
-                        use_optimizer=args.use_optimizer,
-                        frontend_endpoint=frontend_endpoint,
-                        collaboration_id=collaboration_id,
-                        cgs_client=consumer_cgs_client,
-                    )
-                    if not seed_result["success"]:
-                        print(
-                            f"{Colors.RED}Run-history seed execution failed: {seed_result['error']}{Colors.RESET}"
+                for seed_case in seed_cases:
+                    _record_seed(
+                        execute_sql_test_parallel(
+                            test_name=(
+                                f"{seed_case['name']} "
+                                f"[run {run_number}/{RUN_HISTORY_MIN_EXPECTED_RUNS}]"
+                            ),
+                            query_document_id=seed_case["query_document_id"],
+                            contract_id=contract_id,
+                            kube_config=kube_config,
+                            expect_failure=seed_case["expect_failure"],
+                            dry_run=args.dry_run,
+                            use_optimizer=args.use_optimizer,
+                            frontend_endpoint=frontend_endpoint,
+                            collaboration_id=collaboration_id,
+                            cgs_client=consumer_cgs_client,
+                            scale_sku=args.scale_sku,
                         )
-                        sys.exit(1)
+                    )
 
-        run_history_validation_test(
-            successful_query_id=queries["csv_standard"],
-            failing_query_id=queries["csv_lowkmin"],
-            cgs_client=consumer_cgs_client,
-            frontend_endpoint=frontend_endpoint,
-            collaboration_id=collaboration_id,
-            analytics_endpoint=analytics_endpoint,
-        )
+        if run_history_selected:
+            run_history_validation_test(
+                successful_query_id=queries["csv_standard"],
+                failing_query_id=queries["csv_lowkmin"],
+                cgs_client=consumer_cgs_client,
+                frontend_endpoint=frontend_endpoint,
+                collaboration_id=collaboration_id,
+                analytics_endpoint=analytics_endpoint,
+            )
+
+        if job_events_selected:
+            job_events_validation_test(
+                successful_job_ids=successful_job_ids,
+                failing_job_ids=failing_job_ids,
+                cgs_client=consumer_cgs_client,
+                frontend_endpoint=frontend_endpoint,
+                collaboration_id=collaboration_id,
+                analytics_endpoint=analytics_endpoint,
+            )
 
 
 if __name__ == "__main__":

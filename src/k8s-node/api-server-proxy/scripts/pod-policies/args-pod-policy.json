@@ -1,0 +1,10 @@
+[
+    {
+        "name": "app",
+        "properties": {
+            "image": "busybox:latest",
+            "command": ["/bin/myapp"],
+            "args": ["--config=/etc/app.conf", "--verbose"]
+        }
+    }
+]

@@ -11,9 +11,12 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"math/big"
 	"sort"
@@ -41,9 +44,11 @@ type EvidenceInput struct {
 
 // VerifyResult holds the outcome of all verification checks.
 type VerifyResult struct {
-	Verified      bool            `json:"verified"` // true iff every check passed
+	Verified      bool            `json:"verified"`              // true iff every check passed
 	Checks        []NamedCheck    `json:"checks"`
 	RuntimeClaims json.RawMessage `json:"runtimeClaims,omitempty"` // parsed runtime claims from HCL report (only on success)
+	GPUClaims     *GPUClaims      `json:"gpuClaims,omitempty"`
+	ReportData    string          `json:"reportData,omitempty"`    // base64-encoded report data payload extracted from validated user data document
 }
 
 // NamedCheck pairs a check identifier with its result, preserving insertion order.
@@ -143,8 +148,8 @@ func VerifyAll(input *EvidenceInput) *VerifyResult {
 	}
 
 	// Verify ARK matches well-known AMD root.
-	if err := verifyARKMatchesWellKnown(ark, input.AMDProduct); err != nil {
-		result.addCheck("arkRootTrust", CheckResult{Passed: false, Error: err.Error()})
+	if arkErr := verifyARKMatchesWellKnown(ark, input.AMDProduct); arkErr != nil {
+		result.addCheck("arkRootTrust", CheckResult{Passed: false, Error: arkErr.Error()})
 	} else {
 		result.addCheck("arkRootTrust", CheckResult{
 			Passed: true,
@@ -171,7 +176,27 @@ func VerifyAll(input *EvidenceInput) *VerifyResult {
 		})
 	}
 
-	// ── 3. Parse TPM quote ───────────────────────────────────────────────
+	// ── 3. Verify AIK certificate matches HCLAkPub when present ──────────
+	if akPubKey == nil {
+		result.addCheck("aikCertBinding", CheckResult{
+			Passed: false,
+			Error:  "skipped: HCLAkPub not available",
+		})
+	} else if len(input.AIKCert) == 0 {
+		result.addCheck("aikCertBinding", CheckResult{
+			Passed: true,
+			Detail: "AIK certificate not provided; quote verification relies on HCLAkPub",
+		})
+	} else if bindingErr := verifyAIKCertBinding(input.AIKCert, akPubKey); bindingErr != nil {
+		result.addCheck("aikCertBinding", CheckResult{Passed: false, Error: bindingErr.Error()})
+	} else {
+		result.addCheck("aikCertBinding", CheckResult{
+			Passed: true,
+			Detail: "AIK certificate public key matches HCLAkPub",
+		})
+	}
+
+	// ── 4. Parse TPM quote ───────────────────────────────────────────────
 	attestRaw, info, rsaSig, err := parseTPMQuote(input.TPMQuote)
 	if err != nil {
 		result.addCheck("quoteFormat", CheckResult{Passed: false, Error: err.Error()})
@@ -180,7 +205,7 @@ func VerifyAll(input *EvidenceInput) *VerifyResult {
 	}
 	result.addCheck("quoteFormat", CheckResult{Passed: true, Detail: "TPM quote parsed successfully"})
 
-	// ── 4. Verify TPM quote signature ────────────────────────────────────
+	// ── 5. Verify TPM quote signature ────────────────────────────────────
 	if akPubKey != nil && attestRaw != nil {
 		if err := verifyQuoteSignature(attestRaw, rsaSig, akPubKey); err != nil {
 			result.addCheck("tpmQuoteSignature", CheckResult{Passed: false, Error: err.Error()})
@@ -191,7 +216,7 @@ func VerifyAll(input *EvidenceInput) *VerifyResult {
 		result.addCheck("tpmQuoteSignature", CheckResult{Passed: false, Error: "skipped: AK public key not available"})
 	}
 
-	// ── 5. Verify nonce ──────────────────────────────────────────────────
+	// ── 6. Verify nonce ──────────────────────────────────────────────────
 	if bytes.Equal(info.Nonce, input.Nonce) {
 		result.addCheck("nonce", CheckResult{Passed: true, Detail: "nonce matches expected value"})
 	} else {
@@ -201,7 +226,7 @@ func VerifyAll(input *EvidenceInput) *VerifyResult {
 		})
 	}
 
-	// ── 6. Verify PCR digest ─────────────────────────────────────────────
+	// ── 7. Verify PCR digest ─────────────────────────────────────────────
 	if err := verifyPCRDigest(input.PCRValues, info.PCRDigest); err != nil {
 		result.addCheck("pcrDigest", CheckResult{Passed: false, Error: err.Error()})
 	} else {
@@ -211,7 +236,7 @@ func VerifyAll(input *EvidenceInput) *VerifyResult {
 		})
 	}
 
-	// ── 7. Verify report_data binding (VarData hash) ─────────────────────
+	// ── 8. Verify report_data binding (VarData hash) ─────────────────────
 	if err := verifyReportDataBinding(input.HCLReport, input.SNPReport); err != nil {
 		result.addCheck("reportDataBinding", CheckResult{Passed: false, Error: err.Error()})
 	} else {
@@ -221,7 +246,7 @@ func VerifyAll(input *EvidenceInput) *VerifyResult {
 		})
 	}
 
-	// ── 8. Verify SNP report (cert chain + ECDSA signature) ─────────────
+	// ── 9. Verify SNP report (cert chain + ECDSA signature) ─────────────
 	snpResults := VerifySNPReport(input.SNPReport, vcek, ask, ark)
 	result.Checks = append(result.Checks, snpResults...)
 
@@ -373,6 +398,82 @@ func verifyQuoteSignature(attestBytes, rsaSig []byte, pubKey *rsa.PublicKey) err
 	return rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, hash[:], rsaSig)
 }
 
+// verifyAIKCertBinding checks that the optional AIK certificate carries the
+// same RSA public key as HCLAkPub from the runtime claims.
+func verifyAIKCertBinding(aikCertDER []byte, expectedAKPub *rsa.PublicKey) error {
+	certs, err := parseAIKCertificates(aikCertDER)
+	if err != nil {
+		return fmt.Errorf("parse AIK certificate: %w", err)
+	}
+
+	for _, cert := range certs {
+		certAKPub, ok := cert.PublicKey.(*rsa.PublicKey)
+		if !ok {
+			continue
+		}
+
+		if certAKPub.E == expectedAKPub.E && certAKPub.N.Cmp(expectedAKPub.N) == 0 {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("no AIK certificate public key matches HCLAkPub")
+}
+
+func parseAIKCertificates(aikCert []byte) ([]*x509.Certificate, error) {
+	trimmed := bytes.TrimRight(aikCert, "\x00")
+	if len(trimmed) == 0 {
+		return nil, fmt.Errorf("AIK certificate is empty")
+	}
+
+	// Try PEM first.
+	var certs []*x509.Certificate
+	rest := trimmed
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+
+		certs = append(certs, cert)
+	}
+
+	if len(certs) > 0 {
+		return certs, nil
+	}
+
+	// DER fallback: the TPM NV region is a fixed-size buffer, so the DER
+	// certificate is followed by unrelated trailing bytes. Parse one cert
+	// at a time using asn1.Unmarshal to find the exact boundary.
+	data := trimmed
+	for len(data) > 0 {
+		var raw asn1.RawValue
+		rest, err := asn1.Unmarshal(data, &raw)
+		if err != nil {
+			break
+		}
+		certBytes := data[:len(data)-len(rest)]
+		cert, err := x509.ParseCertificate(certBytes)
+		if err != nil {
+			break
+		}
+		certs = append(certs, cert)
+		data = rest
+	}
+
+	if len(certs) == 0 {
+		return nil, fmt.Errorf("no AIK certificates found in %d bytes", len(trimmed))
+	}
+
+	return certs, nil
+}
+
 // verifyPCRDigest checks that SHA256(PCR0 ‖ PCR1 ‖ … ‖ PCRn) equals the
 // expected digest from the quote.  PCR values are concatenated in ascending
 // index order.
@@ -399,7 +500,7 @@ func verifyPCRDigest(pcrValues map[int][]byte, expectedDigest []byte) error {
 // snpReport.report_data[0:32].  The HCL firmware hashes only the claims JSON
 // (after the 20-byte runtime data header), not the entire variable data region.
 func verifyReportDataBinding(hclReport, snpReport []byte) error {
-	if len(snpReport) < snpReportDataOffset+snpReportDataSize {
+	if len(snpReport) < hcl.SNPReportDataOffset+hcl.SNPReportDataSize {
 		return fmt.Errorf("SNP report too small: %d bytes", len(snpReport))
 	}
 
@@ -409,7 +510,7 @@ func verifyReportDataBinding(hclReport, snpReport []byte) error {
 	}
 
 	claimsHash := sha256.Sum256(claimsJSON)
-	reportData := snpReport[snpReportDataOffset : snpReportDataOffset+32]
+	reportData := snpReport[hcl.SNPReportDataOffset : hcl.SNPReportDataOffset+32]
 
 	if !bytes.Equal(claimsHash[:], reportData) {
 		return fmt.Errorf("VarData hash mismatch: SHA256(claims)=%x, report_data[0:32]=%x",

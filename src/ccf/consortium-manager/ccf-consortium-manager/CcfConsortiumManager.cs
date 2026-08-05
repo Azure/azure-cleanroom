@@ -176,7 +176,8 @@ public class CcfConsortiumManager
         JsonObject ccfProviderConfig,
         WorkloadType workloadType,
         string contractId,
-        string policyCreationOption)
+        string policyCreationOption,
+        bool telemetryCollectionEnabled)
     {
         IWorkload workload = this.workloadFactory.GetWorkload(workloadType);
         ConsortiumManagerMember consortiumManagerMember =
@@ -231,7 +232,8 @@ public class CcfConsortiumManager
         (JsonObject deploymentSpec, JsonObject cleanRoomPolicy) =
             await workload.GenerateDeploymentSpec(
                 contractData,
-                policyCreationOption);
+                policyCreationOption,
+                telemetryCollectionEnabled);
         await govClient.ProvisionDeploymentSpec(contractId, deploymentSpec, cleanRoomPolicy);
 
         // Propose contract signing keys (after enabling CA).

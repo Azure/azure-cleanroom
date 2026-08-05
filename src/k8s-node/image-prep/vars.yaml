@@ -1,0 +1,25 @@
+# Default variable values for rendering the Flex Node image-prep templates.
+# Override any value by passing a custom vars file to render.py:
+#   image-prep-render --vars my-vars.yaml --output ./out
+
+aks_flex_node_version: "v0.0.19"
+
+install_nvidia_gpu_drivers: true
+
+nvidia_driver_version: "580"
+nvidia_driver_branch: "server-open"
+
+api_server_proxy_oci_url: "hprabhacr2.azurecr.io/k8s-node/api-server-proxy:latest"
+api_server_proxy_install_path: "/opt/api-server-proxy"
+
+kubelet_proxy_oci_url: "hprabhacr2.azurecr.io/k8s-node/kubelet-proxy:latest"
+kubelet_proxy_install_path: "/opt/kubelet-proxy"
+
+oras_version: "1.2.2"
+
+cleanroom_boot_config_dir: "/etc/cleanroom-boot"
+
+image_version: "0.0.0-dev"
+
+cleanroom_boot_oci_url: "hprabhacr2.azurecr.io/k8s-node/cleanroom-boot:latest"
+cleanroom_boot_install_path: "/opt/cleanroom-boot"

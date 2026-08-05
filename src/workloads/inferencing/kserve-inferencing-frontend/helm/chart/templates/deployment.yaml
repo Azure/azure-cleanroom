@@ -193,8 +193,8 @@ spec:
               value: {{ .Values.settings.cleanroom.versionsDocument | quote }}
             - name: CLEANROOM_CVM_MEASUREMENTS_DOCUMENT_URL
               value: {{ .Values.settings.cleanroom.cvmMeasurementsDocument | quote }}
-            - name: CLEANROOM_RUNTIME_DIGESTS_DOCUMENT_URL
-              value: {{ .Values.settings.cleanroom.runtimeDigestsDocument | quote }}
+            - name: CLEANROOM_INFERENCING_DIGESTS_DOCUMENT_URL
+              value: {{ .Values.settings.cleanroom.inferencingDigestsDocument | quote }}
             {{- if .Values.env.insecureVirtualEnv }}
             - name: INSECURE_VIRTUAL_ENVIRONMENT
               value: "true"

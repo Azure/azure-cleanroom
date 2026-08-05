@@ -1,7 +1,6 @@
 from azure.cli.core.util import CLIError
 from cleanroom_common.azure_cleanroom_core.exceptions.exception import (
     CleanroomSpecificationError,
-    ErrorCode,
 )
 from cleanroom_common.azure_cleanroom_core.models.cleanroom import *
 from knack.log import get_logger
@@ -15,6 +14,8 @@ def get_deployment_template_internal(
     ccf_endpoint: str,
     sslServerCertBase64: str,
     generate_mode: str,
+    use_csi_driver: bool = False,
+    use_blobfuse_proxy_sidecar: bool = False,
 ):
     from cleanroom_common.azure_cleanroom_core.utilities.helpers import (
         get_deployment_template,
@@ -28,6 +29,8 @@ def get_deployment_template_internal(
             sslServerCertBase64,
             generate_mode,
             logger,
+            use_csi_driver=use_csi_driver,
+            use_blobfuse_proxy_sidecar=use_blobfuse_proxy_sidecar,
         )
     except CleanroomSpecificationError as e:
         raise CLIError(f"Error generating deployment template: {e}")

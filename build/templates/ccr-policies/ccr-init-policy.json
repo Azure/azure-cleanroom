@@ -9,8 +9,7 @@
       }
     ],
     "command": [
-      "python",
-      "setup-iptables.py",
+      "setup_iptables",
       "--clear-mount-paths",
       "$volumeStatusMountPath",
       "--create-directories",

@@ -136,6 +136,7 @@ settings:
   applications:
     analytics:
       namespace: analytics
+      timeToLiveSeconds: 259200
       allowAll: False
       debugMode: False
       sql:

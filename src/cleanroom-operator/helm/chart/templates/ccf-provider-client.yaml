@@ -1,0 +1,123 @@
+{{- if .Values.ccfProviderClient.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ccf-provider-client
+  namespace: {{ .Values.namespace }}
+  {{- if .Values.ccfProviderClient.azure.clientId }}
+  annotations:
+    azure.workload.identity/client-id: {{ .Values.ccfProviderClient.azure.clientId | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ccf-provider-client-config
+  namespace: {{ .Values.namespace }}
+data:
+  {{- range $key, $value := .Values.ccfProviderClient.env }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ccf-provider-client
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: ccf-provider-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ccf-provider-client
+  template:
+    metadata:
+      labels:
+        app: ccf-provider-client
+        {{- if .Values.ccfProviderClient.azure.clientId }}
+        azure.workload.identity/use: "true"
+        {{- end }}
+    spec:
+      serviceAccountName: ccf-provider-client
+      containers:
+        - name: ccf-provider-client
+          image: "{{ .Values.ccfProviderClient.image.repository }}:{{ .Values.ccfProviderClient.image.tag | toString }}"
+          imagePullPolicy: {{ .Values.ccfProviderClient.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: ccf-provider-client-config
+          {{- if or .Values.credentialsProxy.enabled .Values.ccfProviderClient.virtual.enabled .Values.telemetry.enabled }}
+          env:
+            {{- if .Values.credentialsProxy.enabled }}
+            - name: IDENTITY_ENDPOINT
+              value: "http://credentials-proxy:8098/token"
+            - name: IMDS_ENDPOINT
+              value: "dummy_required_value"
+            {{- end }}
+            {{- if .Values.ccfProviderClient.virtual.enabled }}
+            - name: WORKSPACE_DIR
+              value: /app/workspace
+            - name: HOST_WORKSPACE_DIR
+              value: {{ .Values.ccfProviderClient.virtual.hostWorkspaceDir | quote }}
+            {{- end }}
+            {{- if .Values.telemetry.enabled }}
+            - name: CR_CCF_PROVIDER_ENABLE_OPEN_TELEMETRY
+              value: "true"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.telemetry.otlpEndpoint | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: ccf-provider-client
+            {{- end }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.ccfProviderClient.resources | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.ccfProviderClient.virtual.enabled }}
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: workspace-dir
+              mountPath: /app/workspace
+            {{- end }}
+      volumes:
+        {{- if .Values.ccfProviderClient.virtual.enabled }}
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: workspace-dir
+          hostPath:
+            path: {{ .Values.ccfProviderClient.virtual.hostWorkspaceDir }}
+            type: DirectoryOrCreate
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ccf-provider-client
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: ccf-provider-client
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+  type: ClusterIP
+{{- end }}

@@ -8,10 +8,11 @@ import sys
 import time
 import uuid
 
+from opentelemetry import context, trace
+
 from cleanroom_internal.utilities import otel_utilities, secret_utilities
 from cleanroom_internal.utilities import utilities as internal_utilities
 from cleanroom_internal.utilities.otel_setup_utilities import TelemetryConfig
-from opentelemetry import context, trace
 
 from .utilities import *
 

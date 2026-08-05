@@ -86,16 +86,56 @@ pwsh $root/test/onebox/model-serving/kserve-inferencing/test-kserve-inferencing.
 pwsh $root/test/onebox/multi-party-collab/big-data-query-analytics/test-big-data-analytics.ps1
 ```
 
-## 4. Testing with a different FlexNode VM SKU
+## 4. Viewing metrics in Grafana
 
-By default, FlexNode VMs use the `Standard_DC4as_v5` SKU (CPU-only confidential VM). To test
+Pass `-openGrafana` to automatically port-forward Grafana and open the inferencing
+metrics dashboard in your browser:
+```powershell
+pwsh $root/test/onebox/model-serving/kserve-inferencing/test-kserve-inferencing.ps1 `
+  -models "iris" `
+  -openGrafana
+```
+This works for both Kind and AKS clusters. The script starts `kubectl port-forward`
+on port 3000 and opens the **Cleanroom Inferencing** dashboard with live auto-refresh.
+Use the dropdown filters at the top to drill down by model, runtime, pod, or node.
+The port-forward is cleaned up automatically when the script exits.
+
+## 5. Faster dev loop with `-noDelete`
+
+When iterating on model deployment code, you can skip the delete-then-redeploy cycle by
+passing `-noDelete` to `test-kserve-inferencing.ps1`. This performs an in-place CRD update
+instead of deleting and recreating the InferenceService, which is significantly faster when
+the model is already deployed:
+```powershell
+pwsh $root/test/onebox/model-serving/kserve-inferencing/test-kserve-inferencing.ps1 `
+  -models "iris" `
+  -noDelete
+```
+```powershell
+pwsh $root/test/onebox/model-serving/kserve-inferencing/test-kserve-inferencing.ps1 `
+  -models "tinyllama" `
+  -noDelete
+```
+
+When the model spec hasn't changed, the update is a no-op — KServe detects no spec difference
+and skips the rolling update, so the script proceeds directly to inference testing. When there
+are actual spec changes (e.g., different resources, args, or model config), KServe performs a
+rolling update to apply them.
+
+> [!TIP]
+> Use `-useExistingDeployment` on `deploy-models.ps1` if you want to skip deployment entirely
+> and only run inference tests against an already-deployed model.
+
+## 6. Testing with a different FlexNode VM SKU
+
+By default, FlexNode VMs use the `Standard_DC2as_v5` SKU (CPU-only confidential VM). To test
 with a different VM SKU (e.g. a GPU-enabled confidential VM like `Standard_NCC40ads_H100_v5`),
 pass the `-flexNodeVmSize` parameter to the test script:
 ```powershell
 # kserve-inferencing with a custom FlexNode VM SKU
 pwsh $root/test/onebox/model-serving/kserve-inferencing/test-kserve-inferencing.ps1 `
   -flexNodeVmSize "Standard_NCC40ads_H100_v5" `
-  -models "gpt2"
+  -models "tinyllama"
 ```
 
 > [!NOTE]

@@ -59,6 +59,15 @@ class MonitoringSpec(BaseModel):
     exposeExecutorMetrics: Optional[bool] = None
 
 
+# https://github.com/kubeflow/spark-operator/blob/master/docs/api-docs.md#sparkoperator.k8s.io/v1beta2.RestartPolicy
+class RestartPolicy(BaseModel):
+    type: str
+    onSubmissionFailureRetries: Optional[int] = None
+    onSubmissionFailureRetryInterval: Optional[int] = None
+    onFailureRetries: Optional[int] = None
+    onFailureRetryInterval: Optional[int] = None
+
+
 class SparkApplicationSpec(BaseModel):
     type: str
     name: str
@@ -73,6 +82,8 @@ class SparkApplicationSpec(BaseModel):
     executor: Executor
     dynamicAllocation: DynamicAllocationProfile
     monitoring: MonitoringSpec
+    timeToLiveSeconds: int
+    restartPolicy: Optional[RestartPolicy] = None
 
     model_config = {"arbitrary_types_allowed": True}
 

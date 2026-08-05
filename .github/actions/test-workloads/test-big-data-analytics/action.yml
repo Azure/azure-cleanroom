@@ -29,14 +29,8 @@ runs:
         oras pull ${{ inputs.repo }}/cli/cleanroom-whl:${{ inputs.tag }}
         az extension add --allow-preview true --source ./cleanroom-*-py2.py3-none-any.whl -y
     
-    # TODO: Re-enable once astral-sh/setup-uv action is enabled.
-    # - name: Install uv
-    #   uses: astral-sh/setup-uv@v7
-    
     - name: Install uv
-      shell: bash
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
+      uses: astral-sh/setup-uv@v7
 
     - name: Install python
       shell: bash

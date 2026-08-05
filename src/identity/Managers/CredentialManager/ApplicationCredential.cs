@@ -86,6 +86,8 @@ public class ApplicationCredential : ICredential<AccessToken>
                 this.applicationIdentity.Credential.FederationConfiguration.Subject,
                 this.applicationIdentity.Credential.FederationConfiguration.Audience,
                 this.applicationIdentity.Credential.FederationConfiguration.Issuer,
+                this.applicationIdentity.Credential.FederationConfiguration
+                    .GovernanceApiPathPrefix,
                 this.logger),
 
             _ => throw new NotSupportedException($"Credential type " +

@@ -26,6 +26,10 @@ The quickest way to develop or build and run sample applications is to checkout 
 
 - See [readme](src/ccf/README.md) for CCF creation and design.
 
+## Clean Room Operator (Kubernetes CRD)
+
+- See [readme](src/cleanroom-operator/README.md) for managing clean room clusters declaratively using Kubernetes custom resources and `kubectl cleanroom`.
+
 ## Developer onebox setup
 
 - See [readme](DEV-ENVIRONMENT-SETUP-GUIDE.md) for running clean room containers locally on a Kind cluster.

@@ -1,0 +1,16 @@
+# CodeQL scan configuration for azure-cleanroom.
+#
+# `path_classifiers` lets us tell CodeQL which files belong to which category.
+# Files classified as `test` are excluded from production-code alerts
+# (e.g. SM03157 'requests verify=False' is acceptable in our integration tests
+# which target a local kubectl proxy / Kind cluster with self-signed certs).
+#
+# Reference: https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/customizing-your-advanced-setup-for-code-scanning#using-path-classifiers
+#
+# After merging changes to `develop`, re-run the
+# `dynamic/github-code-scanning/codeql` pipeline. Exclusions take effect
+# within 24-48 hours of the next scan.
+
+path_classifiers:
+  test:
+    - "test/**"

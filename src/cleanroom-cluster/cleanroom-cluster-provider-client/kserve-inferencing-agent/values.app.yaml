@@ -1,5 +1,6 @@
 images:
   inferencingagentUrl: <INFERENCING_AGENT_IMAGE_URL>
+  ohttpGatewayUrl: <OHTTP_GATEWAY_IMAGE_URL>
   ccrproxyUrl: <CCR_PROXY_IMAGE_URL>
   ccrskrUrl: <CCR_SKR_IMAGE_URL>
   ccrgovernanceUrl: <CCR_GOVERNANCE_IMAGE_URL>
@@ -9,10 +10,14 @@ ccrproxy:
   caType: <CA_TYPE>
   ccrFqdn: <CCR_FQDN>
 
+ohttp:
+  enabled: <OHTTP_ENABLED>
+
 env:
   inferencingFrontendEndpoint: <INFERENCING_FRONTEND_ENDPOINT>
   inferencingFrontendSnpHostData: <INFERENCING_FRONTEND_SNP_HOST_DATA>
   ccfNetworkRecoveryMembers: <CCF_NETWORK_RECOVERY_MEMBERS>
+  inferencingNamespace: <INFERENCING_NAMESPACE>
 
 ccrgovernance:
   ccrgovEndpoint: <CCR_GOV_ENDPOINT>

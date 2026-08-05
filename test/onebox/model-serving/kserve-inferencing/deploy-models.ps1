@@ -3,7 +3,14 @@ param
 (
     [string]$deploymentConfigDir = "$PSScriptRoot/../../workloads/generated",
     [string]$outDir = "$PSScriptRoot/generated",
-    [string]$hostNetwork
+    [string]$hostNetwork,
+    [ValidateSet("iris", "tinyllama-gpu", "gemma4-gpu", "phi4-gpu", "tinyllama", "default")]
+    [string]$models,
+    [ValidateSet("predictor", "inferencing-agent", "ohttp", "agent-framework", "default")]
+    [string]$mode,
+    [switch]$noDelete,
+    [switch]$useExistingDeployment,
+    [switch]$submitOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,7 +25,15 @@ if (-not [System.IO.Path]::IsPathRooted($outDir)) {
 uv lock
 
 # Run the scenario in an isolated environment using uv
-uv run --package test-kserve-inferencing --frozen --isolated python3 -u $PSScriptRoot/deploy-models.py `
-    --deployment-config-dir $deploymentConfigDir `
-    --out-dir $outDir `
-$(if ($hostNetwork) { "--host-network $hostNetwork" })
+$pyArgs = @(
+    "--deployment-config-dir", $deploymentConfigDir,
+    "--out-dir", $outDir
+)
+if ($hostNetwork) { $pyArgs += "--host-network", $hostNetwork }
+if ($models) { $pyArgs += "--models", $models }
+if ($mode) { $pyArgs += "--mode", $mode }
+if ($noDelete) { $pyArgs += "--no-delete" }
+if ($useExistingDeployment) { $pyArgs += "--use-existing-deployment" }
+if ($submitOnly) { $pyArgs += "--submit-only" }
+
+uv run --package test-kserve-inferencing --frozen --isolated python3 -u $PSScriptRoot/deploy-models.py @pyArgs

@@ -6,7 +6,7 @@ from codecs import open
 from setuptools import find_packages, setup
 
 try:
-    from azure_bdist_wheel import cmdclass
+    from azure_bdist_wheel import cmdclass  # noqa: F401
 except ImportError:
     from distutils import log as logger
 

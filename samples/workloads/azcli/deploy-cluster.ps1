@@ -30,6 +30,21 @@ param
     $flexNodeVmSize = "",
 
     [switch]
+    $flexNodeInsecure,
+
+    [switch]
+    $flexNodeProvisionUsingSSH,
+
+    [switch]
+    $requirePreProvisionedKindNodes,
+
+    [string]
+    $gpuSharingMode = "",
+
+    [int]
+    $gpuMpsReplicas = 0,
+
+    [switch]
     $enableMonitoring,
 
     [string]
@@ -168,6 +183,8 @@ if ($registry -ne "mcr") {
             pwsh $build/workloads/inferencing/build-workload-infra-containers.ps1 -repo $repo -tag latest -push -pushPolicy:$pushPolicy
             pwsh $build/workloads/frontend/build-frontend-service.ps1 -repo $repo -tag latest -push -pushPolicy:$pushPolicy
             pwsh $build/k8s-node/build-api-server-proxy.ps1
+            pwsh $build/k8s-node/build-kubelet-proxy.ps1
+            pwsh $build/k8s-node/build-cleanroom-boot.ps1
         }
 
         docker tag $repo/ccr-proxy:latest $repo/ccr-proxy:$localTag
@@ -192,8 +209,14 @@ if ($registry -ne "mcr") {
         docker push $repo/workloads/kserve-inferencing-agent:$localTag
         docker tag $repo/workloads/kserve-inferencing-frontend:latest $repo/workloads/kserve-inferencing-frontend:$localTag
         docker push $repo/workloads/kserve-inferencing-frontend:$localTag
+        docker tag $repo/workloads/ohttp-gateway:latest $repo/workloads/ohttp-gateway:$localTag
+        docker push $repo/workloads/ohttp-gateway:$localTag
+        docker tag $repo/workloads/ohttp-client:latest $repo/workloads/ohttp-client:$localTag
+        docker push $repo/workloads/ohttp-client:$localTag
 
         pwsh $build/k8s-node/build-api-server-proxy.ps1 -push -repo $repo -tag $localTag -skipBuild
+        pwsh $build/k8s-node/build-kubelet-proxy.ps1 -push -repo $repo -tag $localTag -skipBuild
+        pwsh $build/k8s-node/build-cleanroom-boot.ps1 -push -repo $repo -tag $localTag -skipBuild
 
         docker tag $repo/cleanroom-cluster/cleanroom-cluster-provider-client:latest $repo/cleanroom-cluster/cleanroom-cluster-provider-client:$localTag
         docker push $repo/cleanroom-cluster/cleanroom-cluster-provider-client:$localTag
@@ -284,11 +307,15 @@ if ($registry -ne "mcr") {
     $envVars["AZCLI_CLEANROOM_SPARK_FRONTEND_VERSIONS_DOCUMENT_URL"] = "$repo/versions/workloads/cleanroom-spark-frontend:$tag"
     $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_IMAGE"] = "$repo/workloads/kserve-inferencing-agent:$localTag"
     $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_CHART_URL"] = "$ociEndpoint/workloads/helm/kserve-inferencing-agent:$semanticVersion"
-    $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_SECURITY_POLICY_DOCUMENT_URL"] = "$repo/policies/workloads/kserve-inferencing-agent-security-policy:$localTag"
+    $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_SECURITY_POLICY_DOCUMENT_URL"] = "$repo/policies/workloads/cleanroom-kserve-inferencing-agent-security-policy:$localTag"
+    $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_OHTTP_GATEWAY_IMAGE"] = "$repo/workloads/ohttp-gateway:$localTag"
     $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_IMAGE"] = "$repo/workloads/kserve-inferencing-frontend:$localTag"
     $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_CHART_URL"] = "$ociEndpoint/workloads/helm/kserve-inferencing-frontend:$semanticVersion"
-    $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_SECURITY_POLICY_DOCUMENT_URL"] = "$repo/policies/workloads/kserve-inferencing-frontend-security-policy:$localTag"
+    $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_SECURITY_POLICY_DOCUMENT_URL"] = "$repo/policies/workloads/cleanroom-kserve-inferencing-frontend-security-policy:$localTag"
     $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_API_SERVER_PROXY_PACKAGE_URL"] = "$ociEndpoint/k8s-node/api-server-proxy:$localTag"
+    $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KUBELET_PROXY_PACKAGE_URL"] = "$ociEndpoint/k8s-node/kubelet-proxy:$localTag"
+    $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_CLEANROOM_BOOT_PACKAGE_URL"] = "$ociEndpoint/k8s-node/cleanroom-boot:$localTag"
+    $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_FLEX_NODE_IMAGE_DIGESTS_URL"] = "$ociEndpoint/cleanroom-image-digests:$localTag"
 
     # Analytics App specific
     $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_CONTAINER_REGISTRY_URL"] = "$repo"
@@ -305,8 +332,9 @@ if ($registry -ne "mcr") {
     $envVars["AZCLI_CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL"] = "$podReachableRepo"
     $envVars["AZCLI_CLEANROOM_ANALYTICS_APP_IMAGE_POLICY_DOCUMENT_URL"] = "$podReachableRepo/policies/workloads/cleanroom-spark-analytics-app-security-policy:$localTag"
     $envVars["AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL"] = "$podReachableRepo/sidecar-digests:$tag"
+    $envVars["AZCLI_CLEANROOM_CVM_MEASUREMENTS_VIRTUAL_DOCUMENT_URL"] = "$podReachableRepo/cvm-measurements-virtual:$tag"
     $envVars["AZCLI_CLEANROOM_CVM_MEASUREMENTS_DOCUMENT_URL"] = "$podReachableRepo/cvm-measurements:$tag"
-    $envVars["AZCLI_CLEANROOM_RUNTIME_DIGESTS_DOCUMENT_URL"] = "$podReachableRepo/inf-runtime-digests:$tag"
+    $envVars["AZCLI_CLEANROOM_INFERENCING_DIGESTS_DOCUMENT_URL"] = "$podReachableRepo/inferencing-digests:$tag"
 }
 else {
     # Empty values so that default azurecr.io paths baked in the AZCLI_CLEANROOM_CLUSTER_PROVIDER_CLIENT_IMAGE get used.
@@ -326,15 +354,21 @@ else {
     $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_IMAGE"] = ""
     $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_SECURITY_POLICY_DOCUMENT_URL"] = ""
     $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_CHART_URL"] = ""
+    $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_OHTTP_GATEWAY_IMAGE"] = ""
     $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_IMAGE"] = ""
     $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_SECURITY_POLICY_DOCUMENT_URL"] = ""
     $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_CHART_URL"] = ""
-    $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_API_SERVER_PROXY_PACKAGE_URL"] = ""
     $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_CONTAINER_REGISTRY_USE_HTTP"] = ""
     $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_CONTAINER_REGISTRY_URL"] = ""
     $envVars["AZCLI_CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL"] = ""
     $envVars["AZCLI_CLEANROOM_ANALYTICS_APP_IMAGE_URL"] = ""
     $envVars["AZCLI_CLEANROOM_ANALYTICS_APP_IMAGE_POLICY_DOCUMENT_URL"] = ""
+    $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_FLEX_NODE_IMAGE_DIGESTS_URL"] = ""
+    $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_API_SERVER_PROXY_PACKAGE_URL"] = ""
+    $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KUBELET_PROXY_PACKAGE_URL"] = ""
+    $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_CLEANROOM_BOOT_PACKAGE_URL"] = ""
+    $envVars["AZCLI_CLEANROOM_CVM_MEASUREMENTS_VIRTUAL_DOCUMENT_URL"] = ""
+    $envVars["AZCLI_CLEANROOM_CVM_MEASUREMENTS_DOCUMENT_URL"] = ""
 }
 
 # Write environment variables to file
@@ -465,9 +499,29 @@ if ($enableFlexNode) {
     $signingConfigFile = "$sandbox_common/signing-config.json"
     $policySigningCertPath = (Get-Content $signingConfigFile | ConvertFrom-Json).policySigningCertPath
 
+    # Build the flex node profile JSON.
+    $flexNodeProfileObj = @{
+        policySigningCert = $policySigningCertPath
+        nodeCount         = $flexNodeCount
+    }
+
+    if ($flexNodeVmSize -ne "") {
+        $flexNodeProfileObj["vmSize"] = $flexNodeVmSize
+    }
+
+    if ($flexNodeInsecure) {
+        $flexNodeProfileObj["insecure"] = $true
+    }
+
+    if ($flexNodeProvisionUsingSSH) {
+        $flexNodeProfileObj["provisionUsingSSH"] = $true
+    }
+
+    if ($requirePreProvisionedKindNodes) {
+        $flexNodeProfileObj["requirePreProvisionedKindNodes"] = $true
+    }
+
     # Generate SSH key pair for flex node VM access if it doesn't exist (only for non-virtual infra).
-    $sshPrivateKeyPath = ""
-    $sshPublicKeyPath = ""
     if ($infraType -ne "virtual") {
         $sshPrivateKeyPath = "$sandbox_common/flex-node-ssh-key.pem"
         $sshPublicKeyPath = "$sandbox_common/flex-node-ssh-key.pub"
@@ -480,16 +534,16 @@ if ($enableFlexNode) {
             # chmod 600 $sshPrivateKeyPath
             # Write-Host "SSH key pair generated at: $sshPrivateKeyPath"
 
-            Write-Host "Downloading SSH keys from Key Vault 'azcleanroompublickv'..."
+            Write-Host "Downloading SSH keys from Key Vault 'azcleanroomemukv'..."
             $privateKeyContent = az keyvault secret show `
-                --vault-name "azcleanroompublickv" `
+                --vault-name "azcleanroomemukv" `
                 --name "flex-node-ssh-private-key" `
                 --query "value" -o tsv
             $privateKeyContent | Out-File -FilePath $sshPrivateKeyPath
             chmod 600 $sshPrivateKeyPath
 
             $publicKeyContent = az keyvault secret show `
-                --vault-name "azcleanroompublickv" `
+                --vault-name "azcleanroomemukv" `
                 --name "flex-node-ssh-public-key" `
                 --query "value" -o tsv
             $publicKeyContent | Out-File -FilePath $sshPublicKeyPath
@@ -499,27 +553,32 @@ if ($enableFlexNode) {
         else {
             Write-Host "Found existing SSH key pair at: $sshPrivateKeyPath"
         }
+
+        $flexNodeProfileObj["sshPrivateKey"] = $sshPrivateKeyPath
+        $flexNodeProfileObj["sshPublicKey"] = $sshPublicKeyPath
     }
     else {
         Write-Host "Skipping SSH key pair generation for virtual infra type."
     }
 
+    if ($gpuSharingMode -ne "") {
+        $gpuConfig = @{
+            sharing = @{
+                mode = $gpuSharingMode
+            }
+        }
+        if ($gpuMpsReplicas -gt 0) {
+            $gpuConfig.sharing["replicas"] = $gpuMpsReplicas
+        }
+        $flexNodeProfileObj["gpu"] = $gpuConfig
+    }
+
+    $flexNodeProfilePath = "$sandbox_common/flex-node-profile.json"
+    $flexNodeProfileObj | ConvertTo-Json -Depth 10 | Out-File $flexNodeProfilePath
+
     $clusterCreateCmd += @(
-        "--enable-flex-node",
-        "--flex-node-policy-signing-cert", $policySigningCertPath,
-        "--flex-node-count", $flexNodeCount
+        "--flex-node-profile", $flexNodeProfilePath
     )
-
-    if ($flexNodeVmSize -ne "") {
-        $clusterCreateCmd += @("--flex-node-vm-size", $flexNodeVmSize)
-    }
-
-    if ($infraType -ne "virtual") {
-        $clusterCreateCmd += @(
-            "--flex-node-ssh-private-key", $sshPrivateKeyPath,
-            "--flex-node-ssh-public-key", $sshPublicKeyPath
-        )
-    }
 }
 
 # Execute the cluster create command
@@ -601,9 +660,9 @@ az cleanroom cluster get-kubeconfig `
     --provider-client $clusterProviderProjectName
 
 @"
-            {
-  "repo": "$repo",
-  "tag": "$tag",
-  "clusterProviderProjectName": "$clusterProviderProjectName"
-}
+    {
+        "repo": "$repo",
+        "tag": "$tag",
+        "clusterProviderProjectName": "$clusterProviderProjectName"
+    }
 "@ > $sandbox_common/repoConfig.json

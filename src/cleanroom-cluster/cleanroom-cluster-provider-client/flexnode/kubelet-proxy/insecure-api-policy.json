@@ -1,0 +1,16 @@
+{
+  "allowed_apis": [
+    "/pods",
+    "/metrics",
+    "/metrics/cadvisor",
+    "/metrics/resource",
+    "/metrics/probes",
+    "/stats",
+    "/checkpoint",
+    "/healthz",
+    "/containerLogs",
+    "/logs",
+    "/portForward",
+    "/exec"
+  ]
+}

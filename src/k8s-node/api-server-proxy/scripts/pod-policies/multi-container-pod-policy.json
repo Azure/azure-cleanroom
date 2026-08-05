@@ -1,0 +1,4 @@
+[
+  {"name":"web","properties":{"image":"nginx:latest"}},
+  {"name":"sidecar","properties":{"image":"busybox:latest"}}
+]

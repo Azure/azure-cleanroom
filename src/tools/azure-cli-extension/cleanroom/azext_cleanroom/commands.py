@@ -188,6 +188,9 @@ def load_command_table(self, _):
         g.custom_command("download", "logs_download_cmd")
         g.custom_command("decrypt", "logs_decrypt_cmd")
 
+    with self.command_group("cleanroom operator") as g:
+        g.custom_command("install-cli", "operator_install_cli_cmd")
+
     with self.command_group("cleanroom cluster provider") as g:
         g.custom_command("deploy", "cluster_provider_deploy_cmd")
         g.custom_command("remove", "cluster_provider_remove_cmd")

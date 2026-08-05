@@ -14,12 +14,20 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/azure/azure-cleanroom/src/k8s-node/api-server-proxy/internal/apiserverproxy/admission"
 )
+
+// nodeStatusPattern matches PATCH requests to /api/v1/nodes/<name>/status.
+var nodeStatusPattern = regexp.MustCompile(`^/api/v1/nodes/[^/]+/status$`)
+
+// nodeRegisterPattern matches POST requests to /api/v1/nodes (initial registration).
+var nodeRegisterPattern = regexp.MustCompile(`^/api/v1/nodes$`)
 
 // Proxy intercepts traffic between kubelet and API server.
 // It sits between the kubelet and the Kubernetes API server, intercepting
@@ -156,6 +164,18 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.logger.Printf("Request: %s %s", r.Method, r.URL.String())
 	}
 
+	// Rewrite kubelet port in node status updates before forwarding.
+	if p.config.RewriteKubeletPort != 0 && p.isNodeStatusPatch(r) {
+		p.handleNodeStatusPatch(w, r)
+		return
+	}
+
+	// Rewrite kubelet port in node registration (POST /api/v1/nodes).
+	if p.config.RewriteKubeletPort != 0 && p.isNodeRegister(r) {
+		p.handleNodePortRewrite(w, r)
+		return
+	}
+
 	// Check if this is a pod-related request that needs interception
 	if p.isPodRequest(r) {
 		p.handlePodRequest(w, r)
@@ -164,6 +184,203 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Forward all other requests directly
 	p.reverseProxy.ServeHTTP(w, r)
+}
+
+// handleNodeStatusPatch rewrites the kubelet port in node status updates
+// and forwards the request.
+func (p *Proxy) handleNodeStatusPatch(w http.ResponseWriter, r *http.Request) {
+	if err := rewriteNodeStatusPort(r, p.config.RewriteKubeletPort, p.logger); err != nil {
+		p.logger.Printf("Error rewriting node status port: %v", err)
+		http.Error(w, "Failed to process node status update", http.StatusInternalServerError)
+		return
+	}
+	p.reverseProxy.ServeHTTP(w, r)
+}
+
+// handleNodePortRewrite rewrites the kubelet port in node registration
+// (POST /api/v1/nodes). kubelet sends this as protobuf, so we decode it,
+// modify the port, and re-encode as JSON for forwarding.
+func (p *Proxy) handleNodePortRewrite(w http.ResponseWriter, r *http.Request) {
+	if r.Body == nil {
+		p.reverseProxy.ServeHTTP(w, r)
+		return
+	}
+
+	bodyBytes, err := io.ReadAll(r.Body)
+	_ = r.Body.Close()
+	if err != nil {
+		p.logger.Printf("Error reading node registration body: %v", err)
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		p.reverseProxy.ServeHTTP(w, r)
+		return
+	}
+
+	contentType := r.Header.Get("Content-Type")
+
+	// Try JSON first (same as status patches).
+	if strings.Contains(contentType, "json") {
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		if err := rewriteNodeStatusPort(r, p.config.RewriteKubeletPort, p.logger); err != nil {
+			p.logger.Printf("Error rewriting node registration port (JSON): %v", err)
+		}
+		p.reverseProxy.ServeHTTP(w, r)
+		return
+	}
+
+	// Handle protobuf: decode → modify port → re-encode as JSON.
+	if strings.Contains(contentType, "protobuf") {
+		node, err := decodeNodeProtobuf(bodyBytes)
+		if err != nil {
+			p.logger.Printf("Failed to decode node protobuf: %v", err)
+			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			p.reverseProxy.ServeHTTP(w, r)
+			return
+		}
+
+		originalPort := node.Status.DaemonEndpoints.KubeletEndpoint.Port
+		node.Status.DaemonEndpoints.KubeletEndpoint.Port = int32(p.config.RewriteKubeletPort)
+		p.logger.Printf("Rewrote node registration kubelet port %d → %d",
+			originalPort, p.config.RewriteKubeletPort)
+
+		jsonBody, err := json.Marshal(node)
+		if err != nil {
+			p.logger.Printf("Failed to marshal node as JSON: %v", err)
+			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			p.reverseProxy.ServeHTTP(w, r)
+			return
+		}
+
+		r.Body = io.NopCloser(bytes.NewReader(jsonBody))
+		r.ContentLength = int64(len(jsonBody))
+		r.Header.Set("Content-Length", strconv.Itoa(len(jsonBody)))
+		r.Header.Set("Content-Type", "application/json")
+		p.reverseProxy.ServeHTTP(w, r)
+		return
+	}
+
+	// Unknown content type — pass through.
+	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	p.reverseProxy.ServeHTTP(w, r)
+}
+
+// isNodeStatusPatch checks if the request is a PATCH to a node status endpoint.
+func (p *Proxy) isNodeStatusPatch(r *http.Request) bool {
+	return isNodeStatusPatchRequest(r)
+}
+
+func isNodeStatusPatchRequest(r *http.Request) bool {
+	return r.Method == http.MethodPatch && nodeStatusPattern.MatchString(r.URL.Path)
+}
+
+// isNodeRegister checks if the request is a POST to create a node (initial registration).
+func (p *Proxy) isNodeRegister(r *http.Request) bool {
+	return r.Method == http.MethodPost && nodeRegisterPattern.MatchString(r.URL.Path)
+}
+
+// rewriteNodeStatusPort unconditionally rewrites the kubelet endpoint port in
+// node status PATCH requests. If the body contains
+// daemonEndpoints.kubeletEndpoint.Port, it is set to kubeletProxyPort.
+func rewriteNodeStatusPort(
+	r *http.Request,
+	kubeletProxyPort int,
+	logger *log.Logger,
+) error {
+	if r.Body == nil {
+		return nil
+	}
+
+	bodyBytes, err := io.ReadAll(r.Body)
+	_ = r.Body.Close()
+	if err != nil {
+		return fmt.Errorf("failed to read node status body: %w", err)
+	}
+
+	var body map[string]interface{}
+	if unmarshalErr := json.Unmarshal(bodyBytes, &body); unmarshalErr != nil {
+		// Not valid JSON — the kubelet may send strategic merge patches in
+		// protobuf format. Pass through unchanged.
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		return nil
+	}
+
+	originalPort, found := getKubeletEndpointPort(body)
+	if !found {
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		return nil
+	}
+
+	setKubeletEndpointPort(body, kubeletProxyPort)
+
+	rewritten, err := json.Marshal(body)
+	if err != nil {
+		logger.Printf("Failed to marshal rewritten node status: %v", err)
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		return nil
+	}
+
+	logger.Printf("Rewrote node status kubelet port %d → %d", originalPort, kubeletProxyPort)
+
+	r.Body = io.NopCloser(bytes.NewReader(rewritten))
+	r.ContentLength = int64(len(rewritten))
+	r.Header.Set("Content-Length", strconv.Itoa(len(rewritten)))
+	return nil
+}
+
+// getKubeletEndpointPort extracts
+// status.daemonEndpoints.kubeletEndpoint.Port from a node status body.
+func getKubeletEndpointPort(body map[string]interface{}) (int, bool) {
+	status, ok := getMap(body, "status")
+	if !ok {
+		return 0, false
+	}
+
+	daemonEndpoints, ok := getMap(status, "daemonEndpoints")
+	if !ok {
+		return 0, false
+	}
+
+	kubeletEndpoint, ok := getMap(daemonEndpoints, "kubeletEndpoint")
+	if !ok {
+		return 0, false
+	}
+
+	portVal, ok := kubeletEndpoint["Port"]
+	if !ok {
+		return 0, false
+	}
+
+	// json.Unmarshal decodes JSON numbers as float64 by default.
+	switch p := portVal.(type) {
+	case float64:
+		return int(p), true
+	case json.Number:
+		n, err := p.Int64()
+		if err != nil {
+			return 0, false
+		}
+		return int(n), true
+	default:
+		return 0, false
+	}
+}
+
+// setKubeletEndpointPort sets
+// status.daemonEndpoints.kubeletEndpoint.Port in a node status body.
+func setKubeletEndpointPort(body map[string]interface{}, port int) {
+	status := body["status"].(map[string]interface{})
+	daemonEndpoints := status["daemonEndpoints"].(map[string]interface{})
+	kubeletEndpoint := daemonEndpoints["kubeletEndpoint"].(map[string]interface{})
+	kubeletEndpoint["Port"] = float64(port)
+}
+
+func getMap(m map[string]interface{}, key string) (map[string]interface{}, bool) {
+	v, ok := m[key]
+	if !ok {
+		return nil, false
+	}
+
+	result, ok := v.(map[string]interface{})
+	return result, ok
 }
 
 // isPodRequest checks if the request is for pods
@@ -203,7 +420,7 @@ func (p *Proxy) handlePodListOrGet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Error: %v", err), http.StatusBadGateway)
 		return
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // Best-effort close on HTTP response body.
 
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)
@@ -229,7 +446,7 @@ func (p *Proxy) handlePodListOrGet(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
 	w.WriteHeader(resp.StatusCode)
-	w.Write(body)
+	_, _ = w.Write(body)
 }
 
 // handlePodWatch handles pod watch requests with streaming response
@@ -245,7 +462,7 @@ func (p *Proxy) handlePodWatch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Error: %v", err), http.StatusBadGateway)
 		return
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // Best-effort close on HTTP response body.
 
 	// Copy headers
 	for k, vv := range resp.Header {
@@ -257,7 +474,7 @@ func (p *Proxy) handlePodWatch(w http.ResponseWriter, r *http.Request) {
 
 	// For non-OK responses, just copy the body
 	if resp.StatusCode != http.StatusOK {
-		io.Copy(w, resp.Body)
+		_, _ = io.Copy(w, resp.Body)
 		return
 	}
 
@@ -265,7 +482,7 @@ func (p *Proxy) handlePodWatch(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		p.logger.Printf("Warning: ResponseWriter doesn't support Flusher, streaming may not work")
-		io.Copy(w, resp.Body)
+		_, _ = io.Copy(w, resp.Body)
 		return
 	}
 
@@ -569,8 +786,9 @@ func (p *Proxy) rejectPodViaStatus(namespace, name, reason string) {
 	req.Header.Set("Content-Type", "application/strategic-merge-patch+json")
 
 	// Add bearer token authentication (required for API server access)
-	if token, err := p.tokenProvider.GetToken(); err != nil {
-		p.logger.Printf("Warning: failed to get token for status patch: %v", err)
+	token, tokenErr := p.tokenProvider.GetToken()
+	if tokenErr != nil {
+		p.logger.Printf("Warning: failed to get token for status patch: %v", tokenErr)
 	} else if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -586,7 +804,7 @@ func (p *Proxy) rejectPodViaStatus(namespace, name, reason string) {
 		p.logger.Printf("Error patching pod status: %v", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // Best-effort close on HTTP response body.
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		p.logger.Printf("Successfully rejected pod %s/%s via status patch", namespace, name)

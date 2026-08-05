@@ -1,0 +1,6 @@
+apiVersion: v2
+name: aspire-dashboard
+description: Helm chart for the .NET Aspire Dashboard (OTLP collector + UI)
+type: application
+version: 0.1.0
+appVersion: latest

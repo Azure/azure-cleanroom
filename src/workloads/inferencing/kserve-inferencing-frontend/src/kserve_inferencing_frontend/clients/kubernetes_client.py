@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 from typing import Callable, Optional
@@ -86,7 +87,6 @@ class KubernetesOperationTracer:
 
 
 class KubernetesAPICaller:
-
     def call(
         self,
         operation: str,
@@ -190,6 +190,22 @@ class KubernetesClient:
                     "resourceVersion"
                 ]
 
+                # Preserve existing metadata labels and annotations, merging
+                # with any new values so that system-set fields (e.g. from
+                # KServe or Kubernetes) are not wiped during a replace.
+                existing_labels = existing.get("metadata", {}).get("labels", {})
+                existing_annotations = existing.get("metadata", {}).get(
+                    "annotations", {}
+                )
+                resource_body["metadata"]["labels"] = {
+                    **existing_labels,
+                    **(tags or {}),
+                }
+                resource_body["metadata"]["annotations"] = {
+                    **existing_annotations,
+                    **(annotations or {}),
+                }
+
                 self._api_caller.call(
                     operation="update",
                     resource_type=kind.lower(),
@@ -276,6 +292,27 @@ class KubernetesClient:
             logger.error(f"Error retrieving custom resource: {e}")
             raise
 
+    def get_existing_inference_service_spec(
+        self, name: str, namespace: str
+    ) -> Optional[dict]:
+        """
+        Get the spec of an existing InferenceService CR as a raw dict.
+
+        Returns None if the resource does not exist.
+        """
+        try:
+            cr = self.get_custom_resource(
+                name=name,
+                namespace=namespace,
+                group=self._resource_settings.group,
+                version=self._resource_settings.version,
+                kind=self._resource_settings.kind,
+                plural=self._resource_settings.plural,
+            )
+            return cr.get("spec")
+        except ResourceNotFound:
+            return None
+
     def submit_inference_service(
         self,
         name: str,
@@ -344,10 +381,12 @@ class KubernetesClient:
                 labels={
                     "app": f"isvc.{name}-predictor",
                     "component": "predictor",
+                    "service": "external-dns",
                 },
                 owner_references=[owner_ref],
             ),
             spec=kubernetes.client.V1ServiceSpec(
+                cluster_ip="None",
                 selector={"app": f"isvc.{name}-predictor"},
                 ports=[
                     kubernetes.client.V1ServicePort(
@@ -400,7 +439,7 @@ class KubernetesClient:
             )
         except Exception as e:
             logger.error(
-                f"Failed to create V1ObjectMeta from: " f"{metadata_dict}, error: {e}"
+                f"Failed to create V1ObjectMeta from: {metadata_dict}, error: {e}"
             )
             raise
 
@@ -417,9 +456,83 @@ class KubernetesClient:
             return InferenceService.model_validate(inference_svc_data)
         except ValidationError as validation_error:
             logger.error(
-                "Pydantic validation failed for "
-                f"InferenceService: {validation_error}"
+                f"Pydantic validation failed for InferenceService: {validation_error}"
             )
             for error in validation_error.errors():
                 logger.error(f"Field '{error.get('loc')}': {error.get('msg')}")
             raise
+
+    def patch_kserve_agent_image(self, agent_image_with_digest: str):
+        """Patch the KServe inferenceservice-config ConfigMap to use a
+        digest-pinned agent image. Reads the existing value to preserve
+        other fields (memoryRequest, cpuLimit, etc.)."""
+        core_api = kubernetes.client.CoreV1Api()
+        cm = core_api.read_namespaced_config_map(
+            name="inferenceservice-config", namespace="kserve"
+        )
+        agent_config = json.loads(cm.data.get("agent", "{}"))
+        agent_config["image"] = agent_image_with_digest
+        cm.data["agent"] = json.dumps(agent_config)
+        core_api.patch_namespaced_config_map(
+            name="inferenceservice-config", namespace="kserve", body=cm
+        )
+        logger.info(f"Patched KServe agent image to: {agent_image_with_digest}")
+
+    def get_pod_health(self, model_name: str, namespace: str) -> dict:
+        """Return pod-level diagnostics for an InferenceService's
+        predictor pods. Uses the KServe label
+        ``serving.kserve.io/inferenceservice`` to locate pods."""
+        core_api = kubernetes.client.CoreV1Api()
+        pods = self._api_caller.call(
+            operation="list",
+            resource_type="pod",
+            api_callable=lambda: core_api.list_namespaced_pod(
+                namespace=namespace,
+                label_selector=(f"serving.kserve.io/inferenceservice={model_name}"),
+            ),
+            namespace=namespace,
+        )
+
+        result = {"pods": []}
+        for pod in pods.items:
+            pod_info = {
+                "name": pod.metadata.name,
+                "phase": pod.status.phase,
+                "containers": [],
+            }
+
+            all_statuses = list(pod.status.init_container_statuses or [])
+            all_statuses += list(pod.status.container_statuses or [])
+
+            for cs in all_statuses:
+                container_info = {
+                    "name": cs.name,
+                    "ready": cs.ready,
+                    "restartCount": cs.restart_count,
+                }
+                if cs.state:
+                    if cs.state.waiting:
+                        container_info["state"] = cs.state.waiting.reason
+                        container_info["message"] = cs.state.waiting.message or ""
+                    elif cs.state.terminated:
+                        container_info["state"] = "Terminated"
+                        container_info["lastTermination"] = {
+                            "exitCode": cs.state.terminated.exit_code,
+                            "reason": cs.state.terminated.reason,
+                            "message": cs.state.terminated.message,
+                        }
+                    else:
+                        container_info["state"] = "Running"
+
+                if cs.last_state and cs.last_state.terminated:
+                    container_info["lastTermination"] = {
+                        "exitCode": cs.last_state.terminated.exit_code,
+                        "reason": cs.last_state.terminated.reason,
+                        "message": cs.last_state.terminated.message,
+                    }
+
+                pod_info["containers"].append(container_info)
+
+            result["pods"].append(pod_info)
+
+        return result

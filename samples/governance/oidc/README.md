@@ -1,6 +1,6 @@
 ## Using OIDC Provider (IdP) running in CGS for getting federated credentials from Azure
 ```pwsh
-# endpoint is where the CGS instance is running and publicly reachable. Below assumes deployment via acme-tls/deploy-cgs.ps1. Change as appopriate for you.
+# endpoint is where the CGS instance is running and publicly reachable. Change as appropriate for you.
 $endpoint="https://cgssvc.duckdns.org:8080"
 
 # The user-assigned managed identity federated credential details. Update as appropriate for you.

@@ -28,6 +28,7 @@ data:
     applications:
       analytics:
         namespace: {{ .Values.settings.applications.analytics.namespace | quote }}
+        timeToLiveSeconds: {{ .Values.settings.applications.analytics.timeToLiveSeconds | quote }}
         applicationFile: {{ .Values.settings.applications.analytics.applicationFile | quote }}
         allowAll: {{ .Values.settings.applications.analytics.allowAll | quote }}
         debugMode: {{ .Values.settings.applications.analytics.debugMode | quote }}

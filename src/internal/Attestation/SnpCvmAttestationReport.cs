@@ -8,7 +8,26 @@ using System.Text.Json.Serialization;
 namespace AttestationClient;
 
 // This is the JSON schema returned by the cvm-attestation-agent's /snp/attest endpoint.
+// The response is structured as { vtpm: {...}, gpu?: {...}, userDataDocument: "..." }.
 public class SnpCvmAttestationReport
+{
+    [JsonPropertyName("vtpm")]
+    public VTpmAttestationReport VTpm { get; set; } = default!;
+
+    [JsonPropertyName("gpu")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GpuAttestationReport? Gpu { get; set; }
+
+    // Base64-encoded canonical JSON user data document whose SHA-256 hash
+    // is bound to the runtime claims user-data[0:32]. Transmitted alongside
+    // evidence so the verifier can decode, re-hash, and compare against the
+    // hardware-signed value.
+    [JsonPropertyName("userDataDocument")]
+    public string UserDataDocument { get; set; } = default!;
+}
+
+// vTPM attestation evidence and metadata.
+public class VTpmAttestationReport
 {
     [JsonPropertyName("evidence")]
     public SnpCvmEvidence Evidence { get; set; } = default!;
@@ -50,6 +69,30 @@ public class SnpCvmEvidence
     }
 }
 
+// GPU attestation evidence container.
+public class GpuAttestationReport
+{
+    [JsonPropertyName("evidences")]
+    public List<GpuDeviceEvidence> Evidences { get; set; } = default!;
+}
+
+// NVIDIA GPU attestation evidence for a single GPU.
+public class GpuDeviceEvidence
+{
+    [JsonPropertyName("evidence")]
+    public string Evidence { get; set; } = default!;
+
+    [JsonPropertyName("certificate")]
+    public string Certificate { get; set; } = default!;
+
+    // Raw NVAT file-evidence fields preserved for verifier-side RIM appraisal.
+    [JsonPropertyName("arch")]
+    public string Arch { get; set; } = default!;
+
+    [JsonPropertyName("nonce")]
+    public string Nonce { get; set; } = default!;
+}
+
 public class CvmRuntimeClaims
 {
     [JsonPropertyName("keys")]
@@ -58,6 +101,9 @@ public class CvmRuntimeClaims
     [JsonPropertyName("vm-configuration")]
     public CvmVmConfiguration? VmConfiguration { get; set; }
 
+    // 64-byte user-data as a hex string. Bytes 0-31 are SHA256(user data
+    // document); bytes 32-63 are zeros.
+    // Serialized as the "user-data" key in runtime claims JSON.
     [JsonPropertyName("user-data")]
     public string? UserData { get; set; }
 }

@@ -179,6 +179,17 @@ function putSecretByCleanRoom(
     };
   }
 
+  // Enforce signing key is same as encryption key in the report data.
+  if (body.encrypt.publicKey != body.sign.publicKey) {
+    return {
+      statusCode: 400,
+      body: new ErrorResponse(
+        "SigningKeyMismatch",
+        "Signing key must be the same as the encryption key in the report data."
+      )
+    };
+  }
+
   // Attestation report and report data values are verified. Now check the signature.
   const data: ArrayBuffer = b64ToBuf(body.data);
   try {

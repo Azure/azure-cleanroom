@@ -1,0 +1,150 @@
+# Deploy manifest for the accr-conf-inferencing AIRunway provider.
+#
+# Installs the provider controller that watches AIRunway
+# ModelDeployment resources selected for the
+# "accr-conf-inferencing" provider and translates them into
+# cleanroom ModelRegistration + ModelDeployment resources.
+#
+# Prerequisites on the target (workload) cluster:
+#   - AIRunway CRDs + controller (airunway.ai/ModelDeployment,
+#     InferenceProviderConfig) installed.
+#   - The cleanroom operator installed (cleanroom.azure.com CRDs).
+#   - At least one Ready cleanroom Environment.
+#
+# The provider only talks to the Kubernetes API server (it creates
+# cleanroom CRs); all Azure work is done by the cleanroom operator
+# and its provider clients, so this controller needs no Azure
+# credentials / workload identity.
+#
+# Set the image to an AKS-reachable registry before applying, e.g.
+#   gsinhadev.azurecr.io/accr-conf-inferencing-provider:latest
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: accr-conf-inferencing-provider
+  namespace: cleanroom-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: accr-conf-inferencing-provider
+rules:
+  # AIRunway ModelDeployment: watch + finalize + report status.
+  - apiGroups: ["airunway.ai"]
+    resources: ["modeldeployments"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["airunway.ai"]
+    resources: ["modeldeployments/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["airunway.ai"]
+    resources: ["modeldeployments/finalizers"]
+    verbs: ["update"]
+  # InferenceProviderConfig: register/heartbeat/unregister
+  # (cluster-scoped).
+  - apiGroups: ["airunway.ai"]
+    resources: ["inferenceproviderconfigs"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: ["airunway.ai"]
+    resources: ["inferenceproviderconfigs/status"]
+    verbs: ["get", "update", "patch"]
+  # Cleanroom Environment: read to confirm it is Ready.
+  - apiGroups: ["cleanroom.azure.com"]
+    resources: ["environments"]
+    verbs: ["get", "list", "watch"]
+  # Cleanroom ModelRegistration + ModelDeployment: created and
+  # tracked by this provider (owner-referenced to the AIRunway MD).
+  - apiGroups: ["cleanroom.azure.com"]
+    resources: ["modelregistrations", "modeldeployments"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: ["cleanroom.azure.com"]
+    resources: ["modelregistrations/status", "modeldeployments/status"]
+    verbs: ["get"]
+  # Event recording.
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: accr-conf-inferencing-provider
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: accr-conf-inferencing-provider
+subjects:
+  - kind: ServiceAccount
+    name: accr-conf-inferencing-provider
+    namespace: cleanroom-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accr-conf-inferencing-provider
+  namespace: cleanroom-system
+  labels:
+    app: accr-conf-inferencing-provider
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: accr-conf-inferencing-provider
+  template:
+    metadata:
+      labels:
+        app: accr-conf-inferencing-provider
+    spec:
+      serviceAccountName: accr-conf-inferencing-provider
+      containers:
+        - name: provider
+          # Override with an AKS-reachable registry before applying.
+          image: gsinhadev.azurecr.io/accr-conf-inferencing-provider:latest
+          imagePullPolicy: Always
+          args:
+            - --health-probe-bind-address=:8081
+            # Disable the secure metrics server for the test
+            # (avoids needing a serving cert). Set to :8443 to
+            # enable.
+            - --metrics-bind-address=0
+          env:
+            # Cluster-wide defaults applied when a ModelDeployment's
+            # provider.overrides omit these. The in-cluster provider
+            # cannot provision Azure storage / identity itself (the
+            # az CLI does this client-side), so supply them here once
+            # and per-deployment specs only need environmentRef.
+            - name: AIRUNWAY_DEFAULT_STORAGE_ACCOUNT_ID
+              # e.g. /subscriptions/<sub>/resourceGroups/<rg>/providers/
+              #      Microsoft.Storage/storageAccounts/<sa>
+              value: ""
+            - name: AIRUNWAY_DEFAULT_MANAGED_IDENTITY_ID
+              # e.g. /subscriptions/<sub>/resourceGroups/<rg>/providers/
+              #      Microsoft.ManagedIdentity/userAssignedIdentities/<mi>
+              value: ""
+            - name: AIRUNWAY_DEFAULT_CVM_SKU
+              value: ""
+            - name: AIRUNWAY_DEFAULT_ENCRYPTION_MODE
+              value: ""
+          ports:
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi

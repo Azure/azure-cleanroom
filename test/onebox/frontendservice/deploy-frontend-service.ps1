@@ -111,17 +111,25 @@ else {
     $retryInterval = 10
     $retryCount = 0
 
+    # While the pod is still being scheduled (common on VN2/CACI virtual nodes), kubectl
+    # can legitimately exit non-zero (e.g. a jsonpath index on an empty item list). The
+    # loop already tolerates that via the $LASTEXITCODE guards below, so locally disable
+    # the native-command error-action preference here; otherwise the very first poll
+    # throws a terminating NativeCommandExitException before the guard can run.
+    $prevNativeErrPref = $PSNativeCommandUseErrorActionPreference
+    $PSNativeCommandUseErrorActionPreference = $false
+
     do {
         $retryCount++
         Write-Host "Checking pod status (attempt $retryCount/$maxRetries)..."
-        $podStatus = kubectl get pods -n $ns --kubeconfig "${outDir}/cl-cluster/k8s-credentials.yaml" -o jsonpath='{.items[0].status.phase}' 2>$null
+        $podStatus = kubectl get pods -n $ns --kubeconfig "${outDir}/cl-cluster/k8s-credentials.yaml" -o jsonpath='{.items[*].status.phase}' 2>$null
         if ($LASTEXITCODE -ne 0) {
             $podStatus = ""
         }
 
         if ($podStatus -eq "Running") {
             # Check if pod is ready
-            $readyStatus = kubectl get pods -n $ns --kubeconfig "${outDir}/cl-cluster/k8s-credentials.yaml" -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>$null
+            $readyStatus = kubectl get pods -n $ns --kubeconfig "${outDir}/cl-cluster/k8s-credentials.yaml" -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' 2>$null
             if ($LASTEXITCODE -ne 0) {
                 $readyStatus = ""
             }
@@ -150,6 +158,9 @@ else {
             Start-Sleep -Seconds $retryInterval
         }
     } while ($retryCount -lt $maxRetries)
+
+    # Restore the caller's native-command error-action preference.
+    $PSNativeCommandUseErrorActionPreference = $prevNativeErrPref
 
     if ($retryCount -eq $maxRetries) {
         Write-Error "Timeout waiting for frontend-service pod to become ready"

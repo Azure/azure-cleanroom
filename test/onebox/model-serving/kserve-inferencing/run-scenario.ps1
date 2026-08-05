@@ -32,10 +32,19 @@ param
     $withSecurityPolicy,
 
     [string]
-    $models = "all",
+    $models = "default",
 
     [string]
-    $flexNodeVmSize = ""
+    $flexNodeVmSize = "",
+
+    [string]
+    $location = "centralindia",
+
+    [switch]
+    $provisionFlexNodeUsingBakedImage,
+
+    [switch]
+    $noDelete
 )
 
 #https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
@@ -76,13 +85,14 @@ Remove-Item -Path "$outDir/collaboration-config-*.yaml" -Force -ErrorAction Sile
 $runId = (New-Guid).ToString().Substring(0, 8)
 $env:CLEANROOM_COLLABORATION_CONFIG_FILE = "$outDir/collaboration-config-$runId.yaml"
 
-pwsh $PSScriptRoot/setup-kfserving-examples-storage.ps1 -outDir $outDir
+pwsh $PSScriptRoot/setup-kfserving-examples-storage.ps1 -outDir $outDir -models $models
 
 $publisherSaResult = Get-Content "$outDir/sa-resources.generated.json" | ConvertFrom-Json
 pwsh $PSScriptRoot/setup-kfserving-examples-mi.ps1 `
     -resourceGroup $publisherResourceGroup `
     -storageAccountName $publisherSaResult.sa.name `
     -resourceGroupTags $resourceGroupTags `
+    -location $location `
     -outDir $outDir
 
 # Start a local IDP server that can provide token to local users.
@@ -348,7 +358,53 @@ az cleanroom collaboration dataset publish `
     --policy-allowed-fields "date,author,mentions" `
     --datastore-config-file $publisherDatastoreConfig
 
-# Create an ad-hoc inferencing document till we figure out the document schema for inferencing models.
+# Approvers list (publisher) reused for the inferencing model documents.
+, @(
+    @{
+        "id"   = "$publisherUserId"
+        "type" = "user"
+    }
+) | ConvertTo-Json -Depth 100 | Out-File $outDir/publisher-inferencing-model-approvers.json
+
+# Helper: create + propose + accept a user document as the publisher.
+function Publish-PublisherUserDocument {
+    param(
+        [Parameter(Mandatory)][string]$DocId,
+        [Parameter(Mandatory)][string]$DataPath
+    )
+
+    $docContent = Get-Content -Raw $DataPath
+    az cleanroom governance user-document create `
+        --data $docContent `
+        --id $DocId `
+        --approvers $outDir/publisher-inferencing-model-approvers.json `
+        --contract-id $contractId `
+        --governance-client $publisherProjectName
+
+    $version = (az cleanroom governance user-document show `
+            --id $DocId `
+            --governance-client $publisherProjectName `
+            --query "version" `
+            --output tsv)
+    $proposalId = (az cleanroom governance user-document propose `
+            --version $version `
+            --id $DocId `
+            --governance-client $publisherProjectName `
+            --query "proposalId" `
+            --output tsv)
+
+    az cleanroom governance user-document vote `
+        --id $DocId `
+        --proposal-id $proposalId `
+        --action accept `
+        --governance-client $publisherProjectName | Out-Null
+}
+
+# Runtime image+digest is operational state pinned by the agent/frontend
+# release version (the frontend resolves it from a bundled digest table
+# at deploy time). The model document carries only the runtime name.
+
+# Create the inferencing model governance document using the typed schema.
 $inferencingModelDocumentId = "inferencing-model-$runId"
 @"
 {
@@ -356,57 +412,22 @@ $inferencingModelDocumentId = "inferencing-model-$runId"
   "application": {
     "applicationType": "KServe-Inferencing",
     "modelDir": "$publisherInputSseDatasetName/models/sklearn/1.0/model",
-    "inputDataset": [
+    "modelDatasets": [
       {
         "specification": "$publisherInputSseDatasetName"
       }
-    ]
+    ],
+    "runtime": {
+      "name": "kserve-sklearnserver"
+    }
   }
 }
 "@ > $outDir/inferencingModelConfig.json
 
-# , @({...}) generates an array of objects in json for the approvers list for the user document.
-, @(
-    @{
-        "id"   = "$publisherUserId"
-        "type" = "user"
-    }
-) | ConvertTo-Json -Depth 100 | Out-File $outDir/publisher-inferencing-model-approvers.json
-$modelConfigDocument = Get-Content -Raw $outDir/inferencingModelConfig.json
-
-Write-Output "Adding user document for infrencing model with approvers as $(Get-Content -Raw $outDir/publisher-inferencing-model-approvers.json)..."
-az cleanroom governance user-document create `
-    --data $modelConfigDocument `
-    --id $inferencingModelDocumentId `
-    --approvers $outDir/publisher-inferencing-model-approvers.json `
-    --contract-id $contractId `
-    --governance-client $publisherProjectName
-
-Write-Output "Submitting user document proposal for inferencing model"
-$version = (az cleanroom governance user-document show `
-        --id $inferencingModelDocumentId `
-        --governance-client $publisherProjectName `
-        --query "version" `
-        --output tsv)
-$proposalId = (az cleanroom governance user-document propose `
-        --version $version `
-        --id $inferencingModelDocumentId `
-        --governance-client $publisherProjectName `
-        --query "proposalId" `
-        --output tsv)
-
-Write-Output "Accepting the user document proposal for inferencing model as publisher"
-az cleanroom governance user-document vote `
-    --id $inferencingModelDocumentId `
-    --proposal-id $proposalId `
-    --action accept `
-    --governance-client $publisherProjectName
-
-@"
-{
-    "cgsClient": "$publisherProjectName"
-}
-"@ > $outDir/deployModelConfig.json
+Write-Output "Publishing inferencing model document '$inferencingModelDocumentId'..."
+Publish-PublisherUserDocument `
+    -DocId $inferencingModelDocumentId `
+    -DataPath "$outDir/inferencingModelConfig.json"
 
 # Setup OIDC issuer and managed identity access to storage in publisher tenant.
 $subject = $contractId + "-" + $publisherUserId
@@ -430,6 +451,32 @@ if ($flexNodeVmSize -ne "") {
     $enableFlexNodeArgs += @("-flexNodeVmSize", $flexNodeVmSize)
 }
 
+# GPU VMs have limited availability — use a single flex node to test GPU workloads.
+if ($flexNodeVmSize -like "Standard_NC*") {
+    $enableFlexNodeArgs += @("-flexNodeCount", 1)
+}
+else {
+    $enableFlexNodeArgs += @("-flexNodeCount", 2)
+}
+# Enable MPS GPU sharing when tinyllama-gpu is selected — it deploys
+# minReplicas: 2, requiring at least 2 nvidia.com/gpu resources which
+# MPS provides via replica advertisement. Other GPU models (gemma4-gpu,
+# phi4-gpu) use minReplicas: 1 and don't need MPS.
+$enabledModels = $models -split ","
+if (($enabledModels -contains "tinyllama-gpu") -and $flexNodeVmSize -like "Standard_NC*") {
+    $enableFlexNodeArgs += @("-gpuSharingMode", "mps", "-gpuMpsReplicas", 2)
+}
+
+# TODO (HPrabh): This forces the api-server-proxy to not check pod policies.
+# The kserve pods currently do not support policies that can be enforced by the api-server-proxy.
+# Remove this once we have proper policies in place and the kserve pods are annotated.
+$enableFlexNodeArgs += @(
+    "-insecure"
+)
+
+if (!$provisionFlexNodeUsingBakedImage) {
+    $enableFlexNodeArgs += @("-provisionUsingSSH")
+}
 pwsh $root/samples/workloads/azcli/enable-flex-node.ps1 @enableFlexNodeArgs
 
 # Deploy the inferencing agent using the CGS /deploymentspec endpoint as the inferencing config endpoint.
@@ -450,6 +497,13 @@ Write-Output "Fetching deployment information..."
 $clCluster = Get-Content $clClusterOutDir/cl-cluster.json | ConvertFrom-Json
 $inferencingEndpoint = $clCluster.inferencingWorkloadProfile.kserveProfile.endpoint
 Write-Output "Fetched inferencing endpoint: $inferencingEndpoint"
+
+@"
+{
+    "cgsClient": "$publisherProjectName",
+    "inferencingAgentEndpoint": "$inferencingEndpoint"
+}
+"@ > $outDir/deployModelConfig.json
 
 #
 # Instead of accessing the service via the public endpoint, we will use kubectl proxy to access it via localhost.
@@ -490,62 +544,94 @@ az cleanroom governance proposal vote `
 }
 "@ > $outDir/ModelConfig.json
 
-# Create governance document for GPT-2 LLM model (llama.cpp server).
-$gpt2ModelDocumentId = "inferencing-gpt2-model-$runId"
-@"
+$enabledModels = $models -split ","
+$runDefault = $enabledModels -contains "default"
+$runTinyLlamaCpu = $runDefault -or $enabledModels -contains "tinyllama"
+$runTinyLlamaGpu = $enabledModels -contains "tinyllama-gpu"
+$runGemma4 = $enabledModels -contains "gemma4-gpu"
+$runPhi4 = $enabledModels -contains "phi4-gpu"
+
+# Helper: create, propose, and accept a model governance document.
+function New-ModelGovernanceDocument(
+    $displayName,
+    $docId,
+    $modelDir,
+    $runtimeName,
+    $configOutputFile) {
+    @"
 {
-  "name": "$gpt2ModelDocumentId",
+  "name": "$docId",
   "application": {
     "applicationType": "KServe-Inferencing",
-    "modelDir": "$publisherInputSseDatasetName/models/gpt2-gguf/model.gguf",
-    "inputDataset": [
+    "modelDir": "$modelDir",
+    "modelDatasets": [
       {
         "specification": "$publisherInputSseDatasetName"
       }
-    ]
+    ],
+    "runtime": {
+      "name": "$runtimeName"
+    }
   }
 }
-"@ > $outDir/gpt2ModelConfig.json
+"@ > $outDir/${docId}.json
 
-$gpt2ModelConfigDocument = Get-Content -Raw $outDir/gpt2ModelConfig.json
+    Write-Output "Publishing user document '$docId' for $displayName model..."
+    Publish-PublisherUserDocument `
+        -DocId $docId `
+        -DataPath "$outDir/${docId}.json"
 
-Write-Output "Adding user document for GPT-2 model..."
-az cleanroom governance user-document create `
-    --data $gpt2ModelConfigDocument `
-    --id $gpt2ModelDocumentId `
-    --approvers $outDir/publisher-inferencing-model-approvers.json `
-    --contract-id $contractId `
-    --governance-client $publisherProjectName
-
-Write-Output "Submitting user document proposal for GPT-2 model"
-$gpt2Version = (az cleanroom governance user-document show `
-        --id $gpt2ModelDocumentId `
-        --governance-client $publisherProjectName `
-        --query "version" `
-        --output tsv)
-$gpt2ProposalId = (az cleanroom governance user-document propose `
-        --version $gpt2Version `
-        --id $gpt2ModelDocumentId `
-        --governance-client $publisherProjectName `
-        --query "proposalId" `
-        --output tsv)
-
-Write-Output "Accepting the user document proposal for GPT-2 model as publisher"
-az cleanroom governance user-document vote `
-    --id $gpt2ModelDocumentId `
-    --proposal-id $gpt2ProposalId `
-    --action accept `
-    --governance-client $publisherProjectName
-
-@"
+    @"
 {
     "contractId": "$contractId",
-    "modelDocumentId": "$gpt2ModelDocumentId"
+    "modelDocumentId": "$docId"
 }
-"@ > $outDir/Gpt2ModelConfig.json
+"@ > $configOutputFile
+}
+
+if ($runTinyLlamaCpu) {
+    New-ModelGovernanceDocument `
+        -displayName "TinyLlama-1.1B-Chat (CPU)" `
+        -docId "inferencing-tinyllama-cpu-model-$runId" `
+        -modelDir "$publisherInputSseDatasetName/models/tinyllama-chat-gguf/model.gguf" `
+        -runtimeName "llamacpp-server" `
+        -configOutputFile "$outDir/TinyLlamaCpuModelConfig.json"
+}
+
+if ($runTinyLlamaGpu) {
+    New-ModelGovernanceDocument `
+        -displayName "TinyLlama-1.1B-Chat (GPU)" `
+        -docId "inferencing-tinyllama-gpu-model-$runId" `
+        -modelDir "$publisherInputSseDatasetName/models/tinyllama-chat-gguf/model.gguf" `
+        -runtimeName "llamacpp-server-cuda" `
+        -configOutputFile "$outDir/TinyLlamaGpuModelConfig.json"
+}
+
+if ($runGemma4) {
+    New-ModelGovernanceDocument `
+        -displayName "Gemma 4 31B-IT" `
+        -docId "inferencing-gemma4-model-$runId" `
+        -modelDir "$publisherInputSseDatasetName/models/gemma4-31b-it" `
+        -runtimeName "vllm-openai" `
+        -configOutputFile "$outDir/Gemma4ModelConfig.json"
+}
+
+if ($runPhi4) {
+    New-ModelGovernanceDocument `
+        -displayName "Phi-4 14B" `
+        -docId "inferencing-phi4-model-$runId" `
+        -modelDir "$publisherInputSseDatasetName/models/phi-4-14b" `
+        -runtimeName "vllm-openai" `
+        -configOutputFile "$outDir/Phi4ModelConfig.json"
+}
 
 Write-Output "Deploying inferencing model..."
-python3 -u $PSScriptRoot/deploy-models.py `
-    --out-dir $outDir `
-    --deployment-config-dir $deploymentConfigDir `
-    --models $models
+$deployModelArgs = @(
+    "--out-dir", $outDir,
+    "--deployment-config-dir", $deploymentConfigDir,
+    "--models", $models
+)
+if ($noDelete) {
+    $deployModelArgs += "--no-delete"
+}
+python3 -u $PSScriptRoot/deploy-models.py @deployModelArgs

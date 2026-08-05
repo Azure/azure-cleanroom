@@ -182,6 +182,8 @@ namespace cleanroom::crypto
         return NID_secp384r1;
       case CurveID::SECP256R1:
         return NID_X9_62_prime256v1;
+      case CurveID::CURVE25519:
+      case CurveID::X25519:
       default:
         throw std::logic_error(
           fmt::format("unsupported OpenSSL CurveID {}", gid));
@@ -202,7 +204,7 @@ namespace cleanroom::crypto
       md_type = get_md_for_ec(get_curve_id());
     }
     OpenSSLHashProvider hp;
-    bytes = hp.Hash(contents, contents_size, md_type);
+    bytes = hp.hash(contents, contents_size, md_type);
     return verify_hash(bytes.data(), bytes.size(), sig, sig_size, md_type);
   }
 
@@ -324,7 +326,7 @@ namespace cleanroom::crypto
 #endif
   }
 
-  PublicKey::Coordinates PublicKey_OpenSSL::coordinates() const
+  ECPublicKey::Coordinates PublicKey_OpenSSL::coordinates() const
   {
     Coordinates r;
     Unique_BIGNUM x, y;

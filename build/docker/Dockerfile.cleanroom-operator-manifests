@@ -1,0 +1,32 @@
+# Generates CRD YAML and deepcopy from Go types using controller-gen.
+# Outputs are placed at /output/crds/ and /output/zz_generated.deepcopy.go.
+FROM mcr.microsoft.com/oss/go/microsoft/golang:1.26.4
+
+ARG CONTROLLER_GEN_VERSION=v0.17.0
+
+WORKDIR /app
+
+# Install controller-gen binary. This layer is only rebuilt when the
+# version ARG changes.
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go install sigs.k8s.io/controller-tools/cmd/controller-gen@${CONTROLLER_GEN_VERSION}
+
+# Download module dependencies (cached unless go.mod/go.sum change).
+COPY src/cleanroom-operator/go.mod src/cleanroom-operator/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+# Copy source. Only changes here bust the generation layer below.
+COPY src/cleanroom-operator/api/ ./api/
+COPY src/cleanroom-operator/client/ ./client/
+COPY src/cleanroom-operator/flexnodeclaim-controller/ ./flexnodeclaim-controller/
+COPY src/cleanroom-operator/internal/ ./internal/
+COPY src/cleanroom-operator/helm/ ./helm/
+
+# Generate CRD, deepcopy, and RBAC using the pre-installed binary.
+RUN controller-gen crd paths=./api/... output:crd:dir=/output/crds && \
+    controller-gen object paths=./api/... && \
+    cp api/v1alpha1/zz_generated.deepcopy.go /output/zz_generated.deepcopy.go && \
+    controller-gen rbac:roleName=cleanroom-operator \
+    paths=./internal/controller/... output:rbac:dir=/output/rbac

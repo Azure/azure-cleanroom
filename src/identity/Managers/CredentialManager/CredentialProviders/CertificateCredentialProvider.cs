@@ -44,6 +44,10 @@ internal class CertificateCredentialProvider : ITokenCredentialProvider
         return new ClientCertificateCredential(
             tenantId,
             clientId,
-            certificate);
+            certificate,
+            new ClientCertificateCredentialOptions
+            {
+                SendCertificateChain = true,
+            });
     }
 }

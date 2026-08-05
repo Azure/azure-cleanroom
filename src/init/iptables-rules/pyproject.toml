@@ -1,0 +1,15 @@
+[project]
+name = "iptables-rules"
+version = "0.1.0"
+description = "Init container that configures iptables rules for cleanroom sandboxing"
+requires-python = ">=3.12"
+dependencies = [
+    "jinja2==3.1.6",
+]
+
+[project.scripts]
+setup_iptables = "iptables_rules.main:main"
+
+[build-system]
+requires = ["uv_build>=0.9.3,<0.10.0"]
+build-backend = "uv_build"

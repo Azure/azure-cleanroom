@@ -1,12 +1,12 @@
-import datetime
 from enum import StrEnum
 from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field
 
 from cleanroom_sdk.models.cleanroom import DatasetInfo
 from frontend_internal.models.input_models import (
     GovernanceSettings,
 )
-from pydantic import BaseModel, ConfigDict, Field
 
 
 class ModelFormatInput(BaseModel):
@@ -70,6 +70,7 @@ class PredictorInput(BaseModel):
     )
     scale_metric_type: Optional[str] = Field(None, alias="scaleMetricType")
     auto_scaling: Optional[AutoScalingInput] = Field(None, alias="autoScaling")
+    affinity: Optional[Dict[str, Any]] = Field(None, alias="affinity")
 
 
 class JobInput(BaseModel):

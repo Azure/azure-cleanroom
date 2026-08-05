@@ -275,9 +275,6 @@ def test_identity_update_replace():
     print("\nTesting Identity update/replace functionality...")
 
     try:
-        from cleanroom_common.azure_cleanroom_core.models.cleanroom import (
-            AttestationBasedTokenIssuer,
-        )
         from cleanroom_common.azure_cleanroom_core.utilities.identity_manager import (
             IdentityManager,
         )

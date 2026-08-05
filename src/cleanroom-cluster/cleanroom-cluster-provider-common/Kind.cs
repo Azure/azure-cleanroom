@@ -18,13 +18,38 @@ public class KindClient : RunCommand
         this.config = config;
     }
 
-    public async Task CreateCluster(string name)
+    public async Task CreateCluster(string name, int flexNodeCount = 0)
     {
         var template = await File.ReadAllTextAsync("kind/kind-config.yaml");
         var hostSharedDir =
             Environment.GetEnvironmentVariable("CR_CLUSTER_PROVIDER_HOST_SHARED_DIR") ??
             throw new ArgumentNullException("CR_CLUSTER_PROVIDER_HOST_SHARED_DIR");
         template = template.Replace("<HOST_SHARED_DIR>", hostSharedDir);
+
+        var flexNodeWorkers = new StringBuilder();
+        if (flexNodeCount > 0)
+        {
+            const string flexNodeEntry =
+                """
+                  - role: worker
+                    kubeadmConfigPatches:
+                      - |
+                        kind: JoinConfiguration
+                        nodeRegistration:
+                          taints:
+                            - key: "for-flex-node"
+                              value: "true"
+                              effect: "NoSchedule"
+
+                """;
+            for (int i = 0; i < flexNodeCount; i++)
+            {
+                flexNodeWorkers.Append(flexNodeEntry);
+            }
+        }
+
+        template = template.Replace("  # <FLEX_NODE_WORKERS>\n", flexNodeWorkers.ToString());
+
         var configFile = Path.GetTempFileName();
         await File.WriteAllTextAsync(configFile, template);
         await this.Kind($"create cluster --name {name} --config={configFile}");
@@ -64,6 +89,28 @@ public class KindClient : RunCommand
     public async Task LoadImageArchive(string imageFile, string name, string nodeName)
     {
         await this.Kind($"load image-archive {imageFile} --name {name} --nodes {nodeName}");
+    }
+
+    public async Task AddWorkerNode(
+        string clusterName,
+        string nodeName,
+        string? taint = null,
+        string? providerID = null)
+    {
+        var args = $"kind/add-worker-node.sh --cluster-name {clusterName} --node-name {nodeName}";
+        if (!string.IsNullOrEmpty(taint))
+        {
+            args += $" --add-taint {taint}";
+        }
+
+        if (!string.IsNullOrEmpty(providerID))
+        {
+            args += $" --provider-id {providerID}";
+        }
+
+        StringBuilder output = new();
+        StringBuilder error = new();
+        await this.ExecuteCommand("bash", args, output, error);
     }
 
     private async Task<string> Kind(

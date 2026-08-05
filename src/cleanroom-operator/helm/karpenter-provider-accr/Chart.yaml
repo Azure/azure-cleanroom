@@ -1,0 +1,8 @@
+apiVersion: v2
+name: karpenter-provider-accr
+description: >-
+  Deploys karpenter-provider-accr and cluster-provider-client
+  into a workload cluster for on-demand flex node provisioning.
+type: application
+version: 0.1.0
+appVersion: v1alpha1

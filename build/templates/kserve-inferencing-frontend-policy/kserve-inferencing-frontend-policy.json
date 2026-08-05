@@ -30,7 +30,7 @@
           "regex": true
         },
         {
-          "name": "CLEANROOM_RUNTIME_DIGESTS_DOCUMENT_URL",
+          "name": "CLEANROOM_INFERENCING_DIGESTS_DOCUMENT_URL",
           "value": ".*",
           "regex": true
         },

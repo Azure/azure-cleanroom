@@ -2,23 +2,22 @@ apiVersion: kind.x-k8s.io/v1alpha4
 kind: Cluster
 nodes:
   - role: control-plane
+    extraMounts:
+      # The cluster-provider-client pod is pinned to the
+      # control-plane node and needs access to the host Docker
+      # socket to manage Kind worker nodes for flex node
+      # provisioning.
+      - hostPath: /var/run/docker.sock
+        containerPath: /var/run/docker.sock
   - role: worker
   - role: worker
-  - role: worker
-    kubeadmConfigPatches:
-      - |
-        kind: JoinConfiguration
-        nodeRegistration:
-          taints:
-            - key: "for-flex-node"
-              value: "true"
-              effect: "NoSchedule"
   - role: worker
     labels:
       apps: llama-3point1-8b-instruct
     extraMounts:
       - hostPath: <HOST_SHARED_DIR>
         containerPath: /shared
+  # <FLEX_NODE_WORKERS>
 kubeadmConfigPatches:
   - |
     kind: InitConfiguration

@@ -3,8 +3,6 @@ import os
 from datetime import datetime, timedelta
 from functools import reduce
 
-from analytics_contracts.audit import AuditRecordFactory, IAuditRecordLogger
-from analytics_contracts.events import IEventEmitter, OperationalEventFactory
 from opentelemetry import trace
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import (
@@ -19,6 +17,9 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
 )
+
+from analytics_contracts.audit import AuditRecordFactory, IAuditRecordLogger
+from analytics_contracts.events import IEventEmitter, OperationalEventFactory
 
 from ..config.configuration import DatasetInfo
 
@@ -126,6 +127,7 @@ async def load_dataset_async(
                     source="dataset_loader",
                     dataset_name=dataset.name,
                     job_id=job_id,
+                    row_count=str(row_count),
                 )
             )
 

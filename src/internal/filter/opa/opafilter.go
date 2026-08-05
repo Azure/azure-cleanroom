@@ -5,15 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
 
 	"github.com/azure/azure-cleanroom/src/internal/filter"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	pb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	typev3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
-	"github.com/open-policy-agent/opa/rego"
-	"github.com/open-policy-agent/opa/topdown"
+	"github.com/open-policy-agent/opa/v1/rego"
+	"github.com/open-policy-agent/opa/v1/topdown"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -30,17 +29,17 @@ type opaFilter struct {
 }
 
 // Processes the specified confidential request headers.
-func (self *opaFilter) OnRequestHeaders(ctx context.Context, req *pb.ProcessingRequest) *pb.ProcessingResponse {
+func (f *opaFilter) OnRequestHeaders(ctx context.Context, req *pb.ProcessingRequest) *pb.ProcessingResponse {
 	headers := req.Request.(*pb.ProcessingRequest_RequestHeaders)
-	self.method = filter.ExtractHeader(filter.Method, headers)
-	self.path = filter.ExtractHeader(filter.Path, headers)
+	f.method = filter.ExtractHeader(filter.Method, headers)
+	f.path = filter.ExtractHeader(filter.Path, headers)
 
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(
-		attribute.String("request.path", self.path),
-		attribute.String("request.method", self.method),
+		attribute.String("request.path", f.path),
+		attribute.String("request.method", f.method),
 	)
-	_, response := self.processRequest(ctx, rule_OnRequestHeaders, req)
+	_, response := f.processRequest(ctx, rule_OnRequestHeaders, req)
 	if response != nil {
 		return response
 	}
@@ -49,10 +48,10 @@ func (self *opaFilter) OnRequestHeaders(ctx context.Context, req *pb.ProcessingR
 }
 
 // Processes the specified confidential request body.
-func (self *opaFilter) OnRequestBody(ctx context.Context, req *pb.ProcessingRequest) *pb.ProcessingResponse {
+func (f *opaFilter) OnRequestBody(ctx context.Context, req *pb.ProcessingRequest) *pb.ProcessingResponse {
 	body := req.Request.(*pb.ProcessingRequest_RequestBody)
-	log.Debugf("Handling confidential %s '%s' request", self.method, self.path)
-	evalResult, response := self.processRequest(ctx, rule_OnRequestBody, req)
+	log.Debugf("Handling confidential %s '%s' request", f.method, f.path)
+	evalResult, response := f.processRequest(ctx, rule_OnRequestBody, req)
 	if response != nil {
 		return response
 	}
@@ -73,8 +72,8 @@ func (self *opaFilter) OnRequestBody(ctx context.Context, req *pb.ProcessingRequ
 }
 
 // Processes the specified confidential response headers.
-func (self *opaFilter) OnResponseHeaders(ctx context.Context, req *pb.ProcessingRequest) *pb.ProcessingResponse {
-	_, response := self.processRequest(ctx, rule_OnResponseHeaders, req)
+func (f *opaFilter) OnResponseHeaders(ctx context.Context, req *pb.ProcessingRequest) *pb.ProcessingResponse {
+	_, response := f.processRequest(ctx, rule_OnResponseHeaders, req)
 	if response != nil {
 		return response
 	}
@@ -83,10 +82,10 @@ func (self *opaFilter) OnResponseHeaders(ctx context.Context, req *pb.Processing
 }
 
 // Processes the specified confidential response body.
-func (self *opaFilter) OnResponseBody(ctx context.Context, req *pb.ProcessingRequest) *pb.ProcessingResponse {
+func (f *opaFilter) OnResponseBody(ctx context.Context, req *pb.ProcessingRequest) *pb.ProcessingResponse {
 	body := req.Request.(*pb.ProcessingRequest_ResponseBody)
-	log.Debugf("Handling confidential %s '%s' response", self.method, self.path)
-	evalResult, response := self.processRequest(ctx, rule_OnResponseBody, req)
+	log.Debugf("Handling confidential %s '%s' response", f.method, f.path)
+	evalResult, response := f.processRequest(ctx, rule_OnResponseBody, req)
 	if response != nil {
 		return response
 	}
@@ -106,7 +105,7 @@ func (self *opaFilter) OnResponseBody(ctx context.Context, req *pb.ProcessingReq
 		pb.CommonResponse_CONTINUE, headerMutation, bodyMutation)
 }
 
-func (self *opaFilter) processRequest(
+func (f *opaFilter) processRequest(
 	ctx context.Context,
 	rule rule,
 	req *pb.ProcessingRequest) (*evalResult, *pb.ProcessingResponse) {
@@ -121,10 +120,10 @@ func (self *opaFilter) processRequest(
 			"failed to convert incoming message to policy input")
 	}
 
-	log.Infof("Evaluating '%s' policy for %s '%s'", rule, self.method, self.path)
-	input["context"] = self.currentRequestContext
-	input["teeType"] = self.teeType
-	result, err := self.eval(rule, input)
+	log.Infof("Evaluating '%s' policy for %s '%s'", rule, f.method, f.path)
+	input["context"] = f.currentRequestContext
+	input["teeType"] = f.teeType
+	result, err := f.eval(rule, input)
 	if err != nil {
 		log.Errorf("failed to evaluate query: %s", err)
 		return nil, filter.CreateErrorProxyResponse(
@@ -165,7 +164,7 @@ func (self *opaFilter) processRequest(
 	}
 
 	if context != nil {
-		self.currentRequestContext = context
+		f.currentRequestContext = context
 	}
 
 	return &result, nil
@@ -192,13 +191,13 @@ func requestToInput(req *pb.ProcessingRequest) (map[string]interface{}, error) {
 	return input, nil
 }
 
-func (self *opaFilter) eval(rule rule, input interface{}) (evalResult, error) {
+func (f *opaFilter) eval(rule rule, input interface{}) (evalResult, error) {
 	ctx := context.TODO()
 	result := evalResult{}
 	var pb bytes.Buffer
 	ph := topdown.NewPrintHook(&pb)
 	nt := newNoteQueryTracer()
-	query := self.policyQueries[rule]
+	query := f.policyQueries[rule]
 	resultSet, err :=
 		query.Eval(ctx, rego.EvalInput(input), rego.EvalPrintHook(ph), rego.EvalQueryTracer(nt))
 	printStatements := pb.String()
@@ -206,8 +205,11 @@ func (self *opaFilter) eval(rule rule, input interface{}) (evalResult, error) {
 		log.Infof("'%s' policy print output:\n%s", rule, pb.String())
 	}
 
-	// TODO (gsinha): Hook this output via logrus and not stdout.
-	topdown.PrettyTraceWithLocation(os.Stdout, *nt.bt)
+	var tb bytes.Buffer
+	topdown.PrettyTraceWithLocation(&tb, *nt.bt)
+	if tb.Len() > 0 {
+		log.Infof("'%s' policy trace:\n%s", rule, tb.String())
+	}
 
 	switch {
 	case err != nil:
@@ -251,11 +253,10 @@ func disallowedResponse(ctx context.Context, evalResult evalResult) *pb.Processi
 			"failed to get response status")
 	}
 
-	// TODO (gsinha): Revisit whether a logical disallowed response should be treated as an error
-	// for the span. This might not be an "issue" that the infra sidecars need to monitor but the
-	// business logic of the policy bundle which is opaque to us.
-	disallowedError := fmt.Errorf("%s", body)
-	filter.RecordSpanError(ctx, &disallowedError)
+	span := trace.SpanFromContext(ctx)
+	span.AddEvent("policy.denied", trace.WithAttributes(
+		attribute.Int("response.status", int(httpStatus)),
+	))
 	return filter.CreateImmediateProxyResponse(
 		httpStatus,
 		body,

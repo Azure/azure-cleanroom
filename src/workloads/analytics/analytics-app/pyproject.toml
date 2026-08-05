@@ -7,7 +7,7 @@ dependencies = [
     "pydantic==2.11.7",
     "pydantic-settings==2.10.1",
     "pyspark==4.0.0",
-    "requests==2.32.4",
+    "requests==2.33.0",
     "dependency-injector==4.48.3",
     "tenacity==9.0.0",
     "cleanroom-internal",

@@ -1,0 +1,39 @@
+FROM mcr.microsoft.com/oss/go/microsoft/golang:1.25.3 AS build-image
+
+WORKDIR /app
+
+# Copy go.mod files for dependency caching.
+COPY src/cleanroom-operator/go.mod src/cleanroom-operator/go.sum \
+    ./cleanroom-operator/
+COPY src/cleanroom-operator/providers/airunway/go.mod \
+    src/cleanroom-operator/providers/airunway/go.sum \
+    ./cleanroom-operator/providers/airunway/
+
+# Copy airunway controller module (for the replace directive).
+COPY airunway/controller/go.mod airunway/controller/go.sum \
+    ./airunway/controller/
+COPY airunway/controller/api/ ./airunway/controller/api/
+
+# Download dependencies.
+RUN --mount=type=cache,target=/go/pkg/mod \
+    cd cleanroom-operator/providers/airunway && go mod download
+
+# Copy source.
+COPY src/cleanroom-operator/api/ ./cleanroom-operator/api/
+COPY src/cleanroom-operator/providers/airunway/ \
+    ./cleanroom-operator/providers/airunway/
+
+# Build binary. The Microsoft Go toolchain's crypto backend requires
+# CGO, so the binary is dynamically linked and needs a glibc runtime
+# base below.
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    cd cleanroom-operator/providers/airunway && \
+    CGO_ENABLED=1 GOOS=linux go build \
+    -o /app/accr-conf-inferencing-provider ./cmd
+
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:24.04
+
+COPY --from=build-image --chmod=755 /app/accr-conf-inferencing-provider /
+
+ENTRYPOINT ["/accr-conf-inferencing-provider"]

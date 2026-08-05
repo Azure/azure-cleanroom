@@ -10,13 +10,13 @@ import json
 import logging
 import os
 import sys
-import uuid
+
+from opentelemetry import context, trace
 
 from analytics_workload.config.configuration import QueryConfiguration
 from analytics_workload.utilities import utilities
 from cleanroom_internal.utilities import otel_utilities
 from cleanroom_internal.utilities.otel_setup_utilities import TelemetryConfig
-from opentelemetry import context, trace
 
 config: QueryConfiguration
 

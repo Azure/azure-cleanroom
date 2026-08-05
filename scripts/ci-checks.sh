@@ -39,3 +39,14 @@ else
   "$SCRIPT_DIR"/check-format.sh src
 fi
 endgroup
+
+group "C# format"
+for sln in $(find src -name "*.sln" -not -path "*/node_modules/*"); do
+  echo "Checking $sln"
+  if [ $FIX -ne 0 ]; then
+    dotnet format "$sln" --verbosity normal
+  else
+    dotnet format "$sln" --verify-no-changes --verbosity normal
+  fi
+done
+endgroup

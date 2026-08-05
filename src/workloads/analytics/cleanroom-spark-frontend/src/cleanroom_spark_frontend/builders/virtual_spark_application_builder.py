@@ -17,6 +17,11 @@ class VirtualSparkApplicationBuilder(SparkApplicationBuilder):
     ):
         super().__init__(cleanroom_settings, telemetry_settings, governance_settings)
 
+    def _get_virtual_governance_image(self) -> str:
+        """Build the virtual (non-confidential) governance sidecar image reference."""
+        tag = self._cleanroom_settings.versions_document.split(":")[-1]
+        return f"{self._cleanroom_settings.registry_url}/ccr-governance-virtual:{tag}"
+
     def WithPolicy(
         self, policy_file: str, debug_mode: bool = False, allow_all: bool = False
     ):
@@ -30,10 +35,7 @@ class VirtualSparkApplicationBuilder(SparkApplicationBuilder):
         app = super().Build()
 
         # Override the governance sidecar image to use the virtual (non-confidential) variant.
-        versions_registry_tag = self._cleanroom_settings.versions_document.split(":")[
-            -1
-        ]
-        virtual_governance_image = f"{self._cleanroom_settings.registry_url}/ccr-governance-virtual:{versions_registry_tag}"
+        virtual_governance_image = self._get_virtual_governance_image()
 
         for container in app.spec.driver.initContainers:
             if container.name == "ccr-governance":

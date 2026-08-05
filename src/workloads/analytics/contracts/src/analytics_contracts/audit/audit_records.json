@@ -1,7 +1,7 @@
 {
   "DATASET_LOAD_COMPLETED": {
     "id": 3001,
-    "message": "Dataset: {dataset_name} load completed successfully | job id: {job_id}"
+    "message": "Dataset: {dataset_name} load completed successfully | rows: {row_count} | job id: {job_id}"
   },
   "DATASET_LOAD_FAILED": {
     "id": 3002,

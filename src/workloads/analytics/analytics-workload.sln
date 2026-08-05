@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "cleanroom-spark-analytics-a
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "governance-common", "..\..\internal\governance-common\governance-common.csproj", "{62FA7377-CF3D-0644-FB56-1F71D7E1D6D7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "workload-agent-common", "..\..\internal\workload-agent-common\workload-agent-common.csproj", "{A1C2D3E4-F5A6-7890-1234-56789ABCDEF0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -39,6 +41,10 @@ Global
 		{62FA7377-CF3D-0644-FB56-1F71D7E1D6D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{62FA7377-CF3D-0644-FB56-1F71D7E1D6D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{62FA7377-CF3D-0644-FB56-1F71D7E1D6D7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1C2D3E4-F5A6-7890-1234-56789ABCDEF0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1C2D3E4-F5A6-7890-1234-56789ABCDEF0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1C2D3E4-F5A6-7890-1234-56789ABCDEF0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1C2D3E4-F5A6-7890-1234-56789ABCDEF0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

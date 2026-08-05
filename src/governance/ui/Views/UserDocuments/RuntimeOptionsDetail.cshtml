@@ -72,14 +72,14 @@
                     <div class="d-grid">
                         @if (@Model.Execution.Status == "enabled")
                         {
-                            <a asp-controller="UserDocuments" asp-action="DisableExecution" asp-route-id="@Model.Id"
+                            <a asp-controller="UserDocuments" asp-action="DisableExecution" asp-route-id="@System.Net.WebUtility.HtmlEncode(Model.Id)"
                                class="btn btn-outline-danger">
                                 <i class="fas fa-stop me-1"></i>Disable Execution
                             </a>
                         }
                         else if (@Model.Execution.Status == "disabled")
                         {
-                            <a asp-controller="UserDocuments" asp-action="EnableExecution" asp-route-id="@Model.Id"
+                            <a asp-controller="UserDocuments" asp-action="EnableExecution" asp-route-id="@System.Net.WebUtility.HtmlEncode(Model.Id)"
                                class="btn btn-outline-success">
                                 <i class="fas fa-play me-1"></i>Enable Execution
                             </a>
@@ -138,14 +138,14 @@
                     <div class="d-grid">
                         @if (@Model.Telemetry.Status == "enabled")
                         {
-                            <a asp-controller="UserDocuments" asp-action="DisableTelemetry" asp-route-id="@Model.Id"
+                            <a asp-controller="UserDocuments" asp-action="DisableTelemetry" asp-route-id="@System.Net.WebUtility.HtmlEncode(Model.Id)"
                                class="btn btn-outline-warning">
                                 <i class="fas fa-pause me-1"></i>Disable Telemetry
                             </a>
                         }
                         else if (@Model.Telemetry.Status == "disabled")
                         {
-                            <a asp-controller="UserDocuments" asp-action="EnableTelemetry" asp-route-id="@Model.Id"
+                            <a asp-controller="UserDocuments" asp-action="EnableTelemetry" asp-route-id="@System.Net.WebUtility.HtmlEncode(Model.Id)"
                                class="btn btn-outline-success">
                                 <i class="fas fa-play me-1"></i>Enable Telemetry
                             </a>

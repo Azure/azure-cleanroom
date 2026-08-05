@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   cgs-test:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=cgs-test-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=cgs-test-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +46,7 @@ jobs:
 
       - name: CGS test reporter
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v3
         with:
           name: Test report-CGS  # Name of the check run which will be created
           path: ./src/governance/test/TestResults/TestRunResult-CGS.trx    # Path to test results

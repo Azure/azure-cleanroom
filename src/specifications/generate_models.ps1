@@ -22,34 +22,54 @@ if ($forceBuild -or -not (docker images -q python-linter)) {
     pwsh $root/src/tools/python-linter/build-python-linter.ps1
 }
 
-
 $typespecBase = "$root/src/specifications/typespec"
-
 $specs = @{
-    "cleanroom-governance-service"      = @{
-        "js" = @{
+    "cleanroom-governance-service" = @{
+        "js"     = @{
             "src" = "server/nodejs/src/generated";
-            "dst" = "$root/src/governance/ccf-app/js/src";
+            "dst" = "$root/src/governance/ccf-app/js/src/auto-generated";
         };
-    };
-    "cleanroom-governance-client-lib"   = @{
         "csharp" = @{
-            "src" = "server/aspnet/generated";
-            "dst" = "$root/src/sdk/cleanroom-governance-client-lib";
-        }
+            "src" = "client/csharp/src/Generated";
+            "dst" = "$root/src/sdk/clients/cgs-client/auto-generated";
+        };
     };
-    "cleanroom-governance-client-proxy" = @{
+    # "cleanroom-sdk"                = @{
+    #     "csharp" = @{
+    #         "src" = "server/aspnet/generated";
+    #         "dst" = "$root/src/sdk/dotnet/auto-generated/cleanroom-sdk";
+    #     }
+    # };
+    "ccf"                          = @{
         "csharp" = @{
-            "src" = "server/aspnet/generated";
-            "dst" = "$root/src/sdk/cleanroom-governance-client-proxy/service";
-        };
-        "python" = @{
-            "src" = "clients/python";
-            "dst" = "$root/src/sdk/cleanroom-governance-client-proxy/client";
+            "src" = "client/csharp/src/Generated";
+            "dst" = "$root/src/sdk/clients/ccf-client/auto-generated";
         };
     };
+    # "cleanroom-governance-client-proxy" = @{
+    #     "csharp" = @{
+    #         "src" = "server/aspnet";
+    #         "dst" = "$root/src/sdk/cleanroom-governance-client-proxy/service";
+    #     };
+    #     "python" = @{
+    #         "src" = "clients/python";
+    #         "dst" = "$root/src/sdk/cleanroom-governance-client-proxy/client/python";
+    #     };
+    # };
 }
 
+# Invoke script to emit operations Typespec from app.json.
+$pythonScript = Join-Path $PSScriptRoot "generate_typespec.py"
+
+$pythonArgs = @()
+$pythonArgs += "--app-json"
+$pythonArgs += "$root/src/governance/ccf-app/js/app.json"
+$pythonArgs += "--output-dir"
+$pythonArgs += "$root/src/specifications/typespec"
+
+python3 $pythonScript @pythonArgs
+
+# Iterate over specifications to generate code for each target.
 $specs.GetEnumerator() | ForEach-Object {
     $spec = $_.Key
     $typespecFolder = "$typespecBase/$spec"
@@ -76,7 +96,7 @@ $specs.GetEnumerator() | ForEach-Object {
         $language = $_.Key
         $src = "$typespecFolder/generated/$($_.Value.src)/."
 
-        $dst = "$($_.Value.dst)/auto-generated/$language"
+        $dst = $_.Value.dst
         rm -fr $dst
         mkdir -p $dst
 

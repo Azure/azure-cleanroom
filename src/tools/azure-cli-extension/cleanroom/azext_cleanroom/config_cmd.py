@@ -103,7 +103,6 @@ def config_add_identity_az_secret_cmd(
 def config_add_identity_oidc_attested_cmd(
     cmd, cleanroom_config_file, name, client_id, tenant_id, issuer_url
 ):
-    from azure.cli.core.util import CLIError
     from cleanroom_common.azure_cleanroom_core.utilities.identity_manager import (
         IdentityManager,
     )

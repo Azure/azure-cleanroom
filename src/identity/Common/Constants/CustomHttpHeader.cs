@@ -8,4 +8,6 @@ public static class CustomHttpHeader
     public const string MsClientRequestId = "x-ms-client-request-id";
     public const string MsCorrelationRequestId = "x-ms-correlation-request-id";
     public const string MsRequestId = "x-ms-request-id";
+    public const string MsCcrGovernanceApiPathPrefix =
+        "x-ms-ccr-governance-api-path-prefix";
 }

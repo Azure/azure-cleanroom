@@ -10,12 +10,12 @@ import threading
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from math import e
+
+from opentelemetry import context, trace
 
 from cleanroom_internal.utilities import otel_utilities, secret_utilities
 from cleanroom_internal.utilities import utilities as internal_utilities
 from cleanroom_internal.utilities.otel_setup_utilities import TelemetryConfig
-from opentelemetry import context, trace
 
 from .utilities import *
 
@@ -284,25 +284,29 @@ def main():
             start_readiness_server(args.readiness_port)
 
         encryption_key_base64 = ""
-        try:
-            internal_utilities.wait_for_services_readiness(
-                logger,
-                tracer,
-                [args.otel_collector_port],
-            )
-        except Exception:
-            logger.warning(
-                "OTel collector endpoint on port %s is not available."
-                " Continuing without telemetry export.",
-                args.otel_collector_port,
-            )
+        if args.otel_collector_port != 0:
+            try:
+                internal_utilities.wait_for_services_readiness(
+                    logger,
+                    tracer,
+                    [args.otel_collector_port],
+                )
+            except Exception:
+                logger.warning(
+                    "OTel collector endpoint on port %s is not available."
+                    " Continuing without telemetry export.",
+                    args.otel_collector_port,
+                )
+        else:
+            logger.info("OTel collector port is 0, skipping readiness check.")
+        ports_to_wait = [args.imds_port]
+        if args.cgs_dek_secret:
+            # Only wait for governance sidecar when using CGS DEK path.
+            ports_to_wait.append(args.governance_port)
         internal_utilities.wait_for_services_readiness(
             logger,
             tracer,
-            [
-                args.imds_port,
-                args.governance_port,
-            ],
+            ports_to_wait,
         )
         if args.encryption_mode in ["CPK", "CSE"]:
             if args.cgs_dek_secret:

@@ -8,9 +8,33 @@ authors = [
 requires-python = ">=3.10"
 dependencies = []
 
-[tool.black]
-target-version = ['py310']
-extend-exclude = 'vendored_sdks'
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+extend-exclude = [
+    "vendored_sdks",
+    "src/sdk/cleanroom-governance-client-proxy/client/auto-generated",
+]
+
+[tool.ruff.lint]
+select = [
+    "I",      # isort (replaces standalone isort).
+    "F401",   # Unused imports.
+]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "cleanroom_sdk",
+    "cleanroom_internal",
+    "analytics_contracts",
+    "frontend_internal",
+    "analytics_workload",
+    "cleanroom_spark_frontend",
+    "kserve_inferencing_frontend",
+    "blobfuse_launcher",
+    "s3fs_launcher",
+    "code_launcher",
+]
 
 [tool.uv.sources]
 cleanroom-sdk = {workspace = true}
@@ -29,7 +53,17 @@ members = [
     "src/blobfuse-launcher",
     "src/s3fs-launcher",
     "src/code-launcher",
+    "src/init/iptables-rules",
+    "src/otel-collector",
+    "src/proxy/render-config",
     "test/onebox/multi-party-collab/big-data-query-analytics",
     "test/onebox/model-serving/kserve-inferencing",
+    "src/workloads/inferencing/ohttp/tests",
     "src/internal/frontend-internal",
+    "src/k8s-node/image-prep",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.7",
 ]

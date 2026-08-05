@@ -5,19 +5,19 @@ import logging
 import math
 import os
 import tempfile
-from typing import List
+from typing import List, Optional
 
 import oras.client
 import yaml
+from kubernetes.client import models as k8smodels
+
 from cleanroom_internal.utilities import otel_utilities
 from cleanroom_sdk.models.cleanroom import DatasetInfo
-from cleanroom_spark_frontend.utilities.helpers import to_spark_app_name
 from frontend_internal.cleanroom_application_builder import (
     CleanroomApplicationBuilder,
     replace_vars,
 )
 from frontend_internal.models.cleanroom_application import Sidecar
-from kubernetes.client import models as k8smodels
 
 from ..builders.i_spark_application_builder import (
     ISparkApplicationBuilder,
@@ -27,6 +27,7 @@ from ..builders.i_spark_application_builder import (
     ISparkApplicationBuilderWithMainAppFile,
     ISparkApplicationBuilderWithName,
     ISparkApplicationBuilderWithPolicy,
+    ISparkApplicationBuilderWithTimeToLiveSeconds,
 )
 from ..config.configuration import (
     CleanroomSettings,
@@ -42,6 +43,7 @@ from ..models.spark_application_models import (
     DynamicAllocationProfile,
     Executor,
     MonitoringSpec,
+    RestartPolicy,
     SparkApplicationSpec,
 )
 from ..utilities.constants import Constants, SparkMonitoringConstants
@@ -59,6 +61,7 @@ class SparkApplicationBuilder(
     ISparkApplicationBuilderWithImage,
     ISparkApplicationBuilderWithMainAppFile,
     ISparkApplicationBuilderWithPolicy,
+    ISparkApplicationBuilderWithTimeToLiveSeconds,
     ISparkApplicationBuilderWithDriver,
     ISparkApplicationBuilderWithExecutor,
 ):
@@ -80,6 +83,7 @@ class SparkApplicationBuilder(
         self._dynamic_allocation_profile = DynamicAllocationProfile()
         self._debug_mode: bool = False
         self._allow_all: bool = False
+        self._time_to_live_seconds: Optional[int] = None
         self._arguments = []
         self._env_vars = []
         self._datasets: List[DatasetInfo] = []
@@ -127,6 +131,12 @@ class SparkApplicationBuilder(
         self._arguments = arguments
         return self
 
+    def AddTimeToLiveSeconds(
+        self, time_to_live_seconds: int
+    ) -> "ISparkApplicationBuilderWithTimeToLiveSeconds":
+        self._time_to_live_seconds = time_to_live_seconds
+        return self
+
     def AddDriver(
         self, settings: DriverSettings
     ) -> "ISparkApplicationBuilderWithDriver":
@@ -154,10 +164,17 @@ class SparkApplicationBuilder(
         return self
 
     def Build(self) -> CleanRoomSparkApplication:
-        if not self._app_name or not self._image or not self._main_application_file:
+        if (
+            not self._app_name
+            or not self._image
+            or not self._main_application_file
+            or self._time_to_live_seconds is None
+        ):
             raise ValueError("Missing required fields to build SparkApplication")
 
         spark_conf = {}
+        # Initial shuffle partition count (default 200); AQE coalesces at runtime.
+        spark_conf["spark.sql.shuffle.partitions"] = "200"
         volumes: List[k8smodels.V1Volume] = []
 
         metrics_endpoint = "http://localhost:4040"
@@ -286,6 +303,14 @@ class SparkApplicationBuilder(
                 monitoring=MonitoringSpec(
                     exposeDriverMetrics=True,
                     exposeExecutorMetrics=True,
+                ),
+                timeToLiveSeconds=self._time_to_live_seconds,
+                # Retry submission up to 3 times (10s apart) so a transient kube-apiserver
+                # connection timeout during spark-submit does not fail the whole run.
+                restartPolicy=RestartPolicy(
+                    type="OnFailure",
+                    onSubmissionFailureRetries=3,
+                    onSubmissionFailureRetryInterval=10,
                 ),
             ),
             spark_pod_policy["driver"],

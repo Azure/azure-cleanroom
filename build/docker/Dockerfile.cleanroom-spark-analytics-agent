@@ -14,15 +14,19 @@ COPY src/secrets/common/*.csproj /app/src/secrets/common/
 COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
 COPY src/internal/governance-common/*.csproj /app/src/internal/governance-common/
+COPY src/internal/workload-agent-common/*.csproj /app/src/internal/workload-agent-common/
 RUN dotnet restore /app/src/workloads/analytics/analytics-workload.sln
 
 # copy everything else and build app
 COPY stylecop.json /app
 COPY Menees.Analyzers.Settings.xml /app
 COPY .editorconfig /app
-COPY src/internal /app/src/internal
+COPY src/internal/Attestation /app/src/internal/Attestation
+COPY src/internal/restapi-common /app/src/internal/restapi-common
+COPY src/internal/governance-common /app/src/internal/governance-common
+COPY src/internal/workload-agent-common /app/src/internal/workload-agent-common
 COPY src/secrets/common /app/src/secrets/common/
-COPY src/workloads /app/src/workloads
+COPY src/workloads/analytics /app/src/workloads/analytics
 
 # Publish the application
 RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/workloads/analytics/cleanroom-spark-analytics-agent/cleanroom-spark-analytics-agent.csproj

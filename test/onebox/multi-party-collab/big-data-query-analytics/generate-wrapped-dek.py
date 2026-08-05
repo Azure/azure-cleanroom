@@ -55,8 +55,6 @@ def wrap_dek(dek_file: str, kek_public_key_file: str) -> str:
         public_key = serialization.load_pem_public_key(kek_pem_bytes)
     except Exception:
         # If it's a private key PEM, extract the public key from it.
-        from cryptography.hazmat.primitives.asymmetric import rsa
-
         private_key = serialization.load_pem_private_key(kek_pem_bytes, password=None)
         public_key = private_key.public_key()
 

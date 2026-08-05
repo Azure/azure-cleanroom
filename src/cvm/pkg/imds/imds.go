@@ -13,13 +13,13 @@
 //
 //	{
 //	  "id":                      "",
-//	  "offer":                   "0001-com-ubuntu-confidential-vm-jammy",
+//	  "offer":                   "ubuntu-24_04-lts",
 //	  "publisher":               "Canonical",
-//	  "sku":                     "22_04-lts-cvm",
-//	  "version":                 "22.04.202603010",
+//	  "sku":                     "cvm",
+//	  "version":                 "24.04.202604160",
 //	  "communityGalleryImageId": "",
 //	  "sharedGalleryImageId":    "",
-//	  "exactVersion":            "22.04.202603010"
+//	  "exactVersion":            "24.04.202604160"
 //	}
 package imds
 
@@ -63,7 +63,7 @@ func FetchImageReference() (*ImageReference, error) {
 	if err != nil {
 		return nil, fmt.Errorf("IMDS HTTP GET: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // Best-effort close on HTTP response body.
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

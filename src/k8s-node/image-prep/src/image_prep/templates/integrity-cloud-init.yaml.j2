@@ -1,0 +1,70 @@
+#cloud-config
+# Integrity Protection VM -- cloud-init
+#
+# Sets up a utility VM with tpm-tools and cvmboot for processing disk images.
+# This VM is used to apply integrity protection to a data disk (the OS disk
+# from the builder VM).
+
+apt_update: true
+
+# Prevent interactive prompts during all apt operations in cloud-init.
+apt:
+  conf: |
+    APT::Get::Assume-Yes "true";
+    DPkg::Options:: "--force-confdef";
+    DPkg::Options:: "--force-confold";
+
+packages:
+  - tpm2-tools
+  - build-essential
+  - git
+  - device-mapper
+  - cryptsetup
+  - thin-provisioning-tools
+  - libfuse3-dev
+  - pkg-config
+  - libssl-dev
+  - bzip2
+  - qemu-utils
+  - pv
+  - figlet
+
+write_files:
+  # -- Post cloud-init script and service --------------------------------
+{% include '_post-cloud-init.j2' %}
+
+runcmd:
+  - export DEBIAN_FRONTEND=noninteractive
+  - export HOME=/root
+
+  # Clone and build cvmboot.
+  # We build the full project (prereqs install Rust for akvsign) and then
+  # install only cvmdisk manually since `make install` requires all binaries
+  # including sparsefs and akvsign which may fail to build.
+  - |
+    set -e
+    echo "Cloning cvmboot..."
+    git clone https://github.com/microsoft/cvmboot.git /opt/cvmboot
+    cd /opt/cvmboot
+    echo "Running prereqs (installs Rust for akvsign)..."
+    bash prereqs/install.sh
+    export PATH="$HOME/.cargo/bin:$PATH"
+    echo "Building cvmboot..."
+    make || echo "WARNING: make completed with errors (some components may have failed)."
+    echo "Installing cvmdisk and cvmsign..."
+    sudo install -D cvmdisk/cvmdisk /usr/bin/cvmdisk || echo "WARNING: cvmdisk not built."
+    sudo install -D cvmsign/cvmsign /usr/bin/cvmsign || echo "WARNING: cvmsign not built."
+    sudo install -D cvmsign/cvmsign-init /usr/bin/cvmsign-init || true
+    sudo install -D cvmsign/cvmsign-verify /usr/bin/cvmsign-verify || true
+    sudo install -D bootloader/cvmboot.efi /usr/share/cvmboot/cvmboot.efi || true
+    sudo install -D cvmvhd/cvmvhd /usr/bin/cvmvhd || true
+    sudo install -D azcopy/azcopy /usr/bin/azcopy || echo "WARNING: azcopy not built."
+    sudo install -D sparsefs/sparsefs-mount /usr/bin/sparsefs-mount || true
+    sudo install -D akvsign/target/release/akvsign /usr/bin/akvsign || true
+    sudo mkdir -p /usr/share/cvmboot
+    sudo cp -r share/cvmboot/* /usr/share/cvmboot/ 2>/dev/null || true
+    echo "cvmboot build complete."
+    which cvmdisk && cvmdisk --help || echo "WARNING: cvmdisk not available."
+
+  # Start post-cloud-init service (runs after cloud-init finishes).
+  - systemctl enable --now --no-block post-cloud-init.service

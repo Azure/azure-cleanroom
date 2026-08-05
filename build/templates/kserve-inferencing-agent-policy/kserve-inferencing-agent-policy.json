@@ -31,6 +31,10 @@
         {
           "name": "CCF_NETWORK_RECOVERY_MEMBERS",
           "value": "$ccfNetworkRecoveryMembers"
+        },
+        {
+          "name": "INFERENCING_NAMESPACE",
+          "value": "$inferencingNamespace"
         }
       ],
       "volumeMounts": [
@@ -39,6 +43,25 @@
           "mountPath": "/app/service",
           "mountType": "emptyDir",
           "readOnly": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "ohttp-gateway",
+    "properties": {
+      "image": "$containerRegistryUrl/workloads/ohttp-gateway@$digest",
+      "command": [],
+      "environmentVariables": [
+        {
+          "name": "ASPNETCORE_URLS",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "SKR_PORT",
+          "value": ".*",
+          "regex": true
         }
       ]
     }
@@ -86,6 +109,11 @@
           "name": "CCR_FQDN",
           "value": ".*",
           "regex": true
+        },
+        {
+          "name": "CCR_ENVOY_ADDITIONAL_ROUTES",
+          "value": ".*",
+          "regex": true
         }
       ],
       "volumeMounts": [
@@ -98,7 +126,7 @@
       ],
       "command": [
         "/bin/bash",
-        "https-http/bootstrap.sh",
+        "https-http-inference-proxy/bootstrap.sh",
         "--ca-type",
         "$caType"
       ]

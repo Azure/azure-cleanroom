@@ -45,7 +45,10 @@ param
     [switch]
     $withSecurityPolicy,
 
-    [string]$location = "centralindia"
+    [string]$location = "centralindia",
+
+    [ValidateSet('small', 'medium', 'large')]
+    [string]$scaleSku = "small"
 )
 
 #https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
@@ -844,8 +847,8 @@ foreach ($format in $formats) {
 
 # Create a datastore entry for the AWS S3 storage to be used as a datasink with CGS secret Id as
 # its configuration.
-$awsAccessKeyId = az keyvault secret show  --vault-name azcleanroompublickv -n aws-access-key-id --query value -o tsv
-$awsSecretAccessKey = az keyvault secret show  --vault-name azcleanroompublickv -n aws-secret-access-key --query value -o tsv
+$awsAccessKeyId = az keyvault secret show  --vault-name azcleanroomemukv -n aws-access-key-id --query value -o tsv
+$awsSecretAccessKey = az keyvault secret show  --vault-name azcleanroomemukv -n aws-secret-access-key --query value -o tsv
 $secretConfig = @{
     awsAccessKeyId     = $awsAccessKeyId
     awsSecretAccessKey = $awsSecretAccessKey
@@ -1827,7 +1830,8 @@ pwsh $PSScriptRoot/../setup-access.ps1 `
     "publisherDatasets": $(ConvertTo-Json $publisherDatasets -Compress),
     "consumerDatasets": $(ConvertTo-Json $consumerDatasets -Compress),
     "frontendEndpoint": $(if ($useFrontendService) { "`"http://$frontendServiceEndpoint`"" } else { "null" }),
-    "collaborationId": "$consumerProjectName"
+    "collaborationId": "$consumerProjectName",
+    "infraType": "$($clCluster.infraType)"
 
 }
 "@ > $outDir/submitSqlJobConfig.json
@@ -1934,16 +1938,28 @@ if ($useFrontendService) {
 }
 
 if ($clCluster.infraType -eq "aks") {
+    $scaleSkuArgs = @()
+    if ($scaleSku) {
+        $scaleSkuArgs = @("--scale-sku", $scaleSku)
+    }
+
     # Do parallel query runs on AKS setup = save on execution time.
     python3 -u $PSScriptRoot/submit-sql-job.py `
         --deployment-config-dir $deploymentConfigDir `
         --out-dir $outDir `
         --parallel `
-        --format $formats
+        --formats $formats `
+        $scaleSkuArgs
 }
 else {
+    $scaleSkuArgs = @()
+    if ($scaleSku) {
+        $scaleSkuArgs = @("--scale-sku", $scaleSku)
+    }
+
     # Not doing parallel query runs on virtual setup as we hit pod scheduling limits.
     python3 -u $PSScriptRoot/submit-sql-job.py `
         --deployment-config-dir $deploymentConfigDir `
-        --out-dir $outDir
+        --out-dir $outDir `
+        $scaleSkuArgs
 }

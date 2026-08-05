@@ -27,4 +27,4 @@ echo "Launching cchost"
 cchostLog="$LOGS_DIR/cchost_$(date +"%Y_%m_%d_%I_%M_%p").log"
 ln -f -s $cchostLog "/app/cchost.log"
 # Use exec so that SIGTERM is propagated to the child process and the process can be gracefully stopped.
-exec /usr/bin/cchost --config $CONFIG_EXTRACT_DIR/cchost_config.json --enclave-log-level $CCF_LOG_LEVEL 2>&1 | tee $cchostLog
+exec /usr/bin/cchost --config $CONFIG_EXTRACT_DIR/cchost_config.json --log-level $CCF_LOG_LEVEL 2>&1 | tee $cchostLog

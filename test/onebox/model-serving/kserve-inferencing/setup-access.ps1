@@ -26,6 +26,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 
+. $PSScriptRoot/helpers.ps1
+
 # Look up the managed identity's principal ID.
 $mi = (az identity show `
         --name $managedIdentityName `
@@ -37,25 +39,11 @@ $storageAccount = (az storage account show `
         --name $storageAccountName `
         --resource-group $storageAccountResourceGroup) | ConvertFrom-Json
 
-$role = "Storage Blob Data Contributor"
-$roleAssignment = (az role assignment list `
-        --assignee-object-id $principalId `
-        --scope $storageAccount.id `
-        --role $role `
-        --fill-principal-name false `
-        --fill-role-definition-name false) | ConvertFrom-Json
-
-if ($roleAssignment.Length -eq 1) {
-    Write-Host "'$role' permission on the storage account already exists, skipping assignment."
-}
-else {
-    Write-Host "Assigning '$role' on the storage account..."
-    az role assignment create `
-        --role $role `
-        --scope $storageAccount.id `
-        --assignee-object-id $principalId `
-        --assignee-principal-type ServicePrincipal
-}
+Ensure-RoleAssignment `
+    -assigneeObjectId $principalId `
+    -scope $storageAccount.id `
+    -role "Storage Blob Data Contributor" `
+    -principalType "ServicePrincipal"
 
 # Set up federated credential on the managed identity.
 Write-Host "Setting up federation on managed identity '$managedIdentityName' with issuerUrl '$issuerUrl' and subject '$subject'..."

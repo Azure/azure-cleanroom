@@ -8,7 +8,7 @@
     Creates an Azure CVM with vTPM enabled for SNP attestation testing.
     VM name and resource group are auto-generated: from JOB_ID / RUN_ID in
     GitHub Actions, or from the current user name otherwise. SSH keys are
-    downloaded from the azcleanroompublickv Key Vault. Deployment info is written
+    downloaded from the azcleanroomemukv Key Vault. Deployment info is written
     to generated/cvm-deploy.json for use by the test script.
 .EXAMPLE
     ./src/cvm/tests/deploy-cvm.ps1
@@ -19,15 +19,18 @@
 param(
     [string]$Location = "westeurope",
 
-    [string]$OutDir
+    [string]$OutDir,
+
+    [switch]$Gpu
 )
 
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $true
 
 $AdminUser = "azureuser"
-$KeyVault = "azcleanroompublickv"
+$KeyVault = "azcleanroomemukv"
 $GeneratedDir = $OutDir ? $OutDir : (Join-Path $PSScriptRoot "generated")
+$VmSize = $Gpu ? "Standard_NCC40ads_H100_v5" : "Standard_DC2as_v5"
 
 # --- Auto-generate VM and RG names ---
 if ($env:GITHUB_ACTIONS -eq "true") {
@@ -59,6 +62,8 @@ Write-Host "=== Deploy Azure Confidential VM ==="
 Write-Host "  VM Name:        $VmName"
 Write-Host "  Resource Group: $ResourceGroup"
 Write-Host "  Location:       $Location"
+Write-Host "  VM Size:        $VmSize"
+Write-Host "  GPU:            $Gpu"
 Write-Host "  Admin User:     $AdminUser"
 Write-Host ""
 
@@ -125,12 +130,12 @@ else {
         --resource-group $ResourceGroup `
         --name $VmName `
         --admin-username $AdminUser `
-        --size Standard_DC4as_v5 `
+        --size $VmSize `
         --enable-vtpm true `
-        --image "Canonical:0001-com-ubuntu-confidential-vm-jammy:22_04-lts-cvm:22.04.202601280" `
+        --image "Canonical:ubuntu-24_04-lts:cvm:24.04.202604160" `
         --public-ip-sku Standard `
         --security-type ConfidentialVM `
-        --os-disk-security-encryption-type VMGuestStateOnly `
+        --os-disk-security-encryption-type DiskWithVMGuestState `
         --enable-secure-boot true `
         --ssh-key-values $sshPublicKey `
         --output table
@@ -175,6 +180,41 @@ for ($i = 1; $i -le 30; $i++) {
     }
     Write-Host "  Attempt $i/30 ..."
     Start-Sleep -Seconds 10
+}
+
+# 7. Install GPU driver if -Gpu was specified.
+if ($Gpu) {
+    Write-Host ""
+    Write-Host "--- Installing GPU driver for CC mode ---"
+    $gpuScript = @'
+set -euo pipefail
+echo "Installing initramfs-tools..."
+sudo apt-get update -qq
+sudo apt-get install -y -qq initramfs-tools
+
+echo "Configuring nvidia-lkca for CC mode..."
+echo "install nvidia /sbin/modprobe ecdsa_generic ecdh; /sbin/modprobe --ignore-install nvidia" \
+    | sudo tee /etc/modprobe.d/nvidia-lkca.conf
+
+echo "Rebuilding initramfs..."
+sudo update-initramfs -u -k $(uname -r)
+
+echo "Installing nvidia-driver-580-server-open..."
+sudo apt-get install -y nvidia-driver-580-server-open \
+    linux-modules-nvidia-580-server-open-$(uname -r)
+
+echo "Setting GPU persistence mode..."
+sudo nvidia-smi -pm 1
+
+echo "Verifying GPU CC mode..."
+nvidia-smi
+nvidia-smi conf-compute -f
+echo "GPU driver installation complete."
+'@
+    bash -c "ssh $sshArgs $vmHost bash -s <<'REMOTEOF'
+$gpuScript
+REMOTEOF"
+    Write-Host "  GPU driver installed."
 }
 
 Write-Host "Done."

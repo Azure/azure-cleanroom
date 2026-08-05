@@ -1,4 +1,4 @@
-namespace Cleanroom.Governance;
+namespace Azure.Cleanroom.Governance;
 
 /**
  * Get proposal response

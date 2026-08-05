@@ -1,0 +1,117 @@
+{{- if .Values.providerClient.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cluster-provider-client
+  namespace: {{ .Values.namespace }}
+  {{- if .Values.providerClient.azure.clientId }}
+  annotations:
+    azure.workload.identity/client-id: {{ .Values.providerClient.azure.clientId | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-provider-client-config
+  namespace: {{ .Values.namespace }}
+data:
+  {{- range $key, $value := .Values.providerClient.env }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-provider-client
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: cluster-provider-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cluster-provider-client
+  template:
+    metadata:
+      labels:
+        app: cluster-provider-client
+        {{- if .Values.providerClient.azure.clientId }}
+        azure.workload.identity/use: "true"
+        {{- end }}
+    spec:
+      serviceAccountName: cluster-provider-client
+      containers:
+        - name: cluster-provider-client
+          image: "{{ .Values.providerClient.image.repository }}:{{ .Values.providerClient.image.tag | toString }}"
+          imagePullPolicy: {{ .Values.providerClient.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: cluster-provider-client-config
+          {{- if or .Values.credentialsProxy.enabled .Values.telemetry.enabled }}
+          env:
+            {{- if .Values.credentialsProxy.enabled }}
+            - name: IDENTITY_ENDPOINT
+              value: "http://credentials-proxy:8098/token"
+            - name: IMDS_ENDPOINT
+              value: "dummy_required_value"
+            {{- end }}
+            {{- if .Values.telemetry.enabled }}
+            - name: CR_CLUSTER_PROVIDER_ENABLE_OPEN_TELEMETRY
+              value: "true"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.telemetry.otlpEndpoint | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: cluster-provider-client
+            {{- end }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.providerClient.resources | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.providerClient.virtual.enabled }}
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: shared-dir
+              mountPath: /app/shared
+            {{- end }}
+      volumes:
+        {{- if .Values.providerClient.virtual.enabled }}
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: shared-dir
+          hostPath:
+            path: {{ .Values.providerClient.virtual.sharedDir }}
+            type: DirectoryOrCreate
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cluster-provider-client
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: cluster-provider-client
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+  type: ClusterIP
+{{- end }}

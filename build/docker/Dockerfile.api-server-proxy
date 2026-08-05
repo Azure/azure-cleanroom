@@ -1,5 +1,8 @@
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
+
+RUN apk --no-cache add curl
+RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.11.0
 
 WORKDIR /app
 
@@ -7,10 +10,13 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
+COPY .golangci.yml .
+
 # Copy only the Go source files needed for the build.
 COPY src/k8s-node/api-server-proxy/ ./src/k8s-node/api-server-proxy/
 
-# Build the binary for linux/amd64.
+# Lint and build the binary for linux/amd64.
+RUN golangci-lint run -v -c .golangci.yml ./src/k8s-node/api-server-proxy/...
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-s -w" \
     -o /api-server-proxy \

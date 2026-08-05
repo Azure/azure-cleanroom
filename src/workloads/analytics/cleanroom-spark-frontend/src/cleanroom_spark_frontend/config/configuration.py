@@ -1,6 +1,7 @@
 import os
 from enum import StrEnum
-from typing import List, Optional
+
+from pydantic import BaseModel, Field
 
 from frontend_internal.models.input_models import (
     DEFAULT_MCR_URL,
@@ -8,7 +9,6 @@ from frontend_internal.models.input_models import (
     CleanroomSettings,
     TelemetrySettings,
 )
-from pydantic import BaseModel, Field
 
 
 class SparkComputeProvider(StrEnum):
@@ -43,6 +43,7 @@ class SkuSettings(BaseModel):
 
 class AnalyticsSettings(BaseModel):
     namespace: str = Field(alias="namespace", default="analytics")
+    time_to_live_seconds: int = Field(alias="timeToLiveSeconds", default=259200)
     image: str = Field(
         alias="image",
         default=os.environ.get(
@@ -67,6 +68,7 @@ class AnalyticsSettings(BaseModel):
 
 class ExamplesSettings(BaseModel):
     namespace: str = Field(alias="namespace", default="analytics")
+    time_to_live_seconds: int = Field(alias="timeToLiveSeconds", default=259200)
     image: str = Field(
         alias="image",
         default="spark:4.0.0",

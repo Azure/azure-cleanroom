@@ -1,12 +1,18 @@
 # Build
-FROM mcr.microsoft.com/oss/go/microsoft/golang:1.25.9 AS builder-app
+FROM mcr.microsoft.com/oss/go/microsoft/golang:1.26.4 AS builder-app
+
+RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.11.0
+
 WORKDIR /usr/src/app
 
 COPY go.mod .
 COPY go.sum .
 RUN go mod download
 
+COPY .golangci.yml .
+
 COPY src/attestation src/attestation
+RUN golangci-lint run -v -c .golangci.yml ./src/attestation/...
 RUN go build -v -o /usr/local/bin/app ./src/attestation/
 
 # Run

@@ -1,4 +1,4 @@
 #!/bin/bash
 set -xe
-isort "$@" --profile black
-black "$@" -t py311
+ruff check --select I --fix "$@"
+ruff format "$@"

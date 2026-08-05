@@ -55,6 +55,8 @@ def test_error_code_completeness():
         "CollaborationAlreadyExists",
         "BackingIdentityNotFound",
         "CurrentCollaborationNotSet",
+        "NoApplicationsDefined",
+        "DuplicateName",
     }
 
     # Check for missing or extra error codes
@@ -79,15 +81,15 @@ def test_error_code_completeness():
         )
 
     # Assert that the expected codes match actual codes exactly
-    assert (
-        not missing_from_expected
-    ), f"New error codes need to be added to test: {missing_from_expected}"
-    assert (
-        not extra_in_expected
-    ), f"Outdated error codes need to be removed from test: {extra_in_expected}"
-    assert (
-        expected_codes == actual_codes
-    ), "Expected error codes must match actual error codes exactly"
+    assert not missing_from_expected, (
+        f"New error codes need to be added to test: {missing_from_expected}"
+    )
+    assert not extra_in_expected, (
+        f"Outdated error codes need to be removed from test: {extra_in_expected}"
+    )
+    assert expected_codes == actual_codes, (
+        "Expected error codes must match actual error codes exactly"
+    )
 
     print("✓ All expected error codes present and synchronized")
     print(f"✓ Found {len(actual_codes)} total error codes")
@@ -98,15 +100,15 @@ def test_error_code_completeness():
     # Test that ErrorCode enum has the expected attributes and values for all expected codes
     for code_name in expected_codes:
         # Test that the attribute exists
-        assert hasattr(
-            ErrorCode, code_name
-        ), f"ErrorCode should have attribute {code_name}"
+        assert hasattr(ErrorCode, code_name), (
+            f"ErrorCode should have attribute {code_name}"
+        )
 
         # Test that the value matches the name
         enum_value = getattr(ErrorCode, code_name)
-        assert (
-            enum_value.value == code_name
-        ), f"ErrorCode.{code_name}.value should be '{code_name}'"
+        assert enum_value.value == code_name, (
+            f"ErrorCode.{code_name}.value should be '{code_name}'"
+        )
 
     print("✓ Error code enum properties validated for all expected codes")
 

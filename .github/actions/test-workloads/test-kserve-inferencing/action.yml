@@ -14,9 +14,12 @@ inputs:
     description: The directory containing deployment-config.json
     required: true
   models:
-    description: Comma-separated models to deploy (iris,gpt2,all)
+    description: Comma-separated models to deploy (iris,tinyllama-gpu,gemma4-gpu,tinyllama,default)
     required: false
-    default: "all"
+  flexNodeProvisionUsingBakedImage:
+    description: Whether to provision flex nodes using a baked image instead of SSH
+    required: false
+    default: "false"
 runs:
   using: composite
   steps:
@@ -33,19 +36,17 @@ runs:
         oras pull ${{ inputs.repo }}/cli/cleanroom-whl:${{ inputs.tag }}
         az extension add --allow-preview true --source ./cleanroom-*-py2.py3-none-any.whl -y
 
-    # TODO: Re-enable once astral-sh/setup-uv action is enabled.
-    # - name: Install uv
-    #   uses: astral-sh/setup-uv@v7
-    
     - name: Install uv
-      shell: bash
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
+      uses: astral-sh/setup-uv@v7
 
     - name: Install python
       shell: bash
       run: |
         uv python install 3.12 3.10
+
+    - name: Install powershell-yaml
+      shell: pwsh
+      run: Install-Module -Name powershell-yaml -Force
 
     - name: Deploy governance client
       shell: bash
@@ -72,8 +73,21 @@ runs:
 
     - name: Run kserve inferencing test
       shell: pwsh
-      run: ./test/onebox/model-serving/kserve-inferencing/test-kserve-inferencing.ps1 `
-          -deploymentConfigDir "${{ inputs.deploymentConfigDir }}" -location ${{ inputs.location }} -models "${{ inputs.models }}"
+      run: |
+        $scriptArgs = @{
+          deploymentConfigDir = "${{ inputs.deploymentConfigDir }}"
+          location            = "${{ inputs.location }}"
+          models              = "${{ inputs.models }}"
+        }
+        if ("${{ inputs.flexNodeProvisionUsingBakedImage }}" -eq "true") {
+          $scriptArgs["provisionFlexNodeUsingBakedImage"] = $true
+        }
+        ./test/onebox/model-serving/kserve-inferencing/test-kserve-inferencing.ps1 @scriptArgs
+
+    - name: Validate GPU model CRD submission
+      shell: pwsh
+      run: ./test/onebox/model-serving/kserve-inferencing/deploy-models.ps1 `
+          -deploymentConfigDir "${{ inputs.deploymentConfigDir }}" -models "tinyllama-gpu" -submitOnly
 
     - name: Dump cleanroom-cluster-provider logs
       shell: bash

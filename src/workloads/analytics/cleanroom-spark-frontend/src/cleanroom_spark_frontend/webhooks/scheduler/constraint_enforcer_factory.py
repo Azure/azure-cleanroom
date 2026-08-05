@@ -10,7 +10,6 @@ logger = logging.getLogger("constraint_enforcer_factory")
 
 
 class ConstraintEnforcerFactory:
-
     @staticmethod
     def create_enforcer(
         constraint_type: str, constraint_value: str

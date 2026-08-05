@@ -1,0 +1,12 @@
+{
+    "servers": {
+        "cleanroom-mcp": {
+            "type": "stdio",
+            "command": "bash",
+            "args": [
+                "-c",
+                "cd src/tools/cleanroom-mcp && go run ./cmd/cleanroom-mcp/ --transport stdio"
+            ]
+        }
+    }
+}

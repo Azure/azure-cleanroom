@@ -10,9 +10,13 @@ COPY Directory.Packages.props /app
 COPY Directory.Build.props /app
 COPY src/workloads/inferencing/*.sln /app/src/workloads/inferencing/
 COPY src/workloads/inferencing/kserve-inferencing-agent/*.csproj /app/src/workloads/inferencing/kserve-inferencing-agent/
+COPY src/workloads/inferencing/ohttp/ohttp-common/*.csproj /app/src/workloads/inferencing/ohttp/ohttp-common/
+COPY src/workloads/inferencing/ohttp/ohttp-gateway/*.csproj /app/src/workloads/inferencing/ohttp/ohttp-gateway/
+COPY src/workloads/inferencing/ohttp/ohttp-client/*.csproj /app/src/workloads/inferencing/ohttp/ohttp-client/
 COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
 COPY src/internal/governance-common/*.csproj /app/src/internal/governance-common/
+COPY src/internal/workload-agent-common/*.csproj /app/src/internal/workload-agent-common/
 COPY src/secrets/common/*.csproj /app/src/secrets/common/
 RUN dotnet restore /app/src/workloads/inferencing/inferencing-workload.sln
 
@@ -20,8 +24,11 @@ RUN dotnet restore /app/src/workloads/inferencing/inferencing-workload.sln
 COPY stylecop.json /app
 COPY Menees.Analyzers.Settings.xml /app
 COPY .editorconfig /app
-COPY src/internal /app/src/internal
-COPY src/workloads /app/src/workloads
+COPY src/internal/Attestation /app/src/internal/Attestation
+COPY src/internal/restapi-common /app/src/internal/restapi-common
+COPY src/internal/governance-common /app/src/internal/governance-common
+COPY src/internal/workload-agent-common /app/src/internal/workload-agent-common
+COPY src/workloads/inferencing/kserve-inferencing-agent /app/src/workloads/inferencing/kserve-inferencing-agent
 
 # Publish the application
 RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/workloads/inferencing/kserve-inferencing-agent/kserve-inferencing-agent.csproj

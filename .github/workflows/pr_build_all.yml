@@ -3,12 +3,18 @@ name: "PR Validation: Build"
 on:
   workflow_call:
     inputs:
-      # Comma-separated list of build groups to run (e.g., "build-shared-containers,build-cgs-containers").
+      # Comma-separated list of build groups to run (e.g., "build-ccr-governance-containers,build-cgs-containers").
       # Use "all" (default) to run every build group.
       build-groups:
         type: string
         required: false
         default: "all"
+      # Git ref (branch, tag, or commit SHA) whose product code should be built.
+      # Empty (default) builds the ref that triggered the caller workflow.
+      ref:
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read  # This is required for actions/checkout
@@ -22,14 +28,13 @@ permissions:
 #   cancel-in-progress: true
 
 jobs:
-  build-shared-containers:
-    if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-shared-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-shared-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+  build-ccr-governance-containers:
+    if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-ccr-governance-containers') }}
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-ccr-governance-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
-        container: [ccr-proxy, skr, ccr-governance, ccr-governance-virtual, local-skr, local-idp, otel-collector, cvm-attestation-verifier, cvm-attestation-agent, api-server-proxy]
-      # Prevent Github from cancelling other jobs of the matrix if one of them fails.
+        container: [ccr-governance, ccr-governance-virtual]
       fail-fast: false
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -43,6 +48,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
@@ -61,12 +67,222 @@ jobs:
         shell: pwsh
         run: az acr login -n ${{ vars.ACR_URL }}
 
-      - name: Build shared containers
+      - name: Build governance containers
+        run: pwsh ./build/onebox/build-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -containers ${{ matrix.container }}
+
+  build-ccr-proxy-containers:
+    if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-ccr-proxy-containers') }}
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-ccr-proxy-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    environment: pr
+    strategy:
+      matrix:
+        container: [ccr-proxy]
+      fail-fast: false
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.ref }}
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Add docker user
+        shell: bash
+        run: sudo usermod -aG docker $USER
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        shell: pwsh
+        run: az acr login -n ${{ vars.ACR_URL }}
+
+      - name: Build proxy containers
+        run: pwsh ./build/onebox/build-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -containers ${{ matrix.container }}
+
+  build-ccr-skr-containers:
+    if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-ccr-skr-containers') }}
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-ccr-skr-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    environment: pr
+    strategy:
+      matrix:
+        container: [skr, local-skr]
+      fail-fast: false
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.ref }}
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Add docker user
+        shell: bash
+        run: sudo usermod -aG docker $USER
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        shell: pwsh
+        run: az acr login -n ${{ vars.ACR_URL }}
+
+      - name: Build SKR containers
+        run: pwsh ./build/onebox/build-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -containers ${{ matrix.container }}
+
+  build-ccr-tools-containers:
+    if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-ccr-tools-containers') }}
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-ccr-tools-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    environment: pr
+    strategy:
+      matrix:
+        container: [local-idp]
+      fail-fast: false
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.ref }}
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Add docker user
+        shell: bash
+        run: sudo usermod -aG docker $USER
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        shell: pwsh
+        run: az acr login -n ${{ vars.ACR_URL }}
+
+      - name: Build tools containers
+        run: pwsh ./build/onebox/build-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -containers ${{ matrix.container }}
+
+  build-cvm-containers:
+    if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-cvm-containers') }}
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-cvm-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    environment: pr
+    strategy:
+      matrix:
+        container: [cvm-attestation-verifier, cvm-attestation-agent]
+      fail-fast: false
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.ref }}
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Add docker user
+        shell: bash
+        run: sudo usermod -aG docker $USER
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        shell: pwsh
+        run: az acr login -n ${{ vars.ACR_URL }}
+
+      - name: Build CVM containers
+        run: pwsh ./build/onebox/build-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -containers ${{ matrix.container }}
+
+  build-k8s-node-containers:
+    if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-k8s-node-containers') }}
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-k8s-node-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    environment: pr
+    strategy:
+      matrix:
+        container: [api-server-proxy, kubelet-proxy, cleanroom-boot]
+      fail-fast: false
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.ref }}
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Add docker user
+        shell: bash
+        run: sudo usermod -aG docker $USER
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        shell: pwsh
+        run: az acr login -n ${{ vars.ACR_URL }}
+
+      - name: Build k8s node containers
         run: pwsh ./build/onebox/build-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -containers ${{ matrix.container }}
 
   build-ccf-containers:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-ccf-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-ccf-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-ccf-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -85,6 +301,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
@@ -108,7 +325,7 @@ jobs:
 
   build-cgs-containers:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-cgs-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-cgs-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-cgs-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -127,6 +344,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
@@ -150,11 +368,11 @@ jobs:
 
   build-ccr-containers:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-ccr-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-ccr-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-ccr-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
-        container: [blobfuse-launcher, s3fs-launcher, ccr-init, ccr-secrets, ccr-proxy-ext-processor, ccr-client-proxy, code-launcher, identity, ccr-governance-opa-policy, ccr-artefacts]
+        container: [blobfuse-launcher, s3fs-launcher, ccr-init, ccr-secrets, ccr-proxy-ext-processor, ccr-client-proxy, code-launcher, identity, otel-collector, ccr-governance-opa-policy, ccr-artefacts, cleanroom-csi-driver]
       # Prevent Github from cancelling other jobs of the matrix if one of them fails.
       fail-fast: false
     env:
@@ -169,6 +387,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
@@ -192,14 +411,14 @@ jobs:
 
   build-ccf-container-policies:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-ccf-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-ccf-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-ccf-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
         container: [ccf-network, ccf-recovery-service, ccf-consortium-manager]
       # Prevent Github from cancelling other jobs of the matrix if one of them fails.
       fail-fast: false
-    needs: [build-ccf-containers, build-shared-containers]
+    needs: [build-ccf-containers, build-ccr-governance-containers, build-cvm-containers]
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -212,6 +431,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
@@ -240,9 +460,9 @@ jobs:
 
   build-ccr-container-policies:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-ccr-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-ccr-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-ccr-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
-    needs: [build-ccr-containers, build-shared-containers]
+    needs: [build-ccr-containers, build-ccr-governance-containers, build-ccr-proxy-containers, build-ccr-skr-containers]
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -255,6 +475,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
@@ -284,12 +505,15 @@ jobs:
       - name: Build cvm measurements document
         run: pwsh ./build/ccr/build-cvm-measurements.ps1 -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }} -push
 
-      - name: Build inferencing runtime digests document
-        run: pwsh ./build/inferencing/build-inf-runtime-digests.ps1 -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }} -push
+      - name: Build cvm virtual measurements document
+        run: pwsh ./build/ccr/build-cvm-measurements-virtual.ps1 -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }} -push
+
+      - name: Build inferencing digests document
+        run: pwsh ./build/inferencing/build-inferencing-digests.ps1 -repo ${{ vars.ACR_URL }} -tag ${{ github.run_id }} -push
 
   build-cleanroom-cluster-containers:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-cleanroom-cluster-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-cleanroom-cluster-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-cleanroom-cluster-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -308,6 +532,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
@@ -325,9 +550,52 @@ jobs:
       - name: Build ${{ matrix.container }}
         run: pwsh ./build/cleanroom-cluster/build-cleanroom-cluster-infra-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -containers ${{ matrix.container }}
 
+  build-cleanroom-operator-containers:
+    if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-cleanroom-operator-containers') }}
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-cleanroom-operator-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    environment: pr
+    strategy:
+      matrix:
+        container: [cleanroom-operator, kubectl-cleanroom, karpenter-provider-accr]
+      # Prevent Github from cancelling other jobs of the matrix if one of them fails.
+      fail-fast: false
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.ref }}
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Add docker user
+        shell: bash
+        run: sudo usermod -aG docker $USER
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        shell: pwsh
+        run: az acr login -n ${{ vars.ACR_URL }}
+
+      - name: Build operator containers
+        run: pwsh ./build/cleanroom-operator/build-cleanroom-operator-infra-containers.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -containers ${{ matrix.container }}
+
   build-analytics-workload-containers:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-analytics-workload-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-analytics-workload-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-analytics-workload-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -346,6 +614,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
@@ -369,14 +638,14 @@ jobs:
 
   build-analytics-workload-container-policies:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-analytics-workload-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-analytics-workload-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-analytics-workload-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
         container: [cleanroom-spark-analytics-agent, cleanroom-spark-frontend, cleanroom-spark-analytics-app]
       # Prevent Github from cancelling other jobs of the matrix if one of them fails.
       fail-fast: false
-    needs: [build-analytics-workload-containers, build-shared-containers]
+    needs: [build-analytics-workload-containers, build-ccr-governance-containers, build-ccr-proxy-containers, build-ccr-skr-containers, build-ccr-containers]
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -389,6 +658,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
@@ -417,11 +687,11 @@ jobs:
 
   build-kserve-inferencing-workload-containers:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-kserve-inferencing-workload-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-kserve-inferencing-workload-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-kserve-inferencing-workload-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
-        container: [kserve-inferencing-agent, kserve-inferencing-frontend]
+        container: [kserve-inferencing-agent, kserve-inferencing-frontend, ohttp-gateway, ohttp-client]
       # Prevent Github from cancelling other jobs of the matrix if one of them fails.
       fail-fast: false
     env:
@@ -436,6 +706,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
@@ -459,14 +730,14 @@ jobs:
 
   build-kserve-inferencing-workload-container-policies:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-kserve-inferencing-workload-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-kserve-inferencing-workload-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-kserve-inferencing-workload-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
         container: [kserve-inferencing-agent, kserve-inferencing-frontend]
       # Prevent Github from cancelling other jobs of the matrix if one of them fails.
       fail-fast: false
-    needs: [build-kserve-inferencing-workload-containers, build-shared-containers]
+    needs: [build-kserve-inferencing-workload-containers, build-ccr-governance-containers, build-ccr-proxy-containers, build-ccr-skr-containers, build-ccr-containers]
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -479,6 +750,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
@@ -507,7 +779,7 @@ jobs:
 
   build-frontend-service-containers:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-frontend-service-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-frontend-service-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-frontend-service-containers-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
@@ -526,6 +798,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
@@ -552,14 +825,14 @@ jobs:
 
   build-frontend-service-container-policies:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-frontend-service-containers') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-frontend-service-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-frontend-service-container-policies-${{ matrix.container }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     strategy:
       matrix:
         container: [frontend-service]
       # Prevent Github from cancelling other jobs of the matrix if one of them fails.
       fail-fast: false
-    needs: [build-frontend-service-containers, build-shared-containers, build-cgs-containers, build-ccr-containers, build-ccf-containers]
+    needs: [build-frontend-service-containers, build-cgs-containers, build-ccr-proxy-containers, build-ccr-governance-containers, build-ccr-skr-containers]
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -572,6 +845,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
@@ -600,7 +874,7 @@ jobs:
 
   build-azcliext-cleanroom:
     if: ${{ inputs.build-groups == 'all' || contains(inputs.build-groups, 'build-azcliext-cleanroom') }}
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-azcliext-cleanroom-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-azcliext-cleanroom-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -614,6 +888,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
@@ -630,3 +905,27 @@ jobs:
 
       - name: Build cleanroom az cli extension
         run: pwsh ./build/build-azcliext-cleanroom.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -skipInstall
+
+  generate-dev-up-env:
+    if: ${{ inputs.build-groups != '' }}
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=generate-dev-up-env-${{ github.run_id }}-${{ github.run_attempt }}"]
+    environment: pr
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.ref }}
+
+      - name: Generate dev-up.env
+        shell: pwsh
+        run: |
+          pwsh ./build/onebox/generate-dev-up-env.ps1 `
+            -repo ${{ vars.ACR_URL }} `
+            -tag ${{ github.run_id }} `
+            -outDir ${{ runner.temp }}/dev-up-env
+
+      - name: Upload dev-up.env artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-up-env
+          path: ${{ runner.temp }}/dev-up-env/dev-up.env

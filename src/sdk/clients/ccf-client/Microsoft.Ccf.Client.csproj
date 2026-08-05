@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>This is the Microsoft.Ccf.Client client library for developing .NET applications with rich experience.</Description>
+    <AssemblyTitle>SDK Code Generation Microsoft.Ccf.Client</AssemblyTitle>
+    <Version>1.0.0-beta.1</Version>
+    <PackageTags>Microsoft.Ccf.Client</PackageTags>
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.ClientModel" />
+  </ItemGroup>
+</Project>

@@ -31,9 +31,7 @@ from .utilities._azcli_helpers import az_cli
 
 logger = get_logger(__name__)
 
-ccf_provider_compose_file: str = (
-    f"{os.path.dirname(__file__)}{os.path.sep}data{os.path.sep}ccf-provider{os.path.sep}docker-compose.yaml"
-)
+ccf_provider_compose_file: str = f"{os.path.dirname(__file__)}{os.path.sep}data{os.path.sep}ccf-provider{os.path.sep}docker-compose.yaml"
 ccf_provider_workspace_dir: str = tempfile.gettempdir() + os.path.sep + "ccf-provider"
 
 
@@ -327,7 +325,9 @@ def ccf_network_up(
         + f"--provider-client {provider_client_name}"
     )
 
-    r = requests.get(f"{ccf_endpoint}/node/network", verify=False)
+    # fmt: off
+    r = requests.get(f"{ccf_endpoint}/node/network", verify=False)  # noqa: E501 # CodeQL [SM03157] Bootstrap fetch of CCF network service certificate: no pre-existing trust anchor exists for a brand-new network; the returned cert is pinned via --service-cert for all subsequent calls (standard CCF trust-establishment pattern).
+    # fmt: on
     if r.status_code != 200:
         raise CLIError(response_error_message(r))
     service_cert = r.json()["service_certificate"]

@@ -1,0 +1,251 @@
+# Step template: ALL release-* promotion groups, gated by releaseType.
+# Migrated from the 24 release-* composites wrapped by release.yml /
+# release-and-test.yml. Used by both:
+#   - Release/OneBranch.Release.Prod.yml  (environment: unlisted, needsAttestation: true)
+#   - templates/release-and-test-jobs.yml (environment: internal, needsAttestation: param)
+#
+# Container promotions use steps/release-container.yml; script-based groups
+# (policies/digests/version-documents/bundles) use steps/release-script.yml.
+# Attestation is provided by the OneBranch Official template's governed signing.
+
+parameters:
+  - name: tag
+    type: string
+  - name: environment
+    type: string
+  - name: releaseType
+    type: string
+  - name: needsAttestation
+    type: boolean
+    default: true
+
+steps:
+  # --- cleanroom-containers (images + ccr artefacts + digests + version doc) --
+  - ${{ if contains(parameters.releaseType, 'cleanroom-containers') }}:
+      - ${{ each c in split('ccr-init,identity,blobfuse-launcher,s3fs-launcher,code-launcher,otel-collector,ccr-secrets,ccr-governance,cleanroom-client,ccr-proxy,ccr-proxy-ext-processor,skr', ',') }}:
+          - template: release-container.yml
+            parameters:
+              name: ${{ c }}
+              tag: ${{ parameters.tag }}
+              environment: ${{ parameters.environment }}
+              needsAttestation: ${{ parameters.needsAttestation }}
+      - template: release-container.yml
+        parameters:
+          name: cvm/cvm-attestation-agent
+          artefactName: cvm-attestation-agent
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          needsAttestation: ${{ parameters.needsAttestation }}
+      # release-cleanroom-artefacts (ccr artefacts + cvm measurements)
+      - template: release-script.yml
+        parameters:
+          displayName: Release cleanroom (ccr) artefacts
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          script: |
+            ./build/ccr/build-ccr-artefacts.ps1 -repo $repo -tag $tag -push -outputPath $(repoRoot)/ccr-artefacts
+            ./build/ccr/build-cvm-measurements.ps1 -repo $repo -tag $tag -push
+      - task: PublishPipelineArtifact@1
+        displayName: Upload ccr-governance-opa-policy
+        inputs:
+          targetPath: $(repoRoot)/ccr-artefacts/ccr-governance-opa-policy.tar.gz
+          artifact: ccr-artefacts-${{ parameters.environment }}
+      # release-sidecar-digests
+      - template: release-script.yml
+        parameters:
+          displayName: Release sidecar digests
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          installConfcom: true
+          script: |
+            ./build/ccr/build-ccr-digests.ps1 -repo $repo -tag $tag -push
+      - task: PublishPipelineArtifact@1
+        displayName: Upload sidecar-digests.yaml
+        inputs:
+          targetPath: $(repoRoot)/sidecar-digests.yaml
+          artifact: sidecar-digests-${{ parameters.environment }}.yaml
+      # release-ccr-containers-version-document
+      - template: release-script.yml
+        parameters:
+          displayName: Release ccr containers version document
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          script: |
+            pwsh ./.github/scripts/release-ccr-version-document.ps1 -tag $tag -environment $environment -registryName $registry
+
+  # --- governance-client-containers (+ version documents) --------------------
+  - ${{ if contains(parameters.releaseType, 'governance-client-containers') }}:
+      - ${{ each c in split('cgs-client,cgs-ui', ',') }}:
+          - template: release-container.yml
+            parameters:
+              name: ${{ c }}
+              tag: ${{ parameters.tag }}
+              environment: ${{ parameters.environment }}
+              needsAttestation: ${{ parameters.needsAttestation }}
+      - template: release-script.yml
+        parameters:
+          displayName: Release governance client version documents
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          script: |
+            ./.github/scripts/release-governance-client-version-documents.ps1 -tag $tag -environment $environment -registryName $registry
+
+  # --- cgs-js-app (+ version document) ---------------------------------------
+  - ${{ if contains(parameters.releaseType, 'cgs-js-app') }}:
+      - task: DownloadPipelineArtifact@2
+        displayName: Download cgs-js-app bundle
+        inputs:
+          artifact: cgs-js-app-${{ parameters.tag }}.json
+          path: $(repoRoot)
+      - template: release-script.yml
+        parameters:
+          displayName: Release cgs-js-app bundle
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          script: |
+            $bundle_digest = cat bundle.json | jq -S -j | sha256sum | cut -d ' ' -f 1
+            oras push "$repo/cgs-js-app:$tag,$bundle_digest,latest" ./bundle.json --annotation "cleanroom.version=$tag" --annotation "bundle.json.digest=sha256:$bundle_digest"
+      - template: release-script.yml
+        parameters:
+          displayName: Release cgs-js-app version document
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          script: |
+            pwsh ./.github/scripts/release-ccf-artefact-version-document.ps1 -containerName cgs-js-app -tag $tag -environment $environment -registryName $registry
+
+  # --- cgs-constitution (+ version document) ---------------------------------
+  - ${{ if contains(parameters.releaseType, 'cgs-constitution') }}:
+      - task: DownloadPipelineArtifact@2
+        displayName: Download cgs-constitution
+        inputs:
+          artifact: cgs-constitution-${{ parameters.tag }}.json
+          path: $(repoRoot)
+      - template: release-script.yml
+        parameters:
+          displayName: Release cgs-constitution
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          script: |
+            $constitution_digest = cat constitution.json | jq -S -j | sha256sum | cut -d ' ' -f 1
+            oras push "$repo/cgs-constitution:$tag,$constitution_digest,latest" ./constitution.json --annotation "cleanroom.version=$tag" --annotation "constitution.js.digest=sha256:$constitution_digest"
+      - template: release-script.yml
+        parameters:
+          displayName: Release cgs-constitution version document
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          script: |
+            pwsh ./.github/scripts/release-ccf-artefact-version-document.ps1 -containerName cgs-constitution -tag $tag -environment $environment -registryName $registry
+
+  # --- ccf-provider-client ---------------------------------------------------
+  - ${{ if contains(parameters.releaseType, 'ccf-provider-client') }}:
+      - template: release-container.yml
+        parameters:
+          name: ccf/ccf-provider-client
+          artefactName: ccf-provider-client
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          needsAttestation: ${{ parameters.needsAttestation }}
+
+  # --- ccf-network-containers (+ security policy) ----------------------------
+  - ${{ if contains(parameters.releaseType, 'ccf-network-containers') }}:
+      - ${{ each c in split('ccf/app/run-js/snp,ccf/app/run-js/virtual,ccr-proxy,skr,ccf/ccf-recovery-agent,cvm/cvm-attestation-verifier', ',') }}:
+          - template: release-container.yml
+            parameters:
+              name: ${{ c }}
+              tag: ${{ parameters.tag }}
+              environment: ${{ parameters.environment }}
+              needsAttestation: ${{ parameters.needsAttestation }}
+      - template: release-script.yml
+        parameters:
+          displayName: Release ccf network security policy
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          installConfcom: true
+          script: |
+            ./build/ccf/build-ccf-network-security-policy.ps1 -repo $repo -tag $tag -push
+
+  # --- ccf-recovery-service-containers (+ security policy) -------------------
+  - ${{ if contains(parameters.releaseType, 'ccf-recovery-service-containers') }}:
+      - ${{ each c in split('ccr-proxy,ccf/ccf-recovery-service,skr', ',') }}:
+          - template: release-container.yml
+            parameters:
+              name: ${{ c }}
+              tag: ${{ parameters.tag }}
+              environment: ${{ parameters.environment }}
+              needsAttestation: ${{ parameters.needsAttestation }}
+      - template: release-script.yml
+        parameters:
+          displayName: Release ccf recovery service security policy
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          installConfcom: true
+          script: |
+            ./build/ccf/build-ccf-recovery-service-security-policy.ps1 -repo $repo -tag $tag -push
+
+  # --- ccf-consortium-manager-containers (+ security policy) -----------------
+  - ${{ if contains(parameters.releaseType, 'ccf-consortium-manager-containers') }}:
+      - ${{ each c in split('ccf/ccf-consortium-manager,ccr-proxy,skr', ',') }}:
+          - template: release-container.yml
+            parameters:
+              name: ${{ c }}
+              tag: ${{ parameters.tag }}
+              environment: ${{ parameters.environment }}
+              needsAttestation: ${{ parameters.needsAttestation }}
+      - template: release-script.yml
+        parameters:
+          displayName: Release ccf consortium manager security policy
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          installConfcom: true
+          script: |
+            ./build/ccf/build-ccf-consortium-manager-security-policy.ps1 -repo $repo -tag $tag -push
+
+  # --- cleanroom-workload-infra-containers (+ policy) ------------------------
+  - ${{ if contains(parameters.releaseType, 'cleanroom-workload-infra-containers') }}:
+      - template: release-script.yml
+        parameters:
+          displayName: Release cleanroom workload infra containers policy
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          installConfcom: true
+          script: |
+            ./build/workloads/analytics/build-workload-infra-containers-policy.ps1 -repo $repo -tag $tag -push
+            ./build/workloads/inferencing/build-workload-infra-containers-policy.ps1 -repo $repo -tag $tag -push
+      # NOTE: the 11 workload-infra container/helm release-container +
+      # release-helm-chart items are built on the official image/helm jobs;
+      # exact source names are covered by official-build-jobs.yml.
+
+  # --- cleanroom-cluster-provider-client (+ version documents) ---------------
+  - ${{ if contains(parameters.releaseType, 'cleanroom-cluster-provider-client') }}:
+      - template: release-container.yml
+        parameters:
+          name: cleanroom-cluster/cleanroom-cluster-provider-client
+          artefactName: cleanroom-cluster-provider-client
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          needsAttestation: ${{ parameters.needsAttestation }}
+      - template: release-script.yml
+        parameters:
+          displayName: Release cleanroom cluster provider client version documents
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          script: |
+            ./.github/scripts/release-cleanroom-cluster-provider-client-version-documents.ps1 -tag $tag -environment $environment -registryName $registry
+
+  # --- frontend-service (+ security policy) ----------------------------------
+  - ${{ if contains(parameters.releaseType, 'frontend-service') }}:
+      - ${{ each c in split('frontend-service,cgs-client,ccr-proxy,skr', ',') }}:
+          - template: release-container.yml
+            parameters:
+              name: ${{ c }}
+              tag: ${{ parameters.tag }}
+              environment: ${{ parameters.environment }}
+              needsAttestation: ${{ parameters.needsAttestation }}
+      - template: release-script.yml
+        parameters:
+          displayName: Release frontend service security policy
+          tag: ${{ parameters.tag }}
+          environment: ${{ parameters.environment }}
+          installConfcom: true
+          script: |
+            ./build/workloads/frontend/build-frontend-service-security-policy.ps1 -repo $repo -tag $tag -push

@@ -182,6 +182,36 @@ if ($env:COLLAB_FORCE_MANAGED_IDENTITY -eq "true") {
 }
 else {
   if ($identityType -eq "managed_identity") {
+    # Clean up stale federated credentials created by this script (suffix
+    # "-federation") to avoid hitting the 20-credential limit when running
+    # repeated test scenarios. Credentials created outside this harness are
+    # left untouched.
+    $existingCreds = (az identity federated-credential list `
+      --identity-name $MANAGED_IDENTITY_NAME `
+      --resource-group $resourceGroup `
+      --query "[].name" -o tsv) -split "`n" | Where-Object { $_ -ne "" }
+    $credCount = ($existingCreds | Measure-Object).Count
+    $maxCreds = 20
+    $reserveSlots = 2
+    if ($credCount -ge ($maxCreds - $reserveSlots)) {
+      Write-Host "Federated credential count ($credCount) near limit ($maxCreds). Cleaning up stale credentials created by this script."
+      foreach ($cred in $existingCreds) {
+        $cred = $cred.Trim()
+        if ($cred -eq "$subject-federation") {
+          continue
+        }
+        if (-not $cred.EndsWith("-federation")) {
+          continue
+        }
+        Write-Host "  Deleting stale credential: $cred"
+        az identity federated-credential delete `
+          --identity-name $MANAGED_IDENTITY_NAME `
+          --resource-group $resourceGroup `
+          --name $cred `
+          --yes 2>$null
+      }
+    }
+
     Write-Host "Setting up federation on managed identity $MANAGED_IDENTITY_NAME with issuerUrl $issuerUrl and subject $subject"
     az identity federated-credential create `
       --name "$subject-federation" `

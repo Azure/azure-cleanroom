@@ -19,7 +19,11 @@ internal class Startup : ApiStartup
 
     public override void OnConfigureServices(IServiceCollection services)
     {
-        services.AddSingleton<SparkFrontendClientManager>();
+        services.AddSingleton(new FrontendClientConfig(
+            SettingName.SparkFrontendEndpoint,
+            SettingName.SparkFrontendSnpHostData,
+            "spark-frontend"));
+        services.AddSingleton<FrontendClientManager>();
         services.AddSingleton<GovernanceClientManager>();
         services.AddSingleton<ActiveUserChecker>();
     }

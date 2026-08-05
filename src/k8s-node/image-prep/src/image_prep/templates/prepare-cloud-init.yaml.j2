@@ -1,0 +1,191 @@
+#cloud-config
+# Flex Node Image Prep -- Bake-time cloud-init
+#
+# This cloud-init config is rendered from prepare-cloud-init.yaml.j2 and executed once
+# during VM image creation.  It installs all static software so that the
+# resulting image only needs instance-specific configuration at boot.
+
+apt_update : true
+
+# Prevent interactive prompts during all apt operations in cloud-init.
+apt:
+  conf: |
+    APT::Get::Assume-Yes "true";
+    DPkg::Options:: "--force-confdef";
+    DPkg::Options:: "--force-confold";
+
+packages:
+  - jq
+  - curl
+  - initramfs-tools
+  - python3-yaml
+  - python3-pip
+
+write_files:
+  # -- systemd oneshot service that runs at boot ------------------
+  - path: /etc/systemd/system/initialize-cleanroom.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Cleanroom Flex Node Boot Configuration
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStartPre=/bin/bash -c '\
+        config="{{ cleanroom_boot_config_dir }}/cleanroom-config.json"; \
+        echo "Waiting for $config ..."; \
+        for i in $(seq 1 20); do \
+          [ -f "$config" ] && echo "Found $config" && exit 0; \
+          sleep 15; \
+        done; \
+        echo "ERROR: $config not found after 300s."; \
+        echo "Contents of {{ cleanroom_boot_config_dir }}:"; \
+        ls -la {{ cleanroom_boot_config_dir }}/ 2>&1 || echo "Directory does not exist"; \
+        exit 1'
+      ExecStart=cleanroom-boot \
+        --config {{ cleanroom_boot_config_dir }}/cleanroom-config.json \
+        --boot-dir {{ cleanroom_boot_config_dir }} \
+        --api-server-proxy-dir {{ api_server_proxy_install_path }} \
+        --kubelet-proxy-dir {{ kubelet_proxy_install_path }}
+      ExecStart=/usr/bin/systemctl disable initialize-cleanroom.service
+      StandardOutput=journal+console
+      StandardError=journal+console
+      TimeoutStartSec=900
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # -- Azure provisioning service (replaces waagent report-ready) -------
+{% include '_azure-provisioning.j2' %}
+
+  # -- Image version file ------------------------------------------------
+  # Baked at build time so the cleanroom-boot pipeline can report it in
+  # /var/run/cleanroom/status.json.
+  - path: /etc/cleanroom-image-version
+    permissions: "0644"
+    content: |
+      {{ image_version }}
+
+{% if install_nvidia_gpu_drivers %}
+  # -- GPU driver install script -----------------------------------------
+  - path: /usr/local/bin/install-gpu-driver.sh
+    permissions: "0755"
+    content: |
+      {{ scripts["install-gpu-driver"] | indent(6) }}
+{% endif %}
+
+  # -- Post cloud-init script and service --------------------------------
+  # Runs after cloud-init completes: exports logs, restricts cloud-init,
+  # deprovisions waagent, and uploads the status blob.
+{% include '_post-cloud-init.j2' %}
+
+runcmd:
+  # -- 0. Update, upgrade, and install prerequisite packages ----------------
+  - |
+    export DEBIAN_FRONTEND=noninteractive
+    export HOME=/root
+
+  # -- 1. Install oras CLI ----------------------------------------------
+  - |
+    echo "Installing oras 1.3.0..."
+    curl -fsSL "https://github.com/oras-project/oras/releases/download/v1.3.0/oras_1.3.0_linux_amd64.tar.gz" \
+      -o /tmp/oras.tar.gz
+    tar -xzf /tmp/oras.tar.gz -C /usr/local/bin oras
+    rm -f /tmp/oras.tar.gz
+    echo "oras installed: $(oras version)"
+
+  # -- 2. Pull and install cleanroom-boot binary --------------------------
+  - |
+    echo "Pulling cleanroom-boot to {{ cleanroom_boot_install_path }}..."
+    mkdir -p "{{ cleanroom_boot_install_path }}"
+    oras pull "{{ cleanroom_boot_oci_url }}" -o "{{ cleanroom_boot_install_path }}"
+    chmod +x "{{ cleanroom_boot_install_path }}/cleanroom-boot"
+    cp "{{ cleanroom_boot_install_path }}/cleanroom-boot" /usr/local/bin/cleanroom-boot
+    echo "cleanroom-boot installed at: $(which cleanroom-boot)"
+    cleanroom-boot --help 2>&1 | head -1
+
+  # -- 3. Download and patch AKS Flex Node install.sh -------------------
+  - |
+    echo "Downloading AKS Flex Node install.sh ({{ aks_flex_node_version }})..."
+    curl -fsSL \
+      "https://raw.githubusercontent.com/Azure/AKSFlexNode/refs/tags/{{ aks_flex_node_version }}/scripts/install.sh" \
+      -o /tmp/aks-flex-node-install.sh
+
+    # Pin version and remove az-cli related steps (not needed for MI setup).
+    sed -i 's/version=$(get_latest_release)/version="{{ aks_flex_node_version }}"/' \
+      /tmp/aks-flex-node-install.sh
+    sed -i 's/^\([[:space:]]*\)install_azure_cli$/\1#install_azure_cli/' \
+      /tmp/aks-flex-node-install.sh
+    sed -i 's/^\([[:space:]]*\)check_azure_cli_auth$/\1#check_azure_cli_auth/' \
+      /tmp/aks-flex-node-install.sh
+    sed -i 's/^\([[:space:]]*\)setup_permissions$/\1#setup_permissions/' \
+      /tmp/aks-flex-node-install.sh
+
+  # -- 4. Run AKS Flex Node install.sh ----------------------------------
+  - |
+    echo "Running AKS Flex Node install.sh..."
+    bash /tmp/aks-flex-node-install.sh
+    rm -f /tmp/aks-flex-node-install.sh
+
+{% if install_nvidia_gpu_drivers %}
+  # -- 6. Install NVIDIA GPU driver (CC mode) --------------------------
+  - bash /usr/local/bin/install-gpu-driver.sh --driver-version {{ nvidia_driver_version }} --driver-branch {{ nvidia_driver_branch }}
+{% endif %}
+
+  # -- 7. Pull api-server-proxy OCI package and run install.sh -----------
+  - |
+    echo "Pulling api-server-proxy to {{ api_server_proxy_install_path }}..."
+    mkdir -p "{{ api_server_proxy_install_path }}"
+    oras pull "{{ api_server_proxy_oci_url }}" -o "{{ api_server_proxy_install_path }}"
+    chmod +x "{{ api_server_proxy_install_path }}/api-server-proxy"
+    echo "api-server-proxy contents:"
+    ls -la "{{ api_server_proxy_install_path }}/"
+  - |
+    echo "Running api-server-proxy install.sh (image-prep phase)..."
+    bash "{{ api_server_proxy_install_path }}/install.sh" \
+      --local-binary "{{ api_server_proxy_install_path }}/api-server-proxy"
+
+  # -- 8. Pull kubelet-proxy OCI package and run install.sh -------------
+  - |
+    echo "Pulling kubelet-proxy to {{ kubelet_proxy_install_path }}..."
+    mkdir -p "{{ kubelet_proxy_install_path }}"
+    oras pull "{{ kubelet_proxy_oci_url }}" -o "{{ kubelet_proxy_install_path }}"
+    chmod +x "{{ kubelet_proxy_install_path }}/kubelet-proxy"
+    echo "kubelet-proxy contents:"
+    ls -la "{{ kubelet_proxy_install_path }}/"
+  - |
+    echo "Running kubelet-proxy install.sh (image-prep phase)..."
+    bash "{{ kubelet_proxy_install_path }}/install.sh" \
+      --local-binary "{{ kubelet_proxy_install_path }}/kubelet-proxy"
+
+  # -- 9. Enable the services --------------------------------------------
+  - |
+    mkdir -p "{{ cleanroom_boot_config_dir }}"
+
+  - |
+    systemctl daemon-reload
+    systemctl enable initialize-cleanroom.service
+    systemctl enable azure-provisioning.service
+    echo "Services enabled."
+
+  # -- 10. Remove unnecessary packages -----------------------------------
+  - |
+    echo "Removing unnecessary packages..."
+    sudo apt-get remove -y unattended-upgrades
+    echo "Unnecessary packages removed."
+
+  # -- 11. Clean up bake-time artifacts ----------------------------------
+  - |
+    echo "Cleaning up bake-time artifacts..."
+    rm -f /usr/local/bin/oras
+    rm -rf /root/.cache/oras /root/.config/oras
+    rm -rf "{{ cleanroom_boot_install_path }}"
+    apt-get clean
+    echo "Image bake completed successfully."
+
+  # -- 12. Start post-cloud-init service (runs after cloud-init finishes) -
+  # The service exports logs, restricts cloud-init, deprovisions waagent,
+  # and uploads the completion status blob. Uses --no-block so cloud-init
+  # finishes first (the service has After=cloud-final.service).
+  - systemctl enable --now --no-block post-cloud-init.service

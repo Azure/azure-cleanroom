@@ -7,7 +7,7 @@ spec:
     command: []
     resources:
       requests:
-        cpu: 200m
+        cpu: 100m
         memory: 512Mi
     env:
     - name: TELEMETRY_MOUNT_PATH
@@ -17,3 +17,5 @@ spec:
     volumeMounts:
     - name: tpmrm0
       mountPath: /dev/tpmrm0
+    - name: attestation-lock
+      mountPath: /run/azure-cleanroom

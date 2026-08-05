@@ -19,7 +19,7 @@ kubectl delete pod virtual-cleanroom --force
 kubectl apply -f $outDir/deployments/virtual-cleanroom-pod.yaml
 
 Write-Host "Waiting for pod to become ready"
-kubectl wait --for=condition=ready pod -l app=virtual-cleanroom --timeout=180s
+kubectl wait --for=condition=ready pod -l app=virtual-cleanroom --timeout=360s
 # https://dustinspecker.com/posts/resolving-kubernetes-services-from-host-when-using-kind/
 $podIP = kubectl get pod virtual-cleanroom -o jsonpath="{.status.podIP}"
 Write-Host "Pod IP address: $podIP"

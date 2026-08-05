@@ -13,8 +13,9 @@ public record JobInput(
     [property: JsonPropertyName("governance")] GovernanceJobInput Governance,
     [property: JsonPropertyName("startDate")] DateTimeOffset? StartDate,
     [property: JsonPropertyName("endDate")] DateTimeOffset? EndDate,
-    [property: JsonPropertyName("dryRun")] bool? DryRun,
-    [property: JsonPropertyName("useOptimizer")] bool? UseOptimizer);
+    [property: JsonPropertyName("dryRun")] bool? DryRun = null,
+    [property: JsonPropertyName("useOptimizer")] bool? UseOptimizer = null,
+    [property: JsonPropertyName("scaleSku")] string? ScaleSku = "small");
 
 public record GovernanceJobInput(
     [property: JsonPropertyName("serviceUrl")] string ServiceUrl,

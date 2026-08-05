@@ -1,5 +1,3 @@
-from typing import Optional
-
 from ..builders.confidential_vm_inference_service_builder import (
     ConfidentialVmInferenceServiceBuilder,
 )
@@ -10,7 +8,7 @@ from ..config.configuration import (
     InferencingComputeProvider,
     TelemetrySettings,
 )
-from ..models.input_models import GovernanceSettings, JobInput
+from ..models.input_models import JobInput
 
 
 class InferenceServiceBuilderFactory:

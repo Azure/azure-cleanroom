@@ -1,0 +1,63 @@
+# Job definitions for the Flex Node PR tests, referenced via `- template:`.
+# Migrated from .github/workflows/pr_flex_node.yml (workflow_call). Becomes a JOB
+# TEMPLATE consumed by PR-Validation.yml, gated on testStages contains
+# 'test-flex-node'.
+#
+# Original steps -> ADO mapping:
+#   checkout (submodules) -> checkout: self
+#   setup-docker-on-data-disk -> steps template
+#   Install kind + kubectl -> steps/install-kind-kubectl.yml
+#   go test (api-server-proxy, kubelet-proxy unit + Kind integration) -> bash
+#   login-to-azure -> steps/login-to-azure.yml
+#   (AKS integration tests are DISABLED in GitHub too — TODO HPrabh)
+
+parameters:
+  - name: dependsOn
+    type: object
+    default: []
+  - name: condition
+    type: string
+    default: ""
+
+jobs:
+  - job: flex_node_test
+    displayName: Flex Node Tests
+    timeoutInMinutes: 120
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux # TODO(Phase 1C): 1ES pool with Docker daemon
+    variables:
+      - template: variables/build-common.yml
+      - name: CLUSTER_NAME
+        value: api-server-proxy-ci
+    steps:
+      - checkout: self
+        submodules: recursive
+
+      - template: steps/setup-docker-on-data-disk.yml
+
+      - template: steps/install-kind-kubectl.yml
+
+      - bash: go test -v ./src/k8s-node/api-server-proxy/internal/apiserverproxy/...
+        displayName: Run api-server-proxy unit tests
+        workingDirectory: $(repoRoot)
+
+      - bash: go test -v ./src/k8s-node/kubelet-proxy/internal/kubeletproxy/...
+        displayName: Run kubelet-proxy unit tests
+        workingDirectory: $(repoRoot)
+
+      - bash: |
+          go test \
+            -tags "kind,integration,kubelet_proxy,api_server_proxy" \
+            -v -timeout 30m \
+            ./src/k8s-node/test/integration/
+        displayName: Run integration tests (Kind)
+        workingDirectory: $(repoRoot)
+
+      - template: steps/login-to-azure.yml
+
+      # TODO(HPrabh, from pr_flex_node.yml): AKS integration tests require SSHing
+      # into the flex node VM (deploy an ssh pod + exec). Disabled in GitHub too —
+      # enable once implemented.

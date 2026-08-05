@@ -137,7 +137,7 @@ spec:
           restartPolicy: Always
           command:
             - "/bin/bash"
-            - "https-http/bootstrap.sh"
+            - "https-http-inference-proxy/bootstrap.sh"
             - "--ca-type"
             - {{ .Values.ccrproxy.caType | quote }}
           env:
@@ -148,6 +148,10 @@ spec:
             {{- if .Values.ccrproxy.ccrFqdn }}
             - name: CCR_FQDN
               value: {{ .Values.ccrproxy.ccrFqdn | quote }}
+            {{- end }}
+            {{- if .Values.ohttp.enabled }}
+            - name: CCR_ENVOY_ADDITIONAL_ROUTES
+              value: "/ohttp-gateway:{{ .Values.ohttp.port }}"
             {{- end }}
           ports:
             - name: https
@@ -189,6 +193,10 @@ spec:
             {{- end }}
             - name: SKR_PORT
               value: "8284"
+            - name: SERVICE_CERT_LOCATION
+              value: "/app/service/service-cert.pem"
+            - name: INFERENCING_NAMESPACE
+              value: {{ .Values.env.inferencingNamespace | quote }}
           ports:
             - name: http
               containerPort: 8080
@@ -208,6 +216,34 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+        {{- if .Values.ohttp.enabled }}
+        - name: ohttp-gateway
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.images.ohttpGatewayUrl }}"
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          env:
+            - name: ASPNETCORE_URLS
+              value: "http://+:{{ .Values.ohttp.port }}"
+            - name: SKR_PORT
+              value: "8284"
+            - name: ccrgovApiPathPrefix
+              value: {{ .Values.ccrgovernance.ccrgovApiPathPrefix | quote }}
+            {{- if .Values.env.insecureVirtualEnv }}
+            - name: INSECURE_VIRTUAL_ENVIRONMENT
+              value: "true"
+            {{- end }}
+          ports:
+            - name: ohttp
+              containerPort: {{ .Values.ohttp.port }}
+              protocol: TCP
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
       volumes:
         - name: uds
           emptyDir: {}

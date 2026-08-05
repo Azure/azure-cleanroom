@@ -13,14 +13,14 @@ runs:
       with:
         name: ccf-app-run-js-snp
         tag: ${{ inputs.tag }}
-        dockerfile: build/docker/Dockerfile.ccf_run_js_app.snp
+        dockerfile: build/docker/Dockerfile.ccf_run_js_app
         context: ${{ github.workspace }}
 
     - uses: ./.github/actions/build-container-and-artefacts
       with:
         name: ccf-app-run-js-virtual
         tag: ${{ inputs.tag }}
-        dockerfile: build/docker/Dockerfile.ccf_run_js_app.virtual
+        dockerfile: build/docker/Dockerfile.ccf_run_js_app
         context: ${{ github.workspace }}
 
     - uses: ./.github/actions/build-container-and-artefacts

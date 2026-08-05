@@ -1,18 +1,16 @@
 import os
 from enum import StrEnum
-from typing import Optional
+
+from pydantic import BaseModel, Field
 
 from frontend_internal.models.input_models import (
     DEFAULT_MCR_URL,
     DEFAULT_MCR_VERSION,
+    TelemetrySettings,
 )
 from frontend_internal.models.input_models import (
     CleanroomSettings as CleanroomSettingsBase,
 )
-from frontend_internal.models.input_models import (
-    TelemetrySettings,
-)
-from pydantic import BaseModel, Field
 
 
 class CleanroomSettings(CleanroomSettingsBase):
@@ -21,10 +19,10 @@ class CleanroomSettings(CleanroomSettingsBase):
         default=os.environ.get("CLEANROOM_CVM_MEASUREMENTS_DOCUMENT_URL")
         or f"{DEFAULT_MCR_URL}/cvm-measurements:{DEFAULT_MCR_VERSION}",
     )
-    runtime_digests_document: str = Field(
-        alias="runtimeDigestsDocument",
-        default=os.environ.get("CLEANROOM_RUNTIME_DIGESTS_DOCUMENT_URL")
-        or f"{DEFAULT_MCR_URL}/inf-runtime-digests:{DEFAULT_MCR_VERSION}",
+    inferencing_digests_document: str = Field(
+        alias="inferencingDigestsDocument",
+        default=os.environ.get("CLEANROOM_INFERENCING_DIGESTS_DOCUMENT_URL")
+        or f"{DEFAULT_MCR_URL}/inferencing-digests:{DEFAULT_MCR_VERSION}",
     )
 
 
@@ -64,6 +62,7 @@ class InferencingSettings(BaseModel):
     )
     debug_mode: bool = Field(alias="debugMode", default=False)
     allow_all: bool = Field(alias="allowAll", default=False)
+    enable_test_endpoints: bool = Field(alias="enableTestEndpoints", default=False)
     kserve: SkuSettings = Field(alias="kserve")
 
 

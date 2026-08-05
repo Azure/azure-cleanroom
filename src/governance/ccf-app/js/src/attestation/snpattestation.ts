@@ -1,7 +1,7 @@
 // From https://github.com/microsoft/CCF/blob/a4666e003e6cf2142db0d413082839501b4cca6f/tests/npm-app/src/endpoints/snp_attestation.ts
 import { Base64 } from "js-base64";
 import * as ccfapp from "@microsoft/ccf-app";
-import { hex, verifyPolicyClaims } from "../utils/utils";
+import { hex, requireNonEmptyString, verifyPolicyClaims } from "../utils/utils";
 import { SnpAttestationClaims } from "./SnpAttestationClaims";
 import * as ccfsnp from "@microsoft/ccf-app/snp_attestation";
 
@@ -79,18 +79,36 @@ export function verifySnpAttestation(
   attestation: SnpEvidence,
   delegatedPolicies?: string[]
 ): SnpAttestationResult {
+  requireNonEmptyString(
+    attestation.evidence,
+    "'evidence' must be supplied for snp-caci attestation."
+  );
+  requireNonEmptyString(
+    attestation.endorsements,
+    "'endorsements' must be supplied for snp-caci attestation."
+  );
+  requireNonEmptyString(
+    attestation.uvm_endorsements,
+    "'uvm_endorsements' must be supplied for snp-caci attestation."
+  );
+
   const evidence = ccfapp
     .typedArray(Uint8Array)
-    .encode(Base64.toUint8Array(attestation.evidence));
+    .encode(
+      Base64.toUint8Array(attestation.evidence) as Uint8Array<ArrayBuffer>
+    );
   const endorsements = ccfapp
     .typedArray(Uint8Array)
-    .encode(Base64.toUint8Array(attestation.endorsements));
-  const uvm_endorsements =
-    attestation.uvm_endorsements !== undefined
-      ? ccfapp
-          .typedArray(Uint8Array)
-          .encode(Base64.toUint8Array(attestation.uvm_endorsements))
-      : undefined;
+    .encode(
+      Base64.toUint8Array(attestation.endorsements) as Uint8Array<ArrayBuffer>
+    );
+  const uvm_endorsements = ccfapp
+    .typedArray(Uint8Array)
+    .encode(
+      Base64.toUint8Array(
+        attestation.uvm_endorsements
+      ) as Uint8Array<ArrayBuffer>
+    );
 
   const r = ccfsnp.verifySnpAttestation(
     evidence,

@@ -5,9 +5,12 @@ package attestation
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"syscall"
 	"time"
 
 	"github.com/azure/azure-cleanroom/src/cvm/pkg/hcl"
@@ -38,9 +41,19 @@ const (
 	// ReportDataSize is the size of the report_data field in an SNP report.
 	ReportDataSize = 64
 
+	// gpuNonceSize is the 32-byte prefix of report_data used for GPU session binding.
+	gpuNonceSize = 32
+
 	// ReportDataRefreshDelay is the time to wait after writing report_data
 	// for the HCL firmware to regenerate the SNP report.
 	ReportDataRefreshDelay = 3 * time.Second
+
+	// attestationLockPath is a node-wide lock file used to serialize
+	// TPM NV report_data writes across concurrent pods. The TPM NV
+	// index 0x01400002 is a VM-wide singleton — concurrent writers
+	// race and the loser's SNP report will contain the winner's hash.
+	// This lock must be on a hostPath volume shared across all pods.
+	attestationLockPath = "/run/azure-cleanroom/cvm-attestation.lock"
 )
 
 // RuntimeClaims represents the JSON runtime claims embedded in the HCL report's
@@ -50,7 +63,7 @@ const (
 type RuntimeClaims struct {
 	Keys            []json.RawMessage `json:"keys"`             // JWK keys (HCLAkPub, HCLEkPub)
 	VMConfiguration *VMConfiguration  `json:"vm-configuration"` // Azure CVM configuration
-	UserData        string            `json:"user-data"`        // 64-byte hex string from NV 0x01400002
+	UserData        string            `json:"user-data"`        // 64-byte hex string: SHA256(user data document) || zeros
 }
 
 // VMConfiguration holds selective Azure CVM configuration from the runtime claims.
@@ -109,40 +122,115 @@ func CollectEvidence(nonce []byte, pcrSlots []int) (*Evidence, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open TPM: %w", err)
 	}
-	defer tpmDev.Close()
+	defer tpmDev.Close() //nolint:errcheck // Best-effort close on TPM device.
 
 	return collectEvidenceFromTPM(tpmDev, nonce, pcrSlots)
 }
 
 // CollectEvidenceWithReportData is like CollectEvidence but writes custom
-// report_data to NV index 0x01400002 to trigger fresh SNP report generation.
-// The reportData must be exactly 64 bytes. The resulting SNP report will have
-// the provided reportData bound into its report_data field, creating a direct
-// cryptographic binding between the caller's data and the hardware attestation.
+// reportData to NV index 0x01400002 to trigger fresh HCL/SNP report generation.
+// The reportData must be exactly 64 bytes: SHA256(user data document) in bytes
+// 0-31 and zeros in bytes 32-63. Azure surfaces this value as the runtime
+// claims "user-data" field. The regenerated SNP report binds the runtime
+// claims by hashing them into report_data[0:32].
 // This follows the pattern from az-snp-vtpm: write to 0x01400002, wait for
 // HCL firmware regeneration, then read the fresh report from 0x01400001.
+//
+// A node-wide file lock serializes the write-wait-read critical section to
+// prevent concurrent pods from clobbering each other's NV data. The lock
+// is released after the SNP report is read, before any network calls.
+//
 // If pcrSlots is nil, the default PCRs (0-23) are included.
-func CollectEvidenceWithReportData(nonce []byte, reportData []byte, pcrSlots []int) (*Evidence, error) {
+func CollectEvidenceWithReportData(
+	nonce []byte,
+	reportData []byte,
+	pcrSlots []int,
+) (*Evidence, error) {
 	if len(reportData) != ReportDataSize {
-		return nil, fmt.Errorf("reportData must be exactly %d bytes, got %d", ReportDataSize, len(reportData))
+		return nil, fmt.Errorf(
+			"reportData must be exactly %d bytes, got %d",
+			ReportDataSize, len(reportData))
 	}
+
+	// Acquire a node-wide exclusive lock to serialize TPM NV writes.
+	// Multiple pods on the same VM share a single TPM NV index, so
+	// without this lock a concurrent writer can overwrite the report
+	// data before the HCL firmware regenerates the SNP report.
+	unlock, err := acquireAttestationLock()
+	if err != nil {
+		return nil, fmt.Errorf("acquire attestation lock: %w", err)
+	}
+	defer unlock()
 
 	tpmDev, err := linuxtpm.Open(TPMDevice)
 	if err != nil {
 		return nil, fmt.Errorf("open TPM: %w", err)
 	}
-	defer tpmDev.Close()
+	defer tpmDev.Close() //nolint:errcheck // Best-effort close.
 
 	// Write report_data to trigger fresh SNP report generation
-	if err := NVWriteData(tpmDev, tpm2.TPMHandle(ReportDataNVIndex), reportData); err != nil {
-		return nil, fmt.Errorf("write report_data to 0x%08x: %w", ReportDataNVIndex, err)
+	if err = NVWriteData(
+		tpmDev,
+		tpm2.TPMHandle(ReportDataNVIndex),
+		reportData,
+	); err != nil {
+		return nil, fmt.Errorf(
+			"write report_data to 0x%08x: %w",
+			ReportDataNVIndex, err)
 	}
 
 	// Wait for HCL firmware to regenerate the SNP report
-	log.Printf("Waiting %v for HCL firmware to regenerate SNP report...", ReportDataRefreshDelay)
+	log.Printf(
+		"Waiting %v for HCL firmware to regenerate SNP report...",
+		ReportDataRefreshDelay)
 	time.Sleep(ReportDataRefreshDelay)
 
-	return collectEvidenceFromTPM(tpmDev, nonce, pcrSlots)
+	evidence, err := collectEvidenceFromTPM(tpmDev, nonce, pcrSlots)
+	if err != nil {
+		return nil, err
+	}
+
+	// Lock is released by defer unlock() — the SNP report has been
+	// read and bound to our report_data. Subsequent network calls
+	// (THIM, CGS) do not need the lock.
+	return evidence, nil
+}
+
+// acquireAttestationLock takes an exclusive flock on a host-shared lock
+// file. Returns an unlock function. The lock directory is created if it
+// does not exist (it lives on the volatile /run tmpfs and must be
+// recreated after reboot).
+func acquireAttestationLock() (func(), error) {
+	dir := "/run/azure-cleanroom"
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("create lock dir %s: %w", dir, err)
+	}
+
+	f, err := os.OpenFile(
+		attestationLockPath,
+		os.O_CREATE|os.O_RDWR,
+		0o644,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"open lock file %s: %w", attestationLockPath, err)
+	}
+
+	log.Printf("Acquiring attestation lock %s...", attestationLockPath)
+	start := time.Now()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf(
+			"flock %s: %w", attestationLockPath, err)
+	}
+	log.Printf(
+		"Attestation lock acquired in %v", time.Since(start))
+
+	return func() {
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = f.Close()
+		log.Printf("Attestation lock released")
+	}, nil
 }
 
 // collectEvidenceFromTPM performs the attestation using an already-opened TPM.
@@ -153,7 +241,7 @@ func collectEvidenceFromTPM(tpm transport.TPM, nonce []byte, pcrSlots []int) (*E
 	// 2. Read the pre-provisioned AIK
 	akName, exists := ReadPersistentHandle(tpm, akHandle)
 	if !exists {
-		return nil, fmt.Errorf("Azure-provisioned AIK not found at handle 0x%08x", AIKPersistentHandle)
+		return nil, fmt.Errorf("azure-provisioned AIK not found at handle 0x%08x", AIKPersistentHandle)
 	}
 	log.Println("Azure-provisioned AIK found.")
 
@@ -331,6 +419,19 @@ func ParseRuntimeClaims(hclBlob []byte) (*RuntimeClaims, error) {
 	return &claims, nil
 }
 
+// GPUAttestationNonce returns the 32-byte nonce used to bind GPU evidence to
+// the CPU SNP report. It is the first half of the SNP report_data field,
+// encoded as 64 lowercase hex characters for the NVIDIA tooling.
+func GPUAttestationNonce(snpReport []byte) (string, error) {
+	if len(snpReport) < hcl.SNPReportDataOffset+gpuNonceSize {
+		return "", fmt.Errorf(
+			"SNP report too small for GPU nonce extraction: %d bytes", len(snpReport))
+	}
+
+	return hex.EncodeToString(
+		snpReport[hcl.SNPReportDataOffset : hcl.SNPReportDataOffset+gpuNonceSize]), nil
+}
+
 // NVRead reads the full contents of any NV index in chunks (TPM max NV buffer
 // is typically 1024 bytes). Equivalent to: tpm2_nvread -C o <index>
 func NVRead(tpm transport.TPM, nvIndex tpm2.TPMHandle) ([]byte, error) {
@@ -398,8 +499,8 @@ func NVWriteData(tpm transport.TPM, nvIndex tpm2.TPMHandle, data []byte) error {
 		// NV index doesn't exist — need to define it
 		needsDefine = true
 	} else {
-		nvPublic, err := nvPubRsp.NVPublic.Contents()
-		if err != nil {
+		nvPublic, nvErr := nvPubRsp.NVPublic.Contents()
+		if nvErr != nil {
 			needsDefine = true
 		} else if int(nvPublic.DataSize) != len(data) {
 			// Size mismatch — undefine and redefine
@@ -424,7 +525,7 @@ func NVWriteData(tpm transport.TPM, nvIndex tpm2.TPMHandle, data []byte) error {
 
 	if needsDefine {
 		log.Printf("Defining NV index 0x%08x with size %d", nvIndex, len(data))
-		_, err := tpm2.NVDefineSpace{
+		_, defineErr := tpm2.NVDefineSpace{
 			AuthHandle: tpm2.AuthHandle{
 				Handle: tpm2.TPMRHOwner,
 				Auth:   tpm2.PasswordAuth(nil),
@@ -439,8 +540,8 @@ func NVWriteData(tpm transport.TPM, nvIndex tpm2.TPMHandle, data []byte) error {
 				DataSize: uint16(len(data)),
 			}),
 		}.Execute(tpm)
-		if err != nil {
-			return fmt.Errorf("NVDefineSpace(0x%08x): %w", nvIndex, err)
+		if defineErr != nil {
+			return fmt.Errorf("NVDefineSpace(0x%08x): %w", nvIndex, defineErr)
 		}
 	}
 

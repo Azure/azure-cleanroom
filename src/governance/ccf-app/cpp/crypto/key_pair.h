@@ -3,9 +3,9 @@
 #pragma once
 
 #include "ccf/crypto/curve.h"
+#include "ccf/crypto/ec_public_key.h"
 #include "ccf/crypto/jwk.h"
 #include "ccf/crypto/pem.h"
-#include "ccf/crypto/public_key.h"
 #include "ccf/crypto/san.h"
 
 #include <cstdint>
@@ -143,19 +143,19 @@ namespace cleanroom::crypto
     }
 
     virtual std::vector<uint8_t> derive_shared_secret(
-      const PublicKey& peer_key) = 0;
+      const ECPublicKey& peer_key) = 0;
 
     virtual std::vector<uint8_t> public_key_raw() const = 0;
 
     virtual CurveID get_curve_id() const = 0;
 
-    virtual PublicKey::Coordinates coordinates() const = 0;
+    virtual ECPublicKey::Coordinates coordinates() const = 0;
 
     virtual JsonWebKeyECPrivate private_key_jwk(
       const std::optional<std::string>& kid = std::nullopt) const = 0;
   };
 
-  using PublicKeyPtr = std::shared_ptr<PublicKey>;
+  using PublicKeyPtr = std::shared_ptr<ECPublicKey>;
   using KeyPairPtr = std::shared_ptr<KeyPair>;
 
   /**

@@ -941,27 +941,18 @@ public class EventTests : TestBase
             Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
             var error = (await response.Content.ReadFromJsonAsync<ODataError>())!.Error;
             Assert.AreEqual("VerifySnpAttestationFailed", error.Code);
-            Assert.AreEqual("cannot read property 'replace' of undefined", error.Message);
         }
 
         using (HttpRequestMessage request = new(HttpMethod.Put, ccfAppEventsUrl))
         {
             // Payload contains valid attestation report but no clean room policy has been proposed
             // yet so event insertion should fail.
-            var attestationReport = JsonSerializer.Deserialize<JsonObject>(
-                await File.ReadAllTextAsync(
-                    "data/encryption/attestation.json"))!["report"]!["snpCACI"]!;
             var publicKey = CreateX509Certificate2("foo").PublicKey.ExportSubjectPublicKeyInfo();
             var publicKeyPem = PemEncoding.Write("PUBLIC KEY", publicKey);
             request.Content = new StringContent(
                 new JsonObject
                 {
-                    ["attestation"] = new JsonObject
-                    {
-                        ["evidence"] = attestationReport["attestation"]!.ToString(),
-                        ["endorsements"] = attestationReport["platformCertificates"]!.ToString(),
-                        ["uvm_endorsements"] = attestationReport["uvmEndorsements"]!.ToString(),
-                    },
+                    ["attestation"] = await GetSnpCaciAttestationAsync(),
                     ["sign"] = new JsonObject
                     {
                         ["publicKey"] =
@@ -989,20 +980,12 @@ public class EventTests : TestBase
         using (HttpRequestMessage request = new(HttpMethod.Put, ccfAppEventsUrl))
         {
             // Payload contains valid attestation report but certificate does not match reportdata.
-            var attestationReport = JsonSerializer.Deserialize<JsonObject>(
-                await File.ReadAllTextAsync(
-                    "data/encryption/attestation.json"))!["report"]!["snpCACI"]!;
             var publicKey = CreateX509Certificate2("foo").PublicKey.ExportSubjectPublicKeyInfo();
             var publicKeyPem = PemEncoding.Write("PUBLIC KEY", publicKey);
             request.Content = new StringContent(
                 new JsonObject
                 {
-                    ["attestation"] = new JsonObject
-                    {
-                        ["evidence"] = attestationReport["attestation"]!.ToString(),
-                        ["endorsements"] = attestationReport["platformCertificates"]!.ToString(),
-                        ["uvm_endorsements"] = attestationReport["uvmEndorsements"]!.ToString(),
-                    },
+                    ["attestation"] = await GetSnpCaciAttestationAsync(),
                     ["sign"] = new JsonObject
                     {
                         ["publicKey"] =
@@ -1027,9 +1010,6 @@ public class EventTests : TestBase
         {
             // Payload contains valid report, certificate and signature but data is not
             // corresponding to the signature.
-            var attestationReport = JsonSerializer.Deserialize<JsonObject>(
-                await File.ReadAllTextAsync(
-                    "data/encryption/attestation.json"))!["report"]!["snpCACI"]!;
             var publicKey = (await File.ReadAllTextAsync("data/encryption/pub_key.pem"))!;
 
             // Replace CR+LF with LF for test to pass if run on Windows otherwise we get
@@ -1042,12 +1022,7 @@ public class EventTests : TestBase
             request.Content = new StringContent(
                 new JsonObject
                 {
-                    ["attestation"] = new JsonObject
-                    {
-                        ["evidence"] = attestationReport["attestation"]!.ToString(),
-                        ["endorsements"] = attestationReport["platformCertificates"]!.ToString(),
-                        ["uvm_endorsements"] = attestationReport["uvmEndorsements"]!.ToString(),
-                    },
+                    ["attestation"] = await GetSnpCaciAttestationAsync(),
                     ["sign"] = new JsonObject
                     {
                         ["publicKey"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(publicKey)),

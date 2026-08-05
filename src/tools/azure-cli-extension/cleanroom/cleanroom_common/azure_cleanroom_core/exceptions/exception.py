@@ -27,6 +27,8 @@ class ErrorCode(StrEnum):
     CollaborationAlreadyExists = "CollaborationAlreadyExists"
     BackingIdentityNotFound = "BackingIdentityNotFound"
     CurrentCollaborationNotSet = "CurrentCollaborationNotSet"
+    NoApplicationsDefined = "NoApplicationsDefined"
+    DuplicateName = "DuplicateName"
 
 
 class CleanroomSpecificationError(Exception):

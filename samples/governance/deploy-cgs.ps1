@@ -159,7 +159,7 @@ $proposalId = (curl -sS -X POST -H "content-type: application/json" localhost:$p
      "args": {
         "max_heap_bytes": 104857600,
         "max_stack_bytes": 1048576,
-        "max_execution_time_ms": 1000,
+        "max_execution_time_ms": 5000,
         "log_exception_details": true,
         "return_exception_details": true
      }

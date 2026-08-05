@@ -10,6 +10,9 @@
 *.userosscache
 *.sln.docstates
 
+# C# language server cache
+*.lscache
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
@@ -42,6 +45,8 @@ out/
 # Visual Studio 2017 auto generated files
 Generated\ Files/
 
+test/TPCX-BB_Tools_1.7.0/
+
 # MSTest test Results
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*
@@ -69,6 +74,9 @@ ScaffoldingReadMe.txt
 
 # StyleCop
 StyleCopReport.xml
+
+# C# language server cache
+*.lscache
 
 # Files built by Visual Studio
 *_i.c
@@ -429,3 +437,18 @@ src/azure_cleanroom.egg-info
 .bsp
 
 generated*/
+!test/onebox/skr-validation/generated/
+!test/onebox/skr-validation/generated/cl-skr-validation-eus-rg/
+!test/onebox/skr-validation/generated/cl-skr-validation-eus-rg/resources.json
+src/tools/cleanroom-mcp/cleanroom-mcp
+
+# Compiled Go binaries.
+cvm-attestation-agent
+cvm-attestation-verifier
+
+# Azure Pipelines migration: the `[Rr]elease/` rule above (a .NET build-output
+# convention) also matches the .pipelines/Release/ pipeline folder. Re-include it
+# so the OneBranch release pipeline YAML is tracked (the build-output ignore for
+# actual bin/ Release folders elsewhere is unaffected).
+!.pipelines/Release/
+!.pipelines/Release/**

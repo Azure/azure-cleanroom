@@ -12,6 +12,8 @@ from urllib.parse import urlparse
 
 import oras.client
 import yaml
+from kubernetes.client import models as k8smodels
+
 from cleanroom_sdk.models.cleanroom import (
     AccessPoint,
     AccessPointType,
@@ -19,7 +21,6 @@ from cleanroom_sdk.models.cleanroom import (
     ProtocolType,
     ResourceType,
 )
-from kubernetes.client import models as k8smodels
 
 from .i_cleanroom_application_builder import (
     ICleanroomApplicationBuilder,
@@ -135,9 +136,9 @@ class CleanroomApplicationBuilder(
             )
 
         if self._governance_required:
-            assert (
-                self._governance_settings is not None
-            ), "Governance settings are required."
+            assert self._governance_settings is not None, (
+                "Governance settings are required."
+            )
             assert self._contract_id is not None, "Contract ID is required."
             if self._attestation_type == AttestationType.CVM:
                 sidecars.append(
@@ -154,9 +155,9 @@ class CleanroomApplicationBuilder(
             )
 
         if self._ccr_proxy_https_http:
-            assert (
-                self._governance_required is not None
-            ), "Governance is required when using ccr-proxy with CGS CA."
+            assert self._governance_required is not None, (
+                "Governance is required when using ccr-proxy with CGS CA."
+            )
             listener_port, destination_port, fqdn = self._ccr_proxy_https_http
             sidecars.append(
                 self._get_ccr_proxy_sidecar(listener_port, destination_port, fqdn)
@@ -251,9 +252,14 @@ class CleanroomApplicationBuilder(
 
         base_url = self._cleanroom_settings.sidecars_policy_document_registry_url
 
-        sidecar = [x for x in self._get_sidecars_version() if x["image"] == imageName][
-            0
-        ]
+        matches = [x for x in self._get_sidecars_version() if x["image"] == imageName]
+        if not matches:
+            known = [x["image"] for x in self._get_sidecars_version()]
+            raise ValueError(
+                f"Sidecar '{imageName}' not found in the "
+                f"sidecar-digests document. Known sidecars: {known}"
+            )
+        sidecar = matches[0]
         insecure = self._cleanroom_settings.use_http
 
         lock = threading.Lock()
@@ -303,9 +309,15 @@ class CleanroomApplicationBuilder(
     def _get_sidecar(
         self, sidecar_name: str, sidecar_replacement_vars: dict
     ) -> Sidecar:
-        sidecar = [
-            x for x in self._get_sidecars_version() if x["image"] == sidecar_name
-        ][0]
+        entries = self._get_sidecars_version()
+        matches = [x for x in entries if x["image"] == sidecar_name]
+        if not matches:
+            known = [x["image"] for x in entries]
+            raise ValueError(
+                f"Sidecar '{sidecar_name}' not found in the "
+                f"sidecar-digests document. Known sidecars: {known}"
+            )
+        sidecar = matches[0]
         sidecar_replacement_vars["containerRegistryUrl"] = (
             self._cleanroom_settings.registry_url
         )
@@ -508,17 +520,17 @@ class CleanroomApplicationBuilder(
         encryption_mode = encryption_config["EncryptionMode"]
 
         # TODO (HPrabh): Add support for CSE.
-        assert (
-            encryption_mode != "CSE"
-        ), f"Encryption mode {encryption_mode} is not supported for {access_name}."
+        assert encryption_mode != "CSE", (
+            f"Encryption mode {encryption_mode} is not supported for {access_name}."
+        )
         if encryption_mode == "CPK":
-            assert (
-                access_point.protection.encryptionSecrets
-            ), f"Encryption secrets is null for {access_name}."
+            assert access_point.protection.encryptionSecrets, (
+                f"Encryption secrets is null for {access_name}."
+            )
             dek_entry = access_point.protection.encryptionSecrets.dek
-            assert (
-                dek_entry.secret.backingResource.type == ResourceType.Cgs
-            ), f"Expecting DEK secret backing resource type as '{str(ResourceType.Cgs)}' but value is '{dek_entry.secret.backingResource.type}'."
+            assert dek_entry.secret.backingResource.type == ResourceType.Cgs, (
+                f"Expecting DEK secret backing resource type as '{str(ResourceType.Cgs)}' but value is '{dek_entry.secret.backingResource.type}'."
+            )
         storage_account_name = urlparse(access_point.store.provider.url).hostname.split(
             "."
         )[0]
@@ -613,9 +625,9 @@ class CleanroomApplicationBuilder(
     ) -> Sidecar:
         # Sanitize access name to remove spaces and convert to lowercase and replace underscores with dashes.
         access_name = access_name.lower().replace(" ", "").replace("_", "-")
-        assert (
-            access_point.store.provider.configuration
-        ), f"Store provider configuration is null for {access_name}."
+        assert access_point.store.provider.configuration, (
+            f"Store provider configuration is null for {access_name}."
+        )
         aws_config = json.loads(
             base64.b64decode(access_point.store.provider.configuration).decode()
         )
@@ -630,9 +642,9 @@ class CleanroomApplicationBuilder(
         else:
             trace_context_json_b64 = ""
 
-        assert (
-            aws_config_secret_id is not None
-        ), f"AWS config secret Id value is not set for {access_name}."
+        assert aws_config_secret_id is not None, (
+            f"AWS config secret Id value is not set for {access_name}."
+        )
 
         s3fs_sidecar_replacement_vars = {
             "datasetName": access_name,
@@ -661,7 +673,7 @@ class CleanroomApplicationBuilder(
         self, telemetry_mount_path: str, extra_vars: dict = {}
     ) -> Sidecar:
 
-        return self._get_sidecar(
+        sidecar = self._get_sidecar(
             "otel-collector",
             {
                 "telemetryCollectionEnabled": self._telemetry.telemetry_collection_enabled,
@@ -672,5 +684,42 @@ class CleanroomApplicationBuilder(
                 "tempoEndpoint": self._telemetry.tempo_endpoint,
                 "sparkMetricsEndpoint": extra_vars.get("sparkMetricsEndpoint", ""),
                 "resourceAttributes": extra_vars.get("resourceAttributes", ""),
+                "prometheusScrapeTargets": extra_vars.get(
+                    "prometheusScrapeTargets", ""
+                ),
             },
         )
+
+        # Inject Kubernetes downward API fields so the OTEL resource
+        # processor can stamp pod/node identity onto all metrics.
+        downward_api_vars = [
+            k8smodels.V1EnvVar(
+                name="POD_NAME",
+                value_from=k8smodels.V1EnvVarSource(
+                    field_ref=k8smodels.V1ObjectFieldSelector(
+                        field_path="metadata.name"
+                    )
+                ),
+            ),
+            k8smodels.V1EnvVar(
+                name="POD_NAMESPACE",
+                value_from=k8smodels.V1EnvVarSource(
+                    field_ref=k8smodels.V1ObjectFieldSelector(
+                        field_path="metadata.namespace"
+                    )
+                ),
+            ),
+            k8smodels.V1EnvVar(
+                name="NODE_NAME",
+                value_from=k8smodels.V1EnvVarSource(
+                    field_ref=k8smodels.V1ObjectFieldSelector(
+                        field_path="spec.nodeName"
+                    )
+                ),
+            ),
+        ]
+        if sidecar.container.env is None:
+            sidecar.container.env = []
+        sidecar.container.env.extend(downward_api_vars)
+
+        return sidecar

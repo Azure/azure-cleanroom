@@ -179,12 +179,28 @@
     </div>
     <div class="card-body">
         <div class="code-container">
-            <pre class="bg-light p-3 rounded" id="documentContent"><code>@Model.Document.Data</code></pre>
+            <pre class="bg-light p-3 rounded" style="white-space: pre-wrap; max-height: 600px; overflow-y: auto;"
+                 id="documentContent"><code>@Model.Document.Data</code></pre>
         </div>
     </div>
 </div>
 
 <script>
+    // Pretty-print document content if it looks like JSON.
+    (function () {
+        const el = document.getElementById('documentContent');
+        if (el) {
+            const raw = el.textContent || '';
+            try {
+                const obj = JSON.parse(raw);
+                el.querySelector('code').textContent =
+                    JSON.stringify(obj, null, 2);
+            } catch (e) {
+                // Not valid JSON — leave as-is.
+            }
+        }
+    })();
+
     function copyDocumentContent() {
         const contentElement = document.getElementById('documentContent');
         const copyButton = document.querySelector('[onclick="copyDocumentContent()"]');

@@ -4,14 +4,6 @@ import logging
 from typing import Optional
 
 import kubernetes
-from tenacity import (
-    before_sleep_log,
-    retry,
-    retry_if_exception,
-    stop_after_attempt,
-    wait_exponential,
-    wait_random,
-)
 
 from ..models.job_record_models import (
     JobRecord,
@@ -19,30 +11,10 @@ from ..models.job_record_models import (
     JobRun,
 )
 from ..utilities.constants import JobRecordConstants
+from ..utilities.crd_helpers import conflict_retry
+from ..utilities.helpers import log_safe
 
 logger = logging.getLogger("job_record_client")
-
-
-def _is_conflict_error(exception: Exception) -> bool:
-    return (
-        isinstance(exception, kubernetes.client.ApiException)
-        and exception.status == 409
-    )
-
-
-def _conflict_retry():
-    return retry(
-        retry=retry_if_exception(_is_conflict_error),
-        stop=stop_after_attempt(JobRecordConstants.MAX_RETRY_ATTEMPTS),
-        wait=wait_exponential(
-            multiplier=JobRecordConstants.RETRY_MULTIPLIER,
-            min=JobRecordConstants.RETRY_MIN_WAIT,
-            max=JobRecordConstants.RETRY_MAX_WAIT,
-        )
-        + wait_random(0, JobRecordConstants.RETRY_JITTER),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-        reraise=True,
-    )
 
 
 def _apply_history_limit(runs: list[JobRun]) -> list[JobRun]:
@@ -85,11 +57,11 @@ class JobRecordClient:
         except kubernetes.client.ApiException as e:
             if e.status == 404:
                 logger.info(
-                    f"JobRecord not found: query_id={query_id}, namespace={namespace}"
+                    f"JobRecord not found: query_id={log_safe(query_id)}, namespace={namespace}"
                 )
                 return None
             logger.error(
-                f"Failed to get JobRecord: query_id={query_id}, namespace={namespace}, error={e}"
+                f"Failed to get JobRecord: query_id={log_safe(query_id)}, namespace={namespace}, error={e}"
             )
             raise
 
@@ -120,12 +92,12 @@ class JobRecordClient:
                 body=body,
             )
             logger.info(
-                f"Created JobRecord: query_id={query_id}, namespace={namespace}"
+                f"Created JobRecord: query_id={log_safe(query_id)}, namespace={namespace}"
             )
             return self._parse_job_record(result)
         except kubernetes.client.ApiException as e:
             logger.error(
-                f"Failed to create JobRecord: query_id={query_id}, namespace={namespace}, error={e}"
+                f"Failed to create JobRecord: query_id={log_safe(query_id)}, namespace={namespace}, error={e}"
             )
             raise
 
@@ -139,7 +111,7 @@ class JobRecordClient:
                 if e.status == 409:
                     # Race condition: another client created it first, fetch it
                     logger.info(
-                        f"JobRecord created by another client, fetching: query_id={query_id}, namespace={namespace}"
+                        f"JobRecord created by another client, fetching: query_id={log_safe(query_id)}, namespace={namespace}"
                     )
                     job_record = self.get_job_record(query_id, namespace)
                     if job_record is None:
@@ -176,7 +148,7 @@ class JobRecordClient:
         )
         return job_record, resource_version, existing_runs, existing_summary
 
-    @_conflict_retry()
+    @conflict_retry()
     def _add_run_with_retry(
         self, query_id: str, namespace: str, run: JobRun
     ) -> JobRecord:
@@ -187,7 +159,7 @@ class JobRecordClient:
         existing_run_ids = {r.run_id for r in existing_runs}
         if run.run_id in existing_run_ids:
             logger.info(
-                f"Run already exists, skipping: query_id={query_id}, namespace={namespace}, run_id={run.run_id}"
+                f"Run already exists, skipping: query_id={log_safe(query_id)}, namespace={namespace}, run_id={log_safe(run.run_id)}"
             )
             return job_record
 
@@ -230,19 +202,19 @@ class JobRecordClient:
                 body=status_body,
             )
             logger.info(
-                f"Updated JobRecord: query_id={query_id}, namespace={namespace}, run_id={latest_run.run_id}"
+                f"Updated JobRecord: query_id={log_safe(query_id)}, namespace={namespace}, run_id={log_safe(latest_run.run_id)}"
             )
             return self._parse_job_record(result)
         except kubernetes.client.ApiException as e:
             if e.status == 409:
                 logger.warning(
-                    f"Conflict updating JobRecord, will retry: query_id={query_id}, namespace={namespace}, "
-                    f"run_id={latest_run.run_id}, resourceVersion={resource_version}"
+                    f"Conflict updating JobRecord, will retry: query_id={log_safe(query_id)}, namespace={namespace}, "
+                    f"run_id={log_safe(latest_run.run_id)}, resourceVersion={resource_version}"
                 )
             else:
                 logger.error(
-                    f"Failed to update JobRecord: query_id={query_id}, namespace={namespace}, "
-                    f"run_id={latest_run.run_id}, error={e}"
+                    f"Failed to update JobRecord: query_id={log_safe(query_id)}, namespace={namespace}, "
+                    f"run_id={log_safe(latest_run.run_id)}, error={e}"
                 )
             raise
 

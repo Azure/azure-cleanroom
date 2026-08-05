@@ -167,9 +167,8 @@ function invalidateOtherOpenProposals(proposalIdToRetain) {
 }
 
 function setServiceCertificateValidityPeriod(validFrom, validityPeriodDays) {
-  const rawConfig = ccf.kv["public:ccf.gov.service.config"].get(
-    getSingletonKvKey()
-  );
+  const rawConfig =
+    ccf.kv["public:ccf.gov.service.config"].get(getSingletonKvKey());
   if (rawConfig === undefined) {
     throw new Error("Service configuration could not be found");
   }
@@ -218,9 +217,8 @@ function setNodeCertificateValidityPeriod(
     throw new Error(`Node ${nodeId} has no certificate signing request`);
   }
 
-  const rawConfig = ccf.kv["public:ccf.gov.service.config"].get(
-    getSingletonKvKey()
-  );
+  const rawConfig =
+    ccf.kv["public:ccf.gov.service.config"].get(getSingletonKvKey());
   if (rawConfig === undefined) {
     throw new Error("Service configuration could not be found");
   }
@@ -412,9 +410,8 @@ const actions = new Map([
           ccf.jsonCompatibleToBuf(member_info)
         );
 
-        const rawSignature = ccf.kv["public:ccf.internal.signatures"].get(
-          getSingletonKvKey()
-        );
+        const rawSignature =
+          ccf.kv["public:ccf.internal.signatures"].get(getSingletonKvKey());
         if (rawSignature === undefined) {
           ccf.kv["public:ccf.gov.members.acks"].set(rawMemberId);
         } else {
@@ -456,9 +453,8 @@ const actions = new Map([
         // would still be a sufficient number of recovery members left
         // to recover the service
         if (isActiveMember && isRecoveryMember) {
-          const rawConfig = ccf.kv["public:ccf.gov.service.config"].get(
-            getSingletonKvKey()
-          );
+          const rawConfig =
+            ccf.kv["public:ccf.gov.service.config"].get(getSingletonKvKey());
           if (rawConfig === undefined) {
             throw new Error("Service configuration could not be found");
           }
@@ -1229,9 +1225,8 @@ const actions = new Map([
         }
       },
       function (args) {
-        const rawConfig = ccf.kv["public:ccf.gov.service.config"].get(
-          getSingletonKvKey()
-        );
+        const rawConfig =
+          ccf.kv["public:ccf.gov.service.config"].get(getSingletonKvKey());
         if (rawConfig === undefined) {
           throw new Error("Service configuration could not be found");
         }
@@ -1313,9 +1308,8 @@ const actions = new Map([
         checkEntityId(args.node_id, "node_id");
       },
       function (args) {
-        const rawConfig = ccf.kv["public:ccf.gov.service.config"].get(
-          getSingletonKvKey()
-        );
+        const rawConfig =
+          ccf.kv["public:ccf.gov.service.config"].get(getSingletonKvKey());
         if (rawConfig === undefined) {
           throw new Error("Service configuration could not be found");
         }
@@ -1496,21 +1490,6 @@ const actions = new Map([
       function (args) {},
       function (args, proposalId) {
         ccf.node.triggerSnapshot();
-      }
-    )
-  ],
-  [
-    "trigger_acme_refresh",
-    new Action(
-      function (args) {
-        checkType(
-          args.interfaces,
-          "array?",
-          "interfaces to refresh the certificates for"
-        );
-      },
-      function (args, proposalId) {
-        ccf.node.triggerACMERefresh(args.interfaces);
       }
     )
   ],

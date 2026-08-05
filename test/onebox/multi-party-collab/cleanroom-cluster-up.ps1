@@ -6,7 +6,8 @@ param (
     [string]$repo,
     [string]$tag,
     [string]$clusterProviderProjectName = "ob-cleanroom-cluster-provider",
-    [string]$outDir = ""
+    [string]$outDir = "",
+    [string[]]$ipTags = @()
 )
 
 # https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
@@ -51,18 +52,23 @@ $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_SPARK_FRONTEND_CHART_URL"] = "$ociEnd
 $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_SPARK_FRONTEND_SECURITY_POLICY_DOCUMENT_URL"] = "$repo/policies/workloads/cleanroom-spark-frontend-security-policy:$tag"
 $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_IMAGE"] = "$repo/workloads/kserve-inferencing-agent:$tag"
 $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_CHART_URL"] = "$ociEndpoint/workloads/helm/kserve-inferencing-agent:$semanticVersion"
-$envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_SECURITY_POLICY_DOCUMENT_URL"] = "$repo/policies/workloads/kserve-inferencing-agent-security-policy:$tag"
+$envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_SECURITY_POLICY_DOCUMENT_URL"] = "$repo/policies/workloads/cleanroom-kserve-inferencing-agent-security-policy:$tag"
+$envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_OHTTP_GATEWAY_IMAGE"] = "$repo/workloads/ohttp-gateway:$tag"
 $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_IMAGE"] = "$repo/workloads/kserve-inferencing-frontend:$tag"
 $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_CHART_URL"] = "$ociEndpoint/workloads/helm/kserve-inferencing-frontend:$semanticVersion"
-$envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_SECURITY_POLICY_DOCUMENT_URL"] = "$repo/policies/workloads/kserve-inferencing-frontend-security-policy:$tag"
+$envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_SECURITY_POLICY_DOCUMENT_URL"] = "$repo/policies/workloads/cleanroom-kserve-inferencing-frontend-security-policy:$tag"
 $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_API_SERVER_PROXY_PACKAGE_URL"] = "$ociEndpoint/k8s-node/api-server-proxy:$tag"
+$envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KUBELET_PROXY_PACKAGE_URL"] = "$ociEndpoint/k8s-node/kubelet-proxy:$tag"
+$envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_CLEANROOM_BOOT_PACKAGE_URL"] = "$ociEndpoint/k8s-node/cleanroom-boot:$tag"
+$envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_FLEX_NODE_IMAGE_DIGESTS_URL"] = "$ociEndpoint/cleanroom-image-digests:$tag"
 $envVars["AZCLI_CLEANROOM_CLUSTER_PROVIDER_CONTAINER_REGISTRY_URL"] = "$repo"
 
 # Frontend specific
 $envVars["AZCLI_CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL"] = "$repo"
 $envVars["AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL"] = "$repo/sidecar-digests:$tag"
+$envVars["AZCLI_CLEANROOM_CVM_MEASUREMENTS_VIRTUAL_DOCUMENT_URL"] = "$repo/cvm-measurements-virtual:$tag"
 $envVars["AZCLI_CLEANROOM_CVM_MEASUREMENTS_DOCUMENT_URL"] = "$repo/cvm-measurements:$tag"
-$envVars["AZCLI_CLEANROOM_RUNTIME_DIGESTS_DOCUMENT_URL"] = "$repo/inf-runtime-digests:$tag"
+$envVars["AZCLI_CLEANROOM_INFERENCING_DIGESTS_DOCUMENT_URL"] = "$repo/inferencing-digests:$tag"
 
 # Analytics App Specific.
 $digest = Get-Digest -repo $repo -containerName "workloads/cleanroom-spark-analytics-app" -tag $tag
@@ -75,13 +81,18 @@ $envFileContent = $envVars.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Va
 $envFileContent | Out-File -FilePath $envFilePath -Encoding utf8
 
 Write-Host "Starting deployment of clean room cluster $clusterName on CACI in RG $resourceGroup."
-az cleanroom cluster up `
-    --name $clusterName `
-    --resource-group $resourceGroup `
-    --location $location `
-    --workspace-folder $outDir `
-    --provider-client $clusterProviderProjectName `
-    --env-file $envFilePath
+$clusterUpArgs = @(
+    "--name", $clusterName,
+    "--resource-group", $resourceGroup,
+    "--location", $location,
+    "--workspace-folder", $outDir,
+    "--provider-client", $clusterProviderProjectName,
+    "--env-file", $envFilePath
+)
+if ($ipTags.Count -gt 0) {
+    $clusterUpArgs += @("--ip-tags") + $ipTags
+}
+az cleanroom cluster up @clusterUpArgs
 
 $infraType = "aks"
 $response = az cleanroom cluster show `

@@ -1,1 +1,1 @@
-export * from "./auto-generated/js/models/all/cleanroom/governance";
+export * from "./auto-generated/models/all/azure/cleanroom/governance";

@@ -52,7 +52,7 @@ runs:
         echo "helm_file=${{ inputs.path }}/${{ inputs.name }}-helm.tgz" >> $env:GITHUB_OUTPUT
         Pop-Location
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
       with:
         name: ${{ inputs.name }}-helm
@@ -64,7 +64,7 @@ runs:
       if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
       run: echo "${{ inputs.name }}-helm" >> built-containers.txt
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       if: ${{ steps.check-built-containers.outputs.container_built != 'true' }}
       with:
         name: built-containers

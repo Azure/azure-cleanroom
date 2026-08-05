@@ -8,11 +8,28 @@ function Get-Digest {
         [string]$containerName,
 
         [Parameter(Mandatory = $true)]
-        [string]$tag
+        [string]$tag,
+
+        [string]$platform = "linux/amd64"
     )
 
     $manifest = oras manifest fetch $repo/"$containerName":$tag
+    $manifestJson = $manifest | ConvertFrom-Json
 
+    # If this is a manifest list (multi-arch), extract the platform-specific digest.
+    if ($manifestJson.mediaType -eq "application/vnd.docker.distribution.manifest.list.v2+json" -or
+        $manifestJson.mediaType -eq "application/vnd.oci.image.index.v1+json") {
+        $os, $arch = $platform -split "/"
+        $entry = $manifestJson.manifests | Where-Object {
+            $_.platform.architecture -eq $arch -and $_.platform.os -eq $os
+        } | Select-Object -First 1
+        if (-not $entry) {
+            throw "No manifest found for platform $platform in $repo/$containerName`:$tag"
+        }
+        return $entry.digest
+    }
+
+    # Single-arch manifest: compute digest from the raw manifest content.
     $manifestRaw = ""
     foreach ($line in $manifest) {
         $manifestRaw += $line + "`n"

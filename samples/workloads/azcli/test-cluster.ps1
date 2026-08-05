@@ -8,10 +8,7 @@ param
   $testAnalytics,
 
   [switch]
-  $testKServeInferencing,
-
-  [switch]
-  $testFlexNode
+  $testKServeInferencing
 )
 
 function Get-TimeStamp {
@@ -54,10 +51,10 @@ function Test-DiagnosticK8sCredentials {
     -f $diagnosticKubeConfig
 
   Write-Host "Verifying diagnostic k8s credentials..."
-  Write-Host "Getting pods in telemetry namespace using diagnostic k8s credentials..."
-  kubectl get pods -n telemetry --kubeconfig $diagnosticKubeConfig
+  Write-Host "Getting pods in observability namespace using diagnostic k8s credentials..."
+  kubectl get pods -n observability --kubeconfig $diagnosticKubeConfig
   if ($LASTEXITCODE -ne 0) {
-    throw "Failed to get pods in telemetry namespace using diagnostic k8s credentials."
+    throw "Failed to get pods in observability namespace using diagnostic k8s credentials."
   }
 
   Write-Host "Getting pods in default namespace using diagnostic k8s credentials..."
@@ -232,9 +229,12 @@ else {
   Write-Host "Analytics workload is not enabled, skipping analytics tests."
 }
 
+$flexNodeEnabled = $clusterInfo.flexNodeProfile -ne $null -and $clusterInfo.flexNodeProfile.enabled -eq $true
 $inferencingEnabled = $clusterInfo.inferencingWorkloadProfile -ne $null -and $clusterInfo.inferencingWorkloadProfile.KServeProfile -ne $null -and $clusterInfo.inferencingWorkloadProfile.KServeProfile.enabled -eq $true
 if ($inferencingEnabled) {
   Write-Host "Testing inferencing workload functionality..."
+
+  # Test endpoints are enabled via the deployment config (enableTestEndpoints).
 
   # We will use kubectl proxy to access the frontend service via localhost.
 
@@ -261,12 +261,11 @@ if ($inferencingEnabled) {
     }
   }
   $deployTestUrl = "$frontendSvcAddress/inferencing/test/deployModel"
-  $flexNodeEnabled = $clusterInfo.flexNodeProfile -ne $null -and $clusterInfo.flexNodeProfile.enabled -eq $true
   if ($flexNodeEnabled) {
     Write-Host "Flex node is enabled. Getting security policy and signing it..."
 
     # Get the security policy from the frontend.
-    $policyUrl = "$frontendSvcAddress/inferencing/test/generateSecurityPolicy?node_type=flexnode"
+    $policyUrl = "$frontendSvcAddress/inferencing/test/generateSecurityPolicy?node_type=flexnode&name=$modelName"
     Write-Host "Getting security policy from: $policyUrl"
     $policyResponse = $(curl --silent --fail-with-body -X POST -k $policyUrl)
     Write-Host "Policy response: $policyResponse"
@@ -372,19 +371,4 @@ else {
     throw "KServe inferencing workload is not enabled, cannot run KServe inferencing tests."
   }
   Write-Host "KServe inferencing workload is not enabled, skipping KServe inferencing tests."
-}
-
-$flexNodeEnabled = $clusterInfo.flexNodeProfile -ne $null -and $clusterInfo.flexNodeProfile.enabled -eq $true
-if ($flexNodeEnabled) {
-  Write-Host "Testing flex node pod policies..."
-
-  pwsh $PSScriptRoot/test-pod-policies.ps1
-
-  Write-Host -ForegroundColor Green "Flex node pod policies test completed successfully!"
-}
-else {
-  if ($testFlexNode) {
-    throw "Flex node is not enabled, cannot run flex node tests."
-  }
-  Write-Host "Flex node is not enabled, skipping flex node tests."
 }

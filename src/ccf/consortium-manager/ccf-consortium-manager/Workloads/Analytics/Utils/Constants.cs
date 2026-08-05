@@ -12,16 +12,16 @@ public static class Constants
     public const string SparkFrontendEndpoint =
         $"https://{SparkFrontendReleaseName}.{SparkFrontendServiceNamespace}.svc";
 
-    public const string ObservabilityNamespace = "telemetry";
+    public const string ObservabilityNamespace = "observability";
     public const string ObservabilityZoneName = ObservabilityNamespace + ".svc";
-    public const string LokiReleaseName = "cleanroom-spark-loki";
+    public const string LokiReleaseName = "cleanroom-loki";
     public const string LokiServiceEndpoint = $"http://loki-headless.{ObservabilityNamespace}.svc";
 
-    public const string TempoReleaseName = "cleanroom-spark-tempo";
+    public const string TempoReleaseName = "cleanroom-tempo";
     public const string TempoServiceEndpoint =
         $"http://{TempoReleaseName}.{ObservabilityNamespace}.svc";
 
-    public const string PrometheusReleaseName = "cleanroom-spark-prometheus";
+    public const string PrometheusReleaseName = "cleanroom-prometheus";
     public const string PrometheusServiceEndpoint =
         $"http://{PrometheusReleaseName}-server.{ObservabilityNamespace}.svc";
 }

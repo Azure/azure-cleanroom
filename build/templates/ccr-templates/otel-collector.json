@@ -37,6 +37,10 @@
       {
         "name": "RESOURCE_ATTRIBUTES",
         "value": "$resourceAttributes"
+      },
+      {
+        "name": "PROMETHEUS_SCRAPE_TARGETS",
+        "value": "$prometheusScrapeTargets"
       }
     ],
     "volumeMounts": [

@@ -1,0 +1,6 @@
+{{/*
+  NodePool and FlexNodeClass CR instances are NOT part of this chart.
+  They are applied separately by the cluster provider after chart install,
+  allowing provider-specific configuration (virtual vs AKS) without
+  coupling resource lifecycle to the controller deployment.
+*/}}

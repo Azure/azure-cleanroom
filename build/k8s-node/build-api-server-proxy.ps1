@@ -40,6 +40,12 @@ if ($push) {
     Copy-Item "$outDir/api-server-proxy"     "$staging/api-server-proxy"
     Copy-Item "$scriptsDir/install.sh"       "$staging/install.sh"
     Copy-Item "$scriptsDir/uninstall.sh"     "$staging/uninstall.sh"
+    # Environment-specific configure.sh scripts. install.sh --env <aks|kind>
+    # stages the appropriate one as configure.sh at install time.
+    New-Item -ItemType Directory -Path "$staging/aks" | Out-Null
+    New-Item -ItemType Directory -Path "$staging/kind" | Out-Null
+    Copy-Item "$scriptsDir/aks/configure.sh"  "$staging/aks/configure.sh"
+    Copy-Item "$scriptsDir/kind/configure.sh" "$staging/kind/configure.sh"
 
     Push-Location $staging
     try {
@@ -47,7 +53,9 @@ if ($push) {
         oras push "$repo/k8s-node/api-server-proxy:$tag" `
             ./api-server-proxy `
             ./install.sh `
-            ./uninstall.sh
+            ./uninstall.sh `
+            ./aks/configure.sh `
+            ./kind/configure.sh
         Write-Host "OCI artifact pushed successfully."
     }
     finally {

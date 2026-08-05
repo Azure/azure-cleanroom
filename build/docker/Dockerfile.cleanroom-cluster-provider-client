@@ -24,7 +24,10 @@ RUN dotnet restore /app/src/cleanroom-cluster/cluster.sln
 COPY stylecop.json /app
 COPY Menees.Analyzers.Settings.xml /app
 COPY .editorconfig /app
-COPY src/internal /app/src/internal
+COPY src/internal/Attestation /app/src/internal/Attestation
+COPY src/internal/Cose /app/src/internal/Cose
+COPY src/internal/restapi-common /app/src/internal/restapi-common
+COPY src/internal/clientauth-common /app/src/internal/clientauth-common
 COPY src/cleanroom-cluster /app/src/cleanroom-cluster
 
 # Publish the application
@@ -51,6 +54,11 @@ RUN curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/s
 RUN curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64 && \
     chmod +x ./kind && \
     mv ./kind /usr/local/bin/
+
+# Install yq (Mike Farah's Go-based YAML processor)
+RUN curl -Lo ./yq https://github.com/mikefarah/yq/releases/download/v4.44.6/yq_linux_amd64 && \
+    chmod +x ./yq && \
+    mv ./yq /usr/local/bin/
 
 RUN VERSION="1.2.0" && \
     curl -LO "https://github.com/oras-project/oras/releases/download/v${VERSION}/oras_${VERSION}_linux_amd64.tar.gz" && \

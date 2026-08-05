@@ -1,0 +1,649 @@
+# Job definitions for the Multi-Party Collab sample PR tests. Migrated from
+# .github/workflows/pr_multi_party_collab_samples.yml (workflow_call, 12 scenario
+# jobs). Consumed by PR-Validation.yml, gated on testStages contains
+# 'test-multi-party-collab'.
+#
+# Each GitHub job = checkout -> setup-docker -> a `test-multi-party-collab/test-X`
+# composite. Each composite ~= login -> [kind-up] -> install cleanroom cli ->
+# run-collab scenario script -> dump docker/kubectl logs (!cancelled) ->
+# upload-artifact -> remove-resources.
+#
+# encrypted_storage is the WORKED PATTERN (Kind). All 12 scenarios are fully
+# expanded from their .github/actions/test-multi-party-collab/test-<scenario>
+# composites: run-collab script + scenario-specific docker/kubectl log dumps +
+# upload-artifact + remove-resources. Kind scenarios run kind-up.sh first; CACI
+# scenarios use run-collab-aci.ps1 (no Kind). repo=$(ACR_URL) so the ACR branch
+# of each composite is used (the MCR/-NoBuild branch applies only to MCR repos).
+#
+# 12 jobs: encrypted-storage, encrypted-storage-cleanroom-client,
+#   encrypted-storage-csi-driver, encrypted-storage-blobfuse-proxy-sidecar,
+#   db-access, mongo-db-access, quote-of-the-day, encrypted-storage-caci,
+#   encrypted-storage-cleanroom-client-caci, ml-training-caci (matrix),
+#   nginx-hello, nginx-hello-caci.
+
+parameters:
+  - name: dependsOn
+    type: object
+    default: []
+  - name: condition
+    type: string
+    default: ""
+
+jobs:
+  # --- WORKED PATTERN: encrypted-storage (Kind) ---
+  - job: encrypted_storage
+    displayName: Encrypted storage
+    timeoutInMinutes: 120
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux # TODO(Phase 1C): 1ES pool with Docker daemon
+    variables:
+      - template: variables/build-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - bash: bash ./test/onebox/kind-up.sh
+        displayName: Deploy Kind cluster
+        workingDirectory: $(repoRoot)
+      - template: steps/install-cleanroom-cli.yml
+      - pwsh: ./test/onebox/multi-party-collab/encrypted-storage/run-collab.ps1 -registry acr -repo $(ACR_URL) -tag $(Build.BuildId)
+        displayName: Run collab scenario on Kind
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-consumer-client-cgs-client-1
+        displayName: Dump ob-consumer-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-publisher-client-cgs-client-1
+        displayName: Dump ob-publisher-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-ccf-encrypted-storage-ccf-1
+        displayName: Dump ccf logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
+        displayName: Dump virtual-cleanroom logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - task: PublishPipelineArtifact@1
+        displayName: Upload generated
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/multi-party-collab/encrypted-storage/generated
+          artifact: generated-encrypted-storage
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # --- encrypted-storage (cleanroom-client) Kind ---
+  - job: encrypted_storage_cleanroom_client
+    displayName: Encrypted storage (cleanroom-client)
+    timeoutInMinutes: 120
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux
+    variables:
+      - template: variables/build-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - bash: bash ./test/onebox/kind-up.sh
+        displayName: Deploy Kind cluster
+        workingDirectory: $(repoRoot)
+      - template: steps/install-cleanroom-cli.yml
+      - pwsh: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/run-collab.ps1 -registry acr -repo $(ACR_URL) -tag $(Build.BuildId)
+        displayName: Run collab scenario on Kind
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs credentials-proxy
+        displayName: Dump credentials-proxy logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs cleanroom-client
+        displayName: Dump cleanroom-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-consumer-client-cgs-client-1
+        displayName: Dump ob-consumer-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-publisher-client-cgs-client-1
+        displayName: Dump ob-publisher-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-ccf-encrypted-storage-cl-client-ccf-1
+        displayName: Dump ccf logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
+        displayName: Dump virtual-cleanroom logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: kubectl logs -l app=ccr-client-proxy --tail=-1 --all-containers --ignore-errors --prefix
+        displayName: Dump ccr-client-proxy logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - task: PublishPipelineArtifact@1
+        displayName: Upload generated
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated
+          artifact: generated-encrypted-storage-cleanroom-client
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # --- encrypted-storage (CSI driver) Kind ---
+  - job: encrypted_storage_csi_driver
+    displayName: Encrypted storage (CSI driver)
+    timeoutInMinutes: 120
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux
+    variables:
+      - template: variables/build-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - bash: bash ./test/onebox/kind-up.sh
+        displayName: Deploy Kind cluster
+        workingDirectory: $(repoRoot)
+      - template: steps/install-cleanroom-cli.yml
+      - pwsh: ./test/onebox/multi-party-collab/encrypted-storage/run-collab.ps1 -registry acr -repo $(ACR_URL) -tag $(Build.BuildId) -useCsiDriver
+        displayName: Run collab scenario on Kind with CSI driver
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-consumer-client-cgs-client-1
+        displayName: Dump ob-consumer-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-publisher-client-cgs-client-1
+        displayName: Dump ob-publisher-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-ccf-encrypted-storage-ccf-1
+        displayName: Dump ccf logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
+        displayName: Dump virtual-cleanroom logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: kubectl -n kube-system logs -l app=cleanroom-csi-driver --tail=-1 --all-containers --ignore-errors --prefix
+        displayName: Dump CSI driver logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - task: PublishPipelineArtifact@1
+        displayName: Upload generated
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/multi-party-collab/encrypted-storage/generated
+          artifact: generated-encrypted-storage-csi-driver
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # --- encrypted-storage (blobfuse-proxy sidecar) Kind ---
+  - job: encrypted_storage_blobfuse_proxy_sidecar
+    displayName: Encrypted storage (blobfuse-proxy sidecar)
+    timeoutInMinutes: 120
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux
+    variables:
+      - template: variables/build-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - bash: bash ./test/onebox/kind-up.sh
+        displayName: Deploy Kind cluster
+        workingDirectory: $(repoRoot)
+      - template: steps/install-cleanroom-cli.yml
+      - pwsh: ./test/onebox/multi-party-collab/encrypted-storage/run-collab.ps1 -registry acr -repo $(ACR_URL) -tag $(Build.BuildId) -useBlobfuseProxySidecar
+        displayName: Run collab scenario on Kind with blobfuse-proxy sidecar
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-consumer-client-cgs-client-1
+        displayName: Dump ob-consumer-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-publisher-client-cgs-client-1
+        displayName: Dump ob-publisher-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-ccf-encrypted-storage-ccf-1
+        displayName: Dump ccf logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
+        displayName: Dump virtual-cleanroom logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - task: PublishPipelineArtifact@1
+        displayName: Upload generated
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/multi-party-collab/encrypted-storage/generated
+          artifact: generated-encrypted-storage-blobfuse-proxy-sidecar
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # --- db-access Kind ---
+  - job: db_access
+    displayName: DB access
+    timeoutInMinutes: 120
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux
+    variables:
+      - template: variables/build-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - bash: bash ./test/onebox/kind-up.sh
+        displayName: Deploy Kind cluster
+        workingDirectory: $(repoRoot)
+      - template: steps/install-cleanroom-cli.yml
+      - template: steps/acr-login-from-repo.yml
+      - pwsh: ./test/onebox/multi-party-collab/db-access/run-collab.ps1 -registry acr -repo $(ACR_URL) -tag $(Build.BuildId)
+        displayName: Run collab scenario on Kind
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-consumer-client-cgs-client-1
+        displayName: Dump ob-consumer-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-publisher-client-cgs-client-1
+        displayName: Dump ob-publisher-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-ccf-db-access-ccf-1
+        displayName: Dump ccf logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
+        displayName: Dump virtual-cleanroom logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - task: PublishPipelineArtifact@1
+        displayName: Upload generated
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/multi-party-collab/db-access/generated
+          artifact: generated-db-access
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # --- mongo-db-access Kind ---
+  - job: mongo_db_access
+    displayName: Mongo DB access
+    timeoutInMinutes: 120
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux
+    variables:
+      - template: variables/build-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - bash: bash ./test/onebox/kind-up.sh
+        displayName: Deploy Kind cluster
+        workingDirectory: $(repoRoot)
+      - template: steps/install-cleanroom-cli.yml
+      - template: steps/acr-login-from-repo.yml
+      - pwsh: ./test/onebox/multi-party-collab/mongo-db-access/run-collab.ps1 -registry acr -repo $(ACR_URL) -tag $(Build.BuildId)
+        displayName: Run collab scenario on Kind
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-consumer-client-cgs-client-1
+        displayName: Dump ob-consumer-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-publisher-client-cgs-client-1
+        displayName: Dump ob-publisher-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-ccf-mongo-db-access-ccf-1
+        displayName: Dump ccf logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
+        displayName: Dump virtual-cleanroom logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - task: PublishPipelineArtifact@1
+        displayName: Upload generated
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/multi-party-collab/mongo-db-access/generated
+          artifact: generated-mongo-db-access
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # --- quote-of-the-day Kind ---
+  - job: quote_of_the_day
+    displayName: Quote of the day
+    timeoutInMinutes: 120
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux
+    variables:
+      - template: variables/build-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - bash: bash ./test/onebox/kind-up.sh
+        displayName: Deploy Kind cluster
+        workingDirectory: $(repoRoot)
+      - template: steps/install-cleanroom-cli.yml
+      - template: steps/acr-login-from-repo.yml
+      - pwsh: ./test/onebox/multi-party-collab/quote-of-the-day/run-collab.ps1 -registry acr -repo $(ACR_URL) -tag $(Build.BuildId)
+        displayName: Run collab scenario on Kind
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-consumer-client-cgs-client-1
+        displayName: Dump ob-consumer-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-publisher-client-cgs-client-1
+        displayName: Dump ob-publisher-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-ccf-quote-of-the-day-ccf-1
+        displayName: Dump ccf logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
+        displayName: Dump virtual-cleanroom logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - task: PublishPipelineArtifact@1
+        displayName: Upload generated
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/multi-party-collab/quote-of-the-day/generated
+          artifact: generated-quote-of-the-day
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # --- nginx-hello Kind ---
+  - job: nginx_hello
+    displayName: Nginx hello
+    timeoutInMinutes: 120
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux
+    variables:
+      - template: variables/build-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - bash: bash ./test/onebox/kind-up.sh
+        displayName: Deploy Kind cluster
+        workingDirectory: $(repoRoot)
+      - template: steps/install-cleanroom-cli.yml
+      - template: steps/acr-login-from-repo.yml
+      - pwsh: ./test/onebox/multi-party-collab/nginx-hello/run-collab.ps1 -registry acr -repo $(ACR_URL) -tag $(Build.BuildId)
+        displayName: Run collab scenario on Kind
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-nginx-client-cgs-client-1
+        displayName: Dump ob-nginx-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-ccf-nginx-hello-ccf-1
+        displayName: Dump ccf logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
+        displayName: Dump virtual-cleanroom logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: kubectl logs -l app=ccr-client-proxy --tail=-1 --all-containers --ignore-errors --prefix
+        displayName: Dump ccr-client-proxy logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - task: PublishPipelineArtifact@1
+        displayName: Upload generated
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/multi-party-collab/nginx-hello/generated
+          artifact: generated-nginx-hello
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # ===========================================================================
+  # CACI scenarios (no Kind; run-collab-aci; ACR vs MCR registry variants)
+  # ===========================================================================
+  # NOTE: these run on real Azure Container Instances (ACI/CACI). When repo is a
+  # public MCR path they run with -NoBuild -registry mcr; else -registry acr.
+  # Here repo=$(ACR_URL) (an ACR), so the ACR branch is used.
+
+  # --- encrypted-storage-caci ---
+  - job: encrypted_storage_caci
+    displayName: Encrypted storage (CACI)
+    timeoutInMinutes: 180
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux
+    variables:
+      - template: variables/build-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - template: steps/install-cleanroom-cli.yml
+      - pwsh: ./test/onebox/multi-party-collab/encrypted-storage/run-collab-aci.ps1 -registry acr -repo $(ACR_URL) -tag $(Build.BuildId)
+        displayName: Run collab scenario on CACI
+        workingDirectory: $(repoRoot)
+      - pwsh: docker compose -p ob-encrypted-storage-ccf-provider logs
+        displayName: Dump ccf-provider logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-consumer-client-cgs-client-1
+        displayName: Dump ob-consumer-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-publisher-client-cgs-client-1
+        displayName: Dump ob-publisher-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - task: PublishPipelineArtifact@1
+        displayName: Upload generated
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/multi-party-collab/encrypted-storage/generated
+          artifact: generated-encrypted-storage-caci
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # --- encrypted-storage-cleanroom-client-caci ---
+  - job: encrypted_storage_cleanroom_client_caci
+    displayName: Encrypted storage (cleanroom-client, CACI)
+    timeoutInMinutes: 180
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux
+    variables:
+      - template: variables/build-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - template: steps/install-cleanroom-cli.yml
+      - template: steps/acr-login-from-repo.yml
+      - pwsh: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/run-collab-aci.ps1 -registry acr -repo $(ACR_URL) -tag $(Build.BuildId)
+        displayName: Run collab scenario on CACI
+        workingDirectory: $(repoRoot)
+      - pwsh: docker compose -p ob-encrypted-storage-cr-client-ccf-provider logs
+        displayName: Dump ccf-provider logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs cleanroom-client
+        displayName: Dump cleanroom-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-consumer-client-cgs-client-1
+        displayName: Dump ob-consumer-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-publisher-client-cgs-client-1
+        displayName: Dump ob-publisher-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - task: PublishPipelineArtifact@1
+        displayName: Upload generated
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated
+          artifact: generated-storage-cleanroom-client-caci
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # --- ml-training-caci (matrix key-store) ---
+  - job: ml_training_caci
+    displayName: ML training (CACI)
+    timeoutInMinutes: 180
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux
+    strategy:
+      matrix:
+        akvpremium: { kvType: akvpremium }
+    variables:
+      - template: variables/build-common.yml
+      # MHSM env used by ml-training run-collab-aci.
+      - name: TDP_HSM_RESOURCE_GROUP
+        value: azcleanroom-emu-bvt-rg
+      - name: TDP_MHSM_NAME
+        value: azcleanroomemubvthsm
+      - name: TDC_HSM_RESOURCE_GROUP
+        value: azcleanroom-emu-bvt-rg
+      - name: TDC_MHSM_NAME
+        value: azcleanroomemubvthsm
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - template: steps/install-cleanroom-cli.yml
+      - pwsh: |
+          $env:TDP_HSM_RESOURCE_GROUP='$(TDP_HSM_RESOURCE_GROUP)'
+          $env:TDP_MHSM_NAME='$(TDP_MHSM_NAME)'
+          $env:TDC_HSM_RESOURCE_GROUP='$(TDC_HSM_RESOURCE_GROUP)'
+          $env:TDC_MHSM_NAME='$(TDC_MHSM_NAME)'
+          ./test/onebox/multi-party-collab/ml-training/run-collab-aci.ps1 -registry acr -repo $(ACR_URL) -tag $(Build.BuildId) -kvType "$(kvType)"
+        displayName: Run collab scenario on CACI
+        workingDirectory: $(repoRoot)
+      - pwsh: docker compose -p ob-ml-training-ccf-provider logs
+        displayName: Dump ccf-provider logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-isv-client-cgs-client-1
+        displayName: Dump ob-isv-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - task: PublishPipelineArtifact@1
+        displayName: Upload generated
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/multi-party-collab/ml-training/generated
+          artifact: generated-ml-training-caci-$(kvType)
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-$(kvType)-$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # --- nginx-hello-caci ---
+  - job: nginx_hello_caci
+    displayName: Nginx hello (CACI)
+    timeoutInMinutes: 180
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux
+    variables:
+      - template: variables/build-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - template: steps/install-cleanroom-cli.yml
+      - template: steps/acr-login-from-repo.yml
+      - pwsh: ./test/onebox/multi-party-collab/nginx-hello/run-collab-aci.ps1 -registry acr -repo $(ACR_URL) -tag $(Build.BuildId)
+        displayName: Run collab scenario on CACI
+        workingDirectory: $(repoRoot)
+      - pwsh: docker compose -p ob-nginx-hello-ccf-provider logs
+        displayName: Dump ccf-provider logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-nginx-client-cgs-client-1
+        displayName: Dump ob-nginx-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ccr-client-proxy
+        displayName: Dump ccr-client-proxy logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - task: PublishPipelineArtifact@1
+        displayName: Upload generated
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/multi-party-collab/nginx-hello/generated/configurations
+          artifact: generated-nginx-hello-caci
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)

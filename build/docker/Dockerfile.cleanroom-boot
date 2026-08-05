@@ -1,0 +1,26 @@
+# Build stage -- compile the Go binary.
+FROM golang:1.26 AS builder
+
+WORKDIR /app
+
+# Copy go module files first for layer caching.
+COPY src/k8s-node/cleanroom-boot/go.mod \
+     src/k8s-node/cleanroom-boot/go.sum \
+     ./src/k8s-node/cleanroom-boot/
+
+WORKDIR /app/src/k8s-node/cleanroom-boot
+RUN go mod download
+
+# Copy the full source.
+WORKDIR /app
+COPY src/k8s-node/cleanroom-boot/ ./src/k8s-node/cleanroom-boot/
+
+WORKDIR /app/src/k8s-node/cleanroom-boot
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -ldflags="-s -w" \
+    -o /dist/cleanroom-boot \
+    ./cmd/cleanroom-boot
+
+# Output stage -- export just the binary.
+FROM scratch AS dist
+COPY --from=builder /dist/cleanroom-boot /

@@ -1,9 +1,4 @@
 {
-  "enclave": {
-    "file": "/usr/lib/ccf/libjs_cleanroom.virtual.so",
-    "type": "Virtual",
-    "platform": "Virtual"
-  },
   "network": {
     "node_to_node_interface": {
       "bind_address": "0.0.0.0:8081",
@@ -21,7 +16,7 @@
           "authority": "Node"
         }
       }
-     }
+    }
   },
   "node_certificate": {
     "initial_validity_days": 30

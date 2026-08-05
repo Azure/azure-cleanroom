@@ -1,20 +1,29 @@
-FROM cleanroombuild.azurecr.io/mirror/docker/library/soarinferret/iptablesproxy
+FROM cleanroombuild.azurecr.io/mirror/docker/library/python:3.12 AS wheel-builder
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y curl build-essential && rm -rf /var/lib/apt/lists/*
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+COPY src/init/iptables-rules src/init/iptables-rules
+COPY pyproject.toml .
+COPY uv.lock .
+RUN uv sync --frozen
+RUN uv build --package iptables-rules --wheel
+
+FROM cleanroombuild.azurecr.io/mirror/docker/library/soarinferret/iptablesproxy:python3.12
 
 WORKDIR /root
 
-# Install prerequisities and python/pip.
 # Set PYTHONUNBUFFERED to ensure that Python output is sent straight to the terminal without buffering.
 # Otherwise, the output may be buffered and not appear immediately.
 ENV PYTHONUNBUFFERED=1
-RUN apk update && apk upgrade && apk add --no-cache bash python3 \
-    && ln -sf python3 /usr/bin/python \
-    && python3 -m ensurepip \
-    && pip3 install --no-cache-dir --upgrade pip
+RUN apk update && apk upgrade && apk add --no-cache bash python3 py3-pip iptables-legacy
 
-# Copy scripts for setting up the CCR for sandboxing.
+# Copy the standalone shell script for no-network setup.
 COPY src/init/iptables-rules/setup-iptables-no-network.sh .
-COPY src/init/iptables-rules/templates templates
-COPY src/init/iptables-rules/setup-iptables.py .
-COPY src/init/iptables-rules/requirements.txt .
-RUN chmod +x setup-iptables-no-network.sh \
-    && pip3 install --no-cache-dir -r requirements.txt
+RUN chmod +x setup-iptables-no-network.sh
+
+COPY --from=wheel-builder /build/dist/iptables_rules*.whl /setup/
+RUN pip3 install --no-cache-dir --break-system-packages /setup/*.whl && rm -rf /setup

@@ -140,7 +140,7 @@ settings:
     sidecarsPolicyDocumentRegistryUrl: ""
     versionsDocument: ""
     cvmMeasurementsDocument: ""
-    runtimeDigestsDocument: ""
+    inferencingDigestsDocument: ""
     useHttp: false
   kserve:
     computeProvider: "confidential-vm"
@@ -149,6 +149,7 @@ settings:
       namespace: kserve-inferencing
       allowAll: False
       debugMode: False
+      enableTestEndpoints: False
       kserve:
         predictor:
           cores: 1

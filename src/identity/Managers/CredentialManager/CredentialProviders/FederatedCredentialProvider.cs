@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Azure.Core;
 using Azure.Identity;
+using Constants;
 using Controllers;
 using Identity.CredentialManager;
 using Microsoft.Extensions.Logging;
@@ -23,6 +24,7 @@ internal class FederatedCredentialProvider : ITokenCredentialProvider
     private readonly string? issuer;
     private readonly string subject;
     private readonly string idTokenEndpoint;
+    private readonly string? governanceApiPathPrefix;
     private readonly Dictionary<string, object> retryContextData;
 
     /// <summary>
@@ -34,12 +36,16 @@ internal class FederatedCredentialProvider : ITokenCredentialProvider
     /// <param name="subject">The subject claim.</param>
     /// <param name="audience">The audience claim.</param>
     /// <param name="issuer">Any issuer claim.</param>
+    /// <param name="governanceApiPathPrefix">
+    /// Optional governance path prefix to pass as a request header.
+    /// </param>
     /// <param name="logger">The logger to be used.</param>
     public FederatedCredentialProvider(
         string idTokenEndpoint,
         string subject,
         string audience,
         string? issuer,
+        string? governanceApiPathPrefix,
         ILogger logger)
     {
         this.logger = logger;
@@ -47,6 +53,7 @@ internal class FederatedCredentialProvider : ITokenCredentialProvider
         this.audience = audience;
         this.issuer = issuer;
         this.idTokenEndpoint = idTokenEndpoint;
+        this.governanceApiPathPrefix = governanceApiPathPrefix;
         this.retryContextData = new Dictionary<string, object>
         {
             {
@@ -75,7 +82,15 @@ internal class FederatedCredentialProvider : ITokenCredentialProvider
                 async (ctx) =>
                 {
                     this.logger.LogInformation($"Fetching client assertion from '{url}'");
-                    HttpResponseMessage response = await httpClient.PostAsync(url, null);
+                    using HttpRequestMessage request = new(HttpMethod.Post, url);
+                    if (!string.IsNullOrEmpty(this.governanceApiPathPrefix))
+                    {
+                        request.Headers.Add(
+                            CustomHttpHeader.MsCcrGovernanceApiPathPrefix,
+                            this.governanceApiPathPrefix);
+                    }
+
+                    HttpResponseMessage response = await httpClient.SendAsync(request, cToken);
                     await response.ValidateStatusCodeAsync(this.logger);
                     return await response.Content.ReadFromJsonAsync<JsonObject>();
                 },

@@ -82,13 +82,31 @@ while ($true) {
     Start-Sleep -Seconds 5
 }
 
-# Instead of accessing the service via ${analyticsEndpoint}/ready, we will use kubectl proxy to access it via localhost.
-# This is needed as the public IP address for AKS load balancer is not accessible from machines that are not on corpnet.
-# https://kubernetes.io/docs/tasks/access-application-cluster/access-cluster-services/#manually-constructing-apiserver-proxy-urls
-# For Kind cluster infra also this technique works fine to access the service as it would be having a clusterIP 
-# and thus not reachable from outside the cluster.
-Get-Job -Command "*kubectl proxy --port 8181*" | Stop-Job
-Get-Job -Command "*kubectl proxy --port 8181*" | Remove-Job
+# Use kubectl proxy on :8181 to reach the in-cluster analytics service /ready endpoint.
+# Reap stale in-session job records for a kubectl proxy this script started earlier.
+Get-Job -Command "*kubectl*8181*" | Stop-Job -ErrorAction SilentlyContinue
+Get-Job -Command "*kubectl*8181*" | Remove-Job -ErrorAction SilentlyContinue
+
+# If :8181 is held by a process this script did not start, fail and name the owner.
+# We deliberately do not kill it; the user decides whether it should be stopped.
+& {
+    $PSNativeCommandUseErrorActionPreference = $false
+    $owner = if ($IsWindows) {
+        $conn = Get-NetTCPConnection -LocalPort 8181 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($conn) {
+            $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
+            if ($proc) { "pid=$($proc.Id) name=$($proc.ProcessName)" } else { "pid=$($conn.OwningProcess)" }
+        }
+    }
+    else {
+        & sh -c "ss -lptnH 'sport = :8181' 2>/dev/null | head -1" 2>$null
+    }
+    if ($owner) {
+        Write-Host "Port 8181 is held by: $owner"
+        throw "Port 8181 is in use. Free it (or stop the conflicting process) and re-run."
+    }
+}
+
 kubectl proxy --port 8181 --kubeconfig $kubeConfig &
 $serviceAddress = "http://localhost:8181/api/v1/namespaces/cleanroom-spark-analytics-agent/services/https:cleanroom-spark-analytics-agent:443/proxy"
 

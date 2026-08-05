@@ -40,7 +40,6 @@ from cleanroom_common.azure_cleanroom_core.exceptions.exception import (
     CleanroomSpecificationError,
     ErrorCode,
 )
-from cleanroom_common.azure_cleanroom_core.models.cleanroom import Identity
 from cleanroom_common.azure_cleanroom_core.models.collaboration import (
     CollaborationContext,
     CollaborationSpecification,
@@ -164,8 +163,6 @@ def test_configuration_helpers():
     print("Testing configuration helpers...")
 
     try:
-        from logging import Logger
-
         from cleanroom_common.azure_cleanroom_core.utilities.configuration_helpers import (
             read_collaboration_config,
             write_collaboration_config,
@@ -316,8 +313,6 @@ def test_collaboration_configuration_classes():
     print("\nTesting Collaboration Configuration classes...")
 
     try:
-        from logging import Logger
-
         from azext_cleanroom.utilities.collaboration_helper import (
             CollaborationConfiguration,
         )
@@ -397,8 +392,6 @@ def test_collaboration_environment_variables():
     print("\nTesting Collaboration environment variable handling...")
 
     try:
-        from logging import Logger
-
         from azext_cleanroom.utilities.collaboration_helper import (
             CollaborationConfiguration,
         )
@@ -653,8 +646,8 @@ def test_collaboration_cmd_imports():
 
         # Test basic import structure
         from azext_cleanroom.utilities.collaboration_helper import (
-            CollaborationConfiguration,
-            CollaborationContext,
+            CollaborationConfiguration,  # noqa: F401
+            CollaborationContext,  # noqa: F401
         )
 
         print("✓ Collaboration helper utilities import successful")

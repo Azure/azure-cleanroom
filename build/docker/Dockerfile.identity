@@ -28,7 +28,8 @@ COPY stylecop.json /app
 COPY Menees.Analyzers.Settings.xml /app
 COPY .editorconfig /app
 COPY src/identity /app/src/identity
-COPY src/internal /app/src/internal
+COPY src/internal/Attestation /app/src/internal/Attestation
+COPY src/internal/restapi-common /app/src/internal/restapi-common
 
 # Publish the application
 RUN dotnet publish -c Release --no-restore -o /app/publish /app/src/identity/Application/Sidecar/IdentitySidecar.csproj

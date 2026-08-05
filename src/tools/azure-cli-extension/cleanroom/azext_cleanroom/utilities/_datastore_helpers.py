@@ -165,9 +165,9 @@ def azcopy(
     if use_cpk:
         # azcopy with CPK needs the values below for encryption
         # https://learn.microsoft.com/en-us/azure/storage/common/storage-ref-azcopy-copy
-        assert (
-            encryption_key is not None
-        ), "Encryption key must not be None when encryption mode is CPK"
+        assert encryption_key is not None, (
+            "Encryption key must not be None when encryption mode is CPK"
+        )
         encryption_key_base_64 = base64.b64encode(encryption_key).decode("utf-8")
         encryption_key_sha256 = hashlib.sha256(encryption_key).digest()
         encryption_key_sha256_base_64 = base64.b64encode(encryption_key_sha256).decode(
@@ -282,8 +282,6 @@ def cryptocopy(
     blockSize,
     logger,
 ):
-    import base64
-    import glob
     import os
 
     from cleanroom_common.azure_cleanroom_core.utilities.datastore_helpers import (

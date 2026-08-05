@@ -1,0 +1,25 @@
+{{define "events.html"}}
+<h2>Events</h2>
+{{if .}}
+<ul class="event-list">
+  {{range .}}
+  <li class="event-item">
+    <span class="event-type event-type-{{.Type}}">
+      {{.Type}}</span>
+    <span class="event-reason">{{.Reason}}</span>
+    <span class="event-message">
+      {{.Object}}: {{.Message}}</span>
+    <span class="event-meta">
+      {{timeAgo .Age}}
+      {{if gt .Count 1}}(×{{.Count}}){{end}}
+    </span>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<div style="color:var(--text-muted);
+  font-size:13px;padding:8px">
+  No events
+</div>
+{{end}}
+{{end}}

@@ -5,6 +5,13 @@ import time
 
 from opentelemetry import trace
 
+# Mount base path must match CSI driver's volumeMount path in the pod spec.
+REMOTE_MOUNT_BASE = "/mnt/remote"
+
+
+def is_csi_mode() -> bool:
+    return os.environ.get("CLEANROOM_CSI_MODE", "").lower() == "true"
+
 
 def get_volumestatus_mountpath() -> str:
     """Get the volume status mount path from environment."""
@@ -13,6 +20,8 @@ def get_volumestatus_mountpath() -> str:
 
 def get_mount_path(access_name: str) -> str:
     """Get the mount path for a given access name."""
+    if is_csi_mode():
+        return os.path.join(REMOTE_MOUNT_BASE, access_name)
     volumestatus_mountpath = get_volumestatus_mountpath()
     volume_ready_file = os.path.join(
         volumestatus_mountpath, f"{access_name}.volume.ready"
@@ -55,6 +64,9 @@ def wait_for_mount_point(
 ) -> str:
     """Wait for a mount point to become available and return its path.
 
+    In CSI mode, volumes are mounted before pod containers start, so this
+    returns immediately with the deterministic mount path.
+
     Args:
         access_name: Name of the access/volume to wait for
         max_retries: Maximum number of retries
@@ -68,6 +80,15 @@ def wait_for_mount_point(
         Exception or custom exception if mount point becomes unavailable
     """
     logger = logging.getLogger("utilities")
+
+    if is_csi_mode():
+        mount_path = os.path.join(REMOTE_MOUNT_BASE, access_name)
+        logger.info(
+            f"CSI mode: mount point for {access_name} at {mount_path} "
+            f"is ready (CSI volumes are pre-mounted)."
+        )
+        return mount_path
+
     tracer = trace.get_tracer("utilities")
     volume_ready = False
     attempt = 0

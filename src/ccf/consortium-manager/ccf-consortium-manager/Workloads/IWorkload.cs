@@ -9,5 +9,6 @@ public interface IWorkload
 {
     Task<(JsonObject, JsonObject)> GenerateDeploymentSpec(
         JsonObject contractData,
-        string policyCreationOption);
+        string policyCreationOption,
+        bool telemetryCollectionEnabled);
 }

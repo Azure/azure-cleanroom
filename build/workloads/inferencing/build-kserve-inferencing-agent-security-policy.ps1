@@ -20,7 +20,7 @@ $buildRoot = "$root/build"
 
 if ($outDir -eq "") {
     $root = git rev-parse --show-toplevel
-    $outDir = $root + "/.policies/kserve-inferencing-agent-security-policy"
+    $outDir = $root + "/.policies/cleanroom-kserve-inferencing-agent-security-policy"
     if (-not (Test-Path $outDir)) {
         New-Item -ItemType Directory $outDir 
     }
@@ -28,6 +28,7 @@ if ($outDir -eq "") {
 
 $clContainers = @{
     "kserve-inferencing-agent" = "workloads/kserve-inferencing-agent"
+    "ohttp-gateway"            = "workloads/ohttp-gateway"
     "ccr-proxy"                = "ccr-proxy"
     "ccr-governance"           = "ccr-governance"
     "otel-collector"           = "otel-collector"
@@ -47,8 +48,8 @@ foreach ($container in $clContainers.GetEnumerator()) {
     }
 }
 
-Write-Output $policyJson | Out-File $outDir/kserve-inferencing-agent-security-policy.json
-$policyJsons = Get-Content -Path $outDir/kserve-inferencing-agent-security-policy.json | ConvertFrom-Json
+Write-Output $policyJson | Out-File $outDir/cleanroom-kserve-inferencing-agent-security-policy.json
+$policyJsons = Get-Content -Path $outDir/cleanroom-kserve-inferencing-agent-security-policy.json | ConvertFrom-Json
 $ccePolicyJson = [ordered]@{
     version    = "1.0"
     scenario   = "vn2"
@@ -62,18 +63,18 @@ az confcom acipolicygen `
     --debug-mode `
     --enable-stdio `
     --outraw `
-| Out-File ${outDir}/kserve-inferencing-agent-security-policy.debug.rego
+| Out-File ${outDir}/cleanroom-kserve-inferencing-agent-security-policy.debug.rego
 
 Write-Host "Generating CCE Policy"
 az confcom acipolicygen `
     -i ${outDir}/ccepolicy-input.json `
     --enable-stdio `
     --outraw `
-| Out-File ${outDir}/kserve-inferencing-agent-security-policy.rego
+| Out-File ${outDir}/cleanroom-kserve-inferencing-agent-security-policy.rego
 
-$regoPolicy = (Get-Content -Path ${outDir}/kserve-inferencing-agent-security-policy.rego -Raw).TrimEnd()
+$regoPolicy = (Get-Content -Path ${outDir}/cleanroom-kserve-inferencing-agent-security-policy.rego -Raw).TrimEnd()
 $regoPolicyDigest = $regoPolicy | sha256sum | cut -d ' ' -f 1
-$debugRegoPolicy = (Get-Content -Path ${outDir}/kserve-inferencing-agent-security-policy.debug.rego -Raw).TrimEnd()
+$debugRegoPolicy = (Get-Content -Path ${outDir}/cleanroom-kserve-inferencing-agent-security-policy.debug.rego -Raw).TrimEnd()
 $debugRegoPolicyDigest = $debugRegoPolicy | sha256sum | cut -d ' ' -f 1
 $policyJson = Get-Content -Path "$templatesDir/kserve-inferencing-agent-policy.json" | ConvertFrom-Json
 $networkPolicy = [ordered]@{
@@ -84,11 +85,11 @@ $networkPolicy = [ordered]@{
 }
 
 $policiesRepo = "$repo/policies/workloads"
-$fileName = "kserve-inferencing-agent-security-policy.yaml"
+$fileName = "cleanroom-kserve-inferencing-agent-security-policy.yaml"
 ($networkPolicy | ConvertTo-Yaml).TrimEnd() | Out-File $outDir/$fileName
 if ($push) {
     Push-Location
     Set-Location $outDir
-    oras push "$policiesRepo/kserve-inferencing-agent-security-policy:$tag,$regoPolicyDigest,$debugRegoPolicyDigest" ./$fileName
+    oras push "$policiesRepo/cleanroom-kserve-inferencing-agent-security-policy:$tag,$regoPolicyDigest,$debugRegoPolicyDigest" ./$fileName
     Pop-Location
 }

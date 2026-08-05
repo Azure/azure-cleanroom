@@ -5,7 +5,7 @@ function Get-PrometheusMetrics {
         [int64] $end,
         [string] $outFile
     )
-    $prometheusEndpoint = "http://localhost:8484/api/v1/namespaces/telemetry/services/http:cleanroom-spark-prometheus-server:80/proxy"
+    $prometheusEndpoint = "http://localhost:8484/api/v1/namespaces/observability/services/http:cleanroom-prometheus-server:80/proxy"
 
     $timeout = New-TimeSpan -Minutes 1
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -74,7 +74,7 @@ function Get-LokiLogs {
         [int64] $end,
         [string] $outFile
     )
-    $lokiEndpoint = "http://localhost:8484/api/v1/namespaces/telemetry/services/http:cleanroom-spark-loki:3100/proxy"
+    $lokiEndpoint = "http://localhost:8484/api/v1/namespaces/observability/services/http:cleanroom-loki:3100/proxy"
 
     $timeout = New-TimeSpan -Minutes 1
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -144,7 +144,7 @@ function Get-TempoTraces {
         [string] $outFile
     )
 
-    $tempoEndpoint = "http://localhost:8484/api/v1/namespaces/telemetry/services/http:cleanroom-spark-tempo:3200/proxy"
+    $tempoEndpoint = "http://localhost:8484/api/v1/namespaces/observability/services/http:cleanroom-tempo:3200/proxy"
 
     $timeout = New-TimeSpan -Minutes 1
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()

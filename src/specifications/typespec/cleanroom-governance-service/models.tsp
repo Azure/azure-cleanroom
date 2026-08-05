@@ -12,6 +12,7 @@ import "./models/userdocumentmodels.tsp";
 import "./models/camodels.tsp";
 import "./models/userproposalmodels.tsp";
 import "./models/errorresponse.tsp";
+import "./models/emptyresponse.tsp";
 import "./models/tokenmodels.tsp";
 import "./models/openidmodels.tsp";
 import "./models/proposalmodels.tsp";

@@ -32,6 +32,26 @@
         "name": "RESOURCE_ATTRIBUTES",
         "value": ".*",
         "regex": true
+      },
+      {
+        "name": "PROMETHEUS_SCRAPE_TARGETS",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "POD_NAME",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "POD_NAMESPACE",
+        "value": ".*",
+        "regex": true
+      },
+      {
+        "name": "NODE_NAME",
+        "value": ".*",
+        "regex": true
       }
     ],
     "securityContext": {

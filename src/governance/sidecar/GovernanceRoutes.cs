@@ -66,6 +66,12 @@ public class Routes
         return $"{prefix}/ca/generateEndorsedCert";
     }
 
+    public string CaStatus(WebContext webContext)
+    {
+        var prefix = this.GetPathPrefix(webContext.GovernanceApiPathPrefix);
+        return $"{prefix}/ca/status";
+    }
+
     public string ConsentCheckExecution(WebContext webContext)
     {
         var prefix = this.GetPathPrefix(webContext.GovernanceApiPathPrefix);

@@ -1,0 +1,72 @@
+{{- if .Values.operator.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cleanroom-operator
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: cleanroom-operator
+spec:
+  replicas: {{ .Values.operator.replicas }}
+  selector:
+    matchLabels:
+      app: cleanroom-operator
+  template:
+    metadata:
+      labels:
+        app: cleanroom-operator
+        {{- if .Values.operator.azure.clientId }}
+        azure.workload.identity/use: "true"
+        {{- end }}
+    spec:
+      serviceAccountName: cleanroom-operator
+      containers:
+        - name: operator
+          image: "{{ .Values.operator.image.repository }}:{{ .Values.operator.image.tag | toString }}"
+          imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
+          args:
+            - --health-probe-bind-address=:8081
+            - --metrics-bind-address=:8080
+          envFrom:
+            - configMapRef:
+                name: cleanroom-operator-config
+          {{- if or .Values.credentialsProxy.enabled .Values.telemetry.enabled }}
+          env:
+            {{- if .Values.credentialsProxy.enabled }}
+            - name: IDENTITY_ENDPOINT
+              value: "http://credentials-proxy:8098/token"
+            - name: IMDS_ENDPOINT
+              value: "dummy_required_value"
+            - name: IDENTITY_HEADER # Required additionally for Azure Go SDK to work with credentials proxy
+              value: "dummy_required_value"
+            {{- end }}
+            {{- if .Values.telemetry.enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.telemetry.otlpEndpoint | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: cleanroom-operator
+            {{- end }}
+          {{- end }}
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.operator.resources | nindent 12 }}
+
+{{- end }}

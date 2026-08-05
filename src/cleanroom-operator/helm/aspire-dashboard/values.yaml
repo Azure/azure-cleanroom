@@ -1,0 +1,14 @@
+image:
+  repository: mcr.microsoft.com/dotnet/aspire-dashboard
+  tag: latest
+  pullPolicy: IfNotPresent
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+namespace: cleanroom-system

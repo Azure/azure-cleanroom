@@ -11,8 +11,8 @@ param(
     [string]$UserRole = "Viewer"
 )
 
-$GrafanaSecretName = "cleanroom-spark-grafana"
-$GrafanaNamespace = "telemetry"
+$GrafanaSecretName = "cleanroom-grafana"
+$GrafanaNamespace = "observability"
 $AdminUserNameKey = "admin-user"
 $AdminPasswordKey = "admin-password"
 

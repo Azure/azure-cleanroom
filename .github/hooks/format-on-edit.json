@@ -1,0 +1,16 @@
+{
+    "hooks": {
+        "PostToolUse": [
+            {
+                "type": "command",
+                "command": ".github/hooks/dotnet-format.sh",
+                "timeout": 30
+            },
+            {
+                "type": "command",
+                "command": ".github/hooks/ruff-format.sh",
+                "timeout": 15
+            }
+        ]
+    }
+}

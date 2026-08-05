@@ -10,6 +10,11 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
 
 
+def log_safe(value: object) -> str:
+    """Sanitize a value for logging, stripping CR/LF to prevent log forging."""
+    return str(value).replace("\r", "").replace("\n", "")
+
+
 def generate_query_id(query: str) -> str:
     """
     Generate a unique query_id from a SQL query string using SHA-256 hash.

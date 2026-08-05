@@ -21,7 +21,9 @@ RUN dotnet restore /app/test/onebox/frontendservice/mock-server/mock-server.sln
 COPY stylecop.json /app
 COPY Menees.Analyzers.Settings.xml /app
 COPY .editorconfig /app
-COPY src/internal /app/src/internal
+COPY src/internal/Attestation /app/src/internal/Attestation
+COPY src/internal/Cose /app/src/internal/Cose
+COPY src/internal/restapi-common /app/src/internal/restapi-common
 COPY test/onebox/frontendservice/mock-server /app/test/onebox/frontendservice/mock-server
 
 # Publish the application

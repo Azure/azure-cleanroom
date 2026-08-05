@@ -11,7 +11,19 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "ListContractsResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}": {
@@ -23,7 +35,23 @@
           "member_cert"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "PutContractRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Contract created or updated successfully"
+            }
+          }
+        }
       },
       "post": {
         "js_module": "endpoints/contracts.js",
@@ -35,12 +63,24 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetContractResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/runtimeoptions/{option}/status": {
       "post": {
-        "js_module": "endpoints/contractruntimeoptions.js",
+        "js_module": "endpoints/contract-runtime-options.js",
         "js_function": "checkContractRuntimeOption",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -50,31 +90,55 @@
           "no_auth"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetRuntimeOptionResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/runtimeoptions/{option}/enable": {
       "post": {
-        "js_module": "endpoints/contractruntimeoptions.js",
+        "js_module": "endpoints/contract-runtime-options.js",
         "js_function": "enableContractRuntimeOption",
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "description": "Runtime option enabled successfully"
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/runtimeoptions/{option}/disable": {
       "post": {
-        "js_module": "endpoints/contractruntimeoptions.js",
+        "js_module": "endpoints/contract-runtime-options.js",
         "js_function": "disableContractRuntimeOption",
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "description": "Runtime option disabled successfully"
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/events": {
@@ -88,7 +152,61 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "parameters": [
+            {
+              "name": "id",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "scope",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "from_seqno",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "to_seqno",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "max_seqno_per_page",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetEventsResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       "put": {
         "js_module": "endpoints/events.js",
@@ -99,7 +217,41 @@
           "no_auth"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "parameters": [
+            {
+              "name": "id",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "scope",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "PutEventRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "204": {
+              "description": "Event created successfully"
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/secrets": {
@@ -113,7 +265,19 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "ListSecretsResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/secrets/{secretName}": {
@@ -128,7 +292,29 @@
           "no_auth"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "PutSecretByMemberUserRequest | PutSecretByCleanRoomRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "PutSecretResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       "post": {
         "js_module": "endpoints/secrets.js",
@@ -136,12 +322,34 @@
         "forwarding_required": "sometimes",
         "authn_policies": [],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "GetSecretRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetSecretResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/cleanroompolicy": {
       "post": {
-        "js_module": "endpoints/cleanroompolicy.js",
+        "js_module": "endpoints/clean-room-policy.js",
         "js_function": "getCleanRoomPolicy",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -150,12 +358,24 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetCleanRoomPolicyResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/cleanroompolicy/delegates": {
       "get": {
-        "js_module": "endpoints/cleanroompolicy.js",
+        "js_module": "endpoints/clean-room-policy.js",
         "js_function": "listDelegatePolicies",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -164,12 +384,24 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "ListDelegatePoliciesResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/cleanroompolicy/delegates/{delegateType}/{delegateId}": {
       "post": {
-        "js_module": "endpoints/cleanroompolicy.js",
+        "js_module": "endpoints/clean-room-policy.js",
         "js_function": "getDelegatePolicy",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -178,35 +410,87 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetDelegatePolicyResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       "put": {
-        "js_module": "endpoints/cleanroompolicy.js",
+        "js_module": "endpoints/clean-room-policy.js",
         "js_function": "setDelegatePolicy",
         "forwarding_required": "always",
         "authn_policies": [],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "SetDelegateCleanRoomPolicyRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Delegate policy set successfully"
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/deploymentspec": {
       "post": {
-        "js_module": "endpoints/deploymentspecs.js",
+        "js_module": "endpoints/deployment-spec.js",
         "js_function": "getDeploymentSpec",
         "forwarding_required": "sometimes",
         "authn_policies": [],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetDeploymentSpecResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/deploymentinfo": {
       "post": {
-        "js_module": "endpoints/deploymentinfo.js",
+        "js_module": "endpoints/deployment-info.js",
         "js_function": "getDeploymentInfo",
         "forwarding_required": "sometimes",
         "authn_policies": [],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetDeploymentInfoResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/oauth/token": {
@@ -216,7 +500,29 @@
         "forwarding_required": "sometimes",
         "authn_policies": [],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "GetTokenRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetTokenResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/signing/sign": {
@@ -226,12 +532,25 @@
         "forwarding_required": "sometimes",
         "authn_policies": [],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "description": "Payload signed successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "SignPayloadResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/memberdocuments": {
       "get": {
-        "js_module": "endpoints/memberdocuments.js",
+        "js_module": "endpoints/member-documents.js",
         "js_function": "listMemberDocuments",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -240,22 +559,50 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "ListMemberDocumentResponse[]"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/memberdocuments/{documentId}": {
       "put": {
-        "js_module": "endpoints/memberdocuments.js",
+        "js_module": "endpoints/member-documents.js",
         "js_function": "putMemberDocument",
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "PutMemberDocumentRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Member document created or updated successfully"
+            }
+          }
+        }
       },
       "post": {
-        "js_module": "endpoints/memberdocuments.js",
+        "js_module": "endpoints/member-documents.js",
         "js_function": "getMemberDocument",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -264,22 +611,56 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetMemberDocumentResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/memberdocuments/accepted/{documentId}": {
       "post": {
-        "js_module": "endpoints/memberdocuments.js",
+        "js_module": "endpoints/member-documents.js",
         "js_function": "getAcceptedMemberDocument",
         "forwarding_required": "sometimes",
         "authn_policies": [],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "GetAcceptedMemberDocumentRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetAcceptedMemberDocumentResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/userdocuments": {
       "get": {
-        "js_module": "endpoints/userdocuments.js",
+        "js_module": "endpoints/user-documents.js",
         "js_function": "listUserDocuments",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -288,12 +669,24 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "ListUserDocumentsResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/userdocuments/{documentId}": {
       "put": {
-        "js_module": "endpoints/userdocuments.js",
+        "js_module": "endpoints/user-documents.js",
         "js_function": "putUserDocument",
         "forwarding_required": "always",
         "authn_policies": [
@@ -302,10 +695,26 @@
           "jwt"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "PutUserDocumentRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "User document created or updated successfully"
+            }
+          }
+        }
       },
       "post": {
-        "js_module": "endpoints/userdocuments.js",
+        "js_module": "endpoints/user-documents.js",
         "js_function": "getUserDocument",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -314,58 +723,140 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetUserDocumentResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/userdocuments/accepted/{documentId}": {
       "post": {
-        "js_module": "endpoints/userdocuments.js",
+        "js_module": "endpoints/user-documents.js",
         "js_function": "getAcceptedUserDocument",
         "forwarding_required": "sometimes",
         "authn_policies": [],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "GetAcceptedUserDocumentRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetAcceptedUserDocumentResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/ca/generateSigningKey": {
       "post": {
-        "js_module": "endpoints/ca/cakey.js",
+        "js_module": "endpoints/certificate-authority/ca-key.js",
         "js_function": "generateCASigningKey",
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "description": "CA signing key generated successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GenerateCASigningKeyResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/ca/generateEndorsedCert": {
       "post": {
-        "js_module": "endpoints/ca/cakey.js",
+        "js_module": "endpoints/certificate-authority/ca-key.js",
         "js_function": "generateEndorsedCert",
         "forwarding_required": "always",
         "authn_policies": [],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "GenerateEndorsedCertRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GenerateEndorsedCertResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/ca/status": {
       "post": {
-        "js_module": "endpoints/ca/info.js",
+        "js_module": "endpoints/certificate-authority/ca-info.js",
         "js_function": "getCAInfo",
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert",
           "user_cert",
-          "jwt"
+          "jwt",
+          "no_auth"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "CAInfo"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/memberdocuments": {
       "get": {
-        "js_module": "endpoints/memberdocuments.js",
+        "js_module": "endpoints/member-documents.js",
         "js_function": "listMemberDocuments",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -376,13 +867,24 @@
         "mode": "readonly",
         "openapi": {
           "deprecated": true,
-          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/memberdocuments instead."
+          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/memberdocuments instead.",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "ListMemberDocumentResponse[]"
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
     "/memberdocuments/{documentId}": {
       "put": {
-        "js_module": "endpoints/memberdocuments.js",
+        "js_module": "endpoints/member-documents.js",
         "js_function": "putMemberDocument",
         "forwarding_required": "always",
         "authn_policies": [
@@ -391,11 +893,26 @@
         "mode": "readwrite",
         "openapi": {
           "deprecated": true,
-          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/memberdocuments/{documentId} instead."
+          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/memberdocuments/{documentId} instead.",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "PutMemberDocumentRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Member document created or updated successfully"
+            }
+          }
         }
       },
       "get": {
-        "js_module": "endpoints/memberdocuments.js",
+        "js_module": "endpoints/member-documents.js",
         "js_function": "getMemberDocument",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -406,13 +923,24 @@
         "mode": "readonly",
         "openapi": {
           "deprecated": true,
-          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/memberdocuments/{documentId} instead."
+          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/memberdocuments/{documentId} instead.",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetMemberDocumentResponse"
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
     "/users/identities": {
       "get": {
-        "js_module": "endpoints/useridentities.js",
+        "js_module": "endpoints/user-identities.js",
         "js_function": "listUserIdentities",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -421,24 +949,48 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "ListUserIdentitiesResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/users/identities/self/status": {
       "post": {
-        "js_module": "endpoints/useridentities.js",
+        "js_module": "endpoints/user-identities.js",
         "js_function": "checkUserIdentity",
         "forwarding_required": "sometimes",
         "authn_policies": [
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "CheckUserIdentityResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/users/identities/{identityId}": {
       "post": {
-        "js_module": "endpoints/useridentities.js",
+        "js_module": "endpoints/user-identities.js",
         "js_function": "getUserIdentity",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -447,12 +999,24 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetUserIdentityResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/users/invitations": {
       "get": {
-        "js_module": "endpoints/userinvitations.js",
+        "js_module": "endpoints/user-invitations.js",
         "js_function": "listInvitations",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -461,12 +1025,24 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "ListUserInvitationsResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/users/invitations/{invitationId}": {
       "post": {
-        "js_module": "endpoints/userinvitations.js",
+        "js_module": "endpoints/user-invitations.js",
         "js_function": "getInvitation",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -475,24 +1051,42 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetUserInvitationResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/users/invitations/{invitationId}/accept": {
       "post": {
-        "js_module": "endpoints/userinvitations.js",
+        "js_module": "endpoints/user-invitations.js",
         "js_function": "acceptInvitation",
         "forwarding_required": "always",
         "authn_policies": [
           "jwt"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "description": "Invitation accepted successfully"
+            }
+          }
+        }
       }
     },
     "/userdocuments": {
       "get": {
-        "js_module": "endpoints/userdocuments.js",
+        "js_module": "endpoints/user-documents.js",
         "js_function": "listUserDocuments",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -503,13 +1097,24 @@
         "mode": "readonly",
         "openapi": {
           "deprecated": true,
-          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/userdocuments instead."
+          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/userdocuments instead.",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "ListUserDocumentsResponse"
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
     "/userdocuments/{documentId}": {
       "put": {
-        "js_module": "endpoints/userdocuments.js",
+        "js_module": "endpoints/user-documents.js",
         "js_function": "putUserDocument",
         "forwarding_required": "always",
         "authn_policies": [
@@ -520,11 +1125,26 @@
         "mode": "readwrite",
         "openapi": {
           "deprecated": true,
-          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/userdocuments/{documentId} instead."
+          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/userdocuments/{documentId} instead.",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "PutUserDocumentRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "User document created or updated successfully"
+            }
+          }
         }
       },
       "get": {
-        "js_module": "endpoints/userdocuments.js",
+        "js_module": "endpoints/user-documents.js",
         "js_function": "getUserDocument",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -535,7 +1155,18 @@
         "mode": "readonly",
         "openapi": {
           "deprecated": true,
-          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/userdocuments/{documentId} instead."
+          "summary": "This endpoint is deprecated. Please use /contracts/{contractId}/userdocuments/{documentId} instead.",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetUserDocumentResponse"
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -550,12 +1181,24 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetProposalResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/userdocuments/{documentId}/runtimeoptions/{option}/status": {
       "post": {
-        "js_module": "endpoints/userdocumentruntimeoptions.js",
+        "js_module": "endpoints/user-document-runtime-options.js",
         "js_function": "checkUserDocumentRuntimeOption",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -565,12 +1208,24 @@
           "no_auth"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetRuntimeOptionResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/userdocuments/{documentId}/runtimeoptions/{option}/enable": {
       "post": {
-        "js_module": "endpoints/userdocumentruntimeoptions.js",
+        "js_module": "endpoints/user-document-runtime-options.js",
         "js_function": "enableUserDocumentRuntimeOption",
         "forwarding_required": "always",
         "authn_policies": [
@@ -579,12 +1234,18 @@
           "jwt"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "description": "User document runtime option enabled successfully"
+            }
+          }
+        }
       }
     },
     "/contracts/{contractId}/userdocuments/{documentId}/runtimeoptions/{option}/disable": {
       "post": {
-        "js_module": "endpoints/userdocumentruntimeoptions.js",
+        "js_module": "endpoints/user-document-runtime-options.js",
         "js_function": "disableUserDocumentRuntimeOption",
         "forwarding_required": "always",
         "authn_policies": [
@@ -593,12 +1254,18 @@
           "jwt"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "description": "User document runtime option disabled successfully"
+            }
+          }
+        }
       }
     },
     "/users/proposals/{proposalId}": {
       "post": {
-        "js_module": "endpoints/userproposals.js",
+        "js_module": "endpoints/user-proposals.js",
         "js_function": "getUserProposal",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -607,10 +1274,22 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetUserProposalResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       "put": {
-        "js_module": "endpoints/userproposals.js",
+        "js_module": "endpoints/user-proposals.js",
         "js_function": "putUserProposal",
         "forwarding_required": "always",
         "authn_policies": [
@@ -619,12 +1298,34 @@
           "jwt"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "CreateUserProposalRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "CreateUserProposalResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/users/proposals/{proposalId}/status": {
       "post": {
-        "js_module": "endpoints/userproposals.js",
+        "js_module": "endpoints/user-proposals.js",
         "js_function": "checkUserProposal",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -633,12 +1334,24 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "UserProposalInfoItem"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/users/proposals/{proposalId}/withdraw": {
       "post": {
-        "js_module": "endpoints/userproposals.js",
+        "js_module": "endpoints/user-proposals.js",
         "js_function": "withdrawUserProposal",
         "forwarding_required": "always",
         "authn_policies": [
@@ -647,12 +1360,18 @@
           "jwt"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "description": "User proposal withdrawn successfully"
+            }
+          }
+        }
       }
     },
     "/users/proposals/{proposalId}/ballots/submit": {
       "post": {
-        "js_module": "endpoints/userproposals.js",
+        "js_module": "endpoints/user-proposals.js",
         "js_function": "submitUserProposalBallot",
         "forwarding_required": "always",
         "authn_policies": [
@@ -661,7 +1380,23 @@
           "jwt"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "SubmitUserProposalBallotRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Ballot submitted successfully"
+            }
+          }
+        }
       }
     },
     "/oidc/.well-known/openid-configuration": {
@@ -671,7 +1406,19 @@
         "forwarding_required": "sometimes",
         "authn_policies": [],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "DiscoveryResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/oidc/keys": {
@@ -681,19 +1428,37 @@
         "forwarding_required": "sometimes",
         "authn_policies": [],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "JwksResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/oidc/generateSigningKey": {
       "post": {
-        "js_module": "endpoints/oidc/signingkey.js",
+        "js_module": "endpoints/oidc/signing-key.js",
         "js_function": "generateIssuerSigningKey",
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "description": "OIDC signing key generated successfully"
+            }
+          }
+        }
       }
     },
     "/oidc/setIssuerUrl": {
@@ -707,7 +1472,23 @@
           "jwt"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "SetIssuerUrlRequest",
+                  "required": true
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "OIDC issuer URL set successfully"
+            }
+          }
+        }
       }
     },
     "/oidc/issuerInfo": {
@@ -721,19 +1502,44 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "OidcIssuerInfo"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/signing/generateSigningKey": {
       "post": {
-        "js_module": "endpoints/signing/signingkey.js",
+        "js_module": "endpoints/signing/signing-key.js",
         "js_function": "generateSigningKey",
         "forwarding_required": "always",
         "authn_policies": [
           "member_cert"
         ],
         "mode": "readwrite",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "description": "Signing key generated successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GenerateSigningKeyResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/signing/info": {
@@ -747,12 +1553,25 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "description": "Signing info retrieved successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "SigningInfo"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/runtimeoptions/{option}/status": {
       "post": {
-        "js_module": "endpoints/runtimeoptions.js",
+        "js_module": "endpoints/runtime-options.js",
         "js_function": "checkRuntimeOption",
         "forwarding_required": "sometimes",
         "authn_policies": [
@@ -761,7 +1580,19 @@
           "jwt"
         ],
         "mode": "readonly",
-        "openapi": {}
+        "openapi": {
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "GetRuntimeOptionResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

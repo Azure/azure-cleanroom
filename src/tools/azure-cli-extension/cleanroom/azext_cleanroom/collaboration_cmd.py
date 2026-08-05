@@ -65,9 +65,9 @@ def collaboration_context_add_cmd(
         logger.warning(
             f"Collaboration '{collaboration_name}' added to collaboration configuration."
         )
-    assert (
-        collaboration_context is not None
-    ), f"Collaboration context for {collaboration_name} should not be None at this point in code."
+    assert collaboration_context is not None, (
+        f"Collaboration context for {collaboration_name} should not be None at this point in code."
+    )
 
     from .custom import governance_user_identity_show_cmd
 
@@ -458,9 +458,9 @@ def collaboration_dataset_publish_cmd(
         dataset_accesspoint.subdirectory = subdirectory
 
     if dataset_accesspoint.protection.encryptionSecrets is not None:
-        assert (
-            dek_secret_store is not None and kek_secret_store is not None
-        ), f"Secret stores not specified for publishing dataset {datastore_entry.name}"
+        assert dek_secret_store is not None and kek_secret_store is not None, (
+            f"Secret stores not specified for publishing dataset {datastore_entry.name}"
+        )
 
         # Generate KEK and wrapped DEK for the access point using the contract.
         from .custom import create_kek, governance_deployment_policy_show_cmd
@@ -481,13 +481,11 @@ def collaboration_dataset_publish_cmd(
                 + "has been accepted."
             )
 
-        assert (
-            dataset_accesspoint.protection.encryptionSecrets.kek is not None
-        ), f"KEK not specified for datastore {datastore_entry.name}"
-
-        kek_name = (
-            dataset_accesspoint.protection.encryptionSecrets.kek.secret.backingResource.name
+        assert dataset_accesspoint.protection.encryptionSecrets.kek is not None, (
+            f"KEK not specified for datastore {datastore_entry.name}"
         )
+
+        kek_name = dataset_accesspoint.protection.encryptionSecrets.kek.secret.backingResource.name
         create_kek(
             secretstore_config_file,
             kek_secret_store_name,
@@ -497,9 +495,7 @@ def collaboration_dataset_publish_cmd(
         logger.info(f"Created KEK {kek_name} for {datastore_entry.name}")
 
         public_key = kek_secret_store.get_secret(kek_name)
-        wrapped_dek_name = (
-            dataset_accesspoint.protection.encryptionSecrets.dek.secret.backingResource.name
-        )
+        wrapped_dek_name = dataset_accesspoint.protection.encryptionSecrets.dek.secret.backingResource.name
         logger.warning(
             f"Creating wrapped DEK secret '{wrapped_dek_name}' for '{datastore_name}' in "
             + f"key vault '{dek_secret_store.entry.storeProviderUrl}'."
@@ -609,7 +605,6 @@ def collaboration_spark_sql_application_publish_cmd(
     """
 
     from cleanroom_common.azure_cleanroom_core.models.dataset import Workload
-    from cleanroom_common.azure_cleanroom_core.models.datastore import DataStoreEntry
     from cleanroom_common.azure_cleanroom_core.models.spark import (
         SparkApplicationSpecification,
         SparkMLApplication,
@@ -687,7 +682,6 @@ def collaboration_spark_sql_application_publish_cmd(
         governance_user_document_create_cmd,
         governance_user_document_propose_cmd,
         governance_user_document_show_cmd,
-        governance_user_document_vote_cmd,
     )
 
     # Fetch the owner for each dataset and add as approver.

@@ -1,0 +1,15 @@
+[Unit]
+Description=TPC-DS status export (uploads step logs and status.json)
+After=tpcds-datagen.service
+Wants=tpcds-datagen.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tpcds-export-status.sh
+ExecStart=/usr/bin/systemctl disable tpcds-export-status.service
+TimeoutStartSec=600
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

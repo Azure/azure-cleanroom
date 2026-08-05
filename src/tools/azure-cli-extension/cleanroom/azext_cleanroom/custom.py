@@ -19,7 +19,6 @@ import uuid
 # This is done to speed up command execution as having all the imports listed at top level is making
 # execution slow for every command even if the top level imported packaged will not be used by that
 # command.
-from enum import StrEnum
 from pathlib import Path
 from time import sleep
 from typing import Any, List
@@ -162,8 +161,6 @@ def governance_client_deploy_cmd(
         compose_profiles = ["creds-proxy"]
 
     if use_microsoft_identity:
-        from pathlib import Path
-
         msal_token_cache_root_dir = (
             msal_token_cache_root_dir or default_msal_token_cache_root_dir
         )
@@ -236,7 +233,9 @@ def governance_client_deploy_cmd(
         else (
             "MsLogin"
             if use_microsoft_identity
-            else "LocalIdp" if use_local_identity else None
+            else "LocalIdp"
+            if use_local_identity
+            else None
         )
     )
 
@@ -444,7 +443,7 @@ def governance_service_deploy_cmd(cmd, gov_client_name, env_file=None):
                 "args": {
                     "max_heap_bytes": 104857600,
                     "max_stack_bytes": 1048576,
-                    "max_execution_time_ms": 1000,
+                    "max_execution_time_ms": 5000,
                     "log_exception_details": True,
                     "return_exception_details": True,
                 },
@@ -903,6 +902,8 @@ def governance_deployment_generate_cmd(
     output_dir,
     security_policy_creation_option,
     gov_client_name="",
+    use_csi_driver=False,
+    use_blobfuse_proxy_sidecar=False,
 ):
     generate_security_policy_creation_option = (
         security_policy_creation_option == "generate"
@@ -927,6 +928,8 @@ def governance_deployment_generate_cmd(
         ccf_details["ccfEndpoint"],
         ssl_cert_base64,
         security_policy_creation_option,
+        use_csi_driver=use_csi_driver,
+        use_blobfuse_proxy_sidecar=use_blobfuse_proxy_sidecar,
     )
 
     with open(output_dir + f"{os.path.sep}cleanroom-policy-in.json", "w") as f:
@@ -947,7 +950,9 @@ def governance_deployment_generate_cmd(
             security_policy_creation_option == "allow-all"
             or security_policy_creation_option == "cached"
             or security_policy_creation_option == "cached-debug"
-        ), f"Invalid security policy creation option passed: {security_policy_creation_option}"
+        ), (
+            f"Invalid security policy creation option passed: {security_policy_creation_option}"
+        )
         with open(output_dir + f"{os.path.sep}cleanroom-policy.rego", "w") as f:
             f.write(policy_rego)
 
@@ -2056,7 +2061,6 @@ def config_network_http_enable_cmd(
     direction: TrafficDirection,
     policy_bundle_url="",
 ):
-    from azure.cli.core.util import CLIError
 
     from .utilities._configuration_helpers import (
         read_cleanroom_spec_internal,
@@ -2716,6 +2720,18 @@ def _validate_config(spec: CleanRoomSpecification):
         raise CLIError(errors)
 
 
+def operator_install_cli_cmd(
+    cmd,
+    install_location,
+    client_version,
+    source=None,
+    env_file=None,
+):
+    from .custom_operator import operator_install_cli
+
+    return operator_install_cli(cmd, install_location, client_version, source, env_file)
+
+
 def cluster_provider_deploy_cmd(cmd, provider_client_name, env_file=None):
     from .custom_cleanroom_cluster import cluster_provider_deploy
 
@@ -2737,6 +2753,7 @@ def cluster_up_cmd(
     location,
     node_vm_size,
     provider_client_name,
+    ip_tags=None,
     env_file=None,
 ):
     from .custom_cleanroom_cluster import cluster_up
@@ -2750,6 +2767,7 @@ def cluster_up_cmd(
         location,
         node_vm_size,
         provider_client_name,
+        ip_tags,
         env_file,
     )
 
@@ -2775,12 +2793,7 @@ def cluster_create_cmd(
     kserve_inferencing_workload_disable_telemetry_collection,
     kserve_inferencing_workload_security_policy_creation_option,
     kserve_inferencing_workload_security_policy,
-    enable_flex_node,
-    flex_node_ssh_private_key,
-    flex_node_ssh_public_key,
-    flex_node_policy_signing_cert,
-    flex_node_vm_size,
-    flex_node_count,
+    flex_node_profile,
     provider_client_name,
 ):
     from .custom_cleanroom_cluster import cluster_create
@@ -2806,12 +2819,7 @@ def cluster_create_cmd(
         kserve_inferencing_workload_disable_telemetry_collection,
         kserve_inferencing_workload_security_policy_creation_option,
         kserve_inferencing_workload_security_policy,
-        enable_flex_node,
-        flex_node_ssh_private_key,
-        flex_node_ssh_public_key,
-        flex_node_policy_signing_cert,
-        flex_node_vm_size,
-        flex_node_count,
+        flex_node_profile,
         provider_client_name,
     )
 
@@ -2836,12 +2844,7 @@ def cluster_update_cmd(
     kserve_inferencing_workload_disable_telemetry_collection,
     kserve_inferencing_workload_security_policy_creation_option,
     kserve_inferencing_workload_security_policy,
-    enable_flex_node,
-    flex_node_ssh_private_key,
-    flex_node_ssh_public_key,
-    flex_node_policy_signing_cert,
-    flex_node_vm_size,
-    flex_node_count,
+    flex_node_profile,
     provider_client_name,
 ):
     from .custom_cleanroom_cluster import cluster_update
@@ -2866,12 +2869,7 @@ def cluster_update_cmd(
         kserve_inferencing_workload_disable_telemetry_collection,
         kserve_inferencing_workload_security_policy_creation_option,
         kserve_inferencing_workload_security_policy,
-        enable_flex_node,
-        flex_node_ssh_private_key,
-        flex_node_ssh_public_key,
-        flex_node_policy_signing_cert,
-        flex_node_vm_size,
-        flex_node_count,
+        flex_node_profile,
         provider_client_name,
     )
 

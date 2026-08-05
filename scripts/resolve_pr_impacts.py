@@ -3,8 +3,8 @@
 """Resolve impacted CI build groups and test stages for a PR.
 
 This script determines which container builds and test stages need to run based
-on which files changed in a pull request. It writes boolean outputs to
-GITHUB_OUTPUT so GitHub Actions can gate downstream jobs.
+on which files changed in a pull request. It writes comma-separated list outputs
+to GITHUB_OUTPUT so GitHub Actions can gate downstream jobs.
 
 Strategy (intentionally conservative — prefers false positives over false negatives):
 
@@ -22,9 +22,11 @@ Strategy (intentionally conservative — prefers false positives over false nega
    triggered rather than risking a missed rebuild.
 
 Outputs written to GITHUB_OUTPUT:
-    run-build                — True if any build group needs to run.
-    build-<group>            — One per build group (e.g., build-cgs-containers).
-    run-test-<stage>         — One per test stage (e.g., run-test-cgs).
+    build-groups — Comma-separated list of enabled build groups
+                   (e.g., "build-ccr-governance-containers,build-cgs-containers").
+                   Empty string if no builds needed.
+    test-stages  — Comma-separated list of enabled test stages
+                   (e.g., "test-cgs,test-ccf"). Empty string if none.
 """
 
 from __future__ import annotations
@@ -79,17 +81,28 @@ BROAD_RUN_PATHS = {
 # Dependencies are extracted dynamically by parsing these scripts and their
 # Dockerfiles (COPY sources, src/samples/templates path references).
 GROUP_SCRIPTS = {
-    "build-shared-containers": [
-        "build/ccr/build-ccr-proxy.ps1",
-        "build/ccr/build-skr.ps1",
+    "build-ccr-governance-containers": [
         "build/ccr/build-ccr-governance.ps1",
         "build/ccr/build-ccr-governance-virtual.ps1",
+    ],
+    "build-ccr-proxy-containers": [
+        "build/ccr/build-ccr-proxy.ps1",
+    ],
+    "build-ccr-skr-containers": [
+        "build/ccr/build-skr.ps1",
         "build/ccr/build-local-skr.ps1",
+    ],
+    "build-ccr-tools-containers": [
         "build/ccr/build-local-idp.ps1",
-        "build/ccr/build-otel-collector.ps1",
+    ],
+    "build-cvm-containers": [
         "build/cvm/build-cvm-attestation-verifier.ps1",
         "build/cvm/build-cvm-attestation-agent.ps1",
+    ],
+    "build-k8s-node-containers": [
         "build/k8s-node/build-api-server-proxy.ps1",
+        "build/k8s-node/build-kubelet-proxy.ps1",
+        "build/k8s-node/build-cleanroom-boot.ps1",
     ],
     "build-ccf-containers": [
         "build/ccf/build-ccf-provider-client.ps1",
@@ -116,9 +129,16 @@ GROUP_SCRIPTS = {
         "build/ccr/build-identity.ps1",
         "build/ccr/build-ccr-governance-opa-policy.ps1",
         "build/ccr/build-ccr-artefacts.ps1",
+        "build/ccr/build-otel-collector.ps1",
+        "build/ccr/build-cleanroom-csi-driver.ps1",
     ],
     "build-cleanroom-cluster-containers": [
         "build/cleanroom-cluster/build-cleanroom-cluster-provider-client.ps1",
+    ],
+    "build-cleanroom-operator-containers": [
+        "build/cleanroom-operator/build-cleanroom-operator.ps1",
+        "build/cleanroom-operator/build-kubectl-cleanroom.ps1",
+        "build/cleanroom-operator/build-karpenter-provider-accr.ps1",
     ],
     "build-analytics-workload-containers": [
         "build/workloads/analytics/build-cleanroom-spark-analytics-agent.ps1",
@@ -137,54 +157,118 @@ GROUP_SCRIPTS = {
     ],
 }
 
-# Maps each test stage to the build groups it depends on.
-# A test stage runs if ANY of its required groups have direct changes.
+# Runtime dependencies: maps each test stage to ALL build groups it needs.
+# When a test stage is triggered, every group listed here is built so the test
+# has all the container images it requires.
 # Derived from docker-compose files and workflow structure.
 TEST_STAGE_GROUPS = {
     "test-cgs": [
-        "build-shared-containers",
+        "build-ccr-governance-containers",
+        "build-cvm-containers",
+        "build-ccr-tools-containers",
         "build-cgs-containers",
         # CGS tests deploy a CCF sandbox node via docker-compose.
         "build-ccf-containers",
+        "build-azcliext-cleanroom",
     ],
     "test-ccf": [
-        "build-shared-containers",
+        "build-ccr-proxy-containers",
+        "build-cvm-containers",
+        "build-ccr-skr-containers",
         "build-ccf-containers",
+        # CCF tests deploy CGS (cgs-client, cgs-ui) via deploy-ccf.ps1.
+        "build-cgs-containers",
+        "build-azcliext-cleanroom",
     ],
     "test-cleanroom-cluster": [
-        "build-shared-containers",
+        "build-ccr-governance-containers",
+        "build-ccr-proxy-containers",
+        "build-ccr-skr-containers",
+        "build-cvm-containers",
+        "build-k8s-node-containers",
         "build-ccr-containers",
         "build-cleanroom-cluster-containers",
+        "build-cleanroom-operator-containers",
         "build-analytics-workload-containers",
         "build-kserve-inferencing-workload-containers",
         "build-frontend-service-containers",
+        "build-azcliext-cleanroom",
     ],
     "test-multi-party-collab": [
-        "build-shared-containers",
+        "build-ccr-governance-containers",
+        "build-ccr-proxy-containers",
+        "build-ccr-skr-containers",
+        "build-ccr-tools-containers",
+        # The CCF sandbox node requires cvm-attestation-verifier as a sidecar
+        # to validate SEV-SNP attestation reports.
+        "build-cvm-containers",
+        "build-k8s-node-containers",
         "build-ccr-containers",
-        "build-analytics-workload-containers",
+        # Multi-party-collab deploys CGS via deploy-cgs.ps1, which runs a CCF
+        # sandbox node (ccf-runjs-app-sandbox, ccf-recovery-agent) and uses
+        # CGS containers (cgs-client, cgs-ui).
+        "build-ccf-containers",
+        "build-cgs-containers",
         "build-azcliext-cleanroom",
     ],
     "test-workloads": [
-        "build-shared-containers",
+        "build-ccr-governance-containers",
+        "build-ccr-proxy-containers",
+        "build-ccr-skr-containers",
+        "build-cgs-containers",
+        "build-ccr-tools-containers",
+        "build-cvm-containers",
+        "build-k8s-node-containers",
+        "build-ccr-containers",
         "build-cleanroom-cluster-containers",
+        "build-cleanroom-operator-containers",
         "build-analytics-workload-containers",
         "build-kserve-inferencing-workload-containers",
         "build-frontend-service-containers",
         "build-azcliext-cleanroom",
+        "build-ccf-containers",
+    ],
+    # test-flex-node tests api-server-proxy which is part of build-k8s-node-containers.
+    # It builds locally (no ACR dependency), so it doesn't need the build job.
+    "test-flex-node": [
+        "build-k8s-node-containers",
     ],
 }
 
-# If any of these build groups are impacted, build-shared-containers is also
-# required because shared images (proxy, governance, attestation, etc.) are base
-# dependencies for these groups.
-SHARED_TRANSITIVE_GROUPS = [
-    "build-ccf-containers",
-    "build-ccr-containers",
-    "build-analytics-workload-containers",
-    "build-kserve-inferencing-workload-containers",
-    "build-frontend-service-containers",
-]
+# Transitive build group dependencies derived from the `needs:` relationships
+# between jobs in pr_build_all.yml. When a build group is enabled, all groups
+# it transitively depends on must also be enabled (otherwise the downstream
+# policy jobs that `needs:` both will be skipped).
+# Format: group → set of groups it requires.
+BUILD_GROUP_TRANSITIVE_DEPS = {
+    "build-ccf-containers": {
+        "build-ccr-governance-containers",
+        "build-cvm-containers",
+    },
+    "build-ccr-containers": {
+        "build-ccr-governance-containers",
+        "build-ccr-proxy-containers",
+        "build-ccr-skr-containers",
+    },
+    "build-analytics-workload-containers": {
+        "build-ccr-governance-containers",
+        "build-ccr-proxy-containers",
+        "build-ccr-skr-containers",
+        "build-ccr-containers",
+    },
+    "build-kserve-inferencing-workload-containers": {
+        "build-ccr-governance-containers",
+        "build-ccr-proxy-containers",
+        "build-ccr-skr-containers",
+        "build-ccr-containers",
+    },
+    "build-frontend-service-containers": {
+        "build-ccr-governance-containers",
+        "build-ccr-proxy-containers",
+        "build-ccr-skr-containers",
+        "build-cgs-containers",
+    },
+}
 
 
 # ---------------------------------------------------------------------------
@@ -348,31 +432,50 @@ def get_changed_files() -> list[str]:
 def resolve_from_groups(group_hits: dict[str, bool]) -> dict[str, bool]:
     """Resolve final CI outputs from per-group match results.
 
-    Build outputs use transitive-expanded groups (shared containers are enabled
-    if any dependent group needs them). Test stage outputs use direct group hits
-    only — a test runs when its own code changed, not transitively.
+    1. A test stage is triggered when ANY of its dependency build groups has
+       source changes. Once triggered, ALL build groups that test depends on
+       are enabled so it has every container image it needs.
+    2. Transitive build dependencies (BUILD_GROUP_TRANSITIVE_DEPS) are
+       expanded last.
     """
-    # Apply transitive shared-container requirement for builds.
     build_groups = dict(group_hits)
-    if any(build_groups.get(g, False) for g in SHARED_TRANSITIVE_GROUPS):
-        LOGGER.info("Enabling build-shared-containers transitively.")
-        build_groups["build-shared-containers"] = True
 
-    # Build group outputs (with transitive expansion).
+    # Determine which test stages are triggered — any dependency with direct
+    # changes activates the test. Then ensure all its required groups are built.
+    test_enabled: dict[str, bool] = {}
+    for stage, required_groups in TEST_STAGE_GROUPS.items():
+        triggered = any(group_hits.get(g, False) for g in required_groups)
+        test_enabled[stage] = triggered
+        if triggered:
+            for req in required_groups:
+                if not build_groups.get(req, False):
+                    LOGGER.info("Enabling %s (runtime dependency of %s).", req, stage)
+                    build_groups[req] = True
+
+    # Apply transitive build dependencies.
+    for group, deps in BUILD_GROUP_TRANSITIVE_DEPS.items():
+        if build_groups.get(group, False):
+            for dep in deps:
+                if not build_groups.get(dep, False):
+                    LOGGER.info(
+                        "Enabling %s transitively (required by %s).", dep, group
+                    )
+                    build_groups[dep] = True
+
+    # Build group outputs.
     outputs: dict[str, bool] = {}
     for group_name in GROUP_SCRIPTS:
         outputs[group_name] = build_groups.get(group_name, False)
-    outputs["run-build"] = any(outputs.values())
 
-    # Test stage outputs (using direct group hits, not transitive).
-    for stage, required_groups in TEST_STAGE_GROUPS.items():
-        enabled = any(group_hits.get(g, False) for g in required_groups)
+    # Test stage outputs.
+    for stage in TEST_STAGE_GROUPS:
+        enabled = test_enabled[stage]
         outputs[f"run-{stage}"] = enabled
         LOGGER.info(
             "Test stage %s: %s (requires: %s)",
             stage,
             "enabled" if enabled else "skipped",
-            ", ".join(sorted(required_groups)),
+            ", ".join(sorted(TEST_STAGE_GROUPS[stage])),
         )
 
     return outputs
@@ -383,7 +486,7 @@ def write_outputs(outputs: dict[str, bool]) -> None:
 
     Writes:
         build-groups — Comma-separated list of enabled build groups
-                       (e.g., "build-shared-containers,build-cgs-containers").
+                       (e.g., "build-ccr-governance-containers,build-cgs-containers").
                        Empty string if no builds needed.
         test-stages  — Comma-separated list of enabled test stages
                        (e.g., "test-cgs,test-ccf"). Empty string if none.

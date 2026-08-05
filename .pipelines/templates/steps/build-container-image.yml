@@ -1,0 +1,55 @@
+# Atomic step template that builds ONE container image + its SBOM the OneBranch
+# governed way. Replaces the GitHub composite action
+#   .github/actions/build-container-and-artefacts
+# which did: docker/build-push-action -> sbom-tool generate -> docker save .tar
+#   -> upload-artifact -> prune, with a built-containers.txt dedup guard.
+#
+# On OneBranch all of that collapses into `onebranch.pipeline.imagebuildinfo@1`:
+#   - builds the image (BuildKit),
+#   - generates the SBOM automatically (governed supply-chain),
+#   - saves the image tarball to `saveImageToPath` (the .tar the old composite
+#     produced), which OneBranch publishes as a build output.
+#
+# The old built-containers.txt runtime dedup is instead handled at authoring
+# time: each unique image is emitted ONCE in official-build-jobs.yml (shared
+# images like ccr-proxy/skr are gated on the OR of their owning build groups).
+#
+# MUST run on a `pool: { type: docker }` job (imagebuildinfo is image-build only;
+# such pools silently drop Bash@3/PowerShell@2/AzureCLI@2 — keep those on linux).
+#
+# TODO(Phase 1C): `registry` is the ACR the governed build tags against — set to
+# the real cleanroom ACR once known (placeholder below).
+
+parameters:
+  - name: name
+    type: string
+  - name: dockerfile
+    type: string
+  - name: context
+    type: string
+    default: "."
+  - name: buildArgs
+    type: string
+    default: ""
+  # Runtime build tag (parameters.tag or derived short commit hash), passed from
+  # the linux solutions job as an output variable.
+  - name: buildTag
+    type: string
+    default: "$(buildTag)"
+
+steps:
+  - task: onebranch.pipeline.imagebuildinfo@1
+    displayName: Build ${{ parameters.name }} image tarball
+    inputs:
+      repositoryName: ${{ parameters.name }}
+      dockerFileRelPath: ${{ parameters.dockerfile }}
+      dockerFileContextPath: ${{ parameters.context }}
+      registry: cdpxlinux.azurecr.io # TODO(Phase 1C): cleanroom governed ACR
+      saveImageToPath: images/${{ parameters.name }}.tar
+      build_tag: ${{ parameters.buildTag }}
+      buildkit: 1
+      enable_network: true
+      enable_pull: true
+      enable_acr_push: false
+      ${{ if ne(parameters.buildArgs, '') }}:
+        arguments: ${{ parameters.buildArgs }}

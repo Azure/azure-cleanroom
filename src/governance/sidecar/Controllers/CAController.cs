@@ -30,6 +30,24 @@ public class CAController : ControllerBase
     internal WebContext WebContext =>
         (WebContext)this.ControllerContext.HttpContext.Items[WebContext.WebContextIdentifer]!;
 
+    [HttpGet("/ca/info")]
+    public async Task<IActionResult> GetInfo()
+    {
+        var appClient = await this.ccfClientManager.GetAppClient();
+
+        using (HttpRequestMessage request = new(
+            HttpMethod.Post,
+            this.routes.CaStatus(this.WebContext)))
+        {
+            using HttpResponseMessage response = await appClient.SendAsync(request);
+            this.Response.CopyHeaders(response.Headers);
+            await response.ValidateStatusCodeAsync(this.logger);
+            var jsonResponse =
+                await response.Content.ReadFromJsonAsync<JsonObject>();
+            return this.Ok(jsonResponse);
+        }
+    }
+
     [HttpPost("/ca/generateEndorsedCert")]
     public async Task<IActionResult> GenerateEndorsedCert([FromBody] JsonObject data)
     {

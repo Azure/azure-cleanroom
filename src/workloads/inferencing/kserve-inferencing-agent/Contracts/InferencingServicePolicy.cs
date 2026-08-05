@@ -11,4 +11,4 @@ public record InferencingServicePolicy(
 
 public record PodPolicy(
     [property: JsonPropertyName("jsonBase64")] string JsonBase64,
-    [property: JsonPropertyName("pcrs")] Dictionary<string, string> Pcrs);
+    [property: JsonPropertyName("pcrs")] Dictionary<string, List<string>> Pcrs);

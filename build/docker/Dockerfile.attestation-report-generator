@@ -18,7 +18,8 @@ RUN dotnet restore /app/src/tools/attestation-report-generator/attestation-repor
 COPY stylecop.json /app
 COPY Menees.Analyzers.Settings.xml /app
 COPY .editorconfig /app
-COPY src/internal /app/src/internal
+COPY src/internal/Attestation /app/src/internal/Attestation
+COPY src/internal/restapi-common /app/src/internal/restapi-common
 COPY src/tools/attestation-report-generator /app/src/tools/attestation-report-generator
 
 

@@ -1,8 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Azure.Core;
+using Identity.Configuration;
 using Identity.CredentialManager;
 using Microsoft.AspNetCore.Mvc;
 
@@ -101,6 +103,56 @@ public class IdentityController : ControllerBase
                 DateTimeOffset.Now.ToUnixTimeSeconds(),
             RefreshToken = string.Empty
         };
+    }
+
+    [HttpPost("/metadata/identity/register")]
+    public async Task<IActionResult> RegisterIdentity()
+    {
+        using var reader = new StreamReader(this.Request.Body);
+        var body = await reader.ReadToEndAsync();
+        var identity = JsonSerializer.Deserialize<ApplicationIdentity>(
+            body,
+            new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+        if (identity == null || string.IsNullOrEmpty(identity.ClientId))
+        {
+            return this.BadRequest("Identity with valid ClientId is required.");
+        }
+
+        if (identity.Credential == null)
+        {
+            return this.BadRequest(
+                "Credential configuration is required.");
+        }
+
+        this.logger.LogInformation(
+            $"Registering identity for client ID: " +
+            $"'{identity.ClientId}'.");
+
+        bool added =
+            this.credentialManager.RegisterCredential(identity);
+        if (added)
+        {
+            this.logger.LogInformation(
+                $"Successfully registered identity for " +
+                $"client ID: '{identity.ClientId}'.");
+        }
+        else
+        {
+            this.logger.LogInformation(
+                $"Identity already registered for " +
+                $"client ID: '{identity.ClientId}'.");
+        }
+
+        return this.Ok(
+            new
+            {
+                clientId = identity.ClientId,
+                registered = added
+            });
     }
 
     // MSITokenResponse represents the expected response type from managed identity. Please

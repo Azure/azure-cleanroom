@@ -13,4 +13,6 @@ public class GetClusterKubeConfigInput
     public JsonObject? ProviderConfig { get; set; }
 
     public KubeConfigAccessRole AccessRole { get; set; }
+
+    public bool Internal { get; set; }
 }

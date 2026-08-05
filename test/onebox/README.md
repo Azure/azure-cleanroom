@@ -56,6 +56,31 @@ $scenario = "encrypted-storage"
 pwsh $root/test/onebox/multi-party-collab/$scenario/run-collab.ps1
 ```
 
+To validate the CSI driver path explicitly (including recovery and single-writer
+checks), run:
+```powershell
+pwsh $root/test/onebox/multi-party-collab/encrypted-storage/run-collab.ps1 `
+  -useCsiDriver -registry local -NoBuild
+```
+
+To run another full encrypted-storage collab setup with isolated generated
+artifacts (for example a second contract setup), run:
+```powershell
+pwsh $root/test/onebox/multi-party-collab/encrypted-storage/run-collab-second.ps1 `
+  -useCsiDriver -registry local -NoBuild
+```
+
+You can override the second setup contract and output folder as needed:
+```powershell
+pwsh $root/test/onebox/multi-party-collab/encrypted-storage/run-collab-second.ps1 `
+  -useCsiDriver -registry local -NoBuild `
+  -ContractId collab2 `
+  -OutDir "$root/test/onebox/multi-party-collab/encrypted-storage/generated-second"
+```
+
+In CSI mode, per-volume `contractId` from CSI `volumeAttributes` is used for
+request-level governance path routing, with DaemonSet config as fallback.
+
 ## 4. Delete the clean room from the local cluster
 To remove the clean room instance run the following:
 ```powershell

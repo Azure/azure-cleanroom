@@ -6,6 +6,10 @@
             "command": [
                 "/bin/myapp"
             ],
+            "args": [
+                "--config=/etc/app/config.yaml",
+                "--verbose"
+            ],
             "environmentVariables": [
                 {
                     "name": "APP_ENV",

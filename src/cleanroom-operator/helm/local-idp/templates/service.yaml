@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: local-idp
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: local-idp
+spec:
+  selector:
+    app: local-idp
+  ports:
+    - name: http
+      port: 8321
+      targetPort: http
+      protocol: TCP
+  type: ClusterIP

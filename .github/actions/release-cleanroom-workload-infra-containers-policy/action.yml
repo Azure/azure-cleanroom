@@ -51,22 +51,38 @@ runs:
       run: |
         ./build/workloads/analytics/build-workload-infra-containers-policy.ps1 -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom -tag ${{ inputs.tag }} -push
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: cleanroom-spark-analytics-agent-security-policy-${{ inputs.environment }}.yaml
         path: ./.policies/cleanroom-spark-analytics-agent-security-policy/cleanroom-spark-analytics-agent-security-policy.yaml
         overwrite: true
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: cleanroom-spark-frontend-security-policy-${{ inputs.environment }}.yaml
         path: ./.policies/cleanroom-spark-frontend-security-policy/cleanroom-spark-frontend-security-policy.yaml
         overwrite: true
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: cleanroom-spark-analytics-app-security-policy-${{ inputs.environment }}.yaml
         path: ./.policies/cleanroom-spark-analytics-app-security-policy/cleanroom-spark-analytics-app-security-policy.yaml
+        overwrite: true
+
+    - shell: pwsh
+      run: |
+        ./build/workloads/inferencing/build-workload-infra-containers-policy.ps1 -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom -tag ${{ inputs.tag }} -push
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: cleanroom-kserve-inferencing-agent-security-policy-${{ inputs.environment }}.yaml
+        path: ./.policies/cleanroom-kserve-inferencing-agent-security-policy/cleanroom-kserve-inferencing-agent-security-policy.yaml
+        overwrite: true
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: cleanroom-kserve-inferencing-frontend-security-policy-${{ inputs.environment }}.yaml
+        path: ./.policies/cleanroom-kserve-inferencing-frontend-security-policy/cleanroom-kserve-inferencing-frontend-security-policy.yaml
         overwrite: true
 
     - uses: ./.github/actions/attest-artefact
@@ -89,6 +105,22 @@ runs:
       if: ${{ inputs.needs-attestation == 'true' }}
       with:
         name: policies/workloads/cleanroom-spark-analytics-app-security-policy
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        registry-name: ${{ inputs.registry-name }}
+
+    - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
+      with:
+        name: policies/workloads/cleanroom-kserve-inferencing-agent-security-policy
+        tag: ${{ inputs.tag }}
+        environment: ${{ inputs.environment }}
+        registry-name: ${{ inputs.registry-name }}
+
+    - uses: ./.github/actions/attest-artefact
+      if: ${{ inputs.needs-attestation == 'true' }}
+      with:
+        name: policies/workloads/cleanroom-kserve-inferencing-frontend-security-policy
         tag: ${{ inputs.tag }}
         environment: ${{ inputs.environment }}
         registry-name: ${{ inputs.registry-name }}

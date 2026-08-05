@@ -1,7 +1,7 @@
 import * as ccfapp from "@microsoft/ccf-app";
 import { JwksResponse } from "../../models";
 import { ccf } from "@microsoft/ccf-app/global";
-import { getIssuerSigningKey } from "./signingkey";
+import { getIssuerSigningKey } from "./signing-key";
 import { ErrorResponse } from "../../utils/ErrorResponse";
 
 export function getJwks():

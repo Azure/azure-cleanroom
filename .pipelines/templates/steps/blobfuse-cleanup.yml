@@ -1,0 +1,23 @@
+# Step template: blobfuse-cleanup composite.
+# Migrated from .github/actions/blobfuse-cleanup/action.yml.
+
+parameters:
+  - name: mount_dir
+    type: string
+  - name: temp_dir
+    type: string
+
+steps:
+  - bash: |
+      ps -ef | grep blobfuse2
+      df -h
+    displayName: Check process info (before cleanup)
+  - bash: |
+      fusermount -u ${{ parameters.mount_dir }} || true
+      fusermount3 -u ${{ parameters.mount_dir }} || true
+      ls -lh ${{ parameters.mount_dir }} || true
+      sudo rm -rf ${{ parameters.mount_dir }}/*
+      ls -lh ${{ parameters.temp_dir }} || true
+      sudo rm -rf ${{ parameters.temp_dir }}/*
+    displayName: Cleanup mount + temp dirs
+    condition: always()

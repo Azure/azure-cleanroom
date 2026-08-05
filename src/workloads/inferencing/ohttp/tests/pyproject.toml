@@ -1,0 +1,10 @@
+[project]
+name = "test-ohttp"
+version = "0.1.0"
+description = "Standalone integration tests for OHTTP client and gateway"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.33.0",
+    "cryptography>=46.0.6",
+    "flask>=3.0",
+]

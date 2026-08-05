@@ -2,13 +2,12 @@ import datetime
 from enum import StrEnum
 from typing import List, Optional
 
+from pydantic import BaseModel, Field
+
 from cleanroom_sdk.models.cleanroom import DatasetInfo
-from fastapi.params import Header
 from frontend_internal.models.input_models import (
-    CcfServiceCertDiscoveryModel,
     GovernanceSettings,
 )
-from pydantic import BaseModel, ConfigDict, Field
 
 
 class Format(StrEnum):
@@ -29,6 +28,7 @@ class SQLJobInput(JobInput):
     start_date: Optional[datetime.datetime] = Field(default=None, alias="startDate")
     end_date: Optional[datetime.datetime] = Field(default=None, alias="endDate")
     use_optimizer: bool = Field(default=False, alias="useOptimizer")
+    scale_sku: Optional[str] = Field(default="small", alias="scaleSku")
 
 
 class EnvData(BaseModel):

@@ -124,7 +124,8 @@ public class ConsortiumsController : ControllerBase
                 generateWorkloadContractInput.CcfProviderConfig,
                 generateWorkloadContractInput.WorkloadType,
                 generateWorkloadContractInput.ContractId,
-                generateWorkloadContractInput.PolicyCreationOption);
+                generateWorkloadContractInput.PolicyCreationOption,
+                generateWorkloadContractInput.TelemetryCollectionEnabled);
             return this.Ok();
         }
         catch (Exception ex)

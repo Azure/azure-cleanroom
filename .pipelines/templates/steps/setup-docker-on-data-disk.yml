@@ -1,0 +1,31 @@
+# Step template migrated from the composite action:
+#   .github/actions/setup-docker-on-data-disk/action.yml
+#
+# Configures Docker to use a data disk for its storage by fixing ownership and
+# permissions on /mnt/storage/docker. Referenced via `- template:` from job
+# templates (the ADO equivalent of GitHub's `uses: ./.github/actions/...`).
+#
+# NOTE: paths/behaviour assume the 1ES image mounts the data disk at
+# /mnt/storage/docker (same assumption as the original composite action).
+
+steps:
+  - bash: |
+      docker info | grep "Docker Root Dir"
+      docker system df
+      docker image ls
+      docker ps -a
+    displayName: Docker footprint
+
+  - bash: |
+      # Remove ACLs
+      sudo setfacl -b -R /mnt/storage/docker
+
+      # Set ownership to root:root
+      sudo chown -R root:root /mnt/storage/docker
+
+      # Set permissions to 0711 - full for owner, traverse for group and others
+      sudo chmod 0711 /mnt/storage/docker
+
+      # Verify permissions
+      ls -ld /mnt/storage/docker
+    displayName: Assign permissions for the docker directory on the data disk

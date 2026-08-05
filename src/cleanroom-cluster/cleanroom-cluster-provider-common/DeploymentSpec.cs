@@ -210,6 +210,9 @@ public class KServeInferencingAgentChartValues : AgentChartValuesBase
     [JsonPropertyName("inferencingFrontendSnpHostData")]
     public string InferencingFrontendSnpHostData { get; set; } = default!;
 
+    [JsonPropertyName("enableTestEndpoints")]
+    public bool EnableTestEndpoints { get; set; }
+
     public static KServeInferencingAgentChartValues ToAgentChartValues(
         ContractData contractData,
         bool telemetryCollectionEnabled,

@@ -89,6 +89,11 @@ internal class InMemoryAsyncOperationsManager : IAsyncOperationsManager
         return false;
     }
 
+    Task<Controllers.OperationStatus?> IAsyncOperationsManager.GetOperationStatus(string operationId)
+    {
+        throw new NotImplementedException();
+    }
+
     public class Operation
     {
         public string Id { get; set; } = default!;

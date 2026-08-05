@@ -2,7 +2,7 @@ import "./snpattestation.tsp";
 import "./encrypt.tsp";
 import "./sign.tsp";
 
-namespace Cleanroom.Governance;
+namespace Azure.Cleanroom.Governance;
 
 /**
  * Put secret by member/user request

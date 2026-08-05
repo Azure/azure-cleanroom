@@ -15,6 +15,7 @@ using FrontendSvc.Models;
 using FrontendSvc.Models.CCF;
 using FrontendSvc.Publisher.Factory;
 using FrontendSvc.Utils.Token;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Hosting;
 
@@ -24,6 +25,7 @@ namespace FrontendSvc.Api.V2026_03_01_Preview.Controllers;
 /// Collaboration controller for API version 2026-03-01-preview.
 /// </summary>
 [ApiController]
+[Authorize]
 public class CollaborationController : CollaborationControllerBase
 {
     private readonly ILogger<CollaborationController> logger;
@@ -68,6 +70,7 @@ public class CollaborationController : CollaborationControllerBase
             RunId = requestBody.RunId,
             StartDate = requestBody.StartDate,
             EndDate = requestBody.EndDate,
+            ScaleSku = requestBody.ScaleSku,
             UseOptimizer = requestBody.UseOptimizer,
             DryRun = requestBody.DryRun
         };

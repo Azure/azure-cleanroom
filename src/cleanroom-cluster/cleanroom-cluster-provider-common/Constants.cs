@@ -21,6 +21,9 @@ public static class Constants
         $"https://{SparkFrontendReleaseName}.{SparkFrontendServiceNamespace}.svc";
 
     public const string KServeInferencingWorkloadNamespace = "kserve-inferencing";
+    public const string KServeInferencingWorkloadZoneName =
+        KServeInferencingWorkloadNamespace + ".svc";
+
     public const string KServeInferencingAgentReleaseName = "kserve-inferencing-agent";
     public const string KServeInferencingAgentNamespace = "kserve-inferencing-agent";
     public const string KServeInferencingFrontendReleaseName = "kserve-inferencing-frontend";
@@ -32,21 +35,22 @@ public static class Constants
         $"https://{KServeInferencingFrontendReleaseName}." +
         $"{KServeInferencingFrontendServiceNamespace}.svc";
 
-    public const string ObservabilityNamespace = "telemetry";
+    public const string ObservabilityNamespace = "observability";
     public const string ObservabilityZoneName = ObservabilityNamespace + ".svc";
-    public const string LokiReleaseName = "cleanroom-spark-loki";
+
+    public const string LokiReleaseName = "cleanroom-loki";
     public const string LokiServiceEndpoint = $"http://loki-headless.{ObservabilityNamespace}.svc";
-    public const string TempoReleaseName = "cleanroom-spark-tempo";
+    public const string TempoReleaseName = "cleanroom-tempo";
 
     public const string TempoServiceEndpoint =
     $"http://{TempoReleaseName}.{ObservabilityNamespace}.svc";
 
-    public const string PrometheusReleaseName = "cleanroom-spark-prometheus";
+    public const string PrometheusReleaseName = "cleanroom-prometheus";
 
     public const string PrometheusServiceEndpoint =
         $"http://{PrometheusReleaseName}-server.{ObservabilityNamespace}.svc";
 
-    public const string GrafanaReleaseName = "cleanroom-spark-grafana";
+    public const string GrafanaReleaseName = "cleanroom-grafana";
 
     public const string GrafanaServiceEndpoint =
         $"http://{GrafanaReleaseName}.{ObservabilityNamespace}.svc";
@@ -55,4 +59,8 @@ public static class Constants
     public const string KaitoReleaseName = "kaito-workspace";
 
     public const string SparkOperatorNamespace = "spark-operator";
+
+    public const string KarpenterProviderAccrReleaseName = "karpenter-provider-accr";
+
+    public const string KarpenterProviderAccrNamespace = "karpenter-provider-accr";
 }

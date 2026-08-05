@@ -1,9 +1,10 @@
 import logging
 import os
 
-from cleanroom_internal.utilities import utilities as internal_utilities
 from opentelemetry import trace
 from ruamel.yaml import YAML
+
+from cleanroom_internal.utilities import utilities as internal_utilities
 
 
 def launch_blobfuse(
@@ -19,39 +20,39 @@ def launch_blobfuse(
     telemetryPath: str,
 ) -> int:
     with tracer.start_as_current_span("launch_blobfuse") as span:
-
+        cmd_args = [
+            "blobfuse2",
+            "mount",
+            mountPath,
+            "--allow-other",
+            "--read-only=" + str(readOnly).lower(),
+            f"--cpk-enabled=" + str(cpkEnabled).lower(),
+            "--virtual-directory=true",
+            "--block-cache",
+            "--block-cache-path",
+            "/tmp/blobfuse_tmp",
+            "--block-cache-block-size=" + str(blockSizeMB),
+            "--block-cache-pool-size=256",
+            # Setting prefetch explicitly to 0. Otherwise, blobfuse tries to determine prefetch using
+            # the container CPUs and memory size instead of honoring the mem-size-mb limits and fails to start.
+            "--block-cache-prefetch=0",
+            # Due to the memory limit of 50 GB for CACI, we need to ensure that the total
+            # disk space used by all blobfuse processes does not exceed 50 GB.
+            # Otherwise, blobfuse might fail with a "transport endpoint disconnected" error.
+            "--block-cache-disk-size=4096",
+            "--log-file-path",
+            f"{telemetryPath}/infrastructure/{os.path.basename(mountPath)}-blobfuse.log",
+            "--log-level=LOG_INFO",
+            "--use-adls=" + str(useAdls).lower(),
+            "--disable-writeback-cache=" + str(disableWritebackCache).lower(),
+        ]
+        if subdirectory:
+            cmd_args += ["--subdirectory", subdirectory]
         proc = internal_utilities.subprocess_launch(
             logger,
             tracer,
             "blobfuse-mount",
-            [
-                "blobfuse2",
-                "mount",
-                mountPath,
-                "--allow-other",
-                "--read-only=" + str(readOnly).lower(),
-                f"--cpk-enabled=" + str(cpkEnabled).lower(),
-                "--virtual-directory=true",
-                "--block-cache",
-                "--block-cache-path",
-                "/tmp/blobfuse_tmp",
-                "--block-cache-block-size=" + str(blockSizeMB),
-                "--block-cache-pool-size=256",
-                # Setting prefetch explicitly to 0. Otherwise, blobfuse tries to determine prefetch using
-                # the container CPUs and memory size instead of honoring the mem-size-mb limits and fails to start.
-                "--block-cache-prefetch=0",
-                # Due to the memory limit of 50 GB for CACI, we need to ensure that the total
-                # disk space used by all blobfuse processes does not exceed 50 GB.
-                # Otherwise, blobfuse might fail with a "transport endpoint disconnected" error.
-                "--block-cache-disk-size=4096",
-                "--log-file-path",
-                f"{telemetryPath}/infrastructure/{os.path.basename(mountPath)}-blobfuse.log",
-                "--log-level=LOG_INFO",
-                "--subdirectory",
-                f"{subdirectory}",
-                "--use-adls=" + str(useAdls).lower(),
-                "--disable-writeback-cache=" + str(disableWritebackCache).lower(),
-            ],
+            cmd_args,
         )
         return proc.returncode
 
@@ -65,7 +66,6 @@ def launch_blobfuse_encrypted(
     telemetryPath: str,
 ) -> int:
     with tracer.start_as_current_span("launch_blobfuse") as span:
-
         # To allow encryptor component we need config file for blobfuse mount.
         yaml = YAML()
         with open("encryptor-config.yaml", "r") as file:
@@ -80,6 +80,11 @@ def launch_blobfuse_encrypted(
         }
         config["block_cache"].update(config_details["block_cache"])
         config["encryptor"].update(config_details["encryptor"])
+
+        # Allow per-mount cache path override to isolate concurrent CSE mounts - set when using csi driver only.
+        cache_path = os.environ.get("BLOBFUSE_CACHE_PATH")
+        if cache_path:
+            config["block_cache"]["path"] = cache_path
 
         with open("config.yaml", "w") as file:
             yaml.dump(config, file)

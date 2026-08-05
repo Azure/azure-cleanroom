@@ -4,22 +4,21 @@ import base64
 import logging
 import os
 import subprocess
-import sys
 import time
 import uuid
 
 import uvicorn
-from cleanroom_internal.utilities import otel_setup_utilities
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+from opentelemetry import trace
+from podman.errors.exceptions import APIError, PodmanError
+
 from cleanroom_internal.utilities.otel_setup_utilities import TelemetryConfig
 from cleanroom_sdk.models.cleanroom import (
     Application,
     ApplicationStartType,
     ConsentCheckScope,
 )
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
-from opentelemetry import trace
-from podman.errors.exceptions import APIError, PodmanError
 
 from .cmd_executors.executors import ACRCmdExecutor
 from .utilities import podman_utilities, utilities
@@ -316,13 +315,17 @@ async def async_main():
                 " Continuing without telemetry export.",
                 cmd_arguments.otelcollector_port,
             )
-        utilities.wait_for_services_readiness(
-            [
+        ports_to_wait = [
+            p
+            for p in [
                 cmd_arguments.governance_port,
                 cmd_arguments.identity_port,
                 cmd_arguments.secrets_port,
             ]
-        )
+            if p > 0
+        ]
+        if ports_to_wait:
+            utilities.wait_for_services_readiness(ports_to_wait)
 
     try:
         import psutil

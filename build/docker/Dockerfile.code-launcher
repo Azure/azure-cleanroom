@@ -15,20 +15,52 @@ RUN uv sync --frozen
 
 RUN uv build --all-packages --wheel
 
-FROM quay.io/podman/stable:v5.4.0
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:24.04
 
-# Enable this so that container can get launched in ACI. Without this podman run fails with:
-# "Error: OCI runtime error: crun: pivot_root: Invalid argument"
-RUN echo "no_pivot_root = true" >> /etc/containers/containers.conf
+# Install podman (4.9.3 on Ubuntu 24.04) plus Python 3.12 runtime.
+# Rebased off quay.io/podman/stable (Fedora) because Fedora-built base
+# images produce dm-verity layer hashes that mismatch what
+# `az confcom acipolicygen` computes, causing CACI mount denials.
+# See microsoft/hcsshim#2574.
+RUN apt-get update -y && \
+    DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install \
+    podman crun conmon netavark aardvark-dns fuse-overlayfs uidmap \
+    python3.12 python3-pip curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Replicate the container-in-pod settings that quay.io/podman/stable ships
+# in its /etc/containers/containers.conf. Without these:
+#   - netns="host" is required so nested containers share the outer pod's
+#     network namespace and their ports are reachable at the pod IP.
+#   - cgroups="disabled" + cgroup_manager="cgroupfs" is required because the
+#     outer container is not granted cgroup-write on the ACI/K8s host.
+#   - events_logger="file" avoids the journald dependency.
+#   - log_driver="k8s-file" makes stdout/stderr flow through Kubernetes.
+#   - runtime="crun" matches what the Fedora base used.
+# Also enable no_pivot_root so container launches don't fail with:
+#   "OCI runtime error: crun: pivot_root: Invalid argument"
+RUN mkdir -p /etc/containers && \
+    cat <<'EOF' > /etc/containers/containers.conf
+[containers]
+netns="host"
+userns="host"
+ipcns="host"
+utsns="host"
+cgroupns="host"
+cgroups="disabled"
+log_driver = "k8s-file"
+[engine]
+cgroup_manager = "cgroupfs"
+events_logger = "file"
+runtime = "crun"
+no_pivot_root = true
+EOF
 
 WORKDIR /setup
 
 COPY --from=wheel-builder /build/dist/cleanroom_internal*.whl /setup/
 COPY --from=wheel-builder /build/dist/cleanroom_sdk*.whl /setup/
 COPY --from=wheel-builder /build/dist/code_launcher*.whl /setup/
-
-# Install prerequisities and pip
-RUN dnf install -y python3-pip curl
 
 RUN python3 -m pip install --break-system-packages *.whl && rm -f *.whl
 

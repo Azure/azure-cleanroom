@@ -1,0 +1,110 @@
+# Step template: blobfuse-data-integrity-cpk composite.
+# Migrated from .github/actions/blobfuse-data-integrity-cpk/action.yml.
+# Uses steps/blobfuse-mount.yml. gen-test-config reads STO_ACC_NAME / ACCOUNT_TYPE
+# / ACCOUNT_ENDPOINT / ... from the environment (set at job level).
+#
+# NOTE: the exact `blobfuse2 mount` flag strings were passed via the composite's
+# `mountStep` inputs; the conventional form is used here (verify against the
+# blobfuse-data-integrity-cpk action's `with: mountStep:` values).
+
+parameters:
+  - name: account_type
+    type: string
+  - name: mount_dir
+    type: string
+  - name: config_file
+    type: string
+  - name: temp_dir
+    type: string
+  - name: mount_dir_source
+    type: string
+  - name: temp_dir_source
+    type: string
+  - name: config_file_source
+    type: string
+
+steps:
+  # 1-2. source mount config
+  - bash: |
+      blobfuse2 gen-test-config \
+        --config-file=./test/blobfuse/testdata/config/block_cache.yaml \
+        --container-name=$(SOURCE_CONTAINER_NAME) \
+        --temp-path=${{ parameters.temp_dir_source }} \
+        --output-file=${{ parameters.config_file_source }}
+    displayName: Create config file for source mount
+    workingDirectory: $(repoRoot)
+    env:
+      STO_ACC_NAME: $(STORAGE_ACCOUNT)
+      ACCOUNT_TYPE: ${{ parameters.account_type }}
+      ACCOUNT_ENDPOINT: $(STORAGE_ACCOUNT_ENDPOINT)
+  - bash: cat ${{ parameters.config_file_source }}
+    displayName: Print config file for source mount
+  # 3. source mount
+  - template: blobfuse-mount.yml
+    parameters:
+      mount_dir: ${{ parameters.mount_dir_source }}
+      temp_dir: ${{ parameters.temp_dir_source }}
+      mountStep: sudo blobfuse2 mount ${{ parameters.mount_dir_source }} --config-file=${{ parameters.config_file_source }} -o allow_other
+  # 4-5. CPK mount config
+  - bash: |
+      blobfuse2 gen-test-config \
+        --config-file=./test/blobfuse/testdata/config/block_cache_cpk.yaml \
+        --container-name=$(CONTAINER_NAME) \
+        --temp-path=${{ parameters.temp_dir }} \
+        --output-file=${{ parameters.config_file }}
+    displayName: Create config file for CPK mount
+    workingDirectory: $(repoRoot)
+    env:
+      STO_ACC_NAME: $(STORAGE_ACCOUNT)
+      ACCOUNT_TYPE: ${{ parameters.account_type }}
+      ACCOUNT_ENDPOINT: $(STORAGE_ACCOUNT_ENDPOINT)
+  - bash: cat ${{ parameters.config_file }}
+    displayName: Print config file for CPK mount
+  # 6. upload config files
+  - task: PublishPipelineArtifact@1
+    displayName: Upload config files
+    condition: not(canceled())
+    inputs:
+      targetPath: ${{ parameters.config_file }}
+      artifact: blobfuse-cpk-config
+  # 7. CPK mount
+  - template: blobfuse-mount.yml
+    parameters:
+      mount_dir: ${{ parameters.mount_dir }}
+      temp_dir: ${{ parameters.temp_dir }}
+      mountStep: sudo blobfuse2 mount ${{ parameters.mount_dir }} --config-file=${{ parameters.config_file }} -o allow_other
+  # 8. generate files in source mount
+  - bash: |
+      mkdir -p ${{ parameters.mount_dir_source }}/testData
+      for i in {1,3,7,16,50,100,1024,20480,51200}; do echo $i; done | \
+      parallel --will-cite -j 5 'head -c {}M < /dev/urandom > ${{ parameters.mount_dir_source }}/testData/testfile_{}'
+      ls -lh ${{ parameters.mount_dir_source }}/testData/testfile_*
+    displayName: Generate files in source mount
+  # 9. upload test files to cpk mount
+  - bash: |
+      for i in {1,3,7,16,50,100,1024,20480,51200}; do echo $i; done | \
+      parallel --will-cite -j 5 'cp ${{ parameters.mount_dir_source }}/testData/testfile_{} ${{ parameters.mount_dir }}/testfile_{}'
+      ls -lh ${{ parameters.mount_dir }}/testfile_*
+    displayName: Upload test files to cpk mount
+  # 10. unmount
+  - bash: sudo blobfuse2 unmount ${{ parameters.mount_dir }}
+    displayName: Unmount
+  # 11. remount read-only
+  - template: blobfuse-mount.yml
+    parameters:
+      mount_dir: ${{ parameters.mount_dir }}
+      temp_dir: ${{ parameters.temp_dir }}
+      mountStep: sudo blobfuse2 mount ${{ parameters.mount_dir }} --config-file=${{ parameters.config_file }} -o allow_other -o ro
+      ro_mount: "true"
+  # 12. compare sha256
+  - bash: |
+      for i in {1,3,7,16,50,100,1024,20480,51200}; do
+        local_sha256=$(sha256sum ${{ parameters.mount_dir_source }}/testData/testfile_$i | cut -d ' ' -f 1)
+        remote_sha256=$(sha256sum ${{ parameters.mount_dir }}/testfile_$i | cut -d ' ' -f 1)
+        if [ "$local_sha256" != "$remote_sha256" ]; then
+          echo "SHA256 mismatch for file $i: $local_sha256 (local) vs $remote_sha256 (remote)"
+          echo "Data integrity validation failed."
+          exit 1
+        fi
+      done
+    displayName: Compare SHA256 checksums

@@ -1,0 +1,16 @@
+[project]
+name = "otel-collector"
+version = "0.1.0"
+description = "OpenTelemetry Collector launcher for cleanroom telemetry"
+requires-python = ">=3.12"
+dependencies = [
+    "jinja2==3.1.6",
+    "pydantic==2.11.7",
+]
+
+[project.scripts]
+otel_collector_launcher = "otel_collector.main:main"
+
+[build-system]
+requires = ["uv_build>=0.9.3,<0.10.0"]
+build-backend = "uv_build"

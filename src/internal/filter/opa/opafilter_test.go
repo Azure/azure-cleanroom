@@ -150,41 +150,27 @@ func Test_RequestHeader_PathDisallowed(t *testing.T) {
 	spanStubs := exp.GetSpans()
 	require.Len(t, spanStubs, 1)
 	spanStub := spanStubs[0]
-	var foundException bool
-	var foundExceptionType bool
-	var foundExceptionMessage bool
+	var foundDeniedEvent bool
+	var foundStatusAttr bool
 	for _, event := range spanStub.Events {
-		if event.Name == "exception" {
-			foundException = true
+		if event.Name == "policy.denied" {
+			foundDeniedEvent = true
 			for _, eventAttribute := range event.Attributes {
-				if eventAttribute.Key == "exception.type" &&
-					eventAttribute.Value.AsString() == "*errors.errorString" {
-					foundExceptionType = true
-				}
-
-				if eventAttribute.Key == "exception.message" &&
-					eventAttribute.Value.AsString() == "RequestNotAllowed" {
-					foundExceptionMessage = true
-				}
-
-				if foundExceptionType && foundExceptionMessage {
-					break
+				if eventAttribute.Key == "response.status" &&
+					eventAttribute.Value.AsInt64() == 403 {
+					foundStatusAttr = true
 				}
 			}
 
 			require.True(t,
-				foundExceptionType,
-				"did not find expected exception.type attribute: %v",
-				event.Attributes)
-			require.True(t,
-				foundExceptionMessage,
-				"did not find expected exception.message attribute: %v",
+				foundStatusAttr,
+				"did not find expected response.status attribute: %v",
 				event.Attributes)
 			break
 		}
 	}
 
-	require.True(t, foundException, "did not find expected exception event: %v", spanStub.Events)
+	require.True(t, foundDeniedEvent, "did not find expected policy.denied event: %v", spanStub.Events)
 }
 
 func Test_RequestHeader_HeaderDisallowed(t *testing.T) {
@@ -226,41 +212,27 @@ func Test_RequestHeader_HeaderDisallowed(t *testing.T) {
 	spanStubs := exp.GetSpans()
 	require.Len(t, spanStubs, 1)
 	spanStub := spanStubs[0]
-	var foundException bool
-	var foundExceptionType bool
-	var foundExceptionMessage bool
+	var foundDeniedEvent bool
+	var foundStatusAttr bool
 	for _, event := range spanStub.Events {
-		if event.Name == "exception" {
-			foundException = true
+		if event.Name == "policy.denied" {
+			foundDeniedEvent = true
 			for _, eventAttribute := range event.Attributes {
-				if eventAttribute.Key == "exception.type" &&
-					eventAttribute.Value.AsString() == "*errors.errorString" {
-					foundExceptionType = true
-				}
-
-				if eventAttribute.Key == "exception.message" &&
-					eventAttribute.Value.AsString() == "RequestNotAllowed" {
-					foundExceptionMessage = true
-				}
-
-				if foundExceptionType && foundExceptionMessage {
-					break
+				if eventAttribute.Key == "response.status" &&
+					eventAttribute.Value.AsInt64() == 403 {
+					foundStatusAttr = true
 				}
 			}
 
 			require.True(t,
-				foundExceptionType,
-				"did not find expected exception.type attribute: %v",
-				event.Attributes)
-			require.True(t,
-				foundExceptionMessage,
-				"did not find expected exception.message attribute: %v",
+				foundStatusAttr,
+				"did not find expected response.status attribute: %v",
 				event.Attributes)
 			break
 		}
 	}
 
-	require.True(t, foundException, "did not find expected exception event: %v", spanStub.Events)
+	require.True(t, foundDeniedEvent, "did not find expected policy.denied event: %v", spanStub.Events)
 }
 
 func Test_RequestHeader_MethodDisallowed(t *testing.T) {
@@ -466,7 +438,7 @@ func Test_OpaPolicyBundleDownload_Failure(t *testing.T) {
 	var foundExceptionMessage bool
 	expectedExceptionMessage := "failed to pull non-existent-server.com:1234/policy-bundle:latest: " +
 		"download for 'non-existent-server.com:1234/policy-bundle:latest' " +
-		"failed: failed to resolve non-existent-server.com:1234/policy-bundle:latest: " +
+		"failed: failed to perform \"Resolve\" on source: " +
 		"failed to do request: Head \"https://non-existent-server.com:1234/v2/" +
 		"policy-bundle/manifests/latest\":"
 	for _, event := range downloadBundleSpan.Events {
@@ -474,7 +446,7 @@ func Test_OpaPolicyBundleDownload_Failure(t *testing.T) {
 			foundException = true
 			for _, eventAttribute := range event.Attributes {
 				if eventAttribute.Key == "exception.type" &&
-					eventAttribute.Value.AsString() == "*fmt.wrapError" {
+					eventAttribute.Value.AsString() == "*errors.joinError" {
 					foundExceptionType = true
 				}
 
@@ -516,15 +488,15 @@ func testOpaFilter(tracer trace.Tracer) (filter.HttpFilter, error) {
 	module := `
 		package ccr.policy
 
-		import future.keywords
+		import rego.v1
 
-		default on_request_headers = {
+		default on_request_headers := {
 			"allowed": false,
 			"http_status": 403,
 			"body": "RequestNotAllowed"
 		}
 
-		on_request_headers := response {
+		on_request_headers := response if {
 			is_inbound_request == true
 			some h1 in input.requestHeaders.headers.headers
 			h1.key == ":path"
@@ -547,9 +519,9 @@ func testOpaFilter(tracer trace.Tracer) (filter.HttpFilter, error) {
 			base64.decode(header.rawValue) == "inbound"
 		} else := false
 
-		default on_request_body = false
+		default on_request_body := false
 
-		on_request_body := response {
+		on_request_body := response if {
 			input.context.path == "/api/action1"
 			input.requestBody.body == "aW5wdXQgYm9keQ=="
 			response := {
@@ -558,11 +530,11 @@ func testOpaFilter(tracer trace.Tracer) (filter.HttpFilter, error) {
 			}
 		}
 
-		default on_response_headers = true
+		default on_response_headers := true
 
-		default on_response_body = true
+		default on_response_body := true
 
-		on_response_body := response {
+		on_response_body := response if {
 			input.context.path == "/api/action1"
 			input.responseBody.body == "aW5wdXQgYm9keQ=="
 			response := {

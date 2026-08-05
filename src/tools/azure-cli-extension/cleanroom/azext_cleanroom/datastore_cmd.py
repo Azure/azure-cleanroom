@@ -29,9 +29,9 @@ def datastore_add_cmd(
     from azure.cli.core.util import CLIError
 
     if backingstore_type in DataStoreEntry.StoreType.Aws_S3:
-        assert (
-            encryption_mode == DataStoreEntry.EncryptionMode.SSE
-        ), f"Only SSE is supported for AWS S3. Got: {encryption_mode}"
+        assert encryption_mode == DataStoreEntry.EncryptionMode.SSE, (
+            f"Only SSE is supported for AWS S3. Got: {encryption_mode}"
+        )
 
         # TODO: Enable support for CSE and CPK encryption modes for AWS S3
         if not aws_config_cgs_secret_id:
@@ -89,7 +89,9 @@ def datastore_add_cmd(
             assert (
                 secret_store.entry.secretStoreType
                 == SecretStoreEntry.SecretStoreType.Local_File
-            ), f"Unsupported secret store type passed {secret_store.entry.secretStoreType}."
+            ), (
+                f"Unsupported secret store type passed {secret_store.entry.secretStoreType}."
+            )
 
             def generate_key():
                 from Crypto.Random import get_random_bytes
@@ -198,9 +200,9 @@ def datastore_upload_cmd(
             encryption_key = SecretStoreConfiguration.get_secretstore(
                 datastore.secretstore_name, datastore.secretstore_config
             ).get_secret(datastore_name)
-            assert (
-                encryption_key is not None
-            ), f"Encryption key for datastore {datastore_name} is None."
+            assert encryption_key is not None, (
+                f"Encryption key for datastore {datastore_name} is None."
+            )
         azcopy(source_path, container_url, use_cpk, encryption_key)
 
 
@@ -230,7 +232,9 @@ def datastore_download_cmd(
         DataStoreEntry.StoreType.Azure_BlobStorage,
         DataStoreEntry.StoreType.Azure_BlobStorage_DataLakeGen2,
         DataStoreEntry.StoreType.Azure_OneLake,
-    ], f"Download is only supported for Azure Blob, Azure Blob Storage DataLakeGen2, or Azure Onelake Storage datastores. Datastore '{datastore_name}' has type '{datastore.storeType}'."
+    ], (
+        f"Download is only supported for Azure Blob, Azure Blob Storage DataLakeGen2, or Azure Onelake Storage datastores. Datastore '{datastore_name}' has type '{datastore.storeType}'."
+    )
 
     use_cpk = (
         True
@@ -242,9 +246,9 @@ def datastore_download_cmd(
         encryption_key = SecretStoreConfiguration.get_secretstore(
             datastore.secretstore_name, datastore.secretstore_config
         ).get_secret(datastore_name)
-        assert (
-            encryption_key is not None
-        ), f"Encryption key for datastore {datastore_name} is None."
+        assert encryption_key is not None, (
+            f"Encryption key for datastore {datastore_name} is None."
+        )
 
     if datastore.storeType == DataStoreEntry.StoreType.Azure_OneLake:
         source_url = container_url
@@ -272,7 +276,7 @@ def datastore_download_cmd(
         f"--auth-mode login {prefix_arg}--output json"
     )
 
-    if len(result) > 0:
+    if result:
         for entry in result:
             name = entry.get("name", "")
             content_length = entry.get("properties", {}).get("contentLength", 0)

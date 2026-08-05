@@ -1,0 +1,220 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cleanroom-csi-driver
+  namespace: kube-system
+  labels:
+    app: cleanroom-csi-driver
+spec:
+  selector:
+    matchLabels:
+      app: cleanroom-csi-driver
+  template:
+    metadata:
+      labels:
+        app: cleanroom-csi-driver
+    spec:
+      serviceAccountName: cleanroom-csi-driver
+      hostNetwork: true
+      hostPID: true
+      initContainers:
+        # Installs the blobfuse-proxy host service on the node.
+        # Copies the proxy binary, blobfuse2, and the encryptor plugin to the
+        # host at /opt/cleanroom/{bin,lib}/ and registers a systemd service unit
+        # so that blobfuse2 daemons run under system.slice (not the pod cgroup)
+        # and survive CSI driver pod restarts.
+        - name: install-blobfuse-proxy
+          image: ${REPO}/cleanroom-csi-driver:${TAG}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "/deploy/install-proxy.sh"]
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: host-bin-dir
+              mountPath: /opt/cleanroom/bin
+            - name: host-lib-dir
+              mountPath: /opt/cleanroom/lib
+            - name: host-systemd-dir
+              mountPath: /etc/systemd/system
+            - name: proxy-socket-dir
+              mountPath: /run/blobfuse-proxy
+            - name: host-run-systemd
+              mountPath: /run/systemd
+      containers:
+        # Handles volume mount/unmount requests from kubelet.
+        - name: csi-driver
+          image: ${REPO}/cleanroom-csi-driver:${TAG}
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--node-id=$(NODE_NAME)"
+            - "--endpoint=unix:///csi/csi.sock"
+            - "--staging-dir=/var/lib/csi/cleanroom/staging"
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+            - name: pods-mount-dir
+              mountPath: /var/lib/kubelet/pods
+              mountPropagation: Bidirectional
+            - name: staging-dir
+              mountPath: /var/lib/csi/cleanroom/staging
+              mountPropagation: Bidirectional
+            - name: fuse-device
+              mountPath: /dev/fuse
+            - name: proxy-socket-dir
+              mountPath: /run/blobfuse-proxy
+
+        - name: node-driver-registrar
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.12.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--csi-address=/csi/csi.sock"
+            - "--kubelet-registration-path=/var/lib/kubelet/plugins/cleanroom.csi.azure.com/csi.sock"
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+            - name: registration-dir
+              mountPath: /registration
+
+        # CCR Governance sidecar - OIDC token minting for federated credentials.
+        # Image is set by deploy script: ccr-governance-virtual (onebox) or
+        # ccr-governance (cvm, requires TPM + cvm-attestation-agent).
+        - name: ccr-governance
+          image: ${GOVERNANCE_IMAGE}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8300
+              name: governance
+          env:
+            - name: ccrgovEndpoint
+              value: "${CGS_ENDPOINT}"
+            # Fallback path prefix used by ccr-governance when callers do not
+            # send x-ms-ccr-governance-api-path-prefix per request.
+            - name: ccrgovApiPathPrefix
+              value: "app/contracts/${CONTRACT_ID}"
+            - name: serviceCert
+              value: "${SERVICE_CERT_BASE64}"
+          volumeMounts:
+            - name: uds
+              mountPath: /mnt/uds
+          readinessProbe:
+            tcpSocket:
+              port: 8300
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+        # Identity sidecar - token provider for Azure auth via federated credentials.
+        - name: identity-sidecar
+          image: ${REPO}/identity:${TAG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8290
+              name: identity
+          env:
+            - name: IdentitySideCarArgs
+              value: ""
+          readinessProbe:
+            tcpSocket:
+              port: 8290
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+        # Secrets sidecar - DEK unwrap orchestrator.
+        - name: secrets-sidecar
+          image: ${REPO}/ccr-secrets:${TAG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9300
+              name: secrets
+          env:
+            - name: IDENTITY_PORT
+              value: "8290"
+            - name: SKR_PORT
+              value: "8284"
+          readinessProbe:
+            tcpSocket:
+              port: 9300
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+        # SKR sidecar - Secure Key Release.
+        # Image is set by deploy script: local-skr (onebox) or skr (cvm).
+        - name: skr-sidecar
+          image: ${SKR_IMAGE}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8284
+              name: skr
+          env:
+            - name: Port
+              value: "8284"
+            - name: LogLevel
+              value: "Info"
+          readinessProbe:
+            tcpSocket:
+              port: 8284
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+        # OTEL collector for telemetry.
+        - name: otel-collector
+          image: ${REPO}/otel-collector:${TAG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4317
+              name: otel-grpc
+          env:
+            - name: TELEMETRY_COLLECTION_ENABLED
+              value: "true"
+            - name: TELEMETRY_PATH
+              value: "/tmp/telemetry"
+
+      volumes:
+        - name: plugin-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/cleanroom.csi.azure.com
+            type: DirectoryOrCreate
+        - name: pods-mount-dir
+          hostPath:
+            path: /var/lib/kubelet/pods
+            type: Directory
+        - name: staging-dir
+          hostPath:
+            path: /var/lib/csi/cleanroom/staging
+            type: DirectoryOrCreate
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry
+            type: Directory
+        - name: fuse-device
+          hostPath:
+            path: /dev/fuse
+            type: CharDevice
+        - name: uds
+          emptyDir: {}
+        - name: proxy-socket-dir
+          hostPath:
+            path: /run/blobfuse-proxy
+            type: DirectoryOrCreate
+        - name: host-bin-dir
+          hostPath:
+            path: /opt/cleanroom/bin
+            type: DirectoryOrCreate
+        - name: host-lib-dir
+          hostPath:
+            path: /opt/cleanroom/lib
+            type: DirectoryOrCreate
+        - name: host-systemd-dir
+          hostPath:
+            path: /etc/systemd/system
+            type: DirectoryOrCreate
+        - name: host-run-systemd
+          hostPath:
+            path: /run/systemd
+            type: Directory

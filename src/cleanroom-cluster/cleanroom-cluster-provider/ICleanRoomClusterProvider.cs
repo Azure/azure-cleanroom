@@ -51,7 +51,8 @@ public interface ICleanRoomClusterProvider
     public Task<CleanRoomClusterKubeConfig?> TryGetClusterKubeConfig(
         string clusterName,
         JsonObject? providerConfig,
-        KubeConfigAccessRole accessRole);
+        KubeConfigAccessRole accessRole,
+        bool @internal = false);
 
     public Task<CleanRoomClusterHealth?> TryGetClusterHealth(
         string clusterName,
@@ -78,4 +79,26 @@ public interface ICleanRoomClusterProvider
         GenerateKServeInferencingWorkloadDeployment(
         GenerateKServeInferencingWorkloadDeploymentInput input,
         JsonObject? providerConfig);
+
+    Task CreateFlexNode(
+        string clusterName,
+        string nodeName,
+        string providerID,
+        string policySigningCertPem,
+        JsonObject? providerConfig,
+        IProgress<string> progressReporter)
+    {
+        throw new NotSupportedException(
+            $"CreateFlexNode is not supported for infra type '{this.InfraType}'");
+    }
+
+    Task DeleteFlexNode(
+        string clusterName,
+        string nodeName,
+        JsonObject? providerConfig,
+        IProgress<string> progressReporter)
+    {
+        throw new NotSupportedException(
+            $"DeleteFlexNode is not supported for infra type '{this.InfraType}'.");
+    }
 }

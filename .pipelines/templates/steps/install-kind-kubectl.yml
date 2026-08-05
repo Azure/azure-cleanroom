@@ -1,0 +1,36 @@
+# Step template: install `kind` + `kubectl` on the agent (idempotent).
+# Migrated from the inline install steps repeated in Kind-based PR workflows
+# (pr_flex_node.yml, and the Kind path of the multi-party-collab scenarios).
+#
+# Pinned versions match the GitHub workflows: kind v0.27.0, kubectl v1.33.0.
+
+parameters:
+  - name: kindVersion
+    type: string
+    default: "v0.27.0"
+  - name: kubectlVersion
+    type: string
+    default: "v1.33.0"
+
+steps:
+  - bash: |
+      set -euo pipefail
+      if ! command -v kind &>/dev/null; then
+        echo "Installing kind ${{ parameters.kindVersion }}..."
+        curl -Lo ./kind https://kind.sigs.k8s.io/dl/${{ parameters.kindVersion }}/kind-linux-amd64
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
+      fi
+      kind version
+    displayName: Install kind
+
+  - bash: |
+      set -euo pipefail
+      if ! command -v kubectl &>/dev/null; then
+        echo "Installing kubectl ${{ parameters.kubectlVersion }}..."
+        curl -Lo ./kubectl "https://dl.k8s.io/release/${{ parameters.kubectlVersion }}/bin/linux/amd64/kubectl"
+        chmod +x ./kubectl
+        sudo mv ./kubectl /usr/local/bin/kubectl
+      fi
+      kubectl version --client
+    displayName: Install kubectl

@@ -19,7 +19,11 @@ internal class Startup : ApiStartup
 
     public override void OnConfigureServices(IServiceCollection services)
     {
-        services.AddSingleton<InferencingFrontendClientManager>();
+        services.AddSingleton(new FrontendClientConfig(
+            SettingName.InferencingFrontendEndpoint,
+            SettingName.InferencingFrontendSnpHostData,
+            "inferencing-frontend"));
+        services.AddSingleton<FrontendClientManager>();
         services.AddSingleton<GovernanceClientManager>();
         services.AddSingleton<ActiveUserChecker>();
     }

@@ -41,7 +41,7 @@ Collects attestation evidence from the local CVM hardware and returns it as JSON
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `reportData` | string | Yes | Base64-encoded 64-byte value to embed in the SNP report's `report_data` field. Eg. `SHA256(public_key_PEM_UTF8) \|\| 32_zero_bytes`. |
+| `reportData` | string | Yes | Base64-encoded 64-byte caller report data payload. The agent wraps this into a user data document and hashes the document into the SNP `report_data`. |
 | `nonce` | string | Yes | Base64-encoded nonce for the TPM quote's `extraData` field. Maximum 32 bytes. |
 | `pcrSelection` | int[] | No | List of PCR indices (0–23) to include in the quote. Defaults to all 24 PCRs if omitted. |
 
@@ -49,31 +49,45 @@ Collects attestation evidence from the local CVM hardware and returns it as JSON
 
 ```json
 {
-  "tpmQuote": "<base64>",
-  "hclReport": "<base64>",
-  "snpReport": "<base64>",
-  "aikCert": "<base64>",
-  "pcrs": {
-    "0": "<base64>",
-    "1": "<base64>",
-    "...": "..."
+  "vtpm": {
+    "evidence": {
+      "tpmQuote": "<base64>",
+      "hclReport": "<base64>",
+      "snpReport": "<base64>",
+      "aikCert": "<base64>",
+      "pcrs": { "0": "<base64>", "...": "..." },
+      "runtimeClaims": { "keys": [...], "vm-configuration": {...}, "user-data": "..." }
+    },
+    "nonce": "<base64>",
+    "platformCertificates": "<PEM>",
+    "imageReference": { "publisher": "...", "offer": "...", "sku": "...", "version": "..." }
   },
-  "runtimeClaims": {
-    "keys": [ ... ],
-    "vm-configuration": { ... },
-    "user-data": "..."
-  }
+  "gpu": {
+    "evidences": [{
+      "evidence": "<base64>",
+      "certificate": "<base64>",
+      "arch": "...",
+      "nonce": "..."
+    }]
+  },
+  "userDataDocument": "<base64>"
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `tpmQuote` | string | Base64-encoded TPM quote blob (TPMS_ATTEST + TPMT_SIGNATURE). |
-| `hclReport` | string | Base64-encoded HCL report blob from vTPM NVRAM. |
-| `snpReport` | string | Base64-encoded 1184-byte AMD SNP attestation report. |
-| `aikCert` | string | Base64-encoded AIK x.509 certificate (DER). |
-| `pcrs` | object | SHA256 PCR values as `{ "index": "<base64 digest>", ... }`, keys sorted numerically. |
-| `runtimeClaims` | object | Parsed runtime claims extracted from the HCL report. Contains `keys` (JWK array with HCLAkPub and HCLEkPub), `vm-configuration`, and `user-data`. |
+| `vtpm` | object | vTPM/SNP attestation evidence, nonce, platform certificates, and VM image reference. |
+| `vtpm.evidence.tpmQuote` | string | Base64-encoded TPM quote blob (TPMS_ATTEST + TPMT_SIGNATURE). |
+| `vtpm.evidence.hclReport` | string | Base64-encoded HCL report blob from vTPM NVRAM. |
+| `vtpm.evidence.snpReport` | string | Base64-encoded 1184-byte AMD SNP attestation report. |
+| `vtpm.evidence.aikCert` | string | Base64-encoded AIK x.509 certificate (DER). |
+| `vtpm.evidence.pcrs` | object | SHA256 PCR values as `{ "index": "<base64 digest>", ... }`, keys sorted numerically. |
+| `vtpm.evidence.runtimeClaims` | object | Parsed runtime claims from the HCL report. Contains `keys`, `vm-configuration`, and `user-data`. |
+| `vtpm.platformCertificates` | string | PEM-encoded AMD cert chain (ARK, ASK, VCEK) from THIM. |
+| `vtpm.imageReference` | object | VM image reference (publisher, offer, SKU, version) from IMDS. |
+| `gpu` | object? | GPU attestation evidence, present only when `/dev/nvidia*` devices are detected. |
+| `gpu.evidences` | array | One entry per GPU with SPDM report, certificate chain, architecture, and nonce. |
+| `userDataDocument` | string | Base64-encoded canonical JSON user data document whose SHA-256 hash is bound to the runtime claims `user-data[0:32]`. |
 
 #### Error Response
 
@@ -96,4 +110,5 @@ Collects attestation evidence from the local CVM hardware and returns it as JSON
 | `InvalidNonce` | 400 | `nonce` is not valid base64. |
 | `InvalidNonceSize` | 400 | `nonce` exceeds 32 bytes. |
 | `InvalidPCRSelection` | 400 | `pcrSelection` contains values outside 0–23. |
-| `AttestationFailed` | 500 | Failed to collect attestation evidence from hardware. |
+| `AttestationFailed` | 500 | Failed to collect attestation evidence or prepare report_data. |
+| `GpuAttestationFailed` | 500 | GPU count detection or GPU evidence collection failed. |

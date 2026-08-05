@@ -10,7 +10,6 @@ if TYPE_CHECKING:
 
 
 class ConstraintEnforcer(ABC):
-
     @property
     @abstractmethod
     def name(self) -> str:

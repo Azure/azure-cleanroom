@@ -93,6 +93,7 @@ class InferenceServiceConverter(InferenceServiceConverterBase):
             config.applications.inferencing.namespace,
         )
         self._sku_settings = config.applications.inferencing.kserve
+        self._inferencing_settings = config.applications.inferencing
 
     def to_inference_svc_spec(
         self,
@@ -104,13 +105,12 @@ class InferenceServiceConverter(InferenceServiceConverterBase):
             job_id,
             job,
             sku_settings=self._sku_settings,
-            policy_file="",
-            debug_mode=True,
-            allow_all=True,
+            policy_file=self._inferencing_settings.policy_file,
+            debug_mode=self._inferencing_settings.debug_mode,
+            allow_all=self._inferencing_settings.allow_all,
             telemetry_settings=telemetry_settings,
         )
 
 
 def get(config: Configuration) -> InferenceServiceConverter:
-    return InferenceServiceConverter(config)
     return InferenceServiceConverter(config)

@@ -16,7 +16,7 @@ Deploy api-server-proxy to a kind cluster:
 # This generates signing keys locally via policy-signing-tool.sh
 make deploy-kind
 
-# Run pod policy verification tests
+# Run pod policy verification and flexnode networking tests
 make test-kind
 
 # Tear down cluster
@@ -39,11 +39,14 @@ make deploy-aks
 
 # Run pod policy verification tests
 make test-aks
+
+# Tear down cluster
+make teardown-aks
 ```
 
 The AKS deployment:
 - Creates an AAD-enabled AKS cluster (no Azure RBAC)
-- Deploys an Ubuntu 22.04 Confidential VM (Standard_DC4as_v5) with vTPM and secure boot
+- Deploys an Ubuntu 24.04 Confidential VM (Standard_DC2as_v5) with vTPM and secure boot
 - Creates a single managed identity (kubelet-identity) with Owner role on the AKS cluster
 - Sets up Kubernetes RBAC (system:node-bootstrapper, system:node) for the managed identity
 - Joins the VM to the AKS cluster as a flex node using [AKS Flex Node](https://github.com/Azure/AKSFlexNode) v0.0.10
@@ -51,6 +54,28 @@ The AKS deployment:
 - Installs api-server-proxy with pod policy verification enabled
 - Adds a taint `pod-policy=required:NoSchedule` to the node for policy-required workloads
 - Signs and deploys test pods using `policy-signing-tool.sh`
+
+### AKS Flex Node Networking Tests
+
+`test-flexnode-networking.sh` validates the CNI bridge networking on the flex node:
+
+```bash
+# Run networking tests (included in make test-aks)
+./scripts/aks/test-flexnode-networking.sh
+```
+
+Tests:
+- **maxPods enforcement** — Deploys more pods than the kubelet `maxPods` limit and
+  verifies that excess pods are rejected with `FailedScheduling` (nodeSelector) or
+  `OutOfpods` (nodeName).
+- **CNI IP exhaustion** — Deploys a limited bridge config with only 4 pod IPs and
+  schedules 5 pods to verify that the 5th fails with "no IP addresses available".
+- **Host default outbound IP** — Starts a Python HTTP server on the flex node that
+  reports which local IP the kernel selects for outbound traffic (verifies the
+  primary NIC IP is used even when NIC has secondary Ips).
+
+See [flexnode-networking.md](../../cleanroom-cluster/docs/flexnode-networking.md)
+for details on the networking architecture.
 
 ### Architecture
 
@@ -107,6 +132,30 @@ This approach:
 - **TLS Support**: Full TLS support for secure communication
 - **Graceful Shutdown**: Handles signals for clean shutdown
 
+### Kubelet Port Rewriting
+
+When deployed alongside the [kubelet-proxy](../kubelet-proxy/), the api-server-proxy
+can rewrite the kubelet's advertised port in node status updates. This ensures the
+API server connects to the kubelet-proxy (e.g., port 10250) instead of the kubelet's
+actual port (e.g., 10251), eliminating the need for iptables redirect rules.
+
+Enable with `--rewrite-kubelet-port --kubelet-proxy-port 10250`. When enabled, the
+proxy intercepts `PATCH /api/v1/nodes/<name>/status` requests and unconditionally
+sets `status.daemonEndpoints.kubeletEndpoint.Port` to the kubelet-proxy port before
+forwarding to the API server.
+
+```
+┌──────────────┐          ┌──────────────────┐          ┌─────────────┐
+│  API Server  │ ←──────→ │ api-server-proxy  │ ←──────→ │   Kubelet   │
+└──────────────┘          │  (port rewrite)   │          └─────────────┘
+       │                  └──────────────────┘
+       │                         ↑
+       │              kubelet reports port 10251
+       │              proxy rewrites to 10250
+       │
+       └──── connects to kubelet-proxy on port 10250
+```
+
 ### Usage
 
 ```bash
@@ -116,6 +165,8 @@ This approach:
   --tls-cert /path/to/server.crt \
   --tls-key /path/to/server.key \
   --policy-verification-cert /path/to/signing-cert.pem \
+  --rewrite-kubelet-port \
+  --kubelet-proxy-port 10250 \
   --log-requests
 ```
 
@@ -137,6 +188,9 @@ On the node, configure the kubelet to connect to api-server-proxy instead of the
 | `--tls-cert` | | Path to TLS certificate for serving |
 | `--tls-key` | | Path to TLS key for serving |
 | `--policy-verification-cert` | | Path to certificate for pod policy verification |
+| `--rewrite-kubelet-port` | `false` | Enable rewriting of kubelet port in node status updates |
+| `--kubelet-proxy-port` | | Port the kubelet-proxy listens on (required when `--rewrite-kubelet-port` is set) |
+| `--insecure` | `false` | Bypass pod policy verification (WARNING: insecure) |
 | `--log-requests` | `true` | Log all proxied requests |
 | `--log-pod-payloads` | `false` | Log full pod JSON payloads |
 

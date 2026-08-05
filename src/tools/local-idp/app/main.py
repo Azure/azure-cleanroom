@@ -2,15 +2,17 @@
 import base64
 import datetime
 import hashlib
+import os
 import time
 import uuid
+from pathlib import Path
 from typing import Tuple
 
 import jwt
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import ec, ed25519, padding, rsa, x25519
+from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
     NoEncryption,
@@ -19,9 +21,10 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_private_key,
     load_pem_public_key,
 )
-from cryptography.x509 import load_der_x509_certificate, load_pem_x509_certificate
+from cryptography.x509 import load_pem_x509_certificate
 from cryptography.x509.oid import NameOID
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
@@ -34,6 +37,38 @@ app.signing_kid = uuid.UUID(int=0)
 app.issuer_url = "http://localhost:8321/oidc"
 
 
+def cert_pem_to_der(pem: str) -> bytes:
+    cert = load_pem_x509_certificate(pem.encode("ascii"), default_backend())
+    return cert.public_bytes(Encoding.DER)
+
+
+def _load_preexisting_keys():
+    """Load signing keys from disk if they exist (mounted via Secret volume)."""
+    keys_dir = Path(os.environ.get("LOCAL_IDP_KEYS_DIR", "/keys"))
+    privk_path = keys_dir / "signing-privk.pem"
+    if not privk_path.exists():
+        return
+
+    pubk_path = keys_dir / "signing-pubk.pem"
+    cert_path = keys_dir / "signing-cert.pem"
+    kid_path = keys_dir / "signing-kid"
+
+    if not pubk_path.exists() or not cert_path.exists() or not kid_path.exists():
+        return
+
+    app.signing_priv_pem = privk_path.read_text()
+    app.signing_pub_pem = pubk_path.read_text()
+    app.signing_cert = cert_path.read_text()
+    app.signing_x5c = base64.b64encode(cert_pem_to_der(app.signing_cert)).decode(
+        "ascii"
+    )
+    kid_hex = kid_path.read_text().strip()
+    app.signing_kid = uuid.UUID(kid_hex)
+
+
+_load_preexisting_keys()
+
+
 @app.get("/ready")
 async def root():
     return {"status": "up"}
@@ -41,6 +76,15 @@ async def root():
 
 @app.post("/generatesigningkey")
 async def generateSigingKey():
+    # If keys were pre-loaded from disk, return them instead of generating new
+    # ones. This makes the endpoint idempotent across cluster recreation.
+    if app.signing_pub_pem is not None:
+        return {
+            "kid": app.signing_kid.hex,
+            "pem": app.signing_cert,
+            "x5c": app.signing_x5c,
+        }
+
     app.signing_priv_pem, app.signing_pub_pem = generate_rsa_keypair(2048)
     app.signing_cert = generate_cert(app.signing_priv_pem, cn="local-idp")
     app.signing_x5c = base64.b64encode(cert_pem_to_der(app.signing_cert)).decode(
@@ -48,6 +92,21 @@ async def generateSigingKey():
     )
     app.signing_kid = uuid.uuid4()
     return {"kid": app.signing_kid.hex, "pem": app.signing_cert, "x5c": app.signing_x5c}
+
+
+@app.get("/exportkeys")
+async def exportKeys():
+    """Export full key material including private key for backup/restore."""
+    if app.signing_pub_pem is None:
+        return Response(status_code=204)
+
+    return {
+        "kid": app.signing_kid.hex,
+        "privk_pem": app.signing_priv_pem,
+        "pubk_pem": app.signing_pub_pem,
+        "cert_pem": app.signing_cert,
+        "x5c": app.signing_x5c,
+    }
 
 
 @app.get("/getsigningkey")
@@ -261,8 +320,3 @@ def generate_cert(
     cert = builder.sign(issuer_priv, hashes.SHA256(), default_backend())
 
     return cert.public_bytes(Encoding.PEM).decode("ascii")
-
-
-def cert_pem_to_der(pem: str) -> bytes:
-    cert = load_pem_x509_certificate(pem.encode("ascii"), default_backend())
-    return cert.public_bytes(Encoding.DER)

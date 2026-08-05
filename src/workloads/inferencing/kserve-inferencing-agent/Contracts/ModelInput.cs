@@ -10,7 +10,7 @@ namespace Controllers;
 public record ModelInput(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("predictor")] PredictorSpec Predictor,
-    [property: JsonPropertyName("modelId")] string? ModelId = null,
+    [property: JsonPropertyName("modelId")] string ModelId,
     [property: JsonPropertyName("placement")] PlacementSpec? Placement = null);
 
 // Platform placement — triggers pod-policy injection by the frontend.
@@ -27,7 +27,8 @@ public record PredictorSpec(
     [property: JsonPropertyName("deploymentStrategy")]
     DeploymentStrategySpec? DeploymentStrategy = null,
     [property: JsonPropertyName("scaleMetricType")] string? ScaleMetricType = null,
-    [property: JsonPropertyName("autoScaling")] AutoScalingSpec? AutoScaling = null);
+    [property: JsonPropertyName("autoScaling")] AutoScalingSpec? AutoScaling = null,
+    [property: JsonPropertyName("affinity")] Dictionary<string, object>? Affinity = null);
 
 // KServe autoscaling spec (v0.17+, backed by HPA or KEDA).
 public record AutoScalingSpec(
@@ -49,9 +50,9 @@ public record AutoScalingMetricSpec(
 // KServe model spec.
 public record ModelSpec(
     [property: JsonPropertyName("modelFormat")] ModelFormat ModelFormat,
+    [property: JsonPropertyName("runtime")] string Runtime,
     [property: JsonPropertyName("storageUri")] string? StorageUri = null,
     [property: JsonPropertyName("protocolVersion")] string? ProtocolVersion = null,
-    [property: JsonPropertyName("runtime")] string? Runtime = null,
     [property: JsonPropertyName("args")] List<string>? Args = null,
     [property: JsonPropertyName("resources")] ResourceRequirementsSpec? Resources = null,
     [property: JsonPropertyName("env")] List<EnvVarSpec>? Env = null,

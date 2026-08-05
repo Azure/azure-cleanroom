@@ -2,7 +2,6 @@ import base64
 import json
 import logging
 import os
-from doctest import debug
 from string import Template
 from typing import List
 from urllib.parse import urlparse
@@ -51,6 +50,15 @@ class Sidecar:
         self.template_json = template_json
         self.policy_json = policy_json
         self.policy_rego = policy_rego
+
+    def get_policy_command(self):
+        """Get the command list from policy_json, handling both formats."""
+        if (
+            "properties" in self.policy_json
+            and "command" in self.policy_json["properties"]
+        ):
+            return self.policy_json["properties"]["command"]
+        return self.policy_json["command"]
 
 
 def get_sidecar(
@@ -102,6 +110,7 @@ sidecar_replacement_vars = {
         "tempoEndpoint": "",
         "sparkMetricsEndpoint": "",
         "resourceAttributes": "",
+        "prometheusScrapeTargets": "",
     },
     "ccr-governance": lambda ccf_endpoint, contract_id, service_cert_base64, telemetry_mount_path: {
         "cgsEndpoint": ccf_endpoint,
@@ -124,8 +133,8 @@ sidecar_replacement_vars = {
         "port": port,
         "telemetryMountPath": telemetry_mount_path,
     },
-    "identity": lambda identities, subject, audience, telemetry_mount_path: get_identity_sidecar(
-        identities, subject, audience, telemetry_mount_path
+    "identity": lambda identities, subject, audience, telemetry_mount_path: (
+        get_identity_sidecar(identities, subject, audience, telemetry_mount_path)
     ),
 }
 
@@ -152,9 +161,7 @@ def get_network_sidecars(
                         spec.network.http.inbound.policy.privacyPolicy.policy,
                         ExternalPolicy,
                     ), "Privacy policy must be of type ExternalPolicy."
-                    policy_bundle_url = (
-                        spec.network.http.inbound.policy.privacyPolicy.policy.backingResource.provider.url
-                    )
+                    policy_bundle_url = spec.network.http.inbound.policy.privacyPolicy.policy.backingResource.provider.url
                 else:
                     allow_all = True
 
@@ -183,9 +190,7 @@ def get_network_sidecars(
                         spec.network.http.outbound.policy.privacyPolicy.policy,
                         ExternalPolicy,
                     ), "Privacy policy must be of type ExternalPolicy."
-                    policy_bundle_url = (
-                        spec.network.http.outbound.policy.privacyPolicy.policy.backingResource.provider.url
-                    )
+                    policy_bundle_url = spec.network.http.outbound.policy.privacyPolicy.policy.backingResource.provider.url
                 else:
                     allow_all = True
                 sidecars.append(
@@ -247,7 +252,7 @@ def get_ccr_init(
 
     ccr_init.template_json["properties"]["command"].extend(ccr_init_cmd)
 
-    ccr_init.policy_json["properties"]["command"].extend(ccr_init_cmd)
+    ccr_init.get_policy_command().extend(ccr_init_cmd)
 
     # Check for command key presence before extending as the policy_rego might not be generated if
     # the policy document was created without pre-computed rego-policy.
@@ -412,7 +417,7 @@ def get_code_launcher(
                 {"port": f"{port}", "protocol": "TCP"}
             )
 
-    code_launcher_sidecar.policy_json["properties"]["command"].extend(code_launcher_cmd)
+    code_launcher_sidecar.get_policy_command().extend(code_launcher_cmd)
 
     # Check for command key presence before extending as the policy_rego might not be generated if
     # the policy document was created without pre-computed rego-policy.
@@ -449,6 +454,7 @@ def get_identity_sidecar(
                             "IdTokenEndpoint": "http://localhost:8300",
                             "Subject": f"{subject}",
                             "Audience": f"{audience}",
+                            "GovernanceApiPathPrefix": f"app/contracts/{subject}",
                         },
                     },
                 }
@@ -479,16 +485,16 @@ def get_blobfuse_sidecar(
     dek_secret_name = ""
     dek_vault_url = ""
     if encryption_mode in ["CPK", "CSE"]:
-        assert (
-            access_point.protection.encryptionSecrets
-        ), f"Encryption secrets is null for {access_name}."
+        assert access_point.protection.encryptionSecrets, (
+            f"Encryption secrets is null for {access_name}."
+        )
         kek_entry = access_point.protection.encryptionSecrets.kek
         dek_entry = access_point.protection.encryptionSecrets.dek
 
         kek_kv_url = urlparse(kek_entry.secret.backingResource.provider.url).hostname
-        assert (
-            kek_entry.secret.backingResource.provider.configuration
-        ), f"KEK configuration is null for {access_name}."
+        assert kek_entry.secret.backingResource.provider.configuration, (
+            f"KEK configuration is null for {access_name}."
+        )
         maa_url = urlparse(
             json.loads(
                 base64.b64decode(
@@ -564,11 +570,244 @@ def get_blobfuse_sidecar(
     blobfuse_sidecar.template_json["properties"]["command"].extend(
         blobfuse_launcher_cmd
     )
-    blobfuse_sidecar.policy_json["properties"]["command"].extend(blobfuse_launcher_cmd)
+    blobfuse_sidecar.get_policy_command().extend(blobfuse_launcher_cmd)
     if "command" in blobfuse_sidecar.policy_rego:
         blobfuse_sidecar.policy_rego["command"].extend(blobfuse_launcher_cmd)
 
     return blobfuse_sidecar
+
+
+def get_csi_volume(
+    access_point: AccessPoint,
+    mount_path,
+    encryption_mode,
+    access_name,
+    subject,
+):
+    """Build CSI volumeAttributes dict from AccessPoint, mirroring get_blobfuse_sidecar() args."""
+    kek_kv_url = ""
+    maa_url = ""
+    kek_kid = ""
+    dek_secret_name = ""
+    dek_vault_url = ""
+    if encryption_mode in ["CPK", "CSE"]:
+        assert access_point.protection.encryptionSecrets, (
+            f"Encryption secrets is null for {access_name}."
+        )
+        kek_entry = access_point.protection.encryptionSecrets.kek
+        dek_entry = access_point.protection.encryptionSecrets.dek
+
+        kek_kv_url = f"https://{urlparse(kek_entry.secret.backingResource.provider.url).hostname}"
+        assert kek_entry.secret.backingResource.provider.configuration, (
+            f"KEK configuration is null for {access_name}."
+        )
+        maa_url = f"https://{urlparse(json.loads(base64.b64decode(kek_entry.secret.backingResource.provider.configuration).decode())['authority']).hostname}"
+        kek_kid = kek_entry.secret.backingResource.name
+        dek_secret_name = dek_entry.secret.backingResource.name
+        dek_vault_url = dek_entry.secret.backingResource.provider.url
+
+    storage_account_name = urlparse(access_point.store.provider.url).hostname.split(
+        "."
+    )[0]
+    subdirectory = access_point.subdirectory or ""
+    storage_blob_endpoint = access_point.store.provider.url
+    storage_container_name = access_point.store.name
+    use_adls = access_point.store.provider.protocol in [
+        ProtocolType.Azure_OneLake,
+        ProtocolType.Azure_BlobStorage_DataLakeGen2,
+    ]
+
+    if access_point.store.provider.protocol == ProtocolType.Azure_OneLake:
+        storage_account_name = "onelake"
+        parsed_onelake_url = urlparse(access_point.store.provider.url)
+        storage_blob_endpoint = parsed_onelake_url.hostname
+        storage_container_name = parsed_onelake_url.path.split("/")[1]
+        if not subdirectory:
+            subdirectory = "/".join(parsed_onelake_url.path.split("/")[2:])
+
+    read_only = access_point.type == AccessPointType.Volume_ReadOnly
+
+    volume_attributes = {
+        "storageAccount": storage_account_name,
+        "storageContainer": storage_container_name,
+        "storageBlobEndpoint": storage_blob_endpoint,
+        "clientId": access_point.identity.clientId,
+        "tenantId": access_point.identity.tenantId,
+        "subject": subject,
+        "contractId": subject,
+        "encryptionMode": encryption_mode,
+        "accessName": access_name,
+    }
+
+    if kek_kid:
+        volume_attributes["kid"] = kek_kid
+    if kek_kv_url:
+        volume_attributes["akvEndpoint"] = kek_kv_url
+    if dek_secret_name:
+        volume_attributes["wrappedDekSecret"] = dek_secret_name
+    if dek_vault_url:
+        volume_attributes["wrappedDekAkvEndpoint"] = dek_vault_url
+    if maa_url:
+        volume_attributes["maaEndpoint"] = maa_url
+    if use_adls:
+        volume_attributes["useAdls"] = "true"
+    if subdirectory:
+        volume_attributes["subDirectory"] = subdirectory
+
+    return {
+        "name": f"csi-{access_name}",
+        "csi": {
+            "driver": "cleanroom.csi.azure.com",
+            "readOnly": read_only,
+            "volumeAttributes": volume_attributes,
+        },
+    }
+
+
+def get_blobfuse_proxy_sidecar(
+    access_points: list,
+    subject: str,
+) -> "Sidecar":
+    """Build a blobfuse-proxy sidecar for CACI standalone (mount-all) mode.
+
+    Instead of one blobfuse-launcher per access point, a single blobfuse-proxy
+    container runs in mount-all mode and mounts all volumes via FUSE. Mount
+    requests are passed via the BLOBFUSE_MOUNTS_JSON environment variable
+    (base64-encoded JSON array of MountRequest). CSE two-stage mounts are
+    handled internally by the proxy's doCSETwoStage() function.
+
+    Args:
+        access_points: list of (access_point, encryption_mode, access_name) tuples.
+        subject: the contract-id used as the identity subject for token exchange.
+    """
+    mounts = []
+    for access_point, encryption_mode, access_name in access_points:
+        kek_kid = ""
+        akv_endpoint = ""
+        maa_endpoint = ""
+        wrapped_dek_secret = ""
+        wrapped_dek_akv_endpoint = ""
+
+        if encryption_mode in ["CPK", "CSE"]:
+            assert access_point.protection.encryptionSecrets, (
+                f"Encryption secrets is null for {access_name}."
+            )
+            kek_entry = access_point.protection.encryptionSecrets.kek
+            dek_entry = access_point.protection.encryptionSecrets.dek
+
+            akv_endpoint = f"https://{urlparse(kek_entry.secret.backingResource.provider.url).hostname}"
+            assert kek_entry.secret.backingResource.provider.configuration, (
+                f"KEK configuration is null for {access_name}."
+            )
+            maa_endpoint = f"https://{urlparse(json.loads(base64.b64decode(kek_entry.secret.backingResource.provider.configuration).decode())['authority']).hostname}"
+            kek_kid = kek_entry.secret.backingResource.name
+            wrapped_dek_secret = dek_entry.secret.backingResource.name
+            wrapped_dek_akv_endpoint = dek_entry.secret.backingResource.provider.url
+
+        storage_account_name = urlparse(access_point.store.provider.url).hostname.split(
+            "."
+        )[0]
+        subdirectory = access_point.subdirectory or ""
+        storage_blob_endpoint = access_point.store.provider.url
+        storage_container_name = access_point.store.name
+        use_adls = access_point.store.provider.protocol in [
+            ProtocolType.Azure_OneLake,
+            ProtocolType.Azure_BlobStorage_DataLakeGen2,
+        ]
+
+        if access_point.store.provider.protocol == ProtocolType.Azure_OneLake:
+            storage_account_name = "onelake"
+            parsed_onelake_url = urlparse(access_point.store.provider.url)
+            storage_blob_endpoint = parsed_onelake_url.hostname
+            storage_container_name = parsed_onelake_url.path.split("/")[1]
+            if not subdirectory:
+                subdirectory = "/".join(parsed_onelake_url.path.split("/")[2:])
+
+        mount_req = {
+            "op": "mount",
+            "mountPath": f"/mnt/remote/{access_name}",
+            "encryptionMode": encryption_mode,
+            "encrypted": False,
+            "readOnly": access_point.type == AccessPointType.Volume_ReadOnly,
+            "subDirectory": subdirectory,
+            "useAdls": use_adls,
+            "cpkEnabled": False,
+            "disableWriteback": False,
+            "blockSizeMB": 0,
+            "telemetryPath": TELEMETRY_MOUNT_PATH,
+            "env": {
+                "AZURE_STORAGE_ACCOUNT": storage_account_name,
+                "AZURE_STORAGE_ACCOUNT_CONTAINER": storage_container_name,
+                "AZURE_STORAGE_BLOB_ENDPOINT": storage_blob_endpoint,
+            },
+            "identityClientId": access_point.identity.clientId,
+            "identityTenantId": access_point.identity.tenantId,
+            "identitySubject": subject,
+            "contractId": subject,
+        }
+
+        if kek_kid:
+            mount_req["kid"] = kek_kid
+        if akv_endpoint:
+            mount_req["akvEndpoint"] = akv_endpoint
+        if maa_endpoint:
+            mount_req["maaEndpoint"] = maa_endpoint
+        if wrapped_dek_secret:
+            mount_req["wrappedDekSecret"] = wrapped_dek_secret
+        if wrapped_dek_akv_endpoint:
+            mount_req["wrappedDekAkvEndpoint"] = wrapped_dek_akv_endpoint
+
+        mounts.append(mount_req)
+
+    mounts_json_b64 = base64.b64encode(json.dumps(mounts).encode()).decode()
+
+    # Derive the tag from the sidecars versions document URL, which is set to
+    # "{repo}/sidecar-digests:{tag}" by the test/build scripts. This mirrors
+    # how deploy-csi-daemonset.ps1 uses ${REPO}/${TAG} for the same image.
+    versions_url = os.environ.get(
+        "AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL",
+        DEFAULT_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL,
+    )
+    csi_driver_tag = versions_url.rsplit(":", 1)[-1]
+    image = f"{get_containers_registry_url()}/cleanroom-csi-driver:{csi_driver_tag}"
+    template_json = {
+        "name": "blobfuse-proxy",
+        "properties": {
+            "image": image,
+            "command": ["/app/blobfuse-proxy", "mount-all"],
+            "environmentVariables": [
+                {"name": "BLOBFUSE_MOUNTS_JSON", "value": mounts_json_b64},
+                {"name": "BLOBFUSE2_BINARY", "value": "/usr/local/bin/blobfuse2"},
+            ],
+            "resources": {"requests": {"cpu": 0.5, "memoryInGB": 0.5}},
+            "securityContext": {"privileged": True},
+            "volumeMounts": [
+                {"name": "remotemounts", "mountPath": "/mnt/remote"},
+                {"name": "telemetrymounts", "mountPath": TELEMETRY_MOUNT_PATH},
+                {
+                    "name": "volumestatusmounts",
+                    "mountPath": VOLUMESTATUS_MOUNT_PATH,
+                },
+            ],
+        },
+    }
+
+    # Minimal policy stubs — replaced by allow-all blanket rego in local tests.
+    # WARNING: This is a development stub only. For production CCE policy generation,
+    # replace with a proper policy document fetched from the sidecar-digests registry.
+    # The empty environmentVariables list here will not match the actual runtime
+    # environment, causing policy validation to fail in a real CCE deployment.
+    policy_json = {
+        "name": "blobfuse-proxy",
+        "properties": {
+            "image": image,
+            "command": ["/app/blobfuse-proxy", "mount-all"],
+            "environmentVariables": [],
+        },
+    }
+    policy_rego = {}
+
+    return Sidecar(template_json, policy_json, policy_rego)
 
 
 def get_rego_policy(container_policy_rego: list) -> str:
@@ -589,7 +828,14 @@ def get_deployment_template(
     sslServerCertBase64: str,
     generate_mode: str,
     logger: logging.Logger,
+    use_csi_driver: bool = False,
+    use_blobfuse_proxy_sidecar: bool = False,
 ):
+    if use_csi_driver and use_blobfuse_proxy_sidecar:
+        raise ValueError(
+            "use_csi_driver and use_blobfuse_proxy_sidecar are mutually exclusive: "
+            "choose one storage-mount mode"
+        )
     debug_mode = generate_mode == "cached-debug"
     allow_all = generate_mode == "allow-all"
     sidecars: list[Sidecar] = []
@@ -603,8 +849,65 @@ def get_deployment_template(
 
     for application in cleanroom_spec.applications:
         code_launcher = get_code_launcher(application, debug_mode, logger)
+
+        if use_csi_driver:
+            # Tell code-launcher to use CSI mount paths directly instead
+            # of waiting for blobfuse volume status markers.
+            code_launcher.template_json["properties"]["environmentVariables"].append(
+                {"name": "CLEANROOM_CSI_MODE", "value": "true"}
+            )
+
+            # In CSI mode, identity and secrets sidecars for storage
+            # run in the DaemonSet. Disable secrets port wait.
+            # Identity sidecar stays per-pod for ACR image pulls.
+            code_launcher.template_json["properties"]["command"].extend(
+                ["--secrets_port", "0"]
+            )
+
+            # Add CSI volume mounts for each datasource/datasink so the
+            # code-launcher container can see the CSI-mounted data.
+            # Mount path uses access name to match mountpoint_utilities.get_mount_path().
+            csi_volume_mounts = []
+            mounted_names = set()
+            if application.datasources:
+                for ds_name in application.datasources.keys():
+                    csi_volume_mounts.append(
+                        {
+                            "name": f"csi-{ds_name}",
+                            "mountPath": f"/mnt/remote/{ds_name}",
+                        }
+                    )
+                    mounted_names.add(ds_name)
+            if application.datasinks:
+                for ds_name in application.datasinks.keys():
+                    csi_volume_mounts.append(
+                        {
+                            "name": f"csi-{ds_name}",
+                            "mountPath": f"/mnt/remote/{ds_name}",
+                        }
+                    )
+                    mounted_names.add(ds_name)
+
+            # Telemetry datasinks (application-telemetry,
+            # infrastructure-telemetry) are in cleanroom_spec.datasinks
+            # but not in application.datasinks. Mount them too so
+            # code-launcher can copy telemetry data to storage.
+            for ds in cleanroom_spec.datasinks:
+                if ds.name not in mounted_names:
+                    csi_volume_mounts.append(
+                        {
+                            "name": f"csi-{ds.name}",
+                            "mountPath": f"/mnt/remote/{ds.name}",
+                        }
+                    )
+
+            code_launcher.template_json["properties"]["volumeMounts"].extend(
+                csi_volume_mounts
+            )
+
         sidecars.append(code_launcher)
 
+    # Identity sidecar is always per-pod (needed for ACR image pulls).
     sidecars.append(
         get_sidecar(
             "identity",
@@ -652,9 +955,9 @@ def get_deployment_template(
 
     # Adding the tag with the value of the contract id.
     arm_template["resources"][0]["tags"]["accr-contract-id"] = contract_id
-    arm_template["resources"][0]["tags"][
-        "accr-version"
-    ] = DEFAULT_CLEANROOM_CONTAINER_VERSION
+    arm_template["resources"][0]["tags"]["accr-version"] = (
+        DEFAULT_CLEANROOM_CONTAINER_VERSION
+    )
 
     if (
         cleanroom_spec.network
@@ -671,38 +974,70 @@ def get_deployment_template(
             "Inbound traffic is not enabled. Not adding any application ports to the deployment template."
         )
 
+    blobfuse_proxy_access_points = []
     for access_point in cleanroom_spec.datasources + cleanroom_spec.datasinks:
-        assert (
-            access_point.protection.configuration
-        ), f"Protection configuration is null for {access_point.name}."
+        assert access_point.protection.configuration, (
+            f"Protection configuration is null for {access_point.name}."
+        )
 
         encryption_config = json.loads(
             base64.b64decode(access_point.protection.configuration).decode()
         )
         encryption_mode = encryption_config["EncryptionMode"]
-        if encryption_mode == "CSE":
+
+        if use_csi_driver:
+            # CSI mode: create inline CSI volume definitions instead of
+            # blobfuse-launcher sidecar containers. The CSI DaemonSet
+            # handles the actual blobfuse2 mount on NodePublishVolume.
+            # For CSE, the CSI driver internally creates both the SSE plain
+            # mount and the CSE encrypted mount — no separate -plain volume needed.
+            arm_template["resources"][0]["properties"]["volumes"].append(
+                get_csi_volume(
+                    access_point,
+                    "/mnt/remote",
+                    encryption_mode,
+                    access_point.name,
+                    contract_id,
+                )
+            )
+        elif use_blobfuse_proxy_sidecar:
+            # blobfuse-proxy mount-all mode: collect access points to be mounted by
+            # a single blobfuse-proxy sidecar. CSE two-stage is handled internally
+            # by the proxy's doCSETwoStage() — no separate -plain volume needed.
+            blobfuse_proxy_access_points.append(
+                (access_point, encryption_mode, access_point.name)
+            )
+        else:
+            if encryption_mode == "CSE":
+                sidecars.append(
+                    get_blobfuse_sidecar(
+                        access_point,
+                        "/mnt/remote",
+                        "SSE",
+                        access_point.name + "-plain",
+                        debug_mode,
+                        logger,
+                    )
+                )
+
             sidecars.append(
                 get_blobfuse_sidecar(
                     access_point,
                     "/mnt/remote",
-                    "SSE",
-                    access_point.name + "-plain",
+                    encryption_mode,
+                    access_point.name,
                     debug_mode,
                     logger,
                 )
             )
 
+    if use_blobfuse_proxy_sidecar and blobfuse_proxy_access_points:
         sidecars.append(
-            get_blobfuse_sidecar(
-                access_point,
-                "/mnt/remote",
-                encryption_mode,
-                access_point.name,
-                debug_mode,
-                logger,
-            )
+            get_blobfuse_proxy_sidecar(blobfuse_proxy_access_points, contract_id)
         )
 
+    # OTEL collector stays per-pod even in CSI mode because code-launcher
+    # and other pod containers export to localhost:4317.
     sidecars.append(
         get_sidecar(
             "otel-collector",
@@ -723,22 +1058,23 @@ def get_deployment_template(
         )
     )
 
-    sidecars.append(
-        get_sidecar(
-            "skr",
-            sidecar_replacement_vars["skr"](TELEMETRY_MOUNT_PATH),
-            debug_mode,
-            logger,
+    if not use_csi_driver:
+        sidecars.append(
+            get_sidecar(
+                "skr",
+                sidecar_replacement_vars["skr"](TELEMETRY_MOUNT_PATH),
+                debug_mode,
+                logger,
+            )
         )
-    )
-    sidecars.append(
-        get_sidecar(
-            "ccr-secrets",
-            sidecar_replacement_vars["ccr-secrets"](TELEMETRY_MOUNT_PATH),
-            debug_mode,
-            logger,
+        sidecars.append(
+            get_sidecar(
+                "ccr-secrets",
+                sidecar_replacement_vars["ccr-secrets"](TELEMETRY_MOUNT_PATH),
+                debug_mode,
+                logger,
+            )
         )
-    )
 
     with open(template_folder + "cleanroom-template-policy.json", "r") as fp:
         policy_template = json.load(fp)
@@ -789,91 +1125,198 @@ def get_deployment_template(
 
 def validate_config(spec: CleanRoomSpecification, logger: logging.Logger):
 
-    # TODO (HPrabh): Update the validate function to check the whole spec for anomalies.
     issues = []
     warnings = []
-    seen = set()
-    dupes = []
+
+    # Check that at least one application is defined.
+    if len(spec.applications) == 0:
+        issues.append(
+            CleanroomSpecificationError(
+                ErrorCode.NoApplicationsDefined,
+                "No applications are defined in the cleanroom specification.",
+            )
+        )
+        return issues, warnings
+
+    # Check for duplicate datasource names.
+    datasource_names = [ds.name for ds in spec.datasources]
+    seen_ds_names = set()
+    for name in datasource_names:
+        if name in seen_ds_names:
+            issues.append(
+                CleanroomSpecificationError(
+                    ErrorCode.DuplicateName,
+                    f"Duplicate datasource name '{name}' in the specification.",
+                )
+            )
+        seen_ds_names.add(name)
+
+    # Check for duplicate datasink names.
+    datasink_names = [ds.name for ds in spec.datasinks]
+    seen_sink_names = set()
+    for name in datasink_names:
+        if name in seen_sink_names:
+            issues.append(
+                CleanroomSpecificationError(
+                    ErrorCode.DuplicateName,
+                    f"Duplicate datasink name '{name}' in the specification.",
+                )
+            )
+        seen_sink_names.add(name)
+
+    # Check for duplicate application names.
+    seen_app_names = set()
+    for app in spec.applications:
+        if app.name in seen_app_names:
+            issues.append(
+                CleanroomSpecificationError(
+                    ErrorCode.DuplicateName,
+                    f"Duplicate application name '{app.name}' in the specification.",
+                )
+            )
+        seen_app_names.add(app.name)
+
+    # Check for duplicate identity names.
+    seen_identity_names = set()
+    for identity in spec.identities:
+        if identity.name in seen_identity_names:
+            issues.append(
+                CleanroomSpecificationError(
+                    ErrorCode.DuplicateName,
+                    f"Duplicate identity name '{identity.name}' in the specification.",
+                )
+            )
+        seen_identity_names.add(identity.name)
+
+    # Track all ports across applications for duplicate detection,
+    # and all referenced datasource/datasink names for unused detection.
+    all_ports = set()
+    duplicate_ports = []
+    referenced_datasources = set()
+    referenced_datasinks = set()
+
     for application in spec.applications:
+        # Track ports across all applications.
+        for port in application.runtimeSettings.ports:
+            if port in all_ports:
+                duplicate_ports.append(port)
+            all_ports.add(port)
+
+        # Validate datasource references.
         if application.datasources:
             for datasource in application.datasources.keys():
+                referenced_datasources.add(datasource)
                 index = next(
                     (i for i, x in enumerate(spec.datasources) if x.name == datasource),
                     None,
                 )
-                if index == None:
+                if index is None:
                     logger.error(
-                        f"Datasource {datasource} not found in the cleanroom specification."
+                        f"Datasource {datasource} not found in the "
+                        f"cleanroom specification."
                     )
                     issues.append(
                         CleanroomSpecificationError(
                             ErrorCode.DataStoreNotFound,
-                            f"Datasource {datasource} not found in the cleanroom specification.",
+                            f"Datasource {datasource} not found in the "
+                            f"cleanroom specification.",
                         )
                     )
 
+        # Validate datasink references.
         if application.datasinks:
             for datasink in application.datasinks.keys():
+                referenced_datasinks.add(datasink)
                 index = next(
                     (i for i, x in enumerate(spec.datasinks) if x.name == datasink),
                     None,
                 )
-                if index == None:
+                if index is None:
                     logger.error(
                         f"Datasink {datasink} not found in the cleanroom specification."
                     )
                     issues.append(
                         CleanroomSpecificationError(
                             ErrorCode.DatasinkNotFound,
-                            f"Datasink {datasink} not found in the cleanroom specification.",
+                            f"Datasink {datasink} not found in the "
+                            f"cleanroom specification.",
                         )
                     )
 
-    if spec.network:
-        if spec.network.http:
-            if spec.network.http.inbound:
-                if not spec.network.http.inbound.policy.privacyPolicy:
-                    warnings.append(
-                        {
-                            "code": "InboundAllowAll",
-                            "message": "Inbound traffic is allowed. Configure a network policy to restrict traffic.",
-                        }
-                    )
-            else:
-                if len(seen) > 0:
-                    warnings.append(
-                        {
-                            "code": "InboundTrafficNotAllowed",
-                            "message": "Application ports are defined but no inbound traffic is disabled. "
-                            + "Please run `az cleanroom config network enable http` to enable inbound traffic.",
-                        }
-                    )
+    # Report duplicate ports.
+    if len(duplicate_ports) > 0:
+        issues.append(
+            CleanroomSpecificationError(
+                ErrorCode.DuplicatePort,
+                f"Port {duplicate_ports} appear more than once in the "
+                f"application(s). A port value can be used only once.",
+            )
+        )
 
-            if spec.network.http.outbound:
-                if not spec.network.http.outbound.policy.privacyPolicy:
-                    warnings.append(
-                        {
-                            "code": "OutboundAllowAll",
-                            "message": "Outbound traffic is allowed. Configure a network policy to restrict traffic.",
-                        }
-                    )
+    # Warn about unused datasources.
+    for ds in spec.datasources:
+        if ds.name not in referenced_datasources:
+            warnings.append(
+                {
+                    "code": "UnusedDatasource",
+                    "message": f"Datasource '{ds.name}' is defined but not "
+                    f"referenced by any application.",
+                }
+            )
+
+    # Warn about unused datasinks.
+    for ds in spec.datasinks:
+        if ds.name not in referenced_datasinks:
+            warnings.append(
+                {
+                    "code": "UnusedDatasink",
+                    "message": f"Datasink '{ds.name}' is defined but not "
+                    f"referenced by any application.",
+                }
+            )
+
+    # Network validation.
+    has_inbound = spec.network and spec.network.http and spec.network.http.inbound
+
+    if has_inbound:
+        if not spec.network.http.inbound.policy.privacyPolicy:
+            warnings.append(
+                {
+                    "code": "InboundAllowAll",
+                    "message": "Inbound traffic is allowed. Configure a "
+                    "network policy to restrict traffic.",
+                }
+            )
+    else:
+        if len(all_ports) > 0:
+            warnings.append(
+                {
+                    "code": "InboundTrafficNotAllowed",
+                    "message": "Application ports are defined but inbound "
+                    "HTTP traffic is not enabled. Please run "
+                    "`az cleanroom config network enable http` "
+                    "to enable inbound traffic.",
+                }
+            )
+
+    if spec.network and spec.network.http and spec.network.http.outbound:
+        if not spec.network.http.outbound.policy.privacyPolicy:
+            warnings.append(
+                {
+                    "code": "OutboundAllowAll",
+                    "message": "Outbound traffic is allowed. Configure a "
+                    "network policy to restrict traffic.",
+                }
+            )
 
     if len(spec.applications) > 1:
         warnings.append(
             {
                 "code": "MultipleApplications",
-                "message": "Multiple applications are defined in the specification. "
-                + "Please verify that the associated network policies handle expected ingress / egress.",
+                "message": "Multiple applications are defined in the "
+                "specification. Please verify that the associated "
+                "network policies handle expected ingress / egress.",
             }
-        )
-
-    if len(dupes) > 0:
-        issues.append(
-            CleanroomSpecificationError(
-                ErrorCode.DuplicatePort,
-                f"Port {dupes} appear more than once in the application(s). "
-                + "A port value can be used only once.",
-            )
         )
 
     return issues, warnings

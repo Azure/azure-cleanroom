@@ -15,5 +15,11 @@ spec:
       targetPort: 443
       protocol: TCP
       name: https
+    {{- if .Values.ohttp.enabled }}
+    - port: {{ .Values.ohttp.port }}
+      targetPort: {{ .Values.ohttp.port }}
+      protocol: TCP
+      name: ohttp
+    {{- end }}
   selector:
     {{- include "webserver.selectorLabels" . | nindent 4 }}

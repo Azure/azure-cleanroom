@@ -1,0 +1,137 @@
+{# Shared post-cloud-init script and systemd service.
+   Expects the following variables:
+     - container_sas_url:             SAS URL for the status blob container
+     - status_blob_name:              Name of the status blob
+     - post_cloud_init_log_files:     List of (file_path, blob_name) tuples
+     - post_cloud_init_deprovision:   Whether to restrict cloud-init and deprovision waagent
+#}
+  # -- Post cloud-init script and service --------------------------------
+  - path: /usr/local/bin/post-cloud-init.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -e
+      TAG="post-cloud-init"
+      CONTAINER_SAS_URL="{{ container_sas_url }}"
+      STATUS_BLOB_NAME="{{ status_blob_name }}"
+
+      log() { echo "$1"; logger -t "$TAG" "$1"; }
+
+      upload_blob() {
+        local file="$1" blob_name="$2" content_type="${3:-text/plain}"
+        base_url="${CONTAINER_SAS_URL%%\?*}"
+        sas_token="${CONTAINER_SAS_URL#*\?}"
+        if [ -f "$file" ]; then
+          log "Uploading $file as $blob_name ..."
+          local attempt
+          for attempt in 1 2 3; do
+            local http_code
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+              -H "x-ms-blob-type: BlockBlob" \
+              -H "Content-Type: $content_type" \
+              --data-binary "@$file" \
+              "${base_url}/${blob_name}?${sas_token}")
+            if [ "$http_code" = "201" ]; then
+              log "Uploaded $blob_name (HTTP $http_code)."
+              return 0
+            fi
+            log "Upload $blob_name failed (HTTP $http_code, attempt $attempt/3)."
+            sleep 5
+          done
+          log "ERROR: Failed to upload $blob_name after 3 attempts."
+          return 1
+        else
+          log "Skipping $file (not found)."
+        fi
+      }
+
+      # Capture cloud-init status before any cleanup that might affect it.
+      ci_status=$(cloud-init status 2>/dev/null || echo "unknown")
+      log "cloud-init status: $ci_status"
+      if echo "$ci_status" | grep -q "done"; then
+        STATUS_JSON='{"status":"completed"}'
+      elif echo "$ci_status" | grep -q "error"; then
+        STATUS_JSON='{"status":"error","detail":"cloud-init reported error"}'
+      else
+        STATUS_JSON='{"status":"error","detail":"cloud-init status: '"$ci_status"'"}'
+      fi
+
+      upload_status() {
+        base_url="${CONTAINER_SAS_URL%%\?*}"
+        sas_token="${CONTAINER_SAS_URL#*\?}"
+        local attempt
+        for attempt in 1 2 3; do
+          local http_code
+          http_code=$(echo "$STATUS_JSON" | curl -s -o /dev/null -w "%{http_code}" -X PUT \
+            -H "x-ms-blob-type: BlockBlob" \
+            -H "Content-Type: application/json" \
+            --data-binary @- \
+            "${base_url}/${STATUS_BLOB_NAME}?${sas_token}")
+          if [ "$http_code" = "201" ]; then
+            log "Status blob uploaded (HTTP $http_code): $STATUS_JSON"
+            return 0
+          fi
+          log "Status upload failed (HTTP $http_code, attempt $attempt/3)."
+          sleep 5
+        done
+        log "ERROR: Failed to upload status blob after 3 attempts."
+        return 1
+      }
+
+      log "=== Exporting cloud-init logs ==="
+{% for file_path, blob_name in post_cloud_init_log_files %}
+      upload_blob {{ file_path }} {{ blob_name }}
+{% endfor %}
+{% if post_cloud_init_deprovision %}
+
+      log "=== Restricting cloud-init modules ==="
+      # TODO (HPrabh): Verify all the below modules are required.
+      cat > /etc/cloud/cloud.cfg.d/99-restrict-modules.cfg <<'CLOUDCFG'
+      cloud_init_modules:
+        - seed_random
+        - write_files
+        - growpart
+        - mounts
+        - set_hostname
+        - update_hostname
+        - update_etc_hosts
+        - ca_certs
+      cloud_final_modules:
+        - phone-home
+        - final-message
+        - power-state-change
+      CLOUDCFG
+
+      log "=== Deprovisioning ==="
+      waagent -deprovision+user -force
+      apt-get purge -y walinuxagent 2>/dev/null || true
+      rm -rf /var/lib/waagent
+      rm -f /etc/waagent.conf
+      rm -f /var/log/waagent.log
+      cloud-init clean --logs --seed
+      apt-get clean
+      truncate -s 0 /etc/machine-id
+{% endif %}
+
+      log "=== Uploading completion status ==="
+      upload_status
+      log "Post cloud-init complete."
+
+  - path: /etc/systemd/system/post-cloud-init.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Post cloud-init: export logs and signal completion
+      After=cloud-final.service
+      Wants=cloud-final.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/post-cloud-init.sh
+      ExecStart=/usr/bin/systemctl disable post-cloud-init.service
+      StandardOutput=journal+console
+      StandardError=journal+console
+      TimeoutStartSec=300
+
+      [Install]
+      WantedBy=multi-user.target

@@ -59,9 +59,9 @@ def config_add_datastore(
         candidate_list = cleanroom_spec.datasources
         access_point_type = AccessPointType.Volume_ReadOnly
     else:
-        assert (
-            access_mode == DataStoreEntry.AccessMode.Sink
-        ), f"Unknown access mode {access_mode} for datastore {access_name}."
+        assert access_mode == DataStoreEntry.AccessMode.Sink, (
+            f"Unknown access mode {access_mode} for datastore {access_name}."
+        )
         node = "datasinks"
         candidate_list = cleanroom_spec.datasinks
         access_point_type = AccessPointType.Volume_ReadWrite

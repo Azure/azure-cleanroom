@@ -2,11 +2,11 @@ version: "2"
 linters:
   settings:
     govet:
+      # Enable the shadow analyzer to report shadowed variables. We avoid shadowed
+      # variables as it can create confusion around which err variable is getting
+      # used in statements like "x, err := someFunc()" when intent is to capture
+      # the error being returned from a method in a single common err variable.
       enable:
-        # Report about shadowed variables. We avoid shadowed variables as it can create confusion
-        # around its usage around which err variable is getting used in statements like
-        # "x, err := someFunc()" when intent is to capture the error being returned from a method
-        # in a single common err variable.
         - shadow
     staticcheck:
       checks:
@@ -18,7 +18,6 @@ linters:
   exclusions:
     generated: lax
     rules:
-      # TODO (HPrabh): Fix the following issues separately.
       - linters:
           - staticcheck
         # Some packages [go.opentelemetry.io/otel/trace] are using deprecated APIs.

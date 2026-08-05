@@ -1,4 +1,4 @@
-namespace Cleanroom.Governance;
+namespace Azure.Cleanroom.Governance;
 
 /**
  * Discovery response
@@ -80,4 +80,12 @@ model TenantData {
 
   /** Issuer URL */
   issuerUrl: string;
+}
+
+/**
+ * Set issuer URL request
+ */
+model SetIssuerUrlRequest {
+  /** Issuer URL */
+  url: string;
 }

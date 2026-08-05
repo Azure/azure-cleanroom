@@ -11,12 +11,19 @@
   - [8. So any deployment of a recovery service can try to get the keys for any other deployment via SKR, as all can present identical attestation collateral to AKV/MAA. Isn't that an issue?](#8-so-any-deployment-of-a-recovery-service-can-try-to-get-the-keys-for-any-other-deployment-via-skr-as-all-can-present-identical-attestation-collateral-to-akvmaa-isnt-that-an-issue)
   - [9. What if MAA/AKV goes rogue?](#9-what-if-maaakv-goes-rogue)
   - [10. What can happen if someone starts a malicious SNP that produces a valid host\_data but with an arbitrary measurement (effectively arbitrary code)? Or a formerly valid but now exploited UVM, which can be used to claim arbitrary host\_data?](#10-what-can-happen-if-someone-starts-a-malicious-snp-that-produces-a-valid-host_data-but-with-an-arbitrary-measurement-effectively-arbitrary-code-or-a-formerly-valid-but-now-exploited-uvm-which-can-be-used-to-claim-arbitrary-host_data)
-- [AKS cleanroom environment](#aks-cleanroom-environment)
+- [AKS cleanroom analytics environment](#aks-cleanroom-analytics-environment)
   - [1. What does the CCE policy for the spark analytics agent and frontend measure?](#1-what-does-the-cce-policy-for-the-spark-analytics-agent-and-frontend-measure)
   - [2. How does one establish trust with the spark analytics agent HTTPS endpoint?](#2-how-does-one-establish-trust-with-the-spark-analytics-agent-https-endpoint)
   - [3. How is trust established between spark analytics agent and frontend?](#3-how-is-trust-established-between-spark-analytics-agent-and-frontend)
   - [4. How is the SKR setup by customers on the CCE policy for the spark analytics agent consumed?](#4-how-is-the-skr-setup-by-customers-on-the-cce-policy-for-the-spark-analytics-agent-consumed)
   - [5. If the CCF endpoint that the spark analytics agent communicates with is hijacked won't that transfer secrets from customer AKV into the rogue CCF instance?](#5-if-the-ccf-endpoint-that-the-spark-analytics-agent-communicates-with-is-hijacked-wont-that-transfer-secrets-from-customer-akv-into-the-rogue-ccf-instance)
+- [AKS cleanroom inferencing environment](#aks-cleanroom-inferencing-environment)
+  - [1. What does the CCE policy for the inferencing agent and frontend measure?](#1-what-does-the-cce-policy-for-the-inferencing-agent-and-frontend-measure)
+  - [2. How does one establish trust with the inferencing agent HTTPS endpoint?](#2-how-does-one-establish-trust-with-the-inferencing-agent-https-endpoint)
+  - [3. How is trust established between inferencing agent and frontend?](#3-how-is-trust-established-between-inferencing-agent-and-frontend)
+  - [4. How does the OHTTP gateway establish trust with KServe predictors?](#4-how-does-the-ohttp-gateway-establish-trust-with-kserve-predictors)
+  - [5. How does the inferencing agent authorize inference requests?](#5-how-does-the-inferencing-agent-authorize-inference-requests)
+  - [6. If the CCF endpoint that the inferencing agent communicates with is hijacked won't that compromise the inferencing environment?](#6-if-the-ccf-endpoint-that-the-inferencing-agent-communicates-with-is-hijacked-wont-that-compromise-the-inferencing-environment)
 - [Commit signing](#commit-signing)
   - [1. How does one tie the CCE policy values for the deployed instances with the corresponding code in GitHub?](#1-how-does-one-tie-the-cce-policy-values-for-the-deployed-instances-with-the-corresponding-code-in-github)
 
@@ -135,7 +142,7 @@ There are 2 scenarios where this matters:
 
 The above flow can be followed as the general "found vulnerability, create patch and push update" process. A subsequent step, which would be a customer choice depending on whether they believe their specific instance of the CCF or recovery service has been attacked and secrets leaked, is to not even attempt recovery but create fresh instances of the services with new secrets and thus recreate the entire setup.
 
-# AKS cleanroom environment
+# AKS cleanroom analytics environment
 ## 1. What does the CCE policy for the spark analytics agent and frontend measure?
 The exact CCE policy generation inputs for the analytics agent are available [here](/build/templates/cleanroom-spark-analytics-agent-policy/cleanroom-spark-analytics-agent-policy.json). The policy measures:
 - The container image layers for the `cleanroom-spark-analytics-agent` container and other sidecars containers that get started.
@@ -196,6 +203,93 @@ Its up to the collaborating parties setting up the environment to decide the mem
 
 **Managed cleanroom offering (1P Microsoft)**  
 The managed cleanroom offering will configure a `Confidential Recovery Service` member also the `Consortium Manager` member. These are the only two members that are expected to perform recovery for a managed consortium. These membership details can be supplied as input for validation by the analytics agent before transferring any secrets.
+
+# AKS cleanroom inferencing environment
+## 1. What does the CCE policy for the inferencing agent and frontend measure?
+The exact CCE policy generation inputs for the inferencing agent are available [here](/build/templates/kserve-inferencing-agent-policy/kserve-inferencing-agent-policy.json). The policy measures:
+- The container image layers for the `kserve-inferencing-agent`, `ohttp-gateway`, `ccr-proxy`, `ccr-governance`, `otel-collector` and `skr` containers that get started.
+- Command line used to launch the above containers.
+- An environment variable named `INFERENCING_FRONTEND_SNP_HOST_DATA` capturing the expected `host_data` value for the inferencing frontend service that will run in the AKS cluster.
+- An environment variable named `INFERENCING_FRONTEND_ENDPOINT` capturing the frontend endpoint fqdn.
+- An environment variable named `CCF_NETWORK_RECOVERY_MEMBERS` capturing the expected consortium membership.
+- An environment variable named `INFERENCING_NAMESPACE` capturing the KServe inferencing namespace.
+- Various other environment variables and their values.
+
+The exact CCE policy generation inputs for the frontend service are available [here](/build/templates/kserve-inferencing-frontend-policy/kserve-inferencing-frontend-policy.json). The policy measures:
+- The container image layers for the `kserve-inferencing-frontend` container and other sidecar containers (`ccr-proxy`, `ccr-governance`, `otel-collector`, `skr`) that get started.
+- Command line used to launch the above containers.
+- Various allowed environment variable names, but not their values as most are not security sensitive.
+
+## 2. How does one establish trust with the inferencing agent HTTPS endpoint?
+A client connecting to the inferencing agent endpoint can establish trust with the environment as follows:
+
+1. The client connects over HTTPS on the inferencing agent endpoint (a *.cloudapp.azure.com* address) using the CGS CA cert (see `CA management` [here](/src/tools/azure-cli-extension/cleanroom/README.md#certificate-authority-ca-management)) as the root cert for SSL cert chain verification.
+1. If the SSL connection succeeds then that ensures that the environment being connected to has been approved by CGS, as the SSL cert presented by the agent endpoint is signed by CGS root CA cert.
+
+The SSL certificate for the inferencing agent is generated by [CGS](/src/governance/ccf-app/js/README.md) as follows:
+1. As part of initial setup CGS is configured with the clean room policy which has the `host_data` values for the cleanroom environment(s) that have been approved for usage.
+1. When the inferencing agent instance starts up the `ccr-proxy` init container requests CGS (running in CCF) to issue a certificate (see [generateEndorsedCert](/src/governance/ccf-app/js/src/endpoints/ca/cakey.ts)) while presenting an SNP attestation report for its environment. The certificate request and generation is handled during the [bootstrap](/src/proxy/https-http-inference-proxy/bootstrap.sh) phase.
+  > [!TIP]
+  > See [How does one establish trust with the CCF endpoint?](#3-how-does-one-establish-trust-with-the-ccf-endpoint) for how the cleanroom environment (ie inferencing agent) also establishes trust with the CCF endpoint that is hosting CGS.
+1. If the attestation report presented by the agent contains one of the allowed values for `host_data` then CGS generates a CGS CA endorsed SSL certificate and returns the same to the agent.
+1. The `ccr-proxy` (envoy) sidecar starts to run the SSL server using the generated cert, listening on port 443.
+
+Thus if the SSL connection with the inferencing agent endpoint succeeds using the CGS CA certificate then the client is assured of the integrity of the environment its connecting to which further implies that the SSL connection from the client to the inferencing agent will terminate within the inferencing agent cleanroom environment. So any communication with the inferencing agent endpoint has end-to-end protection.
+
+## 3. How is trust established between inferencing agent and frontend?
+1. The inferencing agent is configured with the frontend endpoint fqdn (a *.svc* k8s service address) and the `host_data` value for the frontend instance. These values are measured in the CCE policy of the inferencing agent via the `INFERENCING_FRONTEND_ENDPOINT` and `INFERENCING_FRONTEND_SNP_HOST_DATA` environment variables.
+1. The agent connects over HTTPS on the frontend endpoint (`fqdn:443/report`) to obtain an SNP attestation report along with other collateral (more details below). At this point the CA cert to use for SSL connections with the frontend is not yet known so an *insecure* SSL connection (ie skipping TLS cert verification) is used.
+1. The agent then verifies the SNP attestation report. Fetching of the report over the insecure SSL connection is not an issue as SNP report validation is agnostic to the mechanism via which a report was received.
+1. On successful verification of the report it then checks that the `host_data` value in the report matches the expected frontend `host_data` value the agent was configured with.
+1. If the `host_data` value in the report matches the expected value then that confirms the integrity (ie what code is running in the UVM) of the environment that generated this report.
+1. Along with the attestation report the `/report` endpoint (see [getFrontendReport](/src/workloads/inferencing/kserve-inferencing-frontend/src/kserve_inferencing_frontend/main.py)) also returns the following collateral data:
+   - The service cert PEM for the self-signed certificate that the frontend generated and is using for its SSL server
+  
+   The sha256 hash value of the above collateral is captured as the `report_data` value while generating the attestation report.
+1. The agent next verifies that the hash of the above collateral returned by `/report` endpoint matches the attestation report's `report_data` value.
+1. If the `report_data` value in the report matches the expected value then that concludes the discovery of the CA certificate to use for establishing secure SSL connections with the frontend endpoint.
+
+The above approach is implemented via [InferencingFrontendServiceCertLocator](/src/workloads/inferencing/kserve-inferencing-agent/InferencingFrontendServiceCertLocator.cs) and [DownloadServiceCertificatePem](/src/internal/restapi-common/Certs/ServiceCertLocator.cs).
+
+## 4. How does the OHTTP gateway establish trust with KServe predictors?
+The OHTTP gateway runs as a sidecar container within the inferencing agent pod, sharing the same TEE boundary. It provides a privacy-preserving inference path where the client's request payload is encrypted end-to-end using [OHTTP (Oblivious HTTP)](https://www.rfc-editor.org/rfc/rfc9458) so that even the inferencing agent (envoy/ext_authz layer) cannot observe the plaintext request body.
+
+The OHTTP gateway establishes trust with KServe predictor pods as follows:
+
+1. The OHTTP gateway fetches the CGS CA certificate from the governance sidecar running in the same pod (`http://localhost:8300/ca/info`). See [PredictorClientManager](/src/workloads/inferencing/ohttp/ohttp-gateway/PredictorClientManager.cs).
+1. Each KServe predictor pod also has a `ccr-proxy` sidecar whose init container requests a CGS CA endorsed SSL certificate during [bootstrap](/src/proxy/https-http-inference-proxy/bootstrap.sh), following the same pattern as the inferencing agent itself.
+1. When the OHTTP gateway proxies a decapsulated request to a predictor pod, it connects over HTTPS and validates the predictor's SSL certificate against the CGS CA cert.
+1. Since both the OHTTP gateway and the predictor pods use CGS CA endorsed certificates, the OHTTP gateway can verify that it is communicating with an approved predictor environment.
+
+The OHTTP inference flow is as follows:
+1. The client OHTTP-encapsulates its inference request using HPKE and sends it to the inferencing agent endpoint at the `/ohttp-gateway` path.
+1. Envoy terminates TLS and forwards the encapsulated request to the OHTTP gateway (`localhost:8090`).
+1. The OHTTP gateway decapsulates the request, resolves the target predictor based on the model name, and proxies the plaintext request to the predictor over HTTPS (validated with CGS CA cert).
+1. The predictor returns the inference response. The OHTTP gateway encrypts the response and returns it to the client.
+
+## 5. How does the inferencing agent authorize inference requests?
+The inferencing agent uses a per-request token-based authorization model for inference requests arriving at the `/ai/*` path. The flow is as follows:
+
+1. Envoy's [ext_authz filter](/src/proxy/https-http-inference-proxy/envoy-config.yaml) intercepts all requests to `/ai/*` and forwards them to the inferencing agent's `/authz` endpoint for authorization.
+1. The agent validates the `x-ms-cleanroom-authorization` header (bearer token) against CGS. If the token is missing or invalid, the request is rejected with a 401 Unauthorized response.
+1. On successful authorization, the agent extracts the model name from the request URL or body and returns `x-model-name` and `x-model-endpoint` response headers to envoy.
+1. Envoy's Lua filter rewrites the `:authority` header to the predictor FQDN returned by the agent.
+1. The dynamic forward proxy resolves the predictor FQDN and routes the request to the correct predictor pod over HTTPS.
+
+This differs from the spark analytics agent's approach where secrets are transferred from customer AKV into CCF's private ledger via SKR for consumption by driver/executor pods. The inferencing agent instead authorizes each inference request individually using tokens issued by CGS.
+
+## 6. If the CCF endpoint that the inferencing agent communicates with is hijacked won't that compromise the inferencing environment?
+The inferencing agent follows the same trust establishment steps as the spark analytics agent for verifying the CCF endpoint. See [How does one establish trust with the CCF endpoint?](#3-how-does-one-establish-trust-with-the-ccf-endpoint) for the detailed protocol.
+
+Additionally, the inferencing agent validates that the consortium comprises of only trusted member(s). The expected consortium membership is configured via the `CCF_NETWORK_RECOVERY_MEMBERS` environment variable which is measured in the CCE policy. The agent checks that the CCF instance's consortium membership matches this expected value before trusting the CCF environment.
+
+With respect to who are the expected members for a CCF setup we have the following scenarios:
+
+**Unmanaged cleanroom offering (OSS)**  
+Its up to the collaborating parties setting up the environment to decide the membership and who can perform recovery and the same can be validated by the inferencing agent.
+
+**Managed cleanroom offering (1P Microsoft)**  
+The managed cleanroom offering will configure a `Confidential Recovery Service` member also the `Consortium Manager` member. These are the only two members that are expected to perform recovery for a managed consortium. These membership details can be supplied as input for validation by the inferencing agent.
 
 # Commit signing
 ## 1. How does one tie the CCE policy values for the deployed instances with the corresponding code in GitHub?

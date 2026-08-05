@@ -24,7 +24,6 @@ import torch.nn as nn
 import torch.optim as optim
 
 # from tqdm import tqdm
-import torch.utils.data as data
 from onnx2pytorch import ConvertModel
 from opacus import PrivacyEngine
 from sklearn.model_selection import train_test_split
@@ -163,7 +162,7 @@ class ccr_model:
                 'Epoch [{epoch+1}/{self.model_config["total_epochs"]}], Loss: {loss.item():.4f}'
             )
             print(
-                f'Epoch [{epoch+1}/{self.model_config["total_epochs"]}], Loss: {loss.item():.4f}'
+                f"Epoch [{epoch + 1}/{self.model_config['total_epochs']}], Loss: {loss.item():.4f}"
             )
         output_path = self.model_config["trained_model_output_path"]
         print("Writing training model to " + output_path)

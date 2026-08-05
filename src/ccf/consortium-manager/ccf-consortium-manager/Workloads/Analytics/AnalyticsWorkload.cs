@@ -22,7 +22,8 @@ public class AnalyticsWorkload : IWorkload
 
     public async Task<(JsonObject, JsonObject)> GenerateDeploymentSpec(
         JsonObject contractDataJson,
-        string policyCreationOption)
+        string policyCreationOption,
+        bool telemetryCollectionEnabled)
     {
         string agentPolicyRego;
         AgentChartValues agentChartValues;
@@ -38,7 +39,7 @@ public class AnalyticsWorkload : IWorkload
             var frontendSecurityPolicyDigest = AciConstants.AllowAllPolicyDigest;
             agentChartValues = AgentChartValues.ToAgentChartValues(
                 contractData,
-                telemetryCollectionEnabled: false,
+                telemetryCollectionEnabled,
                 Constants.SparkFrontendEndpoint,
                 frontendSecurityPolicyDigest);
             agentPolicyRego = AciConstants.AllowAllPolicyRego;
@@ -48,11 +49,11 @@ public class AnalyticsWorkload : IWorkload
             (var frontendPolicyRego, _) =
                 await ImageUtils.DownloadAndExpandSparkFrontendPolicy(
                     policyConfiguration.PolicyCreationOption,
-                    telemetryCollectionEnabled: false);
+                    telemetryCollectionEnabled);
             var frontendSecurityPolicyDigest = ToPolicyDigest(frontendPolicyRego);
             agentChartValues = AgentChartValues.ToAgentChartValues(
                 contractData,
-                telemetryCollectionEnabled: false,
+                telemetryCollectionEnabled,
                 Constants.SparkFrontendEndpoint,
                 frontendSecurityPolicyDigest);
             (agentPolicyRego, _) =

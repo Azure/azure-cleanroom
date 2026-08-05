@@ -9,27 +9,25 @@ from typing import Annotated, Optional
 
 import kubernetes
 import requests
-from cleanroom_internal.utilities.otel_setup_utilities import TelemetryConfig
-from cleanroom_internal.utilities.otel_utilities import extract_context_from_carrier
-from cleanroom_internal.utilities.tracing_utilities import (
-    create_span_context,
-    trace_function,
-)
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.params import Body
 from fastapi.responses import JSONResponse
-from kserve_inferencing_frontend import telemetry
 from opentelemetry import context
+
+from cleanroom_internal.utilities.otel_setup_utilities import TelemetryConfig
+from cleanroom_internal.utilities.otel_utilities import extract_context_from_carrier
+from cleanroom_internal.utilities.tracing_utilities import (
+    create_span_context,
+)
 
 from .clients.kubernetes_client import KubernetesClient
 from .config.config_manager import ConfigManager
 from .config.configuration import Configuration
 from .exceptions.custom_exceptions import ResourceNotFound
-from .models.input_models import JobInput, NodeType
+from .models.input_models import JobInput
 from .telemetry.metrics import KServeFrontendMetrics, get_metrics
 from .utilities import job_converters
-from .utilities.constants import Constants
 
 # Configure logger
 logger = logging.getLogger("kserve-inferencing-frontend")
@@ -38,6 +36,26 @@ app = FastAPI()
 k8s_client: KubernetesClient
 config: Configuration
 metrics_collector: KServeFrontendMetrics = get_metrics()
+
+_kserve_agent_digest_patched = False
+
+
+def _ensure_kserve_agent_digest_pinned(cfg: Configuration):
+    """Patch the KServe agent image in the ConfigMap once with a digest-pinned
+    reference. Subsequent calls are no-ops."""
+    global _kserve_agent_digest_patched
+    if _kserve_agent_digest_patched:
+        return
+
+    try:
+        from .builders.inference_service_builder import resolve_kserve_agent_image
+
+        agent_image = resolve_kserve_agent_image(cfg.cleanroom)
+        if agent_image:
+            k8s_client.patch_kserve_agent_image(agent_image)
+            _kserve_agent_digest_patched = True
+    except Exception as e:
+        logger.warning(f"Failed to pin KServe agent digest: {e}")
 
 
 async def deploy_model(
@@ -69,16 +87,39 @@ async def deploy_model(
                 ),
             )
 
-            # Sign the allow-all policy via governance sidecar.
+            # Ensure the KServe agent sidecar image is pinned by digest in the
+            # inferenceservice-config ConfigMap. This is a no-op if already set.
+            _ensure_kserve_agent_digest_pinned(config)
+
+            # Reuse existing predictor annotations when the policy is unchanged
+            # to avoid an unnecessary KServe rolling update on redeploy.
             from .connectors.governance_connector import GovernanceHttpConnector
 
-            signature = GovernanceHttpConnector.sign_policy(
-                Constants.ALLOW_ALL_POLICY_BASE64
+            existing_spec = k8s_client.get_existing_inference_service_spec(
+                job.model_name, namespace
             )
-            inference_svc_spec.spec.predictor.annotations = {
-                "api-server-proxy.io/policy": Constants.ALLOW_ALL_POLICY_BASE64,
-                "api-server-proxy.io/signature": signature,
-            }
+            existing_annotations = (
+                (existing_spec or {}).get("predictor", {}).get("annotations")
+            )
+
+            policy_base64 = inference_svc_spec.predictor_policy.json_base64
+
+            if (
+                existing_annotations
+                and existing_annotations.get("api-server-proxy.io/policy")
+                == policy_base64
+            ):
+                logger.info(
+                    f"Reusing existing predictor annotations for "
+                    f"'{job.model_name}' (policy unchanged)."
+                )
+                inference_svc_spec.spec.predictor.annotations = existing_annotations
+            else:
+                signature = GovernanceHttpConnector.sign_policy(policy_base64)
+                inference_svc_spec.spec.predictor.annotations = {
+                    "api-server-proxy.io/policy": policy_base64,
+                    "api-server-proxy.io/signature": signature,
+                }
 
             k8s_client.submit_inference_service(
                 job.model_name, namespace, inference_svc_spec.spec, tags
@@ -86,122 +127,6 @@ async def deploy_model(
 
             success = True
             return {"status": "success", "id": job.model_name}
-
-        except Exception as e:
-            logger.error(f"Failed to submit inference service {job_id}: {e}")
-            raise
-        finally:
-            duration = time.time() - start_time
-            metrics_collector.record_job_submission(
-                success=success,
-                duration=duration,
-                namespace=namespace,
-            )
-
-
-# ---------------------------------------------------------------------------
-# Integration test endpoints. These use KServe's native model/runtime spec
-# with a public storageUri, bypassing the production containers-spec builder.
-# They exist so that CI (test-cluster.ps1) can validate cluster infrastructure
-# (KServe controller, kubelet proxy, flex node scheduling) without needing the
-# full governance/agent/blobfuse pipeline.
-# ---------------------------------------------------------------------------
-
-
-async def deploy_test_model(
-    name: str,
-    job_id: str,
-    namespace: str,
-    node_type: Optional[NodeType] = None,
-    host_network: Optional[bool] = None,
-    signature: Optional[str] = None,
-    tags: Optional[dict[str, str]] = None,
-):
-    global k8s_client
-    global config
-
-    start_time = time.time()
-    success = False
-
-    with create_span_context(
-        "deploy_test_model",
-        {"job.id": job_id, "job.namespace": namespace},
-    ):
-        try:
-            logger.info(f"Submitting test inferencing model to Kubernetes: {job_id}")
-
-            from kubernetes.client import models as k8smodels
-
-            from .models.inference_service_models import (
-                InferenceServiceSpec,
-                PredictorSpec,
-            )
-
-            # Uses containers spec with an init container to download the
-            # model — same pattern as the production builder.
-            model_volume = "model-data"
-            model_url = (
-                "https://storage.googleapis.com/"
-                "kfserving-examples/models/sklearn/1.0/model/model.joblib"
-            )
-
-            init_container = k8smodels.V1Container(
-                name="model-download",
-                image="busybox:1.36",
-                command=["sh", "-c"],
-                args=[
-                    f"mkdir -p /mnt/models && "
-                    f"wget -q -O /mnt/models/model.joblib {model_url}"
-                ],
-                volume_mounts=[
-                    k8smodels.V1VolumeMount(name=model_volume, mount_path="/mnt/models")
-                ],
-            )
-
-            container = k8smodels.V1Container(
-                name="kserve-container",
-                image="docker.io/kserve/sklearnserver:v0.17.0",
-                args=["--model_name=" + name, "--model_dir=/mnt/models"],
-                ports=[k8smodels.V1ContainerPort(container_port=8080, protocol="TCP")],
-                volume_mounts=[
-                    k8smodels.V1VolumeMount(name=model_volume, mount_path="/mnt/models")
-                ],
-            )
-
-            predictor = PredictorSpec()
-            predictor.initContainers = [init_container]
-            predictor.containers = [container]
-            predictor.volumes = [k8smodels.V1Volume(name=model_volume, empty_dir={})]
-
-            if node_type is not None:
-                if node_type == NodeType.flexnode:
-                    if host_network is not None:
-                        predictor.hostNetwork = host_network
-                    predictor.nodeSelector = {"pod-policy": "required"}
-                    predictor.tolerations = [
-                        {
-                            "key": "pod-policy",
-                            "operator": "Equal",
-                            "value": "required",
-                            "effect": "NoSchedule",
-                        }
-                    ]
-
-            spec = InferenceServiceSpec(predictor=predictor)
-
-            annotations = None
-            if signature is not None:
-                annotations = {
-                    "api-server-proxy.io/policy": Constants.ALLOW_ALL_POLICY_BASE64,
-                    "api-server-proxy.io/signature": signature,
-                }
-
-            k8s_client.submit_inference_service(
-                name, namespace, spec, tags, annotations
-            )
-
-            success = True
-            return {"status": "success", "id": name}
 
         except Exception as e:
             logger.error(f"Failed to submit inference service {job_id}: {e}")
@@ -266,19 +191,77 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
+def _is_inference_service_ready(status) -> bool:
+    """Check if a KServe InferenceService status indicates
+    readiness. The status can be a pydantic model or a dict."""
+    if not status:
+        return False
+    # Handle both pydantic model and dict.
+    if isinstance(status, dict):
+        url = status.get("url") or status.get("address", {}).get("url")
+        conditions = status.get("conditions", [])
+    else:
+        url = getattr(status, "url", None) or getattr(
+            getattr(status, "address", None), "url", None
+        )
+        conditions = getattr(status, "conditions", None) or []
+    if not url:
+        return False
+    for c in conditions:
+        if isinstance(c, dict):
+            c_type, c_status = c.get("type"), c.get("status")
+        else:
+            c_type = getattr(c, "type", None)
+            c_status = getattr(c, "status", None)
+        if c_type == "Ready":
+            return c_status == "True"
+    return False
+
+
+def _parse_k8s_error(exc: kubernetes.client.ApiException) -> dict:
+    """Extract a user-friendly message from a K8s ApiException."""
+    status_code = exc.status or 500
+    reason = None
+    message = None
+    try:
+        body = json.loads(exc.body) if exc.body else {}
+        reason = body.get("reason", "")
+        message = body.get("message", "")
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    if status_code == 404 or reason == "NotFound":
+        user_message = "The requested resource was not found."
+    elif reason == "AlreadyExists":
+        user_message = "The resource already exists."
+    elif status_code == 409:
+        user_message = "A conflict occurred while processing the request."
+    elif status_code == 422 or reason == "Invalid":
+        user_message = "The request was invalid."
+    else:
+        user_message = "An error occurred while processing the request."
+
+    return {
+        "status_code": status_code,
+        "message": user_message,
+        "details": message or exc.reason or user_message,
+    }
+
+
 @app.exception_handler(kubernetes.client.ApiException)
 async def kubernetes_error_handler(
     request: Request, exc: kubernetes.client.ApiException
 ):
-    logger.error(f"An error occurred: {repr(exc)}")
-    status_code = exc.status if exc.status else 500
-    # TODO (HPrabh): Add more specific error handling based on the individual errors.
+    parsed = _parse_k8s_error(exc)
+    logger.error(
+        f"K8s error on {request.url.path}: "
+        f"status={parsed['status_code']}, details={parsed['details']}"
+    )
     return JSONResponse(
-        status_code=status_code,
+        status_code=parsed["status_code"],
         content={
-            "message": f"An error occurred while processing {request.url.path}",
-            "error": f"{repr(exc)}",
-            "details": f"{exc}",
+            "message": parsed["message"],
+            "details": parsed["details"],
         },
     )
 
@@ -302,65 +285,26 @@ async def deploy_inferencing_model(
             enable_telemetry_collection=enable_telemetry_collection,
             tags=tags,
         )
+    except kubernetes.client.ApiException:
+        raise
+    except (ValueError, NotImplementedError) as e:
+        logger.error(
+            f"Failed to create inferencing service: {e},"
+            f"  traceback: {traceback.format_exc()}"
+        )
+        raise HTTPException(
+            status_code=422,
+            detail=f"Failed to create inferencing service: {e}",
+        )
     except Exception as e:
         logger.error(
-            f"Failed to create inferencing service: {e},  traceback: {traceback.format_exc()}"
+            f"Failed to create inferencing service: {e},"
+            f"  traceback: {traceback.format_exc()}"
         )
         raise HTTPException(
             status_code=500,
             detail=f"Failed to create inferencing service: {e}",
         )
-
-
-@app.post("/inferencing/test/deployModel")
-async def deploy_inferencing_test_model(
-    model_name: Annotated[str, Body(alias="modelName")],
-    node_type: Annotated[Optional[NodeType], Body(alias="nodeType")] = None,
-    host_network: Annotated[Optional[bool], Body(alias="hostNetwork")] = None,
-    signature: Annotated[Optional[str], Body(alias="signature")] = None,
-):
-    """Integration test endpoint only. Deploys a hardcoded sklearn model
-    using KServe's native model/runtime spec with a public storageUri."""
-    global config
-
-    job_id = f"{int(time.time())}"
-    tags = {"job_type": "inferencing"}
-    try:
-        return await deploy_test_model(
-            model_name,
-            job_id,
-            config.applications.inferencing.namespace,
-            node_type=node_type,
-            host_network=host_network,
-            signature=signature,
-            tags=tags,
-        )
-    except Exception as e:
-        logger.error(
-            f"Failed to create inferencing service: {e},  traceback: {traceback.format_exc()}"
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create inferencing service: {e}",
-        )
-
-
-@app.post("/inferencing/test/generateSecurityPolicy")
-async def get_inferencing_test_policy(node_type: NodeType):
-    """Integration test endpoint only. Returns an allow-all policy for
-    flex node testing without requiring the full containers-spec builder."""
-    if node_type != NodeType.flexnode:
-        raise HTTPException(
-            status_code=400,
-            detail="Security policy generation is not supported for "
-            "non-flexnode node type.",
-        )
-
-    return {
-        "predictor": {
-            "jsonBase64": Constants.ALLOW_ALL_POLICY_BASE64,
-        },
-    }
 
 
 @app.get("/inferencing/status/{model_name}")
@@ -379,7 +323,22 @@ async def get_status(model_name: str):
             return {"id": model_name, "status": job_status}
 
         job_status = inference_svc.status
-        return {"id": model_name, "status": job_status}
+        response = {"id": model_name, "status": job_status}
+
+        # When the InferenceService is not ready, augment
+        # the response with pod-level diagnostics so the
+        # caller can surface the root cause.
+        if not _is_inference_service_ready(job_status):
+            try:
+                pod_health = k8s_client.get_pod_health(
+                    model_name,
+                    config.applications.inferencing.namespace,
+                )
+                response["podHealth"] = pod_health
+            except Exception as e:
+                logger.warning(f"Failed to get pod health for {model_name}: {e}")
+
+        return response
 
     except ResourceNotFound as e:
         logger.error(f"Job with ID {model_name} not found.")
@@ -387,6 +346,8 @@ async def get_status(model_name: str):
             status_code=404,
             detail=f"Job with ID {model_name} not found",
         )
+    except kubernetes.client.ApiException:
+        raise
     except Exception as e:
         logger.error(
             f"Failed to get model status: {e}, traceback: {traceback.format_exc()}"
@@ -426,9 +387,21 @@ async def get_inferencing_service_policy(
                 "pcrs": inference_svc_spec.transformer_policy.pcrs,
             },
         }
+    except kubernetes.client.ApiException:
+        raise
+    except (ValueError, NotImplementedError) as e:
+        logger.error(
+            f"Failed to get inferencing pod policy: {e},"
+            f" traceback: {traceback.format_exc()}"
+        )
+        raise HTTPException(
+            status_code=422,
+            detail=f"Failed to get inferencing pod policy: {e}",
+        )
     except Exception as e:
         logger.error(
-            f"Failed to get inferencing pod policy: {e}, traceback: {traceback.format_exc()}"
+            f"Failed to get inferencing pod policy: {e},"
+            f" traceback: {traceback.format_exc()}"
         )
         raise HTTPException(
             status_code=500,
@@ -544,5 +517,12 @@ def main():
         kubeconfig_path=args.kubeconfig,
         resource_settings=config.kserve.resource,
     )
+
+    # Conditionally register integration test endpoints.
+    if config.applications.inferencing.enable_test_endpoints:
+        from .routes.test_routes import create_test_router
+
+        app.include_router(create_test_router(k8s_client, config, metrics_collector))
+        logger.info("Test endpoints enabled.")
 
     uvicorn.run(app, host="0.0.0.0", port=args.port, log_level="debug")

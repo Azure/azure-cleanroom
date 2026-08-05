@@ -13,7 +13,7 @@ dependencies = [
     "pydantic_settings==2.10.1",
     "kubernetes==34.1.0",
     "oras==0.1.29",
-    "requests==2.32.4",
+    "requests==2.33.0",
     "tenacity==9.0.0",
     "cleanroom-internal",
     "cleanroom-sdk",

@@ -6,6 +6,9 @@
       "command": [
         "sleep"
       ],
+      "args": [
+        "infinity"
+      ],
       "environmentVariables": [],
       "volumeMounts": []
     }

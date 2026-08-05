@@ -1,0 +1,17 @@
+{
+    "infraType": "aks",
+    "autoApprove": true,
+    "enableCA": true,
+    "prereqsConfigRef": "my-prereqs",
+    "profiles": {
+        "inferencing": {
+            "kserveProfile": {
+                "enabled": true
+            }
+        },
+        "flexNode": {
+            "enabled": true,
+            "mode": "manual"
+        }
+    }
+}

@@ -5,7 +5,9 @@ using System.Reflection;
 using AttestationClient;
 using Controllers;
 using FrontendSvc.Api.V2026_03_01_Preview;
+using FrontendSvc.Auth;
 using FrontendSvc.Publisher.Factory;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FrontendSvc;
@@ -31,6 +33,18 @@ internal class Startup : ApiStartup
         services.AddSingleton<ClientManager>();
         services.AddSingleton
             <ICollaborationPublisherFactory, CollaborationPublisherFactory>();
+
+        // Validate inbound Microsoft Entra bearer tokens (signature, issuer,
+        // audience, lifetime, algorithm) before controller logic runs. Endpoints
+        // are gated with [Authorize]; health/report endpoints use [AllowAnonymous].
+        services.AddSingleton<EntraTokenValidator>();
+        services.AddAuthentication(options =>
+        {
+            options.DefaultScheme = AuthConstants.BearerScheme;
+        })
+        .AddScheme<AuthenticationSchemeOptions, EntraJwtAuthenticationHandler>(
+            AuthConstants.BearerScheme,
+            _ => { });
 
         // Register supported API versions.
         // Add new versions here as they are created.

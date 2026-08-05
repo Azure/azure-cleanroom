@@ -12,7 +12,6 @@ summary report. The test suite is organized by functional domains:
 Each test file can also be run independently for focused testing.
 """
 
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -65,6 +64,7 @@ def main():
         "test_collaboration.py",
         "test_identity_manager.py",
         "test_querysegment.py",
+        "test_validate_config.py",
     ]
 
     passed = 0

@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Azure.Cleanroom.Sdk</RootNamespace>
+    <AssemblyName>Azure.Cleanroom.Sdk</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Http" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc" />
+    <PackageReference Include="System.ClientModel" />
+    <PackageReference Include="System.Security.Cryptography.Xml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\internal\Attestation\Attestation.csproj" />
+    <ProjectReference Include="..\..\internal\Cose\Cose.csproj" />
+    <ProjectReference Include="..\clients\cgs-client\Azure.Cleanroom.Governance.Client.csproj" />
+    <ProjectReference Include="..\clients\ccf-client\Microsoft.Ccf.Client.csproj" />
+  </ItemGroup>
+
+</Project>

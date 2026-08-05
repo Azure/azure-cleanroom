@@ -47,3 +47,36 @@ runs:
         name: frontend-service
         tag: ${{ inputs.tag }}
         path: ${{ github.workspace }}/src/workloads/frontend/helmchart
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: kserve-inferencing-agent
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.kserve-inferencing-agent
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: kserve-inferencing-frontend
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.kserve-inferencing-frontend
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-container-and-artefacts
+      with:
+        name: ohttp-gateway
+        tag: ${{ inputs.tag }}
+        dockerfile: build/docker/Dockerfile.ohttp-gateway
+        context: ${{ github.workspace }}
+
+    - uses: ./.github/actions/build-helm-chart-and-artefacts
+      with:
+        name: kserve-inferencing-agent
+        tag: ${{ inputs.tag }}
+        path: ${{ github.workspace }}/src/workloads/inferencing/kserve-inferencing-agent/helm/chart
+
+    - uses: ./.github/actions/build-helm-chart-and-artefacts
+      with:
+        name: kserve-inferencing-frontend
+        tag: ${{ inputs.tag }}
+        path: ${{ github.workspace }}/src/workloads/inferencing/kserve-inferencing-frontend/helm/chart

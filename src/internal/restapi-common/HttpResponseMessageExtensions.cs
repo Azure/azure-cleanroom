@@ -15,13 +15,19 @@ public static class HttpResponseMessageExtensions
         {
             var content = await response.Content.ReadAsStringAsync();
 
-            logger.LogError(
+            var requestDetail =
                 $"{response.RequestMessage!.Method} request for resource: " +
                 $"{response.RequestMessage.RequestUri} " +
                 $"failed with statusCode {response.StatusCode}, " +
-                $"reasonPhrase: {response.ReasonPhrase} and content: {content}.");
+                $"reasonPhrase: {response.ReasonPhrase} and content: {content}.";
 
-            throw new Azure.RequestFailedException((int)response.StatusCode, content);
+            logger.LogError(requestDetail);
+
+            var message = string.IsNullOrWhiteSpace(content)
+                ? requestDetail
+                : content;
+
+            throw new Azure.RequestFailedException((int)response.StatusCode, message);
         }
     }
 }

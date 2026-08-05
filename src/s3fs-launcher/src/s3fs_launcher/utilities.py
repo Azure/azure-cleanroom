@@ -1,8 +1,9 @@
 import logging
 import os
 
-from cleanroom_internal.utilities import utilities as internal_utilities
 from opentelemetry import trace
+
+from cleanroom_internal.utilities import utilities as internal_utilities
 
 
 def launch_s3fs(

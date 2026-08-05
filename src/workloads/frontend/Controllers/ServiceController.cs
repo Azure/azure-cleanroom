@@ -6,6 +6,7 @@ using System.Text.Json;
 using AttestationClient;
 using Controllers;
 using FrontendSvc.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FrontendSvc;
@@ -14,6 +15,7 @@ namespace FrontendSvc;
 /// Handles service health and identity endpoints.
 /// </summary>
 [ApiController]
+[AllowAnonymous]
 public class ServiceController : ControllerBase
 {
     private readonly ILogger<ServiceController> logger;

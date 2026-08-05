@@ -11,6 +11,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 
+. $PSScriptRoot/helpers.ps1
+
 $oidcStorageAccountName = "cleanroomoidc"
 mkdir -p $outDir
 
@@ -44,25 +46,11 @@ if ($status -ne "true") {
 
 # Assign Storage Blob Data Contributor to logged-in user if not already assigned.
 $objectId = GetLoggedInEntityObjectId
-$role = "Storage Blob Data Contributor"
-$roleAssignment = (az role assignment list `
-        --assignee-object-id $objectId `
-        --scope $storageAccountResult.id `
-        --role $role `
-        --fill-principal-name false `
-        --fill-role-definition-name false) | ConvertFrom-Json
-
-if ($roleAssignment.Length -eq 1) {
-    Write-Host "'$role' permission on the storage account already exists, skipping assignment."
-}
-else {
-    Write-Host "Assigning '$role' on the storage account..."
-    az role assignment create `
-        --role $role `
-        --scope $storageAccountResult.id `
-        --assignee-object-id $objectId `
-        --assignee-principal-type $(Get-Assignee-Principal-Type)
-}
+Ensure-RoleAssignment `
+    -assigneeObjectId $objectId `
+    -scope $storageAccountResult.id `
+    -role "Storage Blob Data Contributor" `
+    -principalType $(Get-Assignee-Principal-Type)
 
 # Get the static website URL.
 $webUrl = (az storage account show `

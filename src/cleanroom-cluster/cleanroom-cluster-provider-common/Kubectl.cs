@@ -319,7 +319,7 @@ public class KubectlClient : RunCommand
 
     public async Task WaitForPrometheusUp(string ns)
     {
-        string name = "cleanroom-spark-prometheus";
+        string name = Constants.PrometheusReleaseName;
         try
         {
             await this.KubectlWait(
@@ -345,7 +345,7 @@ public class KubectlClient : RunCommand
 
     public async Task WaitForGrafanaUp(string ns)
     {
-        string name = "cleanroom-spark-grafana";
+        string name = Constants.GrafanaReleaseName;
         try
         {
             await this.KubectlWait(
@@ -397,7 +397,7 @@ public class KubectlClient : RunCommand
 
     public async Task WaitForLokiUp(string ns)
     {
-        string name = "cleanroom-spark-loki";
+        string name = Constants.LokiReleaseName;
         try
         {
             // Loki deploys as a StatefulSet and not as a Deployment. Hence, we wait for the pods
@@ -420,7 +420,7 @@ public class KubectlClient : RunCommand
 
     public async Task WaitForTempoUp(string ns)
     {
-        string name = "cleanroom-spark-tempo";
+        string name = Constants.TempoReleaseName;
         try
         {
             // Tempo deploys as a StatefulSet and not as a Deployment. Hence, we wait for the pods
@@ -696,17 +696,17 @@ public class KubectlClient : RunCommand
         // Create a read-only role as well for the user.
         await this.CreateReadOnlyRoleAsync(userName);
 
-        const string telemetryNamespace = "telemetry";
+        const string observabilityNamespace = Constants.ObservabilityNamespace;
 
-        if (!await this.NamespaceExistsAsync(telemetryNamespace))
+        if (!await this.NamespaceExistsAsync(observabilityNamespace))
         {
             throw new InvalidOperationException(
-                $"Namespace '{telemetryNamespace}' does not exist in the cluster. " +
+                $"Namespace '{observabilityNamespace}' does not exist in the cluster. " +
                 $"Cannot create diagnostic role.");
         }
 
         var roleYaml = await File.ReadAllTextAsync("diagnosticrole/role.yaml");
-        roleYaml = roleYaml.Replace("<NAMESPACE>", telemetryNamespace);
+        roleYaml = roleYaml.Replace("<NAMESPACE>", observabilityNamespace);
         roleYaml = roleYaml.Replace("<NAME>", userName);
         var yamlFile = Path.GetTempFileName();
         await File.WriteAllTextAsync(yamlFile, roleYaml);
@@ -780,10 +780,56 @@ public class KubectlClient : RunCommand
         return list.Items;
     }
 
-    public async Task<bool> IsFlexNodeReadyAsync(string nodeName)
+    // Returns names of nodes that have the for-flex-node taint but have not
+    // yet been labeled as cleanroom.azure.com/flexnode=true.
+    public async Task<List<string>> GetUnconfiguredFlexNodeNamesAsync()
     {
         var output = await this.Kubectl(
-            $"get nodes -l cleanroom.azure.com/ready=true " +
+            $"get nodes -o json " +
+            $"--kubeconfig {this.kubeConfigFile}",
+            skipOutputLogging: true);
+
+        var list = JsonSerializer.Deserialize<ListItems>(output)!;
+        var result = new List<string>();
+        foreach (JsonObject node in list.Items)
+        {
+            string? name = node["metadata"]?["name"]?.GetValue<string>();
+            if (name == null)
+            {
+                continue;
+            }
+
+            var labels = node["metadata"]?["labels"]?.AsObject();
+            if (labels?.ContainsKey("cleanroom.azure.com/flexnode") == true)
+            {
+                continue;
+            }
+
+            var taints = node["spec"]?["taints"]?.AsArray();
+            bool hasFlexTaint = taints?.Any(t =>
+                t?["key"]?.GetValue<string>() == "for-flex-node") == true;
+            if (hasFlexTaint)
+            {
+                result.Add(name);
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<bool> IsFlexNodeReadyAsync(string nodeName)
+    {
+        return await this.NodeHasLabelAsync(
+            nodeName, "cleanroom.azure.com/ready=true", checkKubeletReady: true);
+    }
+
+    public async Task<bool> NodeHasLabelAsync(
+        string nodeName,
+        string label,
+        bool checkKubeletReady = false)
+    {
+        var output = await this.Kubectl(
+            $"get nodes -l {label} " +
             $"--field-selector metadata.name={nodeName} " +
             $"-o json " +
             $"--kubeconfig {this.kubeConfigFile}",
@@ -795,8 +841,12 @@ public class KubectlClient : RunCommand
             return false;
         }
 
-        // Verify that the KubeletReady condition on the node is True. If node goes unhealthy/stopped
-        // this signal will become False.
+        if (!checkKubeletReady)
+        {
+            return true;
+        }
+
+        // Verify that the KubeletReady condition on the node is True.
         var node = list.Items[0];
         var conditions = node["status"]?["conditions"]?.AsArray();
         if (conditions != null)
@@ -813,6 +863,24 @@ public class KubectlClient : RunCommand
         }
 
         return false;
+    }
+
+    public async Task<string> GetNodeNameByLabelAsync(string label)
+    {
+        var output = await this.Kubectl(
+            $"get nodes -l {label} " +
+            "-o jsonpath='{.items[0].metadata.name}' " +
+            $"--kubeconfig={this.kubeConfigFile}",
+            skipOutputLogging: true);
+
+        var nodeName = output.Trim().Trim('\'');
+        if (string.IsNullOrWhiteSpace(nodeName))
+        {
+            throw new InvalidOperationException(
+                $"No node found with label '{label}'.");
+        }
+
+        return nodeName;
     }
 
     public async Task TaintNodeAsync(string nodeName, string taint, bool overwrite = false)
@@ -841,6 +909,31 @@ public class KubectlClient : RunCommand
         var overwriteFlag = overwrite ? " --overwrite" : string.Empty;
         await this.Kubectl(
             $"label nodes {nodeName} {label}{overwriteFlag} --kubeconfig={this.kubeConfigFile}");
+    }
+
+    public async Task PatchResourceAsync(
+        string resourceType,
+        string resourceName,
+        string ns,
+        string patchJson)
+    {
+        await this.Kubectl(
+            $"patch {resourceType} {resourceName} " +
+            $"-n {ns} " +
+            $"--type=merge " +
+            $"-p {patchJson} " +
+            $"--kubeconfig={this.kubeConfigFile}");
+    }
+
+    public async Task GetResourceAsync(
+        string resourceType,
+        string resourceName,
+        string ns)
+    {
+        await this.Kubectl(
+            $"get {resourceType} {resourceName} " +
+            $"-n {ns} " +
+            $"--kubeconfig={this.kubeConfigFile}");
     }
 
     public async Task<ClientCertificateResult> RequestClientCertificateAsync(
@@ -932,7 +1025,7 @@ spec:
         };
     }
 
-    public async Task<string> ReplaceUserClientCertificateInKubeConfig(
+    public Task<string> ReplaceUserClientCertificateInKubeConfig(
         string kubeConfig,
         string userName,
         string certificatePem,
@@ -985,7 +1078,7 @@ spec:
             }
         };
 
-        return serializer.Serialize(kubeConfigDoc);
+        return Task.FromResult(serializer.Serialize(kubeConfigDoc));
     }
 
     public async Task<K8sEvents> GetPodFailureEventsByName(

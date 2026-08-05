@@ -1,0 +1,9 @@
+{
+  "model": {
+    "modelFormat": { "name": "gguf" },
+    "runtime": "llamacpp-server",
+    "resources": {
+      "requests": { "cpu": "300m", "memory": "1Gi" }
+    }
+  }
+}

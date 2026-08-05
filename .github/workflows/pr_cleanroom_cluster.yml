@@ -25,7 +25,7 @@ jobs:
         id: pick
         shell: bash
         run: |
-          # These are the locations where DC4as_v5 SKU is available that we use in Flex Node tests.
+          # These are the locations where DC2as_v5 SKU is available that we use in Flex Node tests.
           # "westeurope" is intentionally left out of the list since we have been seeing issues related to AKS Free tier quotas in that region.
           # westus is removed as it is being used by another PR validation flow.
           locations=("northeurope" "germanywestcentral" "centralindia" "eastasia" "southeastasia" )
@@ -35,7 +35,7 @@ jobs:
           
   aks-cleanroom-cluster:
     needs: [pick-location]
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=aks-cleanroom-cluster-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=aks-cleanroom-cluster-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -83,7 +83,7 @@ jobs:
         run: pwsh ./samples/workloads/azcli/dump-cleanroom-cluster-logs.ps1
 
       - name: Upload generated artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aks-cleanroom-cluster
           path: ./samples/workloads/azcli/sandbox_common
@@ -96,7 +96,7 @@ jobs:
         run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=cleanroom-cluster-${{ github.job }}-${{ github.run_id }}"
 
   virtual-cleanroom-cluster:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=virtual-cleanroom-cluster-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=virtual-cleanroom-cluster-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -144,7 +144,7 @@ jobs:
 
   aks-cleanroom-cluster-flexnode:
     needs: [pick-location]
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=aks-cleanroom-cluster-flexnode-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=aks-cleanroom-cluster-flexnode-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -172,6 +172,8 @@ jobs:
           -infraType aks
           -enableObservability
           -enableFlexNode
+          -flexNodeInsecure
+          -flexNodeProvisionUsingSSH
           -enableKServeInferencing
           -registry acr
           -repo ${{ vars.ACR_URL }}
@@ -179,7 +181,7 @@ jobs:
           -location ${{ needs.pick-location.outputs.location }}
 
       - name: Test flex node workloads
-        run: pwsh ./samples/workloads/azcli/test-cluster.ps1 -testFlexNode -testKServeInferencing
+        run: pwsh ./samples/workloads/azcli/test-cluster.ps1 -testKServeInferencing
 
       - name: Dump cleanroom-cluster-provider logs
         shell: pwsh
@@ -192,7 +194,7 @@ jobs:
         run: pwsh ./samples/workloads/azcli/dump-cleanroom-cluster-logs.ps1
         
       - name: Upload generated artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aks-cleanroom-cluster-flexnode
           path: ./samples/workloads/azcli/sandbox_common
@@ -205,7 +207,7 @@ jobs:
         run: ./samples/ccf/azcli/remove-resources.ps1 -tag "github_actions=cleanroom-cluster-${{ github.job }}-${{ github.run_id }}"
 
   virtual-cleanroom-cluster-flexnode:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=virtual-cleanroom-cluster-flexnode-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=virtual-cleanroom-cluster-flexnode-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
         AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -234,12 +236,13 @@ jobs:
           -registry acr
           -enableObservability
           -enableFlexNode
+          -flexNodeInsecure
           -enableKServeInferencing
           -repo ${{ vars.ACR_URL }}
           -tag ${{ github.run_id }}
 
       - name: Test Flex Node workloads
-        run: pwsh ./samples/workloads/azcli/test-cluster.ps1 -testFlexNode -testKServeInferencing
+        run: pwsh ./samples/workloads/azcli/test-cluster.ps1 -testKServeInferencing
 
       - name: Dump cleanroom-cluster-provider logs
         shell: pwsh

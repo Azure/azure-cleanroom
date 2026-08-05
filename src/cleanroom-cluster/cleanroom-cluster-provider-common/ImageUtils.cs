@@ -93,7 +93,7 @@ public static class ImageUtils
         string outDir = Path.GetTempPath();
         string documentUrl = KServeInferencingAgentSecurityPolicyDocumentUrl();
         string document =
-            Path.Combine(outDir, "kserve-inferencing-agent-security-policy.yaml");
+            Path.Combine(outDir, "cleanroom-kserve-inferencing-agent-security-policy.yaml");
 
         try
         {
@@ -124,7 +124,7 @@ public static class ImageUtils
         string outDir = Path.GetTempPath();
         string documentUrl = KServeInferencingSecurityPolicyDocumentUrl();
         string document =
-            Path.Combine(outDir, "kserve-inferencing-frontend-security-policy.yaml");
+            Path.Combine(outDir, "cleanroom-kserve-inferencing-frontend-security-policy.yaml");
 
         try
         {
@@ -219,6 +219,81 @@ public static class ImageUtils
             $"{McrRegistryUrl}/k8s-node/api-server-proxy:{McrTag}";
     }
 
+    public static string KubeletProxyPackageUrl()
+    {
+        var url = Environment.GetEnvironmentVariable(
+            "CR_CLUSTER_PROVIDER_KUBELET_PROXY_PACKAGE_URL");
+
+        return !string.IsNullOrEmpty(url) ? url :
+            $"{McrRegistryUrl}/k8s-node/kubelet-proxy:{McrTag}";
+    }
+
+    public static string CleanroomBootPackageUrl()
+    {
+        var url = Environment.GetEnvironmentVariable(
+            "CR_CLUSTER_PROVIDER_CLEANROOM_BOOT_PACKAGE_URL");
+
+        return !string.IsNullOrEmpty(url) ? url :
+            $"{McrRegistryUrl}/k8s-node/cleanroom-boot:{McrTag}";
+    }
+
+    public static string FlexNodeImageDigestsUrl()
+    {
+        var url = Environment.GetEnvironmentVariable(
+            "CR_CLUSTER_PROVIDER_FLEX_NODE_IMAGE_DIGESTS_URL");
+
+        return !string.IsNullOrEmpty(url) ? url :
+            $"{McrRegistryUrl}/cleanroom-image-digests:{McrTag}";
+    }
+
+    public static async Task<string> GetFlexNodeImageId(
+        ILogger logger,
+        IConfiguration config)
+    {
+        var oras = new OrasClient(logger, config);
+        string digestsUrl = FlexNodeImageDigestsUrl();
+        string tempPath = Path.GetTempPath();
+        string documentPath = Path.Combine(tempPath, "cleanroom-image-digests.yaml");
+
+        try
+        {
+            // Avoid simultaneous downloads to the same location to avoid races in reading the
+            // file.
+            await semaphore.WaitAsync();
+            await oras.Pull(digestsUrl, tempPath);
+
+            if (!File.Exists(documentPath))
+            {
+                throw new FileNotFoundException(
+                    $"cleanroom-image-digests.yaml not found after pulling " +
+                    $"from {digestsUrl}");
+            }
+
+            string yamlContent = await File.ReadAllTextAsync(documentPath);
+            var deserializer = new DeserializerBuilder()
+                .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                .Build();
+            var digests = deserializer
+                .Deserialize<Dictionary<string, Dictionary<string, string>>>(
+                    yamlContent);
+
+            if (!digests.TryGetValue("flexNodeImage", out var flexNode) ||
+                !flexNode.TryGetValue("imageId", out var imageId) ||
+                string.IsNullOrEmpty(imageId))
+            {
+                throw new InvalidOperationException(
+                    "flexNodeImage.imageId not found in " +
+                    $"cleanroom-image-digests.yaml from {digestsUrl}");
+            }
+
+            return imageId;
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
     public static string GetAnalyticsAgentChartPath()
     {
         return GetImage("CR_CLUSTER_PROVIDER_SPARK_ANALYTICS_AGENT_CHART_URL") ??
@@ -300,6 +375,17 @@ public static class ImageUtils
         return GetTag("CR_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_IMAGE") ?? $"{McrTag}";
     }
 
+    public static string OhttpGatewayImage()
+    {
+        return GetImage("CR_CLUSTER_PROVIDER_OHTTP_GATEWAY_IMAGE") ??
+            $"{McrRegistryUrl}/workloads/ohttp-gateway";
+    }
+
+    public static string OhttpGatewayTag()
+    {
+        return GetTag("CR_CLUSTER_PROVIDER_OHTTP_GATEWAY_IMAGE") ?? $"{McrTag}";
+    }
+
     public static string InferencingFrontendImage()
     {
         return GetImage("CR_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_IMAGE") ??
@@ -375,17 +461,6 @@ public static class ImageUtils
         return GetTag("CR_CLUSTER_PROVIDER_LOCAL_SKR_IMAGE") ?? $"{McrTag}";
     }
 
-    public static string CredentialsProxyImage()
-    {
-        // TODO (anrdesai): Move test image references to test project
-        return "cleanroombuild.azurecr.io/workleap/azure-cli-credentials-proxy";
-    }
-
-    public static string CredentialsProxyTag()
-    {
-        return "1.2.5";
-    }
-
     public static string GetCleanroomVersionsDocumentUrl()
     {
         var url = Environment.GetEnvironmentVariable(
@@ -393,6 +468,15 @@ public static class ImageUtils
 
         return !string.IsNullOrEmpty(url) ? url :
             $"{McrRegistryUrl}/sidecar-digests:{McrTag}";
+    }
+
+    public static string GetCleanroomCvmMeasurementsVirtualDocumentUrl()
+    {
+        var url = Environment.GetEnvironmentVariable(
+           "CR_CLUSTER_PROVIDER_CLEANROOM_CVM_MEASUREMENTS_VIRTUAL_DOCUMENT_URL");
+
+        return !string.IsNullOrEmpty(url) ? url :
+            $"{McrRegistryUrl}/cvm-measurements-virtual:{McrTag}";
     }
 
     public static string GetCleanroomCvmMeasurementsDocumentUrl()
@@ -405,16 +489,16 @@ public static class ImageUtils
     }
 
     /// <summary>
-    /// Gets the URL of the inferencing runtime digests document.
+    /// Gets the URL of the inferencing digests document.
     /// </summary>
-    /// <returns>The runtime digests document URL.</returns>
-    public static string GetRuntimeDigestsDocumentUrl()
+    /// <returns>The inferencing digests document URL.</returns>
+    public static string GetInferencingDigestsDocumentUrl()
     {
         var url = Environment.GetEnvironmentVariable(
-           "CR_CLUSTER_PROVIDER_RUNTIME_DIGESTS_DOCUMENT_URL");
+           "CR_CLUSTER_PROVIDER_INFERENCING_DIGESTS_DOCUMENT_URL");
 
         return !string.IsNullOrEmpty(url) ? url :
-            $"{McrRegistryUrl}/inf-runtime-digests:{McrTag}";
+            $"{McrRegistryUrl}/inferencing-digests:{McrTag}";
     }
 
     public static string CleanroomAnalyticsApp()
@@ -432,6 +516,41 @@ public static class ImageUtils
            "CR_CLUSTER_PROVIDER_CLEANROOM_ANALYTICS_IMAGE_POLICY_DOCUMENT_URL");
         return !string.IsNullOrEmpty(url) ? url :
             $"{McrRegistryUrl}/policies/workloads/cleanroom-spark-analytics-app:{McrTag}";
+    }
+
+    public static string GetKarpenterProviderChartPath()
+    {
+        return GetImage("CR_CLUSTER_PROVIDER_KARPENTER_PROVIDER_CHART_URL")
+            ?? $"{McrRegistryUrl}/helm/karpenter-provider-accr";
+    }
+
+    public static string GetKarpenterProviderChartVersion()
+    {
+        return GetTag("CR_CLUSTER_PROVIDER_KARPENTER_PROVIDER_CHART_URL") ?? McrTag;
+    }
+
+    public static string GetKarpenterProviderImage()
+    {
+        return GetImage("CR_CLUSTER_PROVIDER_KARPENTER_PROVIDER_IMAGE")
+            ?? $"{McrRegistryUrl}/karpenter-provider-accr";
+    }
+
+    public static string GetKarpenterProviderTag()
+    {
+        return GetTag("CR_CLUSTER_PROVIDER_KARPENTER_PROVIDER_IMAGE") ?? McrTag;
+    }
+
+    public static string GetProviderClientImage()
+    {
+        return GetImage(
+            "CR_CLUSTER_PROVIDER_CLIENT_IMAGE")
+            ?? ($"{McrRegistryUrl}/cleanroom-cluster/" +
+            "cleanroom-cluster-provider-client");
+    }
+
+    public static string GetProviderClientTag()
+    {
+        return GetTag("CR_CLUSTER_PROVIDER_CLIENT_IMAGE") ?? McrTag;
     }
 
     private static string? GetImage(string envVar)

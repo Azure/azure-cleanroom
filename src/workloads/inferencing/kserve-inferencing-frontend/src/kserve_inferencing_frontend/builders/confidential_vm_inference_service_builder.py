@@ -14,6 +14,13 @@ from ..config.configuration import (
 from ..models.cleanroom_inferencing_application import CleanRoomInferencingApplication
 from ..models.inference_service_models import PredictorSpec
 from ..models.input_models import GovernanceSettings, PredictorInput
+from ..utilities.constants import Constants
+from ..utilities.container_utils import (
+    add_volume_mount,
+    find_container_optional,
+    prepend_env_path,
+    set_mount_propagation,
+)
 
 
 class ConfidentialVmInferenceServiceBuilder(InferenceServiceBuilder):
@@ -31,50 +38,102 @@ class ConfidentialVmInferenceServiceBuilder(InferenceServiceBuilder):
         predictor_settings: PredictorSettings,
     ) -> PredictorSpec:
         predictor = super()._get_predictor(input, predictor_settings)
-        # CVM inferencing requires host networking. Default to True if not specified
-        # via placement input.
+        # CVM inferencing no more requires host networking with FlexNodeIpLayout design.
+        # Default to False if not specified via placement input.
         if predictor.hostNetwork is None:
-            predictor.hostNetwork = True
+            predictor.hostNetwork = False
         return predictor
 
-    def Build(self) -> CleanRoomInferencingApplication:
-        app = super().Build()
-
+    def _customize_app(self, app: CleanRoomInferencingApplication):
         # Add tpmrm0 volume for CVM attestation agent.
         app.spec.predictor.volumes.append(
             k8smodels.V1Volume(
-                name="tpmrm0",
-                host_path=k8smodels.V1HostPathVolumeSource(path="/dev/tpmrm0"),
+                name=Constants.TPMRM0_VOLUME,
+                host_path=k8smodels.V1HostPathVolumeSource(
+                    path=Constants.TPMRM0_HOST_PATH
+                ),
             )
         )
 
-        # On a CVM flex node each container has its own mount namespace. The blobfuse sidecar
-        # creates a FUSE mount inside the shared emptyDir which is only visible to other
-        # containers when mount propagation is configured:
-        # - Bidirectional on the blobfuse sidecar so the FUSE mount propagates out.
-        # - HostToContainer on consuming containers so they receive the propagated mount
-        #   (does not require the container to be privileged).
-        if app.spec.predictor.initContainers:
-            for container in app.spec.predictor.initContainers:
-                for vm in container.volume_mounts:
-                    if vm.name == "remotemounts":
-                        if "blobfuse" in container.name:
-                            vm.mount_propagation = "Bidirectional"
-                        else:
-                            vm.mount_propagation = "HostToContainer"
-
-        serving_container = next(
-            c for c in app.spec.predictor.containers if c.name == "kserve-container"
+        # Add attestation lock volume so concurrent pods serialize TPM
+        # NV writes via flock. The lock file lives on the host's /run
+        # tmpfs and is shared across all pods on the same node.
+        # The matching volumeMount is in the sidecar template.
+        app.spec.predictor.volumes.append(
+            k8smodels.V1Volume(
+                name=Constants.ATTESTATION_LOCK_VOLUME,
+                host_path=k8smodels.V1HostPathVolumeSource(
+                    path=Constants.ATTESTATION_LOCK_HOST_PATH,
+                    type="DirectoryOrCreate",
+                ),
+            )
         )
-        if serving_container.volume_mounts:
-            for vm in serving_container.volume_mounts:
-                if vm.name == "remotemounts":
-                    vm.mount_propagation = "HostToContainer"
 
-        if app.spec.predictor.containers:
-            for container in app.spec.predictor.containers:
-                for vm in container.volume_mounts:
-                    if vm.name == "remotemounts":
-                        vm.mount_propagation = "HostToContainer"
+        # Add NVIDIA driver libraries for GPU attestation via NVML.
+        if self._requires_gpu():
+            app.spec.predictor.volumes.append(
+                k8smodels.V1Volume(
+                    name=Constants.NVIDIA_DRIVER_LIBS_VOLUME,
+                    host_path=k8smodels.V1HostPathVolumeSource(
+                        path=Constants.NVIDIA_DRIVER_LIBS_HOST_PATH,
+                        type="Directory",
+                    ),
+                ),
+            )
+            agent = find_container_optional(
+                app.spec.predictor.initContainers,
+                Constants.CVM_ATTESTATION_AGENT_CONTAINER,
+            )
+            if agent:
+                add_volume_mount(
+                    agent,
+                    Constants.NVIDIA_DRIVER_LIBS_VOLUME,
+                    Constants.NVIDIA_DRIVER_LIBS_MOUNT_PATH,
+                    read_only=True,
+                )
+                prepend_env_path(
+                    agent, "LD_LIBRARY_PATH", Constants.NVIDIA_DRIVER_LIBS_MOUNT_PATH
+                )
 
-        return app
+            # Mount OpenSSL 3.4.1 from host into GPU inference containers.
+            # The encrypted PCIe channel between CPU and H100 in CC mode uses
+            # OpenSSL for encryption. OpenSSL 3.4.1 (AVX512) doubles CPU-GPU
+            # bandwidth compared to the default OpenSSL 3.0.2.
+            app.spec.predictor.volumes.append(
+                k8smodels.V1Volume(
+                    name=Constants.OPENSSL_VOLUME,
+                    host_path=k8smodels.V1HostPathVolumeSource(
+                        path=Constants.OPENSSL_HOST_PATH,
+                        type="Directory",
+                    ),
+                ),
+            )
+            kserve_container = find_container_optional(
+                app.spec.predictor.containers,
+                Constants.KSERVE_CONTAINER,
+            )
+            if kserve_container:
+                add_volume_mount(
+                    kserve_container,
+                    Constants.OPENSSL_VOLUME,
+                    Constants.OPENSSL_MOUNT_PATH,
+                    read_only=True,
+                )
+                prepend_env_path(
+                    kserve_container,
+                    "LD_LIBRARY_PATH",
+                    Constants.OPENSSL_LIB_PATH,
+                )
+
+        # CVM mount propagation: Bidirectional on blobfuse, HostToContainer on others.
+        set_mount_propagation(
+            app.spec.predictor.initContainers,
+            Constants.REMOTE_MOUNTS_VOLUME,
+            "HostToContainer",
+            blobfuse_mode="Bidirectional",
+        )
+        set_mount_propagation(
+            app.spec.predictor.containers,
+            Constants.REMOTE_MOUNTS_VOLUME,
+            "HostToContainer",
+        )

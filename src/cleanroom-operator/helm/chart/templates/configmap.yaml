@@ -1,0 +1,22 @@
+{{- if .Values.operator.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cleanroom-operator-config
+  namespace: {{ .Values.namespace }}
+data:
+  {{- if .Values.providerClient.enabled }}
+  CLUSTER_PROVIDER_CLIENT_ENDPOINT: "http://cluster-provider-client.{{ .Values.namespace }}.svc.cluster.local:8080"
+  {{- else }}
+  CLUSTER_PROVIDER_CLIENT_ENDPOINT: {{ .Values.providerClient.endpoint | quote }}
+  {{- end }}
+  {{- if .Values.ccfProviderClient.enabled }}
+  CCF_PROVIDER_CLIENT_ENDPOINT: "http://ccf-provider-client.{{ .Values.namespace }}.svc.cluster.local:8080"
+  {{- else if .Values.ccfProviderClient.endpoint }}
+  CCF_PROVIDER_CLIENT_ENDPOINT: {{ .Values.ccfProviderClient.endpoint | quote }}
+  {{- end }}
+  {{- range $key, $value := .Values.operator.env }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+
+{{- end }}

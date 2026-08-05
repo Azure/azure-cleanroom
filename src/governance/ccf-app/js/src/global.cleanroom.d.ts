@@ -58,7 +58,8 @@ export interface CleanRoomCrypto {
 
 export interface CvmSnpAttestationCheckResult {
   passed: boolean;
-  detail: string;
+  detail?: string;
+  error?: string;
 }
 
 export interface CvmSnpAttestationNamedCheck {
@@ -66,17 +67,28 @@ export interface CvmSnpAttestationNamedCheck {
   result: CvmSnpAttestationCheckResult;
 }
 
+export interface CvmSnpGpuClaims {
+  gpuCount: number;
+  gpuRIMAppraisal?: boolean;
+  gpuSecureBoot?: boolean;
+  gpuDebugDisabled?: boolean;
+  gpuDriverRIM?: boolean;
+  gpuVbiosRIM?: boolean;
+}
+
 export interface CvmSnpAttestationResult {
   verified: boolean;
   checks: CvmSnpAttestationNamedCheck[];
   runtimeClaims: Record<string, unknown>;
+  gpuClaims?: CvmSnpGpuClaims;
+  reportData?: string; // base64-encoded report data payload from validated user data document
 }
 
 export interface CleanRoomAttestation {
   /**
    * Verifies Azure CVM SNP attestation evidence collected via the vTPM path.
-   * Takes as input the TPM quote, HCL report (wrapping the SNP report),
-   * the VCEK certificate, AIK certificate, PCR values, and a nonce.
+   * Takes as input the TPM quote, HCL report, SNP report, platform
+   * certificate bundle, AIK certificate, PCR values, and a nonce.
    *
    * @param evidence A JSON string containing the attestation evidence and nonce.
    * @returns The verification result with individual check statuses.

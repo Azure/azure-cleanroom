@@ -1,0 +1,58 @@
+services:
+  mock-predictor:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock
+    command:
+      - "--cert=/certs/server.crt"
+      - "--key=/certs/server.key"
+      - "--port=8443"
+    volumes:
+      - ${OHTTP_TEST_CERTS_DIR:-./_certs}:/certs:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request,ssl;ctx=ssl.create_default_context();ctx.check_hostname=False;ctx.verify_mode=ssl.CERT_NONE;urllib.request.urlopen('https://localhost:8443/ready',context=ctx)",
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  ohttp-gateway:
+    image: localhost:5000/workloads/ohttp-gateway:latest
+    environment:
+      # Listen on plain HTTP (TLS is handled by Envoy in prod; here we skip it).
+      ASPNETCORE_URLS: "http://+:8080"
+      # Point at mock predictor for all model names.
+      PREDICTOR_HOST_OVERRIDE: "mock-predictor:8443"
+      # Use the test CA cert to trust mock predictor's TLS certificate.
+      PREDICTOR_CA_CERT_PATH: "/certs/ca.crt"
+    volumes:
+      - ${OHTTP_TEST_CERTS_DIR:-./_certs}:/certs:ro
+    depends_on:
+      mock-predictor:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/ohttp-gateway/ready"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  ohttp-client:
+    image: localhost:5000/workloads/ohttp-client:latest
+    environment:
+      ASPNETCORE_URLS: "http://+:8070"
+      OHTTP_GATEWAY_ENDPOINT: "http://ohttp-gateway:8080"
+    depends_on:
+      ohttp-gateway:
+        condition: service_healthy
+    ports:
+      - "${OHTTP_CLIENT_PORT:-8070}:8070"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8070/ready"]
+      interval: 3s
+      timeout: 5s
+      retries: 10

@@ -2,6 +2,7 @@ output-dir: "{cwd}/generated"
 emit:
   - "@typespec/openapi3"
   - "@typespec/http-server-js"
+  - "@typespec/http-client-csharp"
 options:
   "@typespec/openapi3":
     emitter-output-dir: "{output-dir}/schema"
@@ -9,3 +10,6 @@ options:
       - 3.1.0
   "@typespec/http-server-js":
     emitter-output-dir: "{output-dir}/server/nodejs"
+  "@typespec/http-client-csharp":
+    emitter-output-dir: "{output-dir}/client/csharp"
+    package-name: "Azure.Cleanroom.Governance.Client"

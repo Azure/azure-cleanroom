@@ -54,7 +54,7 @@ namespace cleanroom::crypto
      * @param size The size of @p data
      * @param type The type of hash to compute
      */
-    virtual HashBytes Hash(const uint8_t* data, size_t size, MDType type) const
+    virtual HashBytes hash(const uint8_t* data, size_t size, MDType type) const
     {
       auto o_md_type = OpenSSL::get_md_type(type);
       HashBytes r(EVP_MD_size(o_md_type));
@@ -80,6 +80,4 @@ namespace cleanroom::crypto
   };
 
   void openssl_sha256(const std::span<const uint8_t>& data, uint8_t* h);
-  void openssl_sha256_init();
-  void openssl_sha256_shutdown();
 }

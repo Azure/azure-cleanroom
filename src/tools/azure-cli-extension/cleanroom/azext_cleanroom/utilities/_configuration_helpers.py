@@ -1,5 +1,3 @@
-from typing import Any
-
 import cleanroom_common.azure_cleanroom_core.utilities.configuration_helpers as config_helpers
 from azure.cli.core.util import CLIError
 from cleanroom_common.azure_cleanroom_core.models.cleanroom import (

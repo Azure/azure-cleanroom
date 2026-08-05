@@ -1,0 +1,19 @@
+# Common variables for the release pipelines. Maps the GitHub release secrets to
+# an ADO variable group + OIDC service connection.
+#
+# GitHub secrets -> ADO:
+#   RELEASE_ACR_NAME       -> variable group value RELEASE_ACR_NAME
+#   RELEASE_CLIENT_ID      -\
+#   RELEASE_TENANT_ID       > replaced by ONE prod-release OIDC service connection
+#   RELEASE_SUBSCRIPTION_ID-/  (releaseServiceConnection) — az login via the SC
+#                              instead of passing the three ids to azure/login.
+#
+# TODO(Phase 1C): create the `cleanroom-release-vars` variable group (RELEASE_ACR_NAME)
+#   and the prod-release OIDC service connection, then set the names below.
+
+variables:
+  - group: cleanroom-release-vars # TODO(Phase 1C): RELEASE_ACR_NAME
+  - name: releaseServiceConnection
+    value: "cleanroom-prod-release-oidc" # TODO(Phase 1C): prod-release OIDC SC
+  - name: repoRoot
+    value: "$(Build.SourcesDirectory)/azure-cleanroom"

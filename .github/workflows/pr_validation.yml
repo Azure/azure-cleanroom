@@ -22,15 +22,13 @@ concurrency:
 
 jobs:
   lint:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=lint-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=lint-${{ github.run_id }}-${{ github.run_attempt }}"]
     steps:
       - uses: actions/checkout@v4
-      - name: Run isort
-        uses: isort/isort-action@master
-        with:
-          configuration: "--check-only --profile black"
-      - name: Run Black
-        uses: psf/black@stable
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Run Ruff format and lint check
+        run: ./scripts/ruff-check.sh
 
   detect-changes:
     needs: [lint]
@@ -88,3 +86,63 @@ jobs:
     needs: [detect-changes, build]
     if: ${{ contains(needs.detect-changes.outputs.test-stages, 'test-workloads') }}
     uses: ./.github/workflows/pr_workload_samples.yml
+
+  test-flex-node:
+    needs: [detect-changes]
+    if: ${{ contains(needs.detect-changes.outputs.test-stages, 'test-flex-node') }}
+    uses: ./.github/workflows/pr_flex_node.yml
+
+  # Single gate job for branch protection. Always runs and aggregates results
+  # from all build/test jobs. Use this as the sole required status check to
+  # avoid "Expected — Waiting for status" when the resolver skips test stages
+  # (skipped reusable workflow jobs don't produce child check runs).
+  ci-gate:
+    if: always()
+    needs:
+      - lint
+      - detect-changes
+      - build
+      - test-cgs
+      - test-ccf
+      - test-cleanroom-cluster
+      - test-multi-party-collab
+      - test-workloads
+      - test-flex-node
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check job results
+        run: |
+          failed=0
+          jobs=(
+            "lint"
+            "detect-changes"
+            "build"
+            "test-cgs"
+            "test-ccf"
+            "test-cleanroom-cluster"
+            "test-multi-party-collab"
+            "test-workloads"
+            "test-flex-node"
+          )
+          results=(
+            "${{ needs.lint.result }}"
+            "${{ needs.detect-changes.result }}"
+            "${{ needs.build.result }}"
+            "${{ needs.test-cgs.result }}"
+            "${{ needs.test-ccf.result }}"
+            "${{ needs.test-cleanroom-cluster.result }}"
+            "${{ needs.test-multi-party-collab.result }}"
+            "${{ needs.test-workloads.result }}"
+            "${{ needs.test-flex-node.result }}"
+          )
+          for i in "${!jobs[@]}"; do
+            echo "${jobs[$i]}: ${results[$i]}"
+            if [[ "${results[$i]}" == "failure" || "${results[$i]}" == "cancelled" ]]; then
+              failed=1
+            fi
+          done
+          if [[ "$failed" -eq 1 ]]; then
+            echo "::error::CI gate failed: one or more jobs failed or were cancelled"
+            exit 1
+          fi
+          echo "CI gate passed: all jobs succeeded or were skipped"

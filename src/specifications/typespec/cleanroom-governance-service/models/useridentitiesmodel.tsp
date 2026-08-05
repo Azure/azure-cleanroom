@@ -1,4 +1,4 @@
-namespace Cleanroom.Governance;
+namespace Azure.Cleanroom.Governance;
 
 /**
  * List user identities response
@@ -23,4 +23,12 @@ model GetUserIdentityResponse {
 
   /** User data */
   data: unknown;
+}
+
+/**
+ * Get user identity response
+ */
+model CheckUserIdentityResponse {
+  /** User status */
+  active: boolean;
 }

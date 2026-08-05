@@ -10,6 +10,13 @@ from typing import Annotated, Optional
 
 import kubernetes
 import requests
+import yaml
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.params import Body
+from fastapi.responses import JSONResponse
+from opentelemetry import context
+
 from analytics_contracts.events import OperationalEvent
 from analytics_contracts.statistics import (
     QueryStatisticsData,
@@ -20,15 +27,10 @@ from cleanroom_internal.utilities.otel_setup_utilities import TelemetryConfig
 from cleanroom_internal.utilities.otel_utilities import extract_context_from_carrier
 from cleanroom_internal.utilities.tracing_utilities import (
     create_span_context,
-    trace_function,
 )
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.params import Body
-from fastapi.responses import JSONResponse
-from opentelemetry import context
 
 from .clients.ai_optimizer_client import AIOptimizerClient
+from .clients.job_event_record_client import JobEventRecordClient
 from .clients.job_record_client import JobRecordClient
 from .clients.kubernetes_client import KubernetesClient
 from .config.config_manager import ConfigManager
@@ -41,8 +43,8 @@ from .config.configuration import (
 )
 from .exceptions.custom_exceptions import ResourceNotFound
 from .models.input_models import JobInput, SQLJobInput
+from .models.job_event_models import PersistedJobEvent
 from .models.job_record_models import (
-    JobRecord,
     JobRecordResponse,
     JobRun,
     JobRunError,
@@ -56,7 +58,7 @@ from .models.spark_application_models import (
 from .telemetry.metrics import SparkFrontendMetrics, get_metrics
 from .utilities import job_converters
 from .utilities.constants import Constants
-from .utilities.helpers import generate_query_id, utc_now
+from .utilities.helpers import generate_query_id, log_safe, utc_now
 from .utilities.job_converters import SparkJobProviderType
 from .webhooks.cce_policy_injector import PolicyInjector, PolicyInjectorWebhookHandler
 from .webhooks.scheduler import PodScheduler, SchedulerWebhookHandler
@@ -67,10 +69,95 @@ logger = logging.getLogger("cleanroom-spark-frontend")
 app = FastAPI()
 k8s_client: KubernetesClient
 job_record_client: JobRecordClient
+job_event_record_client: JobEventRecordClient
 config: Configuration
 metrics_collector: SparkFrontendMetrics = get_metrics()
 scheduler_webhook_handler: SchedulerWebhookHandler
 policy_injector_webhook_handler: PolicyInjectorWebhookHandler
+WEB_SERVER_CONFIG_MAP_NAME = "webserver-config"
+DEFAULT_SCALE_SKU = "small"
+
+
+SCALE_SKU_SETTINGS = {
+    "small": {
+        "driver_memory": "4g",
+        "executor_memory": "8g",
+        "executor_max": 5,
+    },
+    "medium": {
+        "driver_memory": "8g",
+        "executor_memory": "16g",
+        "executor_max": 10,
+    },
+    "large": {
+        "driver_memory": "12g",
+        "executor_memory": "24g",
+        "executor_max": 20,
+    },
+}
+
+
+def get_scale_sku_settings(scale_sku: str) -> SkuSettings:
+    normalized_sku = scale_sku.strip().lower()
+    profile = SCALE_SKU_SETTINGS.get(normalized_sku)
+    if profile is None:
+        valid_skus = ", ".join(SCALE_SKU_SETTINGS)
+        raise ValueError(
+            f"Unsupported scaleSku '{scale_sku}'. Valid values: {valid_skus}."
+        )
+
+    return SkuSettings(
+        driver=DriverSettings(
+            cores=config.applications.analytics.sql.driver.cores,
+            memory=profile["driver_memory"],
+            serviceAccount=config.applications.analytics.sql.driver.service_account,
+        ),
+        executor=ExecutorSettings(
+            cores=config.applications.analytics.sql.executor.cores,
+            memory=profile["executor_memory"],
+            instances=ExecutorInstanceSettings(
+                min=config.applications.analytics.sql.executor.instances.min,
+                max=profile["executor_max"],
+            ),
+            deleteOnTermination=config.applications.analytics.sql.executor.delete_on_termination,
+        ),
+    )
+
+
+def update_config_map_sql_settings(
+    scale_sku: str,
+    sku_settings: SkuSettings,
+    job_id: str,
+) -> None:
+    settings_yaml = k8s_client.get_key_from_config_map(
+        WEB_SERVER_CONFIG_MAP_NAME,
+        config.service.namespace,
+        "settings",
+    )
+    settings = yaml.safe_load(settings_yaml) or {}
+    applications = settings.setdefault("applications", {})
+    analytics = applications.setdefault("analytics", {})
+    analytics["sql"] = sku_settings.model_dump(by_alias=True, mode="json")
+    data = {"settings": yaml.safe_dump(settings, sort_keys=False)}
+
+    k8s_client.patch_config_map_data(
+        WEB_SERVER_CONFIG_MAP_NAME,
+        config.service.namespace,
+        data,
+    )
+    config.applications.analytics.sql = sku_settings
+    logger.info(
+        "Updated ConfigMap sql settings for scaleSku=%s job=%s: driver=%sc/%s, "
+        "executor=%sc/%s (instances: %s-%s)",
+        log_safe(scale_sku),
+        log_safe(job_id),
+        sku_settings.driver.cores,
+        sku_settings.driver.memory,
+        sku_settings.executor.cores,
+        sku_settings.executor.memory,
+        sku_settings.executor.instances.min,
+        sku_settings.executor.instances.max,
+    )
 
 
 async def submit_job(
@@ -94,7 +181,7 @@ async def submit_job(
     ):
         try:
             converter = job_converters.get(provider_type, config)
-            logger.info(f"Submitting spark job to Kubernetes: {job_id}")
+            logger.info(f"Submitting spark job to Kubernetes: {log_safe(job_id)}")
 
             spark_spec = converter.to_spark_spec(
                 job_id,
@@ -111,7 +198,7 @@ async def submit_job(
             return {"status": "success", "id": job_name}
 
         except Exception as e:
-            logger.error(f"Failed to submit job {job_id}: {e}")
+            logger.error(f"Failed to submit job {log_safe(job_id)}: {e}")
             raise
         finally:
             duration = time.time() - start_time
@@ -120,6 +207,7 @@ async def submit_job(
                 success=success,
                 duration=duration,
                 namespace=namespace,
+                query_id=(tags or {}).get("query_id", "unknown"),
             )
 
 
@@ -154,15 +242,15 @@ async def telemetry_middleware(request: Request, call_next):
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    logger.info(f"Incoming request: {request.method} {request.url.path}")
-    logger.info(f"Request headers: {request.headers}")
+    logger.info(f"Incoming request: {request.method} {log_safe(request.url.path)}")
+    logger.info(f"Request headers: {log_safe(request.headers)}")
     return await call_next(request)
 
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    logger.error(f"Validation error for request: {await request.body()}")
-    logger.error(f"Request headers: {request.headers}")
+    logger.error(f"Validation error for request: {log_safe(await request.body())}")
+    logger.error(f"Request headers: {log_safe(request.headers)}")
     logger.error(f"Error details: {exc.errors()}")
 
     return JSONResponse(
@@ -209,9 +297,30 @@ async def submit_sql_job(
     override_sku_settings = None
     reasoning = None
     try:
+        scale_sku = job.scale_sku or DEFAULT_SCALE_SKU
+        override_sku_settings = get_scale_sku_settings(scale_sku)
+        safe_scale_sku = log_safe(scale_sku)
+        logger.info(
+            f"Using scaleSku={safe_scale_sku} for job {log_safe(job_id)}: "
+            f"driver={override_sku_settings.driver.cores}c/"
+            f"{override_sku_settings.driver.memory}, "
+            f"executor={override_sku_settings.executor.cores}c/"
+            f"{override_sku_settings.executor.memory} "
+            f"(instances: {override_sku_settings.executor.instances.min}-"
+            f"{override_sku_settings.executor.instances.max})"
+        )
+        logger.info(
+            f"scaleSku={safe_scale_sku} selected for job {log_safe(job_id)}; "
+            "skipping AI optimizer."
+        )
+
         # Use AI optimizer if enabled in config and requested in job input
-        if config.service.optimizer.enabled and job.use_optimizer:
-            logger.info(f"Using AI optimizer for job {job_id}")
+        if (
+            not override_sku_settings
+            and config.service.optimizer.enabled
+            and job.use_optimizer
+        ):
+            logger.info(f"Using AI optimizer for job {log_safe(job_id)}")
             try:
                 optimizer_client = AIOptimizerClient(
                     endpoint=config.service.optimizer.endpoint,
@@ -277,15 +386,14 @@ async def submit_sql_job(
                     f"traceback: {traceback.format_exc()}"
                 )
 
+        effective_sku_settings = (
+            override_sku_settings
+            if override_sku_settings
+            else config.applications.analytics.sql
+        )
+
         # If dry run is enabled, return the SKU settings that would be used
         if dry_run:
-            # Determine which settings would be used
-            effective_sku_settings = (
-                override_sku_settings
-                if override_sku_settings
-                else config.applications.analytics.sql
-            )
-
             return {
                 "status": "success",
                 "id": "none",
@@ -293,25 +401,19 @@ async def submit_sql_job(
                 "jobId": job_id,
                 "optimizationUsed": override_sku_settings is not None,
                 "reasoning": reasoning,
-                "skuSettings": {
-                    "driver": {
-                        "cores": effective_sku_settings.driver.cores,
-                        "memory": effective_sku_settings.driver.memory,
-                        "serviceAccount": effective_sku_settings.driver.service_account,
-                    },
-                    "executor": {
-                        "cores": effective_sku_settings.executor.cores,
-                        "memory": effective_sku_settings.executor.memory,
-                        "instances": {
-                            "min": effective_sku_settings.executor.instances.min,
-                            "max": effective_sku_settings.executor.instances.max,
-                        },
-                        "deleteOnTermination": effective_sku_settings.executor.delete_on_termination,
-                    },
-                },
+                "skuSettings": effective_sku_settings.model_dump(
+                    by_alias=True, mode="json"
+                ),
             }
 
-        return await submit_job(
+        if override_sku_settings:
+            update_config_map_sql_settings(
+                scale_sku,
+                override_sku_settings,
+                job_id,
+            )
+
+        submission_result = await submit_job(
             SparkJobProviderType.SQL,
             job_id,
             job,
@@ -320,6 +422,11 @@ async def submit_sql_job(
             tags=tags,
             override_sku_settings=override_sku_settings,
         )
+        submission_result["scaleSku"] = scale_sku.strip().lower()
+        submission_result["skuSettings"] = effective_sku_settings.model_dump(
+            by_alias=True, mode="json"
+        )
+        return submission_result
     except Exception as e:
         logger.error(
             f"Failed to submit SQL job: {e},  traceback: {traceback.format_exc()}"
@@ -453,6 +560,11 @@ async def get_status(job_id: str):
                 if spark_app.metadata.labels is None
                 else spark_app.metadata.labels.get("job_type", "unknown")
             )
+            query_id = (
+                "unknown"
+                if spark_app.metadata.labels is None
+                else spark_app.metadata.labels.get("query_id", "unknown")
+            )
             if (
                 job_status.terminationTime is not None
                 and job_status.lastSubmissionAttemptTime is not None
@@ -468,6 +580,7 @@ async def get_status(job_id: str):
                     job_status.applicationState.state == ApplicationStateEnum.Completed
                 ),
                 duration=duration,
+                query_id=query_id,
             )
 
             _record_job_run(
@@ -495,10 +608,21 @@ async def get_status(job_id: str):
             for event in k8s_events
         ]
 
-        return {"id": job_id, "status": job_status, "events": events}
+        # Overlay the events persisted in the JobEventRecord CRD so the
+        # operational/statistics events survive the ~1h Kubernetes core-event
+        # garbage collection and remain retrievable after live events are gone.
+        events = _merge_persisted_events(
+            job_id, config.applications.analytics.namespace, events
+        )
+
+        return {
+            "id": job_id,
+            "status": job_status,
+            "events": events,
+        }
 
     except ResourceNotFound as e:
-        logger.error(f"Job with ID {job_id} not found.")
+        logger.error(f"Job with ID {log_safe(job_id)} not found.")
         raise HTTPException(
             status_code=404,
             detail=f"Job with ID {job_id} not found",
@@ -513,6 +637,47 @@ async def get_status(job_id: str):
         )
 
 
+def _merge_persisted_events(
+    job_id: str, namespace: str, live_events: list[dict]
+) -> list[dict]:
+    """Overlay JobEventRecord-persisted events on top of live Kubernetes events.
+
+    Persisted events (keyed by name) take precedence so they remain available
+    once the underlying Kubernetes events are garbage-collected; live-only
+    events (e.g. Spark lifecycle events) are preserved in their original order.
+    """
+    try:
+        record = job_event_record_client.get_event_record(job_id, namespace)
+    except Exception as e:
+        logger.warning(
+            f"Failed to read JobEventRecord: job_id={log_safe(job_id)}, error={e}"
+        )
+        return live_events
+
+    persisted = record.status.events if record and record.status else []
+    if not persisted:
+        return live_events
+
+    persisted_dumps = [e.model_dump(by_alias=True, mode="json") for e in persisted]
+    persisted_by_name = {d["name"]: d for d in persisted_dumps if d.get("name")}
+    unnamed_persisted = [d for d in persisted_dumps if not d.get("name")]
+
+    merged = []
+    seen = set()
+    for event in live_events:
+        name = event.get("name")
+        if name is not None and name in persisted_by_name:
+            merged.append(persisted_by_name[name])
+            seen.add(name)
+        else:
+            merged.append(event)
+    for name, dumped in persisted_by_name.items():
+        if name not in seen:
+            merged.append(dumped)
+    merged.extend(unnamed_persisted)
+    return merged
+
+
 def _parse_query_stats_from_events(
     events: list[kubernetes.client.CoreV1Event], job_id: str
 ) -> tuple[int, int]:
@@ -523,7 +688,9 @@ def _parse_query_stats_from_events(
                 stats_data = QueryStatisticsData.model_validate_json(event.message)
                 return stats_data.num_rows_read, stats_data.num_rows_written
             except Exception:
-                logger.warning(f"Failed to parse stats from event: job_id={job_id}")
+                logger.warning(
+                    f"Failed to parse stats from event: job_id={log_safe(job_id)}"
+                )
     return 0, 0
 
 
@@ -555,7 +722,9 @@ def _record_job_run(
     )
 
     if not query_id:
-        logger.debug(f"No query_id label found, skipping job record: job_id={job_id}")
+        logger.debug(
+            f"No query_id label found, skipping job record: job_id={log_safe(job_id)}"
+        )
         return
 
     try:
@@ -594,15 +763,15 @@ def _record_job_run(
             )
         except Exception as annotation_error:
             logger.warning(
-                f"Failed to set recorded annotation: job_id={job_id}, error={annotation_error}"
+                f"Failed to set recorded annotation: job_id={log_safe(job_id)}, error={annotation_error}"
             )
 
         logger.info(
-            f"Updated job record: query_id={query_id}, run_id={job_id}, namespace={namespace}, is_successful={is_successful}"
+            f"Updated job record: query_id={log_safe(query_id)}, run_id={log_safe(job_id)}, namespace={namespace}, is_successful={is_successful}"
         )
     except Exception as e:
         logger.error(
-            f"Failed to update job record: query_id={query_id}, run_id={job_id}, namespace={namespace}, error={e}"
+            f"Failed to update job record: query_id={log_safe(query_id)}, run_id={log_safe(job_id)}, namespace={namespace}, error={e}"
         )
 
 
@@ -639,7 +808,7 @@ async def get_runs(query_id: str):
         raise
     except Exception as e:
         logger.error(
-            f"Failed to get runs for query {query_id}: {e}, traceback: {traceback.format_exc()}"
+            f"Failed to get runs for query {log_safe(query_id)}: {e}, traceback: {traceback.format_exc()}"
         )
         raise HTTPException(
             status_code=500,
@@ -656,6 +825,7 @@ async def _create_spark_app_event(
 ):
     global k8s_client
     global config
+    global job_event_record_client
 
     try:
         spark_app = k8s_client.get_spark_app(
@@ -691,8 +861,43 @@ async def _create_spark_app_event(
             involved_object_uid=spark_app.metadata.uid,
             event_type=event_type,
         )
+
+        try:
+            now = utc_now()
+            # Own the record by the SparkApplication so the Kubernetes garbage
+            # collector cascade-deletes it when the app is deleted (e.g. when the
+            # app's TTL expires) - events expire together with the app.
+            owner_references = [
+                {
+                    "apiVersion": (
+                        f"{config.spark.resource.group}/{config.spark.resource.version}"
+                    ),
+                    "kind": "SparkApplication",
+                    "name": spark_app.metadata.name,
+                    "uid": spark_app.metadata.uid,
+                }
+            ]
+            job_event_record_client.add_event(
+                job_id=job_id,
+                namespace=config.applications.analytics.namespace,
+                event=PersistedJobEvent(
+                    name=event_name,
+                    reason=reason,
+                    message=message,
+                    type=event_type,
+                    first_timestamp=now,
+                    last_timestamp=now,
+                ),
+                owner_references=owner_references,
+                tags=spark_app.metadata.labels or {},
+            )
+        except Exception as persist_error:
+            logger.warning(
+                f"Failed to persist event to JobEventRecord: job_id={log_safe(job_id)}, "
+                f"name={log_safe(event_name)}, error={persist_error}"
+            )
     except ResourceNotFound as e:
-        logger.error(f"Spark application {job_id} not found: {e}")
+        logger.error(f"Spark application {log_safe(job_id)} not found: {e}")
         raise HTTPException(
             status_code=404,
             detail=f"Spark application {job_id} not found",
@@ -711,7 +916,9 @@ async def record_operational_event(job_id: str, event: OperationalEvent):
             event_type="Normal",
         )
     except Exception as e:
-        logger.error(f"Failed to record operational event for job {job_id}: {e}")
+        logger.error(
+            f"Failed to record operational event for job {log_safe(job_id)}: {e}"
+        )
         raise HTTPException(
             status_code=500,
             detail=f"Failed to record operational event: {e}",
@@ -748,13 +955,13 @@ async def record_statistics(job_id: str, event: StatisticsEvent):
             event_type="Normal",
         )
     except ResourceNotFound as e:
-        logger.error(f"Spark application {job_id} not found: {e}")
+        logger.error(f"Spark application {log_safe(job_id)} not found: {e}")
         raise HTTPException(
             status_code=404,
             detail=f"Spark application {job_id} not found",
         )
     except Exception as e:
-        logger.error(f"Failed to record statistics for job {job_id}: {e}")
+        logger.error(f"Failed to record statistics for job {log_safe(job_id)}: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to record statistics: {e}",
@@ -869,6 +1076,7 @@ def main():
     global scheduler_webhook_handler
     global policy_injector_webhook_handler
     global job_record_client
+    global job_event_record_client
 
     args = parse_args()
     log_args(args)
@@ -895,6 +1103,9 @@ def main():
 
     # Initialize JobRecord client for tracking job runs
     job_record_client = JobRecordClient()
+
+    # Initialize JobEventRecord client for persisting job events
+    job_event_record_client = JobEventRecordClient()
 
     # Initialize the pod scheduler and webhook handler
     pod_scheduler = PodScheduler(k8s_client, config.service.scheduler)

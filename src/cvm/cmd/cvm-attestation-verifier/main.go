@@ -12,33 +12,64 @@
 // Request body (JSON):
 //
 //	{
-//	  "evidence": {              // the full response from /snp/attest
-//	    "tpmQuote":      "…",   // base64
-//	    "hclReport":     "…",   // base64
-//	    "snpReport":     "…",   // base64
-//	    "aikCert":       "…",   // base64
-//	    "pcrs":          {"0":"…", …},  // index → base64 digest
+//	  "vtpm": {
+//	    "evidence": {
+//	      "tpmQuote":      "…",   // base64
+//	      "hclReport":     "…",   // base64
+//	      "snpReport":     "…",   // base64
+//	      "aikCert":       "…",   // base64
+//	      "pcrs":          {"0":"…", …}
+//	    },
+//	    "nonce":                "…",      // base64 or raw string
+//	    "product":              "Milan",  // AMD product name (optional)
+//	    "platformCertificates": "…"       // PEM-encoded AMD cert chain from THIM
 //	  },
-//	  "nonce":                "…",      // base64 or raw string: expected TPM quote nonce
-//	  "product":              "Milan",  // AMD product name (optional, default "Milan")
-//	  "platformCertificates": "…"       // PEM-encoded AMD cert chain (VCEK, ASK, ARK) from THIM
+//	  "gpu": {                            // optional, present on GPU nodes
+//	    "evidences": [{
+//	      "evidence":      "…",           // base64-encoded SPDM report
+//	      "certificate":   "…",           // base64-encoded GPU cert chain
+//	      "arch":          "…",           // NVAT file-evidence architecture
+//	      "nonce":         "…"            // NVAT file-evidence nonce (hex)
+//	    }]
+//	  },
+//	  "userDataDocument":   "…"         // base64-encoded canonical JSON user data document
 //	}
 //
-// The verifier performs 12 independent checks that mirror the trust chain
-// validated by the azure-cvm-tooling Rust crate:
+// The verifier performs the following CPU checks:
 //
 //  1. platformCertsParsing – PEM platform certs decoded into VCEK, ASK, ARK
 //  2. arkRootTrust         – provided ARK matches well-known AMD root for product
 //  3. runtimeClaimsParsing – runtime claims extracted from HCL report
 //  4. akKeyExtraction      – HCLAkPub RSA key extracted from runtime claims
-//  5. quoteFormat          – TPM quote blob parsed (TPM2B_ATTEST + TPMT_SIGNATURE)
-//  6. tpmQuoteSignature    – RSA-SHA256 quote signature verified with HCLAkPub
-//  7. nonce                – extraData in quote matches expected nonce
-//  8. pcrDigest            – SHA256(PCR values) matches quote digest
-//  9. reportDataBinding    – SHA256(VarData) == SNP report_data[0:32]
-//  10. snpReportFormat      – SNP report size validated (1184 bytes)
-//  11. certChainValidation  – ARK → ASK → VCEK chain valid
-//  12. snpSignature         – AMD ECDSA-P384-SHA384 signature over SNP report
+//  5. aikCertBinding       – optional AIK cert public key matches HCLAkPub
+//  6. quoteFormat          – TPM quote blob parsed (TPM2B_ATTEST + TPMT_SIGNATURE)
+//  7. tpmQuoteSignature    – RSA-SHA256 quote signature verified with HCLAkPub
+//  8. nonce                – extraData in quote matches expected nonce
+//  9. pcrDigest            – SHA256(PCR values) matches quote digest
+//  10. reportDataBinding   – SHA256(VarData) == SNP report_data[0:32]
+//  11. snpReportFormat     – SNP report size validated (1184 bytes)
+//  12. certChainValidation – ARK → ASK → VCEK chain valid
+//  13. snpSignature        – AMD ECDSA-P384-SHA384 signature over SNP report
+//
+// When CPU verification succeeds, the verifier also checks:
+//
+//  14. metadataBinding    – SHA256(user data document) matches user-data[0:32]
+//  15. gpuCountBinding    – document gpuCount matches supplied GPU evidence count
+//
+// When GPU evidence is present, the following GPU checks are also performed:
+//
+//  1. gpuInput            – fails if a GPU block is present but empty
+//  2. certChainParsing    – GPU certificate chain parsed from PEM
+//  3. rootTrust           – GPU root CA matches pinned NVIDIA Device Identity CA
+//  4. certChainValidation – NVIDIA root → intermediates → leaf chain valid
+//  5. reportSignature     – SPDM report signature verified with GPU leaf cert
+//  6. nonceBinding        – SPDM nonce matches CPU SNP report_data[0:32]
+//  7. gpuRIMAppraisal     – nvattest local verifier appraised the GPU bundle
+//  8. rimAppraisal        – NVAT measured-state appraisal succeeded
+//  9. secureBoot          – NVAT secure-boot claim is true
+//  10. debugState         – NVAT debug-state claim is disabled
+//  11. driverRIM          – NVAT driver RIM checks all passed
+//  12. vbiosRIM           – NVAT VBIOS RIM checks all passed
 package main
 
 import (
@@ -60,16 +91,22 @@ import (
 // ──────────────────────────────────────────────────────────────────────────────
 
 // VerifyRequest is the JSON body expected by the /snp/verify endpoint.
+// Accepts the combined attestation structure { vtpm: {...}, gpu?: {...}, userDataDocument: "..." }.
 type VerifyRequest struct {
-	Evidence             Evidence `json:"evidence"`             // cvm-attestation-agent /snp/attest response
+	VTpm             VTpmInput        `json:"vtpm"`                       // vTPM/SNP attestation evidence
+	Gpu              *verify.GpuInput `json:"gpu,omitempty"`              // GPU attestation evidence (optional)
+	UserDataDocument string           `json:"userDataDocument"` // base64-encoded canonical JSON user data document
+}
+
+// VTpmInput contains the vTPM/SNP evidence to verify.
+type VTpmInput struct {
+	Evidence             Evidence `json:"evidence"`             // attestation artifacts
 	Nonce                string   `json:"nonce"`                // expected nonce (base64 or raw string)
 	Product              string   `json:"product,omitempty"`    // AMD product: "Milan" (default), "Genoa"
 	PlatformCertificates string   `json:"platformCertificates"` // PEM-encoded AMD cert chain (VCEK, ASK, ARK) from THIM
 }
 
-// Evidence mirrors the cvm-attestation-agent's AttestResponse.
-// RuntimeClaims are extracted automatically from the HCL report and do not need
-// to be supplied by the caller.
+// Evidence mirrors the cvm-attestation-agent's vTPM evidence structure.
 type Evidence struct {
 	TPMQuote  string            `json:"tpmQuote"`
 	HCLReport string            `json:"hclReport"`
@@ -118,27 +155,27 @@ func verifyHandler(w http.ResponseWriter, r *http.Request) {
 
 	// ── Decode base64 fields ─────────────────────────────────────────────
 
-	tpmQuote, err := base64.StdEncoding.DecodeString(req.Evidence.TPMQuote)
+	tpmQuote, err := base64.StdEncoding.DecodeString(req.VTpm.Evidence.TPMQuote)
 	if err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "InvalidTPMQuote", fmt.Sprintf("invalid tpmQuote base64: %v", err))
 		return
 	}
 
-	hclReport, err := base64.StdEncoding.DecodeString(req.Evidence.HCLReport)
+	hclReport, err := base64.StdEncoding.DecodeString(req.VTpm.Evidence.HCLReport)
 	if err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "InvalidHCLReport", fmt.Sprintf("invalid hclReport base64: %v", err))
 		return
 	}
 
-	snpReport, err := base64.StdEncoding.DecodeString(req.Evidence.SNPReport)
+	snpReport, err := base64.StdEncoding.DecodeString(req.VTpm.Evidence.SNPReport)
 	if err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "InvalidSNPReport", fmt.Sprintf("invalid snpReport base64: %v", err))
 		return
 	}
 
 	var aikCert []byte
-	if req.Evidence.AIKCert != "" {
-		aikCert, err = base64.StdEncoding.DecodeString(req.Evidence.AIKCert)
+	if req.VTpm.Evidence.AIKCert != "" {
+		aikCert, err = base64.StdEncoding.DecodeString(req.VTpm.Evidence.AIKCert)
 		if err != nil {
 			httputil.WriteError(w, http.StatusBadRequest, "InvalidAIKCert", fmt.Sprintf("invalid aikCert base64: %v", err))
 			return
@@ -147,16 +184,16 @@ func verifyHandler(w http.ResponseWriter, r *http.Request) {
 
 	// ── Decode PCR values ────────────────────────────────────────────────
 
-	pcrValues := make(map[int][]byte, len(req.Evidence.PCRs))
-	for k, v := range req.Evidence.PCRs {
-		idx, err := strconv.Atoi(k)
-		if err != nil {
-			httputil.WriteError(w, http.StatusBadRequest, "InvalidPCRIndex", fmt.Sprintf("invalid PCR index %q: %v", k, err))
+	pcrValues := make(map[int][]byte, len(req.VTpm.Evidence.PCRs))
+	for k, v := range req.VTpm.Evidence.PCRs {
+		idx, pcrErr := strconv.Atoi(k)
+		if pcrErr != nil {
+			httputil.WriteError(w, http.StatusBadRequest, "InvalidPCRIndex", fmt.Sprintf("invalid PCR index %q: %v", k, pcrErr))
 			return
 		}
-		digest, err := base64.StdEncoding.DecodeString(v)
-		if err != nil {
-			httputil.WriteError(w, http.StatusBadRequest, "InvalidPCRValue", fmt.Sprintf("invalid base64 for PCR %d: %v", idx, err))
+		digest, decErr := base64.StdEncoding.DecodeString(v)
+		if decErr != nil {
+			httputil.WriteError(w, http.StatusBadRequest, "InvalidPCRValue", fmt.Sprintf("invalid base64 for PCR %d: %v", idx, decErr))
 			return
 		}
 		pcrValues[idx] = digest
@@ -165,12 +202,12 @@ func verifyHandler(w http.ResponseWriter, r *http.Request) {
 	// ── Decode nonce ─────────────────────────────────────────────────────
 	// Accept base64-encoded bytes or a raw string.
 
-	nonce, err := base64.StdEncoding.DecodeString(req.Nonce)
+	nonce, err := base64.StdEncoding.DecodeString(req.VTpm.Nonce)
 	if err != nil {
-		nonce = []byte(req.Nonce)
+		nonce = []byte(req.VTpm.Nonce)
 	}
 
-	// ── Run verification ─────────────────────────────────────────────────
+	// ── Run vTPM/SNP verification ────────────────────────────────────────
 
 	result := verify.VerifyAll(&verify.EvidenceInput{
 		TPMQuote:             tpmQuote,
@@ -179,10 +216,42 @@ func verifyHandler(w http.ResponseWriter, r *http.Request) {
 		AIKCert:              aikCert,
 		PCRValues:            pcrValues,
 		Nonce:                nonce,
-		AMDProduct:           req.Product,
-		PlatformCertificates: req.PlatformCertificates,
+		AMDProduct:           req.VTpm.Product,
+		PlatformCertificates: req.VTpm.PlatformCertificates,
 	})
 
+	if len(result.RuntimeClaims) > 0 {
+		docCheck := verify.VerifyMetadataDocumentBinding(
+			req.UserDataDocument, req.Gpu, result.RuntimeClaims)
+		result.Checks = append(result.Checks, docCheck.Checks...)
+		if docCheck.Document != nil {
+			result.GPUClaims = &verify.GPUClaims{
+				GPUCount: docCheck.Document.GPUCount,
+			}
+			result.ReportData = docCheck.Document.ReportData
+		}
+		if !docCheck.Passed {
+			result.Verified = false
+		}
+	}
+
+	// ── Run GPU verification when GPU evidence is present ────────────────
+
+	if req.Gpu != nil {
+		log.Printf("GPU attestation block present: %d GPU(s), running verification",
+			len(req.Gpu.Evidences))
+
+		gpuChecks := verify.VerifyGPU(req.Gpu, snpReport)
+		verify.PopulateGPUClaimsFromChecks(result.GPUClaims, gpuChecks)
+		result.Checks = append(result.Checks, gpuChecks...)
+
+		for _, check := range gpuChecks {
+			if !check.Result.Passed {
+				result.Verified = false
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	_ = json.NewEncoder(w).Encode(result)
 }

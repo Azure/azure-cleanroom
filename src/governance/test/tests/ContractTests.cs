@@ -168,6 +168,16 @@ public class ContractTests : TestBase
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         }
 
+        // GetVotes while the proposal is still open should show only member0 as "accepted".
+        var openVotes =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonArray>(
+                $"proposals/{proposalId}/votes"))!;
+        Assert.HasCount(1, openVotes);
+        var member0Info = (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>("/show"))!;
+        Assert.AreEqual(
+            member0Info["memberId"]!.ToString(), openVotes[0]!["memberId"]!.ToString());
+        Assert.AreEqual("accepted", openVotes[0]!["vote"]!.ToString());
+
         // As its a N member system the contract should remain in proposed.
         contract = (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(contractUrl))!;
         Assert.AreEqual(nameof(ContractState.Proposed), contract[StateKey]!.ToString());
@@ -206,6 +216,21 @@ public class ContractTests : TestBase
             var vote = fv.Find(v => v.MemberId == memberId);
             Assert.IsNotNull(vote);
             Assert.IsTrue(vote.Vote);
+        }
+
+        // GetVotes after acceptance should show all members as "accepted".
+        var closedVotes =
+            (await this.CgsClient_Member0.GetFromJsonAsync<JsonArray>(
+                $"proposals/{proposalId}/votes"))!;
+        Assert.HasCount(this.CgsClients.Count, closedVotes);
+        foreach (var memberClient in this.CgsClients)
+        {
+            var info = await memberClient.GetFromJsonAsync<JsonObject>("/show");
+            string memberId = info!["memberId"]!.ToString();
+            var voteEntry = closedVotes.FirstOrDefault(
+                v => v!["memberId"]!.ToString() == memberId);
+            Assert.IsNotNull(voteEntry);
+            Assert.AreEqual("accepted", voteEntry!["vote"]!.ToString());
         }
 
         using (HttpRequestMessage request = new(HttpMethod.Post, checkStatusUrl))

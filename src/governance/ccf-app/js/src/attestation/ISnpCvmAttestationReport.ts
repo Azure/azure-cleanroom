@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// Attestation claims used for cleanroom policy matching after the verifier has
+// accepted the evidence. CPU PCR values come from the verified vTPM evidence;
+// GPU claims are normalized and verifier-owned, not copied from raw GPU input.
 export interface ISnpCvmAttestationReport {
+  // CPU claims — PCR values from vTPM attestation (SHA-256 digests).
   pcr0?: string;
   pcr1?: string;
   pcr2?: string;
@@ -26,4 +30,12 @@ export interface ISnpCvmAttestationReport {
   pcr21?: string;
   pcr22?: string;
   pcr23?: string;
+
+  // GPU claims — normalized verifier output.
+  gpuCount?: number;
+  gpuRIMAppraisal?: boolean;
+  gpuSecureBoot?: boolean;
+  gpuDebugDisabled?: boolean;
+  gpuDriverRIM?: boolean;
+  gpuVbiosRIM?: boolean;
 }

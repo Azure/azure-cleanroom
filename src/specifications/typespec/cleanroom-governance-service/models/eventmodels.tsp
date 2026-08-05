@@ -1,9 +1,7 @@
 import "./snpattestation.tsp";
 import "./sign.tsp";
 
-using Http;
-
-namespace Cleanroom.Governance;
+namespace Azure.Cleanroom.Governance;
 
 /**
  * Put event request

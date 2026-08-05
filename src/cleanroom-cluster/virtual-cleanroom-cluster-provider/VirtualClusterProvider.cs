@@ -11,6 +11,8 @@ using Docker.DotNet;
 using Docker.DotNet.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace VirtualCleanRoomProvider;
 
@@ -42,14 +44,19 @@ public class VirtualClusterProvider : ICleanRoomClusterProvider
     {
         // Create a kind cluster.
         var kindClient = new KindClient(this.logger, this.configuration);
-        string kindClusterName = this.ToKindClusterName(clClusterName);
+        string kindClusterName =
+            this.ResolveKindClusterName(clClusterName, providerConfig);
         string outDir = Path.GetTempPath();
         var kubeConfigFile = Path.Combine(outDir, $"{kindClusterName}.config");
         progressReporter.Report("Creating kind cluster...");
         this.logger.LogInformation($"Starting kind cluster creation: {kindClusterName}");
+        int flexNodeCount =
+            input.FlexNodeProfile is { Enabled: true, Mode: FlexNodeProfileInput.ModeManual }
+            ? input.FlexNodeProfile.NodeCount
+            : 0;
         try
         {
-            await kindClient.CreateCluster(kindClusterName);
+            await kindClient.CreateCluster(kindClusterName, flexNodeCount);
             this.logger.LogInformation($"Kind cluster creation succeeded: {kindClusterName}");
         }
         catch (ExecuteCommandException e)
@@ -69,27 +76,43 @@ public class VirtualClusterProvider : ICleanRoomClusterProvider
         var kubeConfig = await kindClient.GetKubeConfig(kindClusterName, withInternalAddress);
         await File.WriteAllTextAsync(kubeConfigFile, kubeConfig);
 
-        // Connect the kind control plane container to the docker network of this container
-        // so that the api server via the internal address is reachable from this container.
         if (withInternalAddress)
         {
-            var containerId = Environment.GetEnvironmentVariable("HOSTNAME")!;
-            var container = await this.GetContainerById(containerId);
-            var networkName = container.NetworkSettings.Networks.Single().Key;
-            var kindContainerNames = await kindClient.GetNodeNames(kindClusterName);
-            foreach (var kindContainerName in kindContainerNames)
+            if (IsRunningInKubernetes())
             {
-                var kindContainer = await this.GetContainerByName(kindContainerName);
-                if (!kindContainer.NetworkSettings.Networks.Keys.Contains(networkName))
+                // Running as a K8s pod. HOSTNAME is the pod name, not a Docker
+                // container ID, so GetContainerById would fail. Instead, rewrite
+                // the kubeconfig to use the control-plane container's IP on the
+                // "kind" Docker network which is routable from the pod.
+                kubeConfig = await this.RewriteKubeConfigForK8sAsync(kubeConfig, kindClusterName);
+                await File.WriteAllTextAsync(kubeConfigFile, kubeConfig);
+            }
+            else
+            {
+                // Connect the kind control plane container to the docker network of this container
+                // so that the api server via the internal address is reachable from this container.
+                var containerId = Environment.GetEnvironmentVariable("HOSTNAME")!;
+                var container = await this.GetContainerById(containerId);
+                var networkName =
+                    container.NetworkSettings.Networks.Single().Key;
+                var kindContainerNames =
+                    await kindClient.GetNodeNames(kindClusterName);
+                foreach (var kindContainerName in kindContainerNames)
                 {
-                    this.logger.LogInformation(
-                        $"Connecting {kindContainerName} to network {networkName}.");
-                    await this.dockerClient.Networks.ConnectNetworkAsync(
-                        networkName,
-                        new NetworkConnectParameters
-                        {
-                            Container = kindContainerName
-                        });
+                    var kindContainer =
+                        await this.GetContainerByName(kindContainerName);
+                    if (!kindContainer.NetworkSettings.Networks
+                        .Keys.Contains(networkName))
+                    {
+                        this.logger.LogInformation(
+                            $"Connecting {kindContainerName} to network {networkName}.");
+                        await this.dockerClient.Networks.ConnectNetworkAsync(
+                            networkName,
+                            new NetworkConnectParameters
+                            {
+                                Container = kindContainerName
+                            });
+                    }
                 }
             }
         }
@@ -103,6 +126,7 @@ public class VirtualClusterProvider : ICleanRoomClusterProvider
             this.logger.LogInformation($"Enabling telemetry for cluster: {clClusterName}");
             await this.EnableClusterObservabilityAsync(
                 clClusterName,
+                providerConfig,
                 progressReporter);
         }
 
@@ -111,6 +135,7 @@ public class VirtualClusterProvider : ICleanRoomClusterProvider
             this.logger.LogInformation($"Enabling monitoring for cluster: {clClusterName}");
             await this.EnableClusterMonitoringAsync(
                 clClusterName,
+                providerConfig,
                 progressReporter);
         }
 
@@ -120,6 +145,7 @@ public class VirtualClusterProvider : ICleanRoomClusterProvider
                 clClusterName,
                 input.AnalyticsWorkloadProfile,
                 Constants.AnalyticsWorkloadNamespace,
+                providerConfig,
                 progressReporter);
         }
 
@@ -130,6 +156,7 @@ public class VirtualClusterProvider : ICleanRoomClusterProvider
                 clClusterName,
                 input.InferencingWorkloadProfile.KServeProfile,
                 Constants.KServeInferencingWorkloadNamespace,
+                providerConfig,
                 progressReporter);
         }
 
@@ -138,6 +165,7 @@ public class VirtualClusterProvider : ICleanRoomClusterProvider
             await this.EnableFlexNodeAsync(
                 clClusterName,
                 input.FlexNodeProfile,
+                providerConfig,
                 progressReporter);
         }
 
@@ -227,7 +255,8 @@ data:
     JsonObject? providerConfig,
     IProgress<string> progressReporter)
     {
-        string kindClusterName = this.ToKindClusterName(clClusterName);
+        string kindClusterName =
+            this.ResolveKindClusterName(clClusterName, providerConfig);
         var kindClient = new KindClient(this.logger, this.configuration);
         if (!await kindClient.ClusterExists(kindClusterName))
         {
@@ -239,6 +268,7 @@ data:
             this.logger.LogInformation($"Enabling telemetry for cluster: {clClusterName}");
             await this.EnableClusterObservabilityAsync(
                 clClusterName,
+                providerConfig,
                 progressReporter);
         }
 
@@ -247,6 +277,7 @@ data:
             this.logger.LogInformation($"Enabling monitoring for cluster: {clClusterName}");
             await this.EnableClusterMonitoringAsync(
                 clClusterName,
+                providerConfig,
                 progressReporter);
         }
 
@@ -256,6 +287,7 @@ data:
                 clClusterName,
                 input.AnalyticsWorkloadProfile,
                 Constants.AnalyticsWorkloadNamespace,
+                providerConfig,
                 progressReporter);
         }
 
@@ -266,6 +298,7 @@ data:
                 clClusterName,
                 input.InferencingWorkloadProfile.KServeProfile,
                 Constants.KServeInferencingWorkloadNamespace,
+                providerConfig,
                 progressReporter);
         }
 
@@ -274,6 +307,7 @@ data:
             await this.EnableFlexNodeAsync(
                 clClusterName,
                 input.FlexNodeProfile,
+                providerConfig,
                 progressReporter);
         }
 
@@ -284,9 +318,82 @@ data:
 
     public async Task DeleteCluster(string clusterName, JsonObject? providerConfig)
     {
-        string kindClusterName = this.ToKindClusterName(clusterName);
+        string kindClusterName =
+            this.ResolveKindClusterName(clusterName, providerConfig);
         var kindClient = new KindClient(this.logger, this.configuration);
         await kindClient.DeleteCluster(kindClusterName);
+    }
+
+    public async Task CreateFlexNode(
+        string clusterName,
+        string nodeName,
+        string providerID,
+        string policySigningCertPem,
+        JsonObject? providerConfig,
+        IProgress<string> progressReporter)
+    {
+        string kindClusterName = this.ResolveKindClusterName(clusterName, providerConfig);
+        string kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
+        var kubectlClient = new KubectlClient(this.logger, this.configuration, kubeConfigFile);
+        var dockerCliClient = new DockerCliClient(this.logger);
+        var kindClient = new KindClient(this.logger, this.configuration);
+
+        progressReporter.Report($"Adding worker node '{nodeName}' to kind cluster...");
+        this.logger.LogInformation(
+            $"CreateFlexNode: adding worker node '{nodeName}' to cluster '{kindClusterName}'.");
+
+        await kindClient.AddWorkerNode(
+            kindClusterName,
+            nodeName,
+            taint: "for-flex-node=true:NoSchedule",
+            providerID: providerID);
+
+        // Configure the node with flex node labels/taints and install proxies.
+        var flexNodeProfile = new FlexNodeProfileInput
+        {
+            Insecure = true,
+            PolicySigningCertPem = policySigningCertPem,
+        };
+
+        await this.ConfigureFlexNodeWorkerAsync(
+            nodeName,
+            $"{kindClusterName}-control-plane",
+            flexNodeProfile,
+            kubectlClient,
+            dockerCliClient,
+            progressReporter);
+
+        progressReporter.Report($"Flex node '{nodeName}' provisioned successfully.");
+        this.logger.LogInformation(
+            $"CreateFlexNode: node '{nodeName}' is ready with providerID '{providerID}'.");
+    }
+
+    public async Task DeleteFlexNode(
+        string clusterName,
+        string nodeName,
+        JsonObject? providerConfig,
+        IProgress<string> progressReporter)
+    {
+        string kindClusterName = this.ResolveKindClusterName(clusterName, providerConfig);
+        var dockerCliClient = new DockerCliClient(this.logger);
+
+        // Remove the Docker container backing the Kind worker node.
+        // Karpenter handles draining and deleting the Node object from the API server.
+        progressReporter.Report($"Removing container '{nodeName}'...");
+        try
+        {
+            await dockerCliClient.RemoveContainer(nodeName);
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogWarning(
+                ex,
+                $"docker rm failed for container '{nodeName}'.");
+        }
+
+        progressReporter.Report($"Flex node '{nodeName}' deleted successfully.");
+        this.logger.LogInformation(
+            $"DeleteFlexNode: node '{nodeName}' removed from cluster '{kindClusterName}'.");
     }
 
     public async Task<CleanRoomCluster> GetCluster(
@@ -300,15 +407,18 @@ data:
     public async Task<CleanRoomClusterKubeConfig?> TryGetClusterKubeConfig(
         string clClusterName,
         JsonObject? providerConfig,
-        KubeConfigAccessRole accessRole)
+        KubeConfigAccessRole accessRole,
+        bool @internal = false)
     {
-        string kindClusterName = this.ToKindClusterName(clClusterName);
+        string kindClusterName = this.ResolveKindClusterName(clClusterName, providerConfig);
         var kindClient = new KindClient(this.logger, this.configuration);
         var kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
 
         try
         {
-            var kubeConfig = await kindClient.GetKubeConfig(kindClusterName);
+            var kubeConfig = @internal
+                ? await File.ReadAllTextAsync(kubeConfigFile)
+                : await kindClient.GetKubeConfig(kindClusterName);
 
             var kubectlClient = new KubectlClient(
                 this.logger,
@@ -363,7 +473,7 @@ data:
         string clClusterName,
         JsonObject? providerConfig)
     {
-        string kindClusterName = this.ToKindClusterName(clClusterName);
+        string kindClusterName = this.ResolveKindClusterName(clClusterName, providerConfig);
         string kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
         var kubectlClient = new KubectlClient(this.logger, this.configuration, kubeConfigFile);
 
@@ -374,7 +484,7 @@ data:
             string clClusterName,
             JsonObject? providerConfig)
     {
-        string kindClusterName = this.ToKindClusterName(clClusterName);
+        string kindClusterName = this.ResolveKindClusterName(clClusterName, providerConfig);
         var kindClient = new KindClient(this.logger, this.configuration);
         if (!await kindClient.ClusterExists(kindClusterName))
         {
@@ -517,15 +627,49 @@ data:
         };
     }
 
+    private static bool IsRunningInKubernetes()
+    {
+        return !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("KUBERNETES_SERVICE_HOST"));
+    }
+
     private async Task<string> GetInternalKubeConfigFileAsync(string kindClusterName)
     {
         var kindClient = new KindClient(this.logger, this.configuration);
         bool withInternalAddress =
             Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
         var kubeConfig = await kindClient.GetKubeConfig(kindClusterName, withInternalAddress);
+        if (withInternalAddress && IsRunningInKubernetes())
+        {
+            kubeConfig = await this.RewriteKubeConfigForK8sAsync(kubeConfig, kindClusterName);
+        }
+
         string kubeConfigFile = Path.GetTempFileName();
         await File.WriteAllTextAsync(kubeConfigFile, kubeConfig);
         return kubeConfigFile;
+    }
+
+    // Rewrites the kubeconfig server address from the control-plane container
+    // hostname to its IP on the "kind" Docker network. This is needed when
+    // running as a K8s pod where Docker container hostnames don't resolve.
+    private async Task<string> RewriteKubeConfigForK8sAsync(
+        string kubeConfig,
+        string kindClusterName)
+    {
+        string cpContainerName = $"{kindClusterName}-control-plane";
+        var cpContainer = await this.GetContainerByName(cpContainerName);
+        if (!cpContainer.NetworkSettings.Networks.TryGetValue(
+            "kind",
+            out var kindNetwork))
+        {
+            throw new InvalidOperationException(
+                $"Control-plane container '{cpContainerName}' is not " +
+                $"connected to the 'kind' network.");
+        }
+
+        string cpIP = kindNetwork.IPAddress;
+        return kubeConfig.Replace(
+            $"{cpContainerName}:6443",
+            $"{cpIP}:6443");
     }
 
     private CleanRoomCluster ToCleanRoomCluster(
@@ -604,24 +748,305 @@ data:
         return input + "-kind";
     }
 
+    // Resolves the kind cluster name to use. If the caller supplied a
+    // "kindClusterName" override in providerConfig, that name is used
+    // as-is (allowing an existing kind cluster to be targeted). Otherwise
+    // the name is derived from the clean room cluster name.
+    private string ResolveKindClusterName(
+        string clClusterName,
+        JsonObject? providerConfig)
+    {
+        var overrideName =
+            providerConfig?["kindClusterName"]?.ToString();
+        if (!string.IsNullOrWhiteSpace(overrideName))
+        {
+            return overrideName;
+        }
+
+        return this.ToKindClusterName(clClusterName);
+    }
+
     private async Task EnableFlexNodeAsync(
         string clClusterName,
         FlexNodeProfileInput flexNodeProfile,
+        JsonObject? providerConfig,
+        IProgress<string> progressReporter)
+    {
+        if (flexNodeProfile.Mode == FlexNodeProfileInput.ModeAuto)
+        {
+            await this.EnableFlexNodeAutoAsync(
+                clClusterName, flexNodeProfile, providerConfig, progressReporter);
+            return;
+        }
+
+        await this.EnableFlexNodeManualAsync(
+            clClusterName, flexNodeProfile, providerConfig, progressReporter);
+    }
+
+    private async Task EnableFlexNodeAutoAsync(
+        string clClusterName,
+        FlexNodeProfileInput flexNodeProfile,
+        JsonObject? providerConfig,
+        IProgress<string> progressReporter)
+    {
+        string kindClusterName =
+            this.ResolveKindClusterName(clClusterName, providerConfig);
+        string kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
+
+        // Step 1: Install the Helm chart (controllers only).
+        progressReporter.Report("Installing karpenter-provider-accr...");
+        this.logger.LogInformation(
+            $"EnableFlexNodeAutoAsync: installing chart on '{kindClusterName}'.");
+
+        var karpenterProviderValues = new Dictionary<string, object>
+        {
+            ["image"] = new Dictionary<string, string>
+            {
+                ["repository"] = ImageUtils.GetKarpenterProviderImage(),
+                ["tag"] = ImageUtils.GetKarpenterProviderTag(),
+            },
+        };
+        var providerClientValues = new Dictionary<string, object>
+        {
+            ["image"] = new Dictionary<string, string>
+            {
+                ["repository"] = ImageUtils.GetProviderClientImage(),
+                ["tag"] = ImageUtils.GetProviderClientTag(),
+            },
+            ["env"] = GetProviderClientEnvVars(),
+        };
+        var valuesOverride = new Dictionary<string, object>
+        {
+            ["karpenterProvider"] = karpenterProviderValues,
+            ["providerClient"] = providerClientValues,
+        };
+
+        var serializer = new SerializerBuilder()
+            .WithNamingConvention(CamelCaseNamingConvention.Instance)
+            .WithQuotingNecessaryStrings()
+            .Build();
+        var valuesFile = Path.GetTempFileName();
+        await File.WriteAllTextAsync(valuesFile, serializer.Serialize(valuesOverride));
+
+        var helmClient = new HelmClient(this.logger, this.configuration, kubeConfigFile);
+        await helmClient.InstallKarpenterProviderChart(
+            Constants.KarpenterProviderAccrReleaseName,
+            Constants.KarpenterProviderAccrNamespace,
+            valuesFile);
+
+        this.logger.LogInformation("EnableFlexNodeAutoAsync: chart installed.");
+
+        // Step 2: Apply NodePool + FlexNodeClass CRs separately.
+        await ApplyKarpenterResourcesAsync();
+
+        async Task ApplyKarpenterResourcesAsync()
+        {
+            this.logger.LogInformation(
+                $"ApplyKarpenterResourcesAsync: applying CRs for '{clClusterName}'.");
+
+            var kubectlClient = new KubectlClient(this.logger, this.configuration, kubeConfigFile);
+
+            // Apply FlexNodeClass.
+            string policySigningCertPem = flexNodeProfile.PolicySigningCertPem ?? string.Empty;
+            string policySigningCertValue = string.IsNullOrEmpty(policySigningCertPem)
+                ? "\"\""
+                : "|\n    " + policySigningCertPem.Replace("\n", "\n    ");
+
+            var classTemplate = await File.ReadAllTextAsync("flexnode/flex-node-class.yaml");
+            classTemplate = classTemplate.Replace("<CLUSTER_NAME>", clClusterName)
+                .Replace("<INFRA_TYPE>", "virtual")
+                .Replace("<POLICY_SIGNING_CERT_PEM>", policySigningCertValue);
+
+            var classFile = Path.GetTempFileName();
+            await File.WriteAllTextAsync(classFile, classTemplate);
+            await kubectlClient.ApplyAsync(classFile);
+
+            // Apply NodePool.
+            var poolTemplate = await File.ReadAllTextAsync("flexnode/node-pool.yaml");
+            poolTemplate = poolTemplate.Replace("<CLUSTER_NAME>", clClusterName)
+                .Replace("<CONSOLIDATION_POLICY>", "WhenEmpty")
+                .Replace("<CONSOLIDATE_AFTER>", "5s").Replace("<LIMITS_CPU>", "64");
+
+            var poolFile = Path.GetTempFileName();
+            await File.WriteAllTextAsync(poolFile, poolTemplate);
+            await kubectlClient.ApplyAsync(poolFile);
+
+            this.logger.LogInformation("ApplyKarpenterResourcesAsync: CRs applied.");
+        }
+
+        Dictionary<string, string> GetProviderClientEnvVars()
+        {
+            var env = new Dictionary<string, string>();
+            foreach (var entry in Environment.GetEnvironmentVariables()
+                .Cast<System.Collections.DictionaryEntry>())
+            {
+                string key = entry.Key?.ToString() ?? string.Empty;
+                if (key.StartsWith("CR_CLUSTER_PROVIDER_", StringComparison.Ordinal))
+                {
+                    env[key] = entry.Value?.ToString() ?? string.Empty;
+                }
+            }
+
+            return env;
+        }
+    }
+
+    private async Task EnableFlexNodeManualAsync(
+        string clClusterName,
+        FlexNodeProfileInput flexNodeProfile,
+        JsonObject? providerConfig,
+        IProgress<string> progressReporter)
+    {
+        string kindClusterName =
+            this.ResolveKindClusterName(clClusterName, providerConfig);
+        string kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
+        var kubectlClient = new KubectlClient(this.logger, this.configuration, kubeConfigFile);
+        var dockerCliClient = new DockerCliClient(this.logger);
+        int desiredNodeCount = flexNodeProfile.NodeCount;
+
+        // Nodes already labeled as flex nodes are fully configured.
+        var configuredFlexNodes = await kubectlClient.GetFlexNodesAsync();
+        int configuredCount = configuredFlexNodes.Count;
+
+        int toConfigureCount = desiredNodeCount - configuredCount;
+        if (toConfigureCount <= 0)
+        {
+            progressReporter.Report(
+                $"All {desiredNodeCount} flex node(s) already configured.");
+            this.logger.LogInformation(
+                $"All {desiredNodeCount} flex node(s) already configured.");
+            return;
+        }
+
+        List<string> nodesToConfigure;
+        if (flexNodeProfile.RequirePreProvisionedKindNodes)
+        {
+            // Pre-provisioned path: flex nodes must exist in the kind
+            // config template from cluster creation time.
+            var unconfiguredNames = await kubectlClient.GetUnconfiguredFlexNodeNamesAsync();
+            int availableFlexNodes = configuredCount + unconfiguredNames.Count;
+            if (availableFlexNodes != 0 && desiredNodeCount > availableFlexNodes)
+            {
+                throw new InvalidOperationException(
+                    $"Requested {desiredNodeCount} flex node(s) but the " +
+                    $"cluster only has {availableFlexNodes} flex node " +
+                    $"candidate(s). Kind doesn't support adding nodes " +
+                    $"to a running cluster. Recreate the cluster with " +
+                    $"the desired flex node count or disable " +
+                    $"requirePreProvisionedKindNodes.");
+            }
+
+            // Use convention-based naming (worker4, worker5, ...) for
+            // backward compatibility with pre-provisioned nodes.
+            // Index 4 because kind-config.yaml has: control-plane,
+            // worker, worker2, worker3(llama), then flex workers.
+            const int FlexNodeWorkerStartIndex = 4;
+            nodesToConfigure = new List<string>();
+            for (int i = 0; i < desiredNodeCount; i++)
+            {
+                int workerIndex = FlexNodeWorkerStartIndex + i;
+                string nodeName = $"{kindClusterName}-worker{workerIndex}";
+                nodesToConfigure.Add(nodeName);
+            }
+        }
+        else
+        {
+            // Default path: dynamically add fresh worker nodes to the
+            // running cluster via kindscaler. Does not use any
+            // pre-provisioned unconfigured nodes.
+            nodesToConfigure = await this.AddWorkerNodesViaKindScalerAsync(
+                kindClusterName,
+                toConfigureCount,
+                dockerCliClient,
+                progressReporter);
+        }
+
+        progressReporter.Report(
+            $"Configuring {nodesToConfigure.Count} flex node(s) on kind cluster...");
+        this.logger.LogInformation(
+            $"Configuring {nodesToConfigure.Count} flex node(s) on kind cluster...");
+
+        var tasks = new List<Task>();
+        foreach (string nodeName in nodesToConfigure)
+        {
+            tasks.Add(this.ConfigureFlexNodeWorkerAsync(
+                nodeName,
+                $"{kindClusterName}-control-plane",
+                flexNodeProfile,
+                kubectlClient,
+                dockerCliClient,
+                progressReporter));
+        }
+
+        await Task.WhenAll(tasks);
+
+        progressReporter.Report(
+            $"All {nodesToConfigure.Count} flex node(s) configured successfully.");
+        this.logger.LogInformation(
+            $"All {nodesToConfigure.Count} flex node(s) configured successfully.");
+    }
+
+    // Adds worker nodes to a running Kind cluster using the kindscaler
+    // approach (docker run + kubeadm join). Returns the names of the
+    // newly created node containers.
+    private async Task<List<string>> AddWorkerNodesViaKindScalerAsync(
+        string kindClusterName,
+        int count,
+        DockerCliClient dockerCliClient,
+        IProgress<string> progressReporter)
+    {
+        var kindClient = new KindClient(this.logger, this.configuration);
+        var existingNodes = await kindClient.GetNodeNames(kindClusterName);
+
+        // Find the highest existing worker index.
+        int highestWorkerIndex = 0;
+        string prefix = $"{kindClusterName}-worker";
+        foreach (string node in existingNodes)
+        {
+            if (!node.StartsWith(prefix))
+            {
+                continue;
+            }
+
+            string suffix = node[prefix.Length..];
+            if (int.TryParse(suffix, out int idx) &&
+                idx > highestWorkerIndex)
+            {
+                highestWorkerIndex = idx;
+            }
+        }
+
+        var newNodeNames = new List<string>();
+        for (int i = 0; i < count; i++)
+        {
+            int workerIndex = highestWorkerIndex + 1 + i;
+            string nodeName = $"{kindClusterName}-worker{workerIndex}";
+            progressReporter.Report(
+                $"Adding worker node '{nodeName}' to kind cluster " +
+                $"via kindscaler...");
+            this.logger.LogInformation(
+                $"Adding worker node '{nodeName}' to kind cluster " +
+                $"via kindscaler...");
+            await kindClient.AddWorkerNode(
+                kindClusterName,
+                nodeName,
+                "for-flex-node=true:NoSchedule");
+            newNodeNames.Add(nodeName);
+        }
+
+        return newNodeNames;
+    }
+
+    private async Task ConfigureFlexNodeWorkerAsync(
+        string nodeName,
+        string controlPlaneNodeName,
+        FlexNodeProfileInput flexNodeProfile,
+        KubectlClient kubectlClient,
+        DockerCliClient dockerCliClient,
         IProgress<string> progressReporter)
     {
         const string StagingDir = "/opt/api-server-proxy-staging";
         const string ProxyListenAddr = "127.0.0.1:6444";
-
-        string kindClusterName = this.ToKindClusterName(clClusterName);
-        string kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
-        var kubectlClient = new KubectlClient(this.logger, this.configuration, kubeConfigFile);
-        var dockerCliClient = new DockerCliClient(this.logger);
-
-        progressReporter.Report("Configuring flex node on kind cluster...");
-        this.logger.LogInformation("Configuring flex node on kind cluster...");
-
-        // Use one of the worker nodes with the expected naming convention.
-        var nodeName = $"{kindClusterName}-worker3";
 
         if (await kubectlClient.IsFlexNodeReadyAsync(nodeName))
         {
@@ -657,16 +1082,159 @@ data:
         this.logger.LogInformation(
             $"Worker node '{nodeName}' configured with flex node taint and labels.");
 
-        // Install api-server-proxy on the worker node.
-        progressReporter.Report("Installing api-server-proxy on flex node...");
-        this.logger.LogInformation($"Installing api-server-proxy on worker node: {nodeName}");
-
-        // Pull the api-server-proxy OCI package (binary + install/uninstall scripts).
-        var packageUrl = ImageUtils.ApiServerProxyPackageUrl();
-        this.logger.LogInformation(
-            $"Pulling api-server-proxy package from {packageUrl}...");
         var oras = new OrasClient(this.logger, this.configuration);
-        string packageDir = Path.Combine(Path.GetTempPath(), $"{nodeName}-api-server-proxy-pkg");
+
+        // Pull both OCI packages upfront.
+        string apiServerProxyPackageDir = await this.PullOciPackageAsync(
+            oras,
+            "api-server-proxy",
+            ImageUtils.ApiServerProxyPackageUrl(),
+            nodeName,
+            progressReporter);
+        string kubeletProxyPackageDir = await this.PullOciPackageAsync(
+            oras,
+            "kubelet-proxy",
+            ImageUtils.KubeletProxyPackageUrl(),
+            nodeName,
+            progressReporter);
+
+        // Install api-server-proxy first so it can patch node status requests
+        // when kubelet restarts during kubelet-proxy installation.
+        await this.CopyProxyFilesAsync(
+            nodeName,
+            "api-server-proxy",
+            StagingDir,
+            apiServerProxyPackageDir,
+            dockerCliClient);
+
+        this.logger.LogInformation("Running api-server-proxy uninstall.sh on worker node...");
+        await dockerCliClient.Exec(nodeName, $"bash {StagingDir}/uninstall.sh");
+        this.logger.LogInformation("api-server-proxy uninstall script completed.");
+
+        // Copy signing certificate to node.
+        this.logger.LogInformation("Copying signing certificate to node...");
+        var tempSigningCertPath = Path.Combine(Path.GetTempPath(), $"{nodeName}-signing-cert.pem");
+        await File.WriteAllTextAsync(
+            tempSigningCertPath,
+            flexNodeProfile.PolicySigningCertPem ?? string.Empty);
+        await dockerCliClient.Copy(nodeName, tempSigningCertPath, $"{StagingDir}/signing-cert.pem");
+
+        // Run api-server-proxy install.sh (image-prep: binary + unit +
+        // stage kind/configure.sh) followed by configure.sh (boot: certs,
+        // wire kubelet through the proxy, start service).
+        this.logger.LogInformation("Running api-server-proxy install.sh on worker node...");
+        await dockerCliClient.Exec(
+            nodeName,
+            $"bash {StagingDir}/install.sh " +
+            $"--env kind " +
+            $"--local-binary {StagingDir}/api-server-proxy " +
+            $"--listen-addr {ProxyListenAddr}");
+        this.logger.LogInformation("api-server-proxy install script completed.");
+
+        this.logger.LogInformation("Running api-server-proxy configure.sh on worker node...");
+        string insecureArg = flexNodeProfile.Insecure ? "--insecure" : string.Empty;
+        await dockerCliClient.Exec(
+            nodeName,
+            $"bash {StagingDir}/configure.sh " +
+            $"--signing-cert-file {StagingDir}/signing-cert.pem " +
+            insecureArg);
+        this.logger.LogInformation("api-server-proxy configure script completed.");
+        await this.VerifyServiceDeploymentAsync(nodeName, "api-server-proxy", dockerCliClient);
+
+        // Install kubelet-proxy.
+        const string KubeletProxyStagingDir = "/opt/kubelet-proxy-staging";
+        await this.CopyProxyFilesAsync(
+            nodeName,
+            "kubelet-proxy",
+            KubeletProxyStagingDir,
+            kubeletProxyPackageDir,
+            dockerCliClient);
+
+        this.logger.LogInformation("Running kubelet-proxy uninstall.sh on worker node...");
+        await dockerCliClient.Exec(nodeName, $"bash {KubeletProxyStagingDir}/uninstall.sh");
+        this.logger.LogInformation("kubelet-proxy uninstall script completed.");
+
+        // Copy the appropriate API policy file to the node.
+        string apiPolicyFileName = flexNodeProfile.Insecure
+            ? "insecure-api-policy.json"
+            : "default-api-policy.json";
+        string apiPolicyFilePath = Path.Combine(
+            AppContext.BaseDirectory,
+            "flexnode",
+            "kubelet-proxy",
+            apiPolicyFileName);
+        this.logger.LogInformation(
+            $"Copying kubelet-proxy API policy ({apiPolicyFileName}) to node...");
+        await dockerCliClient.Copy(
+            nodeName,
+            apiPolicyFilePath,
+            $"{KubeletProxyStagingDir}/{apiPolicyFileName}");
+
+        // Extract the real apiserver-kubelet-client cert/key from the
+        // control-plane container. It is signed by the cluster CA, so kubelet
+        // accepts the proxy's connection.
+        this.logger.LogInformation(
+            "Extracting apiserver-kubelet-client cert from control-plane...");
+        string tempCrt = Path.Combine(
+            Path.GetTempPath(), $"{nodeName}-apiserver-kubelet-client.crt");
+        string tempKey = Path.Combine(
+            Path.GetTempPath(), $"{nodeName}-apiserver-kubelet-client.key");
+        await dockerCliClient.CopyFromContainer(
+            controlPlaneNodeName,
+            "/etc/kubernetes/pki/apiserver-kubelet-client.crt",
+            tempCrt);
+        await dockerCliClient.CopyFromContainer(
+            controlPlaneNodeName,
+            "/etc/kubernetes/pki/apiserver-kubelet-client.key",
+            tempKey);
+        await dockerCliClient.Copy(
+            nodeName, tempCrt, $"{KubeletProxyStagingDir}/client.crt");
+        await dockerCliClient.Copy(
+            nodeName, tempKey, $"{KubeletProxyStagingDir}/client.key");
+        File.Delete(tempCrt);
+        File.Delete(tempKey);
+
+        // Run kubelet-proxy install.sh (image-prep: binary + unit + stage
+        // kind/configure.sh) followed by configure.sh (boot: server cert,
+        // install client cert + policy, move kubelet to :10251, start service).
+        this.logger.LogInformation("Running kubelet-proxy install.sh on worker node...");
+        await dockerCliClient.Exec(
+            nodeName,
+            $"bash {KubeletProxyStagingDir}/install.sh " +
+            $"--env kind " +
+            $"--local-binary {KubeletProxyStagingDir}/kubelet-proxy");
+        this.logger.LogInformation("kubelet-proxy install script completed.");
+
+        this.logger.LogInformation("Running kubelet-proxy configure.sh on worker node...");
+        await dockerCliClient.Exec(
+            nodeName,
+            $"bash {KubeletProxyStagingDir}/configure.sh " +
+            $"--client-cert {KubeletProxyStagingDir}/client.crt " +
+            $"--client-key {KubeletProxyStagingDir}/client.key " +
+            $"--api-policy-file {KubeletProxyStagingDir}/{apiPolicyFileName}");
+        this.logger.LogInformation("kubelet-proxy configure script completed.");
+        await this.VerifyServiceDeploymentAsync(nodeName, "kubelet-proxy", dockerCliClient);
+
+        await kubectlClient.LabelNodeAsync(
+            nodeName,
+            "cleanroom.azure.com/ready=true",
+            overwrite: true);
+        this.logger.LogInformation(
+            $"kubelet-proxy and api-server-proxy installed successfully on node: {nodeName}");
+    }
+
+    // PullOciPackageAsync pulls an OCI package from the registry into a local directory.
+    private async Task<string> PullOciPackageAsync(
+        OrasClient oras,
+        string packageName,
+        string packageUrl,
+        string nodeName,
+        IProgress<string> progressReporter)
+    {
+        progressReporter.Report($"Pulling {packageName} package...");
+        this.logger.LogInformation($"Pulling {packageName} package from {packageUrl}...");
+
+        string packageDir = Path.Combine(Path.GetTempPath(), $"{nodeName}-{packageName}-pkg");
         if (Directory.Exists(packageDir))
         {
             Directory.Delete(packageDir, recursive: true);
@@ -678,115 +1246,88 @@ data:
             packageUrl.StartsWith("172.17.0.1") ||
             packageUrl.StartsWith("ccr-registry");
         await oras.Pull(packageUrl, packageDir, useHttp);
-        this.logger.LogInformation("api-server-proxy package pulled successfully.");
+        this.logger.LogInformation($"{packageName} package pulled successfully.");
+        return packageDir;
+    }
 
-        // Create staging directory on node.
-        this.logger.LogInformation($"Creating staging directory on node: {StagingDir}");
-        await dockerCliClient.Exec(nodeName, $"mkdir -p {StagingDir}");
+    // CopyProxyFilesAsync creates the staging directory and copies
+    // install.sh, uninstall.sh, and the binary to the node.
+    private async Task CopyProxyFilesAsync(
+        string nodeName,
+        string proxyName,
+        string stagingDir,
+        string packageDir,
+        DockerCliClient dockerCliClient)
+    {
+        this.logger.LogInformation($"Creating staging directory on node: {stagingDir}");
+        await dockerCliClient.Exec(nodeName, $"mkdir -p {stagingDir}");
+        await dockerCliClient.Exec(nodeName, $"mkdir -p {stagingDir}/kind");
 
-        // Copy uninstall.sh to node and run it to clean up any previous installation.
-        this.logger.LogInformation("Copying uninstall.sh to node...");
+        this.logger.LogInformation($"Copying {proxyName} files to node...");
         await dockerCliClient.Copy(
             nodeName,
             Path.Combine(packageDir, "uninstall.sh"),
-            $"{StagingDir}/uninstall.sh");
-
-        this.logger.LogInformation("Running uninstall.sh on worker node...");
-        await dockerCliClient.Exec(nodeName, $"bash {StagingDir}/uninstall.sh");
-        this.logger.LogInformation("api-server-proxy uninstall script completed.");
-
-        // Copy install.sh and the pre-built binary to node.
-        this.logger.LogInformation("Copying install.sh and api-server-proxy binary to node...");
+            $"{stagingDir}/uninstall.sh");
         await dockerCliClient.Copy(
             nodeName,
             Path.Combine(packageDir, "install.sh"),
-            $"{StagingDir}/install.sh");
+            $"{stagingDir}/install.sh");
         await dockerCliClient.Copy(
             nodeName,
-            Path.Combine(packageDir, "api-server-proxy"),
-            $"{StagingDir}/api-server-proxy");
+            Path.Combine(packageDir, proxyName),
+            $"{stagingDir}/{proxyName}");
 
-        // Copy signing certificate to node.
-        this.logger.LogInformation("Copying signing certificate to node...");
-        var tempSigningCertPath = Path.Combine(Path.GetTempPath(), $"{nodeName}-signing-cert.pem");
-        await File.WriteAllTextAsync(tempSigningCertPath, flexNodeProfile.PolicySigningCertPem);
-        await dockerCliClient.Copy(nodeName, tempSigningCertPath, $"{StagingDir}/signing-cert.pem");
-
-        // Verify files were copied.
-        this.logger.LogInformation("Verifying files on node...");
-        await dockerCliClient.Exec(nodeName, $"ls -la {StagingDir}/");
-
-        // Run install.sh with --local-binary, signing certificate and proxy listen address.
-        this.logger.LogInformation("Running install.sh on worker node...");
-        await dockerCliClient.Exec(
+        // Kind-specific configure.sh. install.sh --env kind stages it as
+        // configure.sh, so it must be present under the kind/ subdir.
+        await dockerCliClient.Copy(
             nodeName,
-            $"bash {StagingDir}/install.sh " +
-            $"--local-binary {StagingDir}/api-server-proxy " +
-            $"--signing-cert-file {StagingDir}/signing-cert.pem " +
-            $"--proxy-listen-addr {ProxyListenAddr}");
+            Path.Combine(packageDir, "kind", "configure.sh"),
+            $"{stagingDir}/kind/configure.sh");
 
-        this.logger.LogInformation("api-server-proxy install script completed.");
-
-        // Verify api-server-proxy deployment.
-        await this.VerifyApiServerProxyDeploymentAsync(nodeName, dockerCliClient);
-
-        await kubectlClient.LabelNodeAsync(
-            nodeName,
-            "cleanroom.azure.com/ready=true",
-            overwrite: true);
-        this.logger.LogInformation($"api-server-proxy installed successfully on node: {nodeName}");
+        this.logger.LogInformation($"Verifying {proxyName} files on node...");
+        await dockerCliClient.Exec(nodeName, $"ls -la {stagingDir}/");
     }
 
-    private async Task VerifyApiServerProxyDeploymentAsync(
+    private async Task VerifyServiceDeploymentAsync(
         string nodeName,
+        string serviceName,
         DockerCliClient dockerCliClient)
     {
-        this.logger.LogInformation("Verifying api-server-proxy deployment...");
+        this.logger.LogInformation($"Verifying {serviceName} deployment...");
 
-        // Check api-server-proxy service status.
+        // Check service status.
         try
         {
             await dockerCliClient.Exec(
                 nodeName,
-                "systemctl status api-server-proxy --no-pager");
-            this.logger.LogInformation("api-server-proxy service is running.");
+                $"systemctl status {serviceName} --no-pager");
+            this.logger.LogInformation($"{serviceName} service is running.");
         }
         catch (Exception ex)
         {
-            this.logger.LogWarning($"api-server-proxy status check failed: {ex.Message}");
+            this.logger.LogWarning($"{serviceName} status check failed: {ex.Message}");
         }
 
-        // Check recent api-server-proxy logs.
+        // Check recent service logs.
         try
         {
             await dockerCliClient.Exec(
                 nodeName,
-                "journalctl -u api-server-proxy --no-pager -n 20");
+                $"journalctl -u {serviceName} --no-pager -n 20");
         }
         catch (Exception ex)
         {
-            this.logger.LogWarning($"Failed to get api-server-proxy logs: {ex.Message}");
-        }
-
-        // Check kubelet service status.
-        try
-        {
-            await dockerCliClient.Exec(
-                nodeName,
-                "systemctl status kubelet --no-pager | head -15");
-            this.logger.LogInformation("kubelet service is running.");
-        }
-        catch (Exception ex)
-        {
-            this.logger.LogWarning($"kubelet status check failed: {ex.Message}");
+            this.logger.LogWarning($"Failed to get {serviceName} logs: {ex.Message}");
         }
     }
 
     private async Task EnableClusterObservabilityAsync(
         string clClusterName,
+        JsonObject? providerConfig,
         IProgress<string> progressReporter)
     {
-        string kindClusterName = this.ToKindClusterName(clClusterName);
+        string kindClusterName =
+            this.ResolveKindClusterName(clClusterName, providerConfig);
         string kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
         var kubectlClient = new KubectlClient(this.logger, this.configuration, kubeConfigFile);
         var helmClient = new HelmClient(this.logger, this.configuration, kubeConfigFile);
@@ -853,9 +1394,11 @@ data:
 
     private async Task EnableClusterMonitoringAsync(
         string clClusterName,
+        JsonObject? providerConfig,
         IProgress<string> progressReporter)
     {
-        string kindClusterName = this.ToKindClusterName(clClusterName);
+        string kindClusterName =
+            this.ResolveKindClusterName(clClusterName, providerConfig);
         string kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
         var kubectlClient = new KubectlClient(this.logger, this.configuration, kubeConfigFile);
         var helmClient = new HelmClient(this.logger, this.configuration, kubeConfigFile);
@@ -878,7 +1421,8 @@ data:
         this.logger.LogInformation(
             $"Kaito workspace controller is ready on: {clClusterName}");
 
-        string preferredNodeName = $"{clClusterName}-kind-worker3";
+        string preferredNodeName = await kubectlClient.GetNodeNameByLabelAsync(
+            "apps=llama-3point1-8b-instruct");
 
         // Check if image already exists on the node
         var dockerCliClient = new DockerCliClient(this.logger);
@@ -928,9 +1472,11 @@ data:
         string clClusterName,
         AnalyticsWorkloadProfileInput input,
         string ns,
+        JsonObject? providerConfig,
         IProgress<string> progressReporter)
     {
-        string kindClusterName = this.ToKindClusterName(clClusterName);
+        string kindClusterName =
+            this.ResolveKindClusterName(clClusterName, providerConfig);
         string kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
 
         progressReporter.Report("Installing spark-operator...");
@@ -999,9 +1545,11 @@ data:
         string clClusterName,
         KServeInferencingWorkloadProfileInput input,
         string ns,
+        JsonObject? providerConfig,
         IProgress<string> progressReporter)
     {
-        string kindClusterName = this.ToKindClusterName(clClusterName);
+        string kindClusterName =
+            this.ResolveKindClusterName(clClusterName, providerConfig);
         string kubeConfigFile = await this.GetInternalKubeConfigFileAsync(kindClusterName);
 
         progressReporter.Report("Installing cert-manager...");
@@ -1315,6 +1863,14 @@ data:
             app = app.Replace(
                 "<CCR_GOVERNANCE_IMAGE_URL>",
                 $"{ImageUtils.CcrGovernanceVirtualImage()}:{ImageUtils.CcrGovernanceVirtualTag()}");
+            app = app.Replace("<OHTTP_ENABLED>", "true");
+            app = app.Replace(
+                "<OHTTP_GATEWAY_IMAGE_URL>",
+                $"{ImageUtils.OhttpGatewayImage()}:{ImageUtils.OhttpGatewayTag()}");
+            app = app.Replace(
+                "<INFERENCING_NAMESPACE>",
+                Constants.KServeInferencingWorkloadNamespace);
+
             var telemetryReplacements = new Dictionary<string, string>();
             if (telemetryCollectionEnabled)
             {
@@ -1410,10 +1966,10 @@ data:
                 $"{ImageUtils.GetCleanroomVersionsDocumentUrl()}");
             app = app.Replace(
                 "<CLEANROOM_CVM_MEASUREMENTS_DOCUMENT>",
-                $"{ImageUtils.GetCleanroomCvmMeasurementsDocumentUrl()}");
+                $"{ImageUtils.GetCleanroomCvmMeasurementsVirtualDocumentUrl()}");
             app = app.Replace(
-                "<RUNTIME_DIGESTS_DOCUMENT>",
-                $"{ImageUtils.GetRuntimeDigestsDocumentUrl()}");
+                "<INFERENCING_DIGESTS_DOCUMENT>",
+                $"{ImageUtils.GetInferencingDigestsDocumentUrl()}");
             app = app.Replace(
                 "<CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL>",
                 $"{ImageUtils.SidecarsPolicyDocumentRegistryUrl()}");
@@ -1422,6 +1978,9 @@ data:
                 Constants.KServeInferencingWorkloadNamespace);
             app = app.Replace("<ALLOW_ALL>", "true");
             app = app.Replace("<DEBUG_MODE>", "false");
+            app = app.Replace(
+                "<ENABLE_TEST_ENDPOINTS>",
+                values.EnableTestEndpoints.ToString().ToLower());
 
             var telemetryReplacements = new Dictionary<string, string>();
             if (telemetryCollectionEnabled)

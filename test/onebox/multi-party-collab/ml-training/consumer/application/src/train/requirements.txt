@@ -1,9 +1,9 @@
 numpy==2.0.0
-onnx==1.17.0
+onnx==1.22.0
 onnx2pytorch==0.4.1
 opacus==1.4.1
 pandas==2.2.2
 pyspark==4.0.0
 scikit_learn==1.5.0
-torch==2.8.0+cpu
+torch==2.13.0
 torchvision==0.23.0+cpu

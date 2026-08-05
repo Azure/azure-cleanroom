@@ -6,7 +6,7 @@ import {
   ccf
 } from "@microsoft/ccf-app/global";
 import { Base64 } from "js-base64";
-import { getSigningKey } from "./signingkey";
+import { getSigningKey } from "./signing-key";
 import { SnpEvidence } from "../../models";
 import { ErrorResponse } from "../../utils/ErrorResponse";
 import { b64ToBuf, toDelegatePolicyKey } from "../../utils/utils";

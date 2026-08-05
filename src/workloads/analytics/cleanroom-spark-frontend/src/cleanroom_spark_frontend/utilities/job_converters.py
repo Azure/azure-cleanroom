@@ -5,8 +5,6 @@ from abc import abstractmethod
 from enum import StrEnum
 from typing import Optional
 
-from cleanroom_internal.utilities import otel_utilities
-
 from ..builders.i_spark_application_builder import CleanRoomSparkApplication
 from ..builders.spark_application_builder_helper import SparkApplicationBuilderFactory
 from ..config.configuration import (
@@ -51,6 +49,7 @@ class SparkJobConverter:
         application_file: str,
         policy_file: str,
         sku_settings: SkuSettings,
+        time_to_live_seconds: int,
         debug_mode: bool = False,
         allow_all: bool = False,
         arguments: Optional[list[str]] = None,
@@ -73,6 +72,7 @@ class SparkJobConverter:
             .WithMainApplicationFile(application_file)
             .WithEnvVars(env_vars or [])
             .WithArguments(arguments or [])
+            .AddTimeToLiveSeconds(time_to_live_seconds)
             .AddDriver(settings=sku_settings.driver)
             .AddExecutor(settings=sku_settings.executor)
         )
@@ -189,6 +189,7 @@ class SQLSparkJobConverter(SparkJobConverter):
             debug_mode=self._application_settings.debug_mode,
             allow_all=self._application_settings.allow_all,
             telemetry_settings=telemetry_settings,
+            time_to_live_seconds=self._application_settings.time_to_live_seconds,
         )
 
 
@@ -201,6 +202,7 @@ class PiSparkJobConverter(SparkJobConverter):
         self._sku_settings = config.applications.examples.pi
         self._application_image = config.applications.examples.image
         self._application_file = config.applications.examples.application_file
+        self._time_to_live_seconds = config.applications.examples.time_to_live_seconds
 
     def to_spark_spec(
         self,
@@ -219,6 +221,7 @@ class PiSparkJobConverter(SparkJobConverter):
             debug_mode=True,
             allow_all=True,
             telemetry_settings=telemetry_settings,
+            time_to_live_seconds=self._time_to_live_seconds,
         )
 
 
@@ -235,4 +238,4 @@ def get(
     elif provider_type == SparkJobProviderType.PI:
         return PiSparkJobConverter(config)
     else:
-        raise ValueError(f"Unsupported provider type: {providerType}")
+        raise ValueError(f"Unsupported provider type: {provider_type}")

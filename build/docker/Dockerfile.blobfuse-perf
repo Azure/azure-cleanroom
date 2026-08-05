@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/mirror/docker/library/ubuntu:22.04 AS build-image
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:24.04 AS build-image
 
 # Install prerequisities.
 RUN apt-get update -y && \
@@ -23,7 +23,7 @@ COPY src/blobfuse-launcher/encryptor azure-storage-fuse/encryptor
 RUN cd azure-storage-fuse/encryptor && go test -v ./...
 RUN cd azure-storage-fuse/encryptor && go build -buildmode=plugin -o encryptor.so
 
-FROM mcr.microsoft.com/mirror/docker/library/ubuntu:22.04
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:24.04
 
 # Install blobfuse dependencies.
 RUN apt-get update -y && \

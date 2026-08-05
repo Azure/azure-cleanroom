@@ -34,28 +34,18 @@ pwsh enable-flex-node.ps1
 ```
 
 This will generate pod policy signing keys via `generate-signing-keys.ps1` and call
-`az cleanroom cluster update` with `--enable-flex-node`.
+`az cleanroom cluster update` with `--flex-node-profile`.
 
 ### 4. Test the cluster
 
 ```pwsh
-pwsh test-cluster.ps1 -testFlexNode -testKServeInferencing
+pwsh test-cluster.ps1 -testKServeInferencing
 ```
 
 This will:
 - Verify the cluster is healthy and kubeconfig works.
 - Deploy an example KServe model to the flex node, sign its policy, and verify
   the deployment succeeds.
-- Run pod policy tests (`test-pod-policies.ps1`) to verify that signed pods are
-  accepted and unsigned/tampered pods are rejected by the api-server-proxy.
-
-### 5. Test pod policies only
-
-To run just the pod policy tests (signed/unsigned/tampered pod acceptance/rejection):
-
-```pwsh
-pwsh test-pod-policies.ps1
-```
 
 ## AKS Setup (Azure Kubernetes Service)
 
@@ -112,16 +102,8 @@ This will create an Azure CVM, join that VM as a flex node to the AKS cluster an
 ### 5. Test the cluster
 
 ```pwsh
-pwsh test-cluster.ps1 -testFlexNode -testKServeInferencing
+pwsh test-cluster.ps1 -testKServeInferencing
 ```
 
 Same as the virtual setup — deploys an example model to the flex node, signs the
-pod policy, and runs the full pod policy test suite.
-
-### 6. Test pod policies only
-
-To run just the pod policy tests (signed/unsigned/tampered pod acceptance/rejection):
-
-```pwsh
-pwsh test-pod-policies.ps1
-```
+pod policy, and verifies the deployment succeeds.

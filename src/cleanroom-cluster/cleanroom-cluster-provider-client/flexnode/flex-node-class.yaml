@@ -1,0 +1,9 @@
+apiVersion: cleanroom.azure.com/v1alpha1
+kind: FlexNodeClass
+metadata:
+  name: <CLUSTER_NAME>
+  namespace: default
+spec:
+  clusterName: "<CLUSTER_NAME>"
+  infraType: "<INFRA_TYPE>"
+  policySigningCertPem: <POLICY_SIGNING_CERT_PEM>

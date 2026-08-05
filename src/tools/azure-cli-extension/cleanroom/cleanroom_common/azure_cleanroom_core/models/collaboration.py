@@ -40,9 +40,9 @@ class CollaborationSpecification(BaseModel):
                 (f"Collaboration {collaboration_name} not found."),
             )
 
-        assert (
-            collaboration_context is not None
-        ), "Collaboration entry should not be None at this point."
+        assert collaboration_context is not None, (
+            "Collaboration entry should not be None at this point."
+        )
         return collaboration_context
 
     def add_collaboration_context(

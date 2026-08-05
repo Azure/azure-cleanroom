@@ -22,13 +22,13 @@ datasources:
     datasources:
       - name: Prometheus
         type: prometheus
-        url: http://cleanroom-spark-prometheus-server.telemetry.svc.cluster.local:9090
+        url: http://cleanroom-prometheus-server.observability.svc.cluster.local:9090
         uid: prometheus_uid
         access: proxy
         isDefault: true
       - name: Loki
         type: loki
-        url: http://cleanroom-spark-loki.telemetry.svc.cluster.local:3100
+        url: http://cleanroom-loki.observability.svc.cluster.local:3100
         uid: loki_uid
         access: proxy
         jsonData:
@@ -41,7 +41,7 @@ datasources:
               urlDisplayLabel: 'View Trace'
       - name: Tempo
         type: tempo
-        url: http://cleanroom-spark-tempo.telemetry.svc.cluster.local:3200
+        url: http://cleanroom-tempo.observability.svc.cluster.local:3200
         uid: tempo_uid
         access: proxy
         jsonData:

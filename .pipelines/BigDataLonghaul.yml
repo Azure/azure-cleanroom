@@ -1,0 +1,154 @@
+################################################################################
+#            Big Data Analytics Longhaul (Azure Pipelines) — scheduled         #
+#                                                                              #
+# Migrated from .github/workflows/bigdata-longhaul.yml (workflow_dispatch with  #
+# durationMinutes/pauseMinutes/enableChaos inputs + schedule cron "0 0 * * *"). #
+#                                                                              #
+# Structure: build (reuse pr-build-all-jobs) -> longhaul_test.                  #
+# The build stage self-gates each build job on buildGroups; for the longhaul we #
+# want a full build, so a small `force_build_groups` job seeds buildGroups='all'#
+# for the pr-build-all template's detectChangesJob contract.                    #
+#                                                                              #
+# TODO(Phase 1C): azureServiceConnection + 1ES pool with Docker; cleanroom-pr-  #
+#   vars variable group.                                                        #
+################################################################################
+
+schedules:
+  - cron: "0 0 * * *"
+    displayName: Daily big data analytics longhaul (00:00 UTC)
+    branches:
+      include:
+        - develop
+    always: true
+
+trigger: none
+pr: none
+
+name: bigdata-longhaul-$(Date:yyyyMMdd).$(Rev:r)
+
+parameters:
+  - name: durationMinutes
+    type: string
+    default: "240"
+  - name: pauseMinutes
+    type: string
+    default: "20"
+  - name: enableChaos
+    type: boolean
+    default: true
+
+variables:
+  - name: LinuxContainerImage
+    value: "mcr.microsoft.com/onebranch/azurelinux/build:3.0"
+  - name: CDP_DEFINITION_BUILD_COUNT
+    value: $[counter('', 0)]
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: OneBranch.Pipelines/GovernedTemplates
+      ref: refs/heads/main
+
+extends:
+  template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates
+  parameters:
+    cloudvault:
+      enabled: false
+    globalSdl:
+      tsa:
+        enabled: false
+      policheck:
+        break: true
+    stages:
+      - stage: BigDataLonghaul
+        displayName: Big Data Analytics Longhaul
+        jobs:
+          # Seed buildGroups='all' so every pr-build-all job runs (full build),
+          # satisfying the template's detectChangesJob output contract.
+          - job: seed_build_groups
+            displayName: Seed build groups (all)
+            pool:
+              type: linux
+            steps:
+              - checkout: none
+              - bash: echo "##vso[task.setvariable variable=buildGroups;isOutput=true]all"
+                name: resolve
+                displayName: Force full build
+
+          # Reuse the PR build job template; each build job gates on buildGroups.
+          - template: templates/pr-build-all-jobs.yml@self
+            parameters:
+              detectChangesJob: seed_build_groups
+
+          - job: longhaul_test
+            displayName: Longhaul test
+            timeoutInMinutes: 600
+            dependsOn:
+              - build_ccr_governance_containers
+              - build_ccr_containers
+              - build_ccf_containers
+              - build_cgs_containers
+              - build_cleanroom_workload_infra_containers
+            condition: succeeded()
+            pool:
+              type: linux # TODO(Phase 1C): 1ES pool with Docker daemon
+            variables:
+              - template: templates/variables/build-common.yml
+              - name: outDir
+                value: "$(repoRoot)/test/onebox/workload-samples/generated"
+            steps:
+              - checkout: self
+                submodules: recursive
+              - template: templates/steps/setup-docker-on-data-disk.yml
+              - template: templates/steps/login-to-azure.yml
+              - pwsh: |
+                  ./samples/ccf/azcli/deploy-ccf.ps1 -infraType virtual -nodeCount 1 `
+                    -confidentialRecovery -registry acr -repo $(ACR_URL) -tag $(Build.BuildId)
+                displayName: Deploy virtual CCF network with confidential recovery
+                workingDirectory: $(repoRoot)
+              # test-workloads/setup-env (virtual) + test-big-data-analytics +
+              # test-big-data-analytics-longhaul (duration/pause/chaos params).
+              - template: templates/steps/workload-setup-env.yml
+                parameters:
+                  infraType: virtual
+                  location: centralindia
+                  outDir: $(outDir)
+              - template: templates/steps/workload-test-big-data-analytics.yml
+                parameters:
+                  location: centralindia
+                  deploymentConfigDir: $(outDir)
+              - template: templates/steps/workload-test-big-data-analytics-longhaul.yml
+                parameters:
+                  deploymentConfigDir: $(outDir)
+                  durationMinutes: "${{ parameters.durationMinutes }}"
+                  pauseMinutes: "${{ parameters.pauseMinutes }}"
+                  enableChaos: "${{ parameters.enableChaos }}"
+              - task: PublishPipelineArtifact@1
+                displayName: Upload test results
+                condition: not(canceled())
+                inputs:
+                  targetPath: $(outDir)
+                  artifact: bigdata-longhaul-results
+              - pwsh: docker logs ccf-provider-client-1
+                displayName: Dump ccf-provider-client logs
+                condition: not(canceled())
+                workingDirectory: $(repoRoot)
+              - pwsh: ./samples/ccf/azcli/show-docker-logs.ps1 -label "ccf-network/type=recovery-agent"
+                displayName: Dump ccf-recovery-agent logs
+                condition: not(canceled())
+                workingDirectory: $(repoRoot)
+              - pwsh: ./samples/ccf/azcli/show-docker-logs.ps1 -label "ccf-recovery-service/type=recovery-service"
+                displayName: Dump ccf-recovery-service logs
+                condition: not(canceled())
+                workingDirectory: $(repoRoot)
+              - pwsh: |
+                  ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-input-$(Agent.JobName)-$(Build.BuildId)"
+                  ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-output-$(Agent.JobName)-$(Build.BuildId)"
+                displayName: Delete AWS buckets
+                condition: succeeded()
+                workingDirectory: $(repoRoot)
+              - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=$(Agent.JobName)-$(Build.BuildId)"
+                displayName: Delete resource groups
+                condition: succeeded()
+                workingDirectory: $(repoRoot)

@@ -21,7 +21,9 @@
 param(
     [string]$Location = "westeurope",
 
-    [switch]$skipDeploy
+    [switch]$skipDeploy,
+
+    [switch]$Gpu
 )
 
 $ErrorActionPreference = "Stop"
@@ -46,7 +48,9 @@ $reportGenPort = "9300"
 # ──────────────────────────────────────────────────────────────────────────────
 if (-not $skipDeploy) {
     Write-Host "=== Deploying Azure CVM ==="
-    & pwsh "$cvmTestsDir/deploy-cvm.ps1" -Location $Location -OutDir $generatedDir
+    $deployArgs = @("-Location", $Location, "-OutDir", $generatedDir)
+    if ($Gpu) { $deployArgs += "-Gpu" }
+    & pwsh "$cvmTestsDir/deploy-cvm.ps1" @deployArgs
     Write-Host ""
 }
 

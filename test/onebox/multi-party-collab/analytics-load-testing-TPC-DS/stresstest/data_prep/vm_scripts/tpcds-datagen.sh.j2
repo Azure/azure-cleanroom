@@ -1,0 +1,32 @@
+#!/bin/bash
+set -uo pipefail
+
+LOG_DIR=/var/log/tpcds
+mkdir -p "$LOG_DIR"
+rm -f "$LOG_DIR/failed-step"
+
+# azcopy (used by the step scripts) authenticates via the VM managed identity.
+export AZCOPY_AUTO_LOGIN_TYPE=MSI
+set -a
+. /etc/tpcds/tpcds.env
+set +a
+
+STEPS=({{ steps }})
+for s in "${STEPS[@]}"; do
+    echo "=== Running $s ==="
+    bash "/usr/local/bin/tpcds-steps/${s}.sh" 2>&1 | tee "$LOG_DIR/${s}.log"
+    # Snapshot PIPESTATUS in one statement: any simple command (including the
+    # next assignment) overwrites it, so copy the whole array before indexing
+    # individual elements - required under 'set -u'.
+    rc=("${PIPESTATUS[@]}")
+    rc_step=${rc[0]}
+    rc_tee=${rc[1]}
+    # Treat a tee failure (disk full / log write error) as a step failure so we
+    # never continue or report success with missing logs.
+    if [ "$rc_step" -ne 0 ] || [ "$rc_tee" -ne 0 ]; then
+        echo "$s" > "$LOG_DIR/failed-step"
+        echo "Step $s failed (rc_step=$rc_step, rc_tee=$rc_tee)" >&2
+        exit 1
+    fi
+done
+echo "All TPC-DS steps completed."

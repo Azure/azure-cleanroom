@@ -2,7 +2,7 @@ import "./snpattestation.tsp";
 import "./encrypt.tsp";
 import "./kvstoremodels.tsp";
 
-namespace Cleanroom.Governance;
+namespace Azure.Cleanroom.Governance;
 
 /**
  * Put user document request

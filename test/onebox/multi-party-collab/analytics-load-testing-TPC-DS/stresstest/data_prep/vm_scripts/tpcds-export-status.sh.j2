@@ -1,0 +1,69 @@
+#!/bin/bash
+set -uo pipefail
+
+STATUS_SAS_URL='{{ status_sas_url }}'
+LOG_DIR=/var/log/tpcds
+
+_status_base() { printf '%s' "${STATUS_SAS_URL%%\?*}"; }
+_status_token() { printf '%s' "${STATUS_SAS_URL#*\?}"; }
+
+# Fallback upload via azcopy using the VM's managed identity (no SAS): an
+# independent path when the curl+SAS PUT fails (transient net, SAS issue).
+azcopy_put() {
+    local file="$1" name="$2"
+    [ -f "$file" ] || return 1
+    command -v azcopy >/dev/null 2>&1 || return 1
+    export AZCOPY_AUTO_LOGIN_TYPE=MSI
+    azcopy copy "$file" "$(_status_base)/${name}" \
+        --from-to LocalBlob --overwrite=true >/dev/null 2>&1
+}
+
+# PUT a local file as a block blob (curl+SAS, azcopy MSI fallback).
+put_blob() {
+    local file="$1" name="$2" ctype="${3:-text/plain}" i code
+    [ -f "$file" ] || return 0
+    for i in 1 2 3; do
+        code=$(curl -s -o /dev/null -w '%{http_code}' -X PUT \
+            -H 'x-ms-blob-type: BlockBlob' -H "Content-Type: $ctype" \
+            --data-binary "@$file" "$(_status_base)/${name}?$(_status_token)")
+        [ "$code" = 201 ] && return 0
+        sleep 5
+    done
+    azcopy_put "$file" "$name"
+}
+
+# PUT the JSON status blob (curl+SAS, azcopy MSI fallback).
+put_status() {
+    local json="$1" i code tmp rc
+    for i in 1 2 3; do
+        code=$(printf '%s' "$json" | curl -s -o /dev/null -w '%{http_code}' -X PUT \
+            -H 'x-ms-blob-type: BlockBlob' -H 'Content-Type: application/json' \
+            --data-binary @- "$(_status_base)/status.json?$(_status_token)")
+        [ "$code" = 201 ] && return 0
+        sleep 5
+    done
+    tmp=$(mktemp)
+    printf '%s' "$json" > "$tmp"
+    azcopy_put "$tmp" "status.json"
+    rc=$?
+    rm -f "$tmp"
+    return $rc
+}
+
+echo "=== Exporting TPC-DS step logs ==="
+if [ -d "$LOG_DIR" ]; then
+    for f in "$LOG_DIR"/*.log; do
+        [ -f "$f" ] || continue
+        put_blob "$f" "$(basename "$f")" || true
+    done
+fi
+
+# Determine the datagen outcome. Prefer the failed-step marker; fall back to the
+# service state in case datagen was killed before it could write the marker.
+if [ -f "$LOG_DIR/failed-step" ] || systemctl is-failed --quiet tpcds-datagen.service; then
+    step=$(cat "$LOG_DIR/failed-step" 2>/dev/null || echo unknown)
+    put_status "{\"status\":\"error\",\"step\":\"$step\",\"detail\":\"tpcds-datagen.service failed at step $step\"}"
+else
+    put_status '{"status":"completed"}'
+fi
+echo "Status export complete."

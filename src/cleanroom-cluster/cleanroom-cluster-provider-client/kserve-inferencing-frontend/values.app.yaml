@@ -28,15 +28,15 @@ settings:
     versionsDocument: <CLEANROOM_VERSIONS_DOCUMENT>
     cvmMeasurementsDocument: <CLEANROOM_CVM_MEASUREMENTS_DOCUMENT>
     sidecarsPolicyDocumentRegistryUrl: <CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL>
-    runtimeDigestsDocument: <RUNTIME_DIGESTS_DOCUMENT>
+    inferencingDigestsDocument: <INFERENCING_DIGESTS_DOCUMENT>
   applications:
-    analytics:
+    inferencing:
       namespace: <INFERENCING_NAMESPACE>
       debugMode: <DEBUG_MODE>
       allowAll: <ALLOW_ALL>
-      applicationFile: "local:///app/src/analytics_workload/run_query.py"
-      sql:
+      enableTestEndpoints: <ENABLE_TEST_ENDPOINTS>
+      kserve:
         predictor:
-          cores: 2
-          memory: "2g"
-          serviceAccount: "spark-operator-spark"
+          cores: 1
+          memory: "512m"
+          serviceAccount: "kserve-operator-kserve"

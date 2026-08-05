@@ -1,0 +1,398 @@
+name: TPC-DS Analytics Stresstest
+run-name: TPC-DS Stresstest - ${{ github.event_name == 'schedule' && 'SF-auto(weekday)' || format('SF{0}', inputs.scaleFactor || '700') }} x${{ github.event_name == 'schedule' && '1' || (inputs.iterations || '1') }} (parallel=${{ github.event_name == 'schedule' && '3' || (inputs.parallel || '3') }})
+
+on:
+  schedule:
+    # Auto-trigger one scale factor per weekday (06:00 UTC, Mon-Fri).
+    # Day-of-week -> scale factor mapping is resolved in "Resolve run parameters":
+    #   Mon=10 | Tue=100 | Wed=400 | Thu=700 | Fri=1000
+    - cron: "0 6 * * 1-5"
+  workflow_dispatch:
+    inputs:
+
+      ref:
+        description: "Git branch, tag, or commit SHA to build and test (blank = default branch)."
+        required: false
+        type: string
+      scaleFactor:
+        description: "TPC-DS scale factor: 10|100|400|700|1000 (blank = repo default)."
+        required: false
+        type: string
+      queryIds:
+        description: Space-separated TPC-DS query IDs (blank = repo default).
+        required: false
+        type: string
+      dataFormats:
+        description: Comma-separated formats to provision and query, e.g. csv,parquet (blank = repo default).
+        required: false
+        type: string
+      iterations:
+        description: Iterations per query, per format (blank = repo default).
+        required: false
+        type: string
+      parallel:
+        description: Parallel query submissions
+        required: false
+        type: string
+      publisherResourceGroup:
+        description: Existing publisher RG containing pre-loaded TPC-DS datasets.
+        required: false
+        type: string
+        default: "cl-ob-publisher-tpcds-analytics"
+      consumerResourceGroup:
+        description: Existing consumer RG containing pre-loaded TPC-DS datasets.
+        required: false
+        type: string
+        default: "cl-ob-consumer-tpcds-analytics"
+      cleanupResources:
+        description: Delete tagged ephemeral resource groups at end of run.
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  checks: write
+  id-token: write
+
+env:
+  # NOTE: keep these defaults in sync with the run-name fallbacks above
+  # (SF/iterations/parallel) — run-name cannot read env, so those are literals.
+  DEFAULT_SCALE_FACTOR: "700"
+  DEFAULT_QUERY_IDS: "query1 query14 query24 query64 query72"
+  DEFAULT_DATA_FORMATS: "csv,parquet"
+  DEFAULT_ITERATIONS: "1"
+  DEFAULT_PARALLEL: "3"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/pr_build_all.yml
+    with:
+      ref: ${{ inputs.ref }}
+
+  tpcds-stresstest:
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=tpcds-stresstest-${{ github.run_id }}-${{ github.run_attempt }}"]
+    needs: [build]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+      SCALE_FACTOR: ${{ github.event.inputs.scaleFactor }}
+      QUERY_IDS: ${{ github.event.inputs.queryIds }}
+      DATA_FORMATS: ${{ github.event.inputs.dataFormats }}
+      ITERATIONS: ${{ github.event.inputs.iterations }}
+      PARALLEL: ${{ github.event.inputs.parallel }}
+      PUBLISHER_RESOURCE_GROUP: ${{ github.event.inputs.publisherResourceGroup || 'cl-ob-publisher-tpcds-analytics' }}
+      CONSUMER_RESOURCE_GROUP: ${{ github.event.inputs.consumerResourceGroup || 'cl-ob-consumer-tpcds-analytics' }}
+      DEPLOYMENT_CONFIG_DIR: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
+      KUBECONFIG_PATH: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated/cl-cluster/k8s-credentials.yaml
+      STRESSTEST_ROOT: ${{ github.workspace }}/test/onebox/multi-party-collab/analytics-load-testing-TPC-DS/stresstest
+      TPCDS_OUT_DIR: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated/tpcds-analytics
+      LOCATION: centralindia
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.ref }}
+
+      - name: Resolve run parameters
+        shell: bash
+        run: |
+          set -eo pipefail
+          # Scheduled runs (no explicit scaleFactor) pick the scale factor from
+          # the current weekday: Mon=10 | Tue=100 | Wed=400 | Thu=700 | Fri=1000.
+          if [ -z "$SCALE_FACTOR" ] && [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+            case "$(date -u +%u)" in
+              1) SCALE_FACTOR="10" ;;
+              2) SCALE_FACTOR="100" ;;
+              3) SCALE_FACTOR="400" ;;
+              4) SCALE_FACTOR="700" ;;
+              5) SCALE_FACTOR="1000" ;;
+              *) SCALE_FACTOR="$DEFAULT_SCALE_FACTOR" ;;
+            esac
+            # Scheduled runs always use iterations=1 and parallel=3.
+            ITERATIONS="1"
+            PARALLEL="3"
+            echo "Scheduled run on $(date -u +%A) → SF=$SCALE_FACTOR"
+          fi
+          SCALE_FACTOR="${SCALE_FACTOR:-$DEFAULT_SCALE_FACTOR}"
+          QUERY_IDS="${QUERY_IDS:-$DEFAULT_QUERY_IDS}"
+          ITERATIONS="${ITERATIONS:-$DEFAULT_ITERATIONS}"
+          PARALLEL="${PARALLEL:-$DEFAULT_PARALLEL}"
+          DATA_FORMATS="${DATA_FORMATS:-$DEFAULT_DATA_FORMATS}"
+          [ "$DATA_FORMATS" = "auto" ] && DATA_FORMATS="$DEFAULT_DATA_FORMATS"
+          metrics_file="$TPCDS_OUT_DIR/results/tpcds_submission_metrics_sf${SCALE_FACTOR}_run${RUN_ID}_attempt${RUN_ATTEMPT}.json"
+          for kv in SCALE_FACTOR QUERY_IDS DATA_FORMATS ITERATIONS PARALLEL; do
+            echo "$kv=${!kv}" >> "$GITHUB_ENV"
+          done
+          echo "METRICS_FILE=$metrics_file" >> "$GITHUB_ENV"
+          echo "Resolved → SF=$SCALE_FACTOR | queries='$QUERY_IDS' | formats=$DATA_FORMATS | iters=$ITERATIONS | parallel=$PARALLEL"
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Login to Azure
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup environment (AKS + CACI CCF)
+        id: setup_env
+        uses: ./.github/actions/test-workloads/setup-env
+        with:
+          repo: ${{ vars.ACR_URL }}
+          tag: ${{ github.run_id }}
+          infraType: aks
+          location: ${{ env.LOCATION }}
+          outDir: ${{ env.DEPLOYMENT_CONFIG_DIR }}
+
+      # Protect this run's resource groups from the subscription cleanup job that
+      # prunes untagged/idle RGs. Without this, a long run's RGs can be deleted
+      # mid-run ("ResourceGroupBeingDeleted"). The tag is removed at end of run
+      # so the RGs become eligible for cleanup again.
+      - name: Tag run resource groups SkipCleanup=true
+        if: ${{ steps.setup_env.outcome == 'success' }}
+        shell: bash
+        env:
+          RG_TAG: github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}
+        run: |
+          set -eo pipefail
+          for rid in $(az group list --tag "$RG_TAG" --query '[].id' -o tsv); do
+            echo "SkipCleanup=true -> $rid"
+            az tag update --resource-id "$rid" --operation merge --tags SkipCleanup=true -o none
+          done
+
+      - name: Print run fingerprint
+        if: always()
+        shell: bash
+        env:
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          CONFIG_DIR: ${{ env.DEPLOYMENT_CONFIG_DIR }}
+        run: |
+          set +e
+          CFG="$CONFIG_DIR/deployment-config.json"
+          TAG="github_actions=${JOB_ID}-${RUN_ID}"
+          CCF_EP=$(jq -r '.ccf_endpoint // "n/a"' "$CFG" 2>/dev/null || echo "n/a")
+
+          mapfile -t RGS < <(az group list --tag "$TAG" --query '[].name' -o tsv)
+          CCF_RG=$(printf '%s\n' "${RGS[@]}" | grep '^cl-ob-isv-' | head -n1)
+          AKS_RG=$(printf '%s\n' "${RGS[@]}" | grep -v '^cl-ob-isv-' | head -n1)
+          AKS_NAME=""
+          if [ -n "$AKS_RG" ]; then
+            AKS_NAME=$(az aks list --resource-group "$AKS_RG" --query '[0].name' -o tsv 2>/dev/null)
+          fi
+
+          {
+            echo "## TPC-DS Stresstest - Run Fingerprint"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Subscription | \`$SUBSCRIPTION_ID\` |"
+            echo "| Region | \`${LOCATION}\` |"
+            echo "| AKS RG | \`${AKS_RG:-n/a}\` |"
+            echo "| AKS cluster | \`${AKS_NAME:-n/a}\` |"
+            echo "| CCF RG | \`${CCF_RG:-n/a}\` |"
+            echo "| CCF endpoint | \`$CCF_EP\` |"
+            if [ -n "$AKS_RG" ]; then
+              echo ""
+              echo "### Portal"
+              echo "- [AKS RG](https://portal.azure.com/#@/resource/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$AKS_RG)"
+              echo "- [CCF RG](https://portal.azure.com/#@/resource/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$CCF_RG)"
+              echo ""
+              echo "### Reproduce locally"
+              echo '```bash'
+              echo "az login"
+              echo "az group list --tag '$TAG' -o table"
+              echo "az aks get-credentials --resource-group '$AKS_RG' --name '$AKS_NAME'"
+              echo "kubectl -n observability get secret cleanroom-grafana -o jsonpath='{.data.admin-password}' | base64 -d ; echo"
+              echo "k9s --context '$AKS_NAME' -n analytics"
+              echo "kubectl -n observability port-forward svc/cleanroom-grafana 3000:80"
+              echo '```'
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Install az cleanroom extension
+        shell: bash
+        run: |
+          set -eo pipefail
+          for i in 1 2 3; do
+            oras pull ${{ vars.ACR_URL }}/cli/cleanroom-whl:${{ github.run_id }} && break
+            echo "oras pull failed (attempt $i); retrying in 5s" >&2
+            sleep 5
+          done
+          az extension add --allow-preview true --source ./cleanroom-*-py2.py3-none-any.whl -y
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Setup Python venv for stresstest
+        shell: bash
+        run: |
+          set -eo pipefail
+          uv python install 3.12
+          uv venv .venv-tpcds --python 3.12
+          # shellcheck disable=SC1091
+          source .venv-tpcds/bin/activate
+          uv pip install -r "$STRESSTEST_ROOT/requirements.txt"
+          echo "$PWD/.venv-tpcds/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$PWD/.venv-tpcds" >> "$GITHUB_ENV"
+
+      - name: Deploy governance + cluster provider clients
+        shell: bash
+        run: |
+          set -eo pipefail
+          cfg="$DEPLOYMENT_CONFIG_DIR/deployment-config.json"
+          project_name=$(jq -r '.project_name' "$cfg")
+          initial_member_name=$(jq -r '.initial_member_name' "$cfg")
+          ccf_endpoint=$(jq -r '.ccf_endpoint' "$cfg")
+          out_dir=$(jq -r '.out_dir' "$cfg")
+          cluster_provider_project_name=$(jq -r '.cluster_provider_project_name' "$cfg")
+
+          az cleanroom governance client deploy \
+            --ccf-endpoint "$ccf_endpoint" \
+            --signing-key "$out_dir/ccf/${initial_member_name}_privk.pem" \
+            --signing-cert "$out_dir/ccf/${initial_member_name}_cert.pem" \
+            --service-cert "$out_dir/ccf/service_cert.pem" \
+            --name "$project_name" \
+            --env-file "$out_dir/ccf/governance-client.env"
+
+          az cleanroom cluster provider deploy \
+            --name "$cluster_provider_project_name" \
+            --env-file "$out_dir/cl-cluster/cluster-provider.env"
+
+      - name: Run TPC-DS scenario setup
+        shell: bash
+        run: |
+          set -eo pipefail
+          cfg="$DEPLOYMENT_CONFIG_DIR/deployment-config.json"
+          pwsh "$STRESSTEST_ROOT/runner/run-scenario.ps1" \
+            -ccfEndpoint "$(jq -r '.ccf_endpoint' "$cfg")" \
+            -ownerClient "$(jq -r '.project_name' "$cfg")" \
+            -ownerName "$(jq -r '.initial_member_name' "$cfg")" \
+            -deploymentConfigDir "$DEPLOYMENT_CONFIG_DIR" \
+            -outDir "$TPCDS_OUT_DIR" \
+            -registry acr \
+            -repo "${{ vars.ACR_URL }}" \
+            -tag "${{ github.run_id }}" \
+            -location "$LOCATION" \
+            -scaleFactor "$SCALE_FACTOR" \
+            -dataFormats "$DATA_FORMATS" \
+            -queryIds "$QUERY_IDS" \
+            -encryptionMode SSE \
+            -publisherResourceGroup "$PUBLISHER_RESOURCE_GROUP" \
+            -consumerResourceGroup "$CONSUMER_RESOURCE_GROUP"
+
+      - name: Submit TPC-DS queries
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -eo pipefail
+          mkdir -p "$TPCDS_OUT_DIR/results"
+          # Keep submit non-blocking so verify_run can emit structured diagnostics.
+          # shellcheck disable=SC2086
+          python3 -u "$STRESSTEST_ROOT/runner/submit_tpcds_job.py" \
+            --config "$TPCDS_OUT_DIR/submitSqlJobConfig.json" \
+            --kube-config "$KUBECONFIG_PATH" \
+            --metrics-file "$METRICS_FILE" \
+            --query-ids $QUERY_IDS \
+            --iterations "$ITERATIONS" \
+            --parallel "$PARALLEL" \
+            --data-format "$DATA_FORMATS"
+
+      - name: Verify TPC-DS run
+        if: ${{ !cancelled() && steps.setup_env.outcome == 'success' }}
+        shell: bash
+        env:
+          MIN_SUCCESS_RATE: "100"
+        run: |
+          set -eo pipefail
+          if [ ! -f "$METRICS_FILE" ]; then
+            echo "::error::No metrics file at $METRICS_FILE; submit step likely crashed before writing results."
+            exit 1
+          fi
+
+          set +e
+          python3 "$STRESSTEST_ROOT/analysis/verify_run.py" \
+            --metrics-file "$METRICS_FILE" \
+            --query-ids "$QUERY_IDS" \
+            --formats "$DATA_FORMATS" \
+            --iterations "$ITERATIONS" \
+            --min-success-rate "$MIN_SUCCESS_RATE" \
+            --duration-threshold-grace-pct 100 \
+            --thresholds "$STRESSTEST_ROOT/analysis/thresholds"
+          verify_rc=$?
+
+          exit "$verify_rc"
+
+      - name: Stage TPC-DS stresstest results for upload
+        if: ${{ !cancelled() && steps.setup_env.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -eo pipefail
+          src="${{ env.TPCDS_OUT_DIR }}/results"
+          dst="${{ runner.temp }}/tpcds-stresstest-artifact"
+          rm -rf "$dst"
+          mkdir -p "$dst"
+          if [ -d "$src" ]; then
+            cp -a "$src/." "$dst/"
+          fi
+
+      - name: Upload TPC-DS stresstest results
+        if: ${{ !cancelled() && steps.setup_env.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tpcds-stresstest-results-sf${{ env.SCALE_FACTOR }}
+          path: ${{ runner.temp }}/tpcds-stresstest-artifact
+          if-no-files-found: ignore
+          overwrite: true
+
+      # Cleanup: deletes RGs tagged for this run (skips RGs tagged SkipCleanup=true).
+      # Refresh OIDC first for the end-of-run path since long SF runs can outlive
+      # the original token; skipped for setup-failure cleanup (still in lifetime).
+      - name: Refresh Azure login before end-of-run cleanup
+        if: ${{ always() && steps.setup_env.outcome == 'success' }}
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Remove the SkipCleanup protection so the RGs are eligible for cleanup
+      # again (the delete step below, or the subscription cleanup job later).
+      - name: Remove SkipCleanup tag from run resource groups
+        if: ${{ always() && steps.setup_env.outcome == 'success' }}
+        shell: bash
+        env:
+          RG_TAG: github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}
+        run: |
+          set +e
+          for rid in $(az group list --tag "$RG_TAG" --query '[].id' -o tsv); do
+            echo "Removing SkipCleanup -> $rid"
+            az tag update --resource-id "$rid" --operation delete --tags SkipCleanup=true -o none
+          done
+
+      - name: Dump cleanroom-cluster logs on failure
+        if: ${{ failure() && !cancelled() && steps.setup_env.outcome == 'success' }}
+        shell: bash
+        run: |
+          cfg="$DEPLOYMENT_CONFIG_DIR/deployment-config.json"
+          docker compose -p "$(jq -r '.cluster_provider_project_name' "$cfg")" logs || true
+          pwsh ./test/onebox/multi-party-collab/big-data-query-analytics/dump-cleanroom-cluster-logs.ps1 \
+            -kubeConfig "$KUBECONFIG_PATH" \
+            -jobConfig "$TPCDS_OUT_DIR/submitSqlJobConfig.json" || true
+
+      # Always tear down this run's resources (success or failure). Runs LAST so
+      # the failure log-dump above can still reach the cluster before teardown.
+      - name: Delete tagged resource groups
+        if: ${{ always() }}
+        shell: pwsh
+        run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}"

@@ -30,6 +30,12 @@ rules:
 - apiGroups: ["cleanroom.azure.com"]
   resources: ["jobrecords/status"]
   verbs: ["get", "update", "patch"]
+- apiGroups: ["cleanroom.azure.com"]
+  resources: ["jobeventrecords"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+- apiGroups: ["cleanroom.azure.com"]
+  resources: ["jobeventrecords/status"]
+  verbs: ["get", "update", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

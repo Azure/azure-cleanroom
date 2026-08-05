@@ -1,11 +1,11 @@
 import logging
 import os
-import socket
 import time
+
+from opentelemetry import trace
 
 from cleanroom_internal.utilities import mountpoint_utilities
 from cleanroom_internal.utilities import utilities as internal_utilities
-from opentelemetry import trace
 
 # Code-launcher specific constants
 BLOBFUSE_LAUNCHER_RETRIES = 5

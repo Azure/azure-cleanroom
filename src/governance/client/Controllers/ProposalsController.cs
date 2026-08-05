@@ -43,25 +43,30 @@ public class ProposalsController : ClientControllerBase
     [HttpGet("/proposals/{proposalId}/votes")]
     public async Task<JsonArray> GetVotes([FromRoute] string proposalId)
     {
-        // Note (gsinha): The old API (non api-version) returns member-wise ballot details
-        // which we can use to determine the voting status. A more direct way to know the votes
-        // for a proposal is needed. See https://github.com/microsoft/CCF/issues/6107
         var ccfClient = await this.CcfClientManager.GetGovClient();
-        using HttpResponseMessage response =
-            await ccfClient.GetAsync($"gov/proposals/{proposalId}");
-        await response.ValidateStatusCodeAsync(this.Logger);
-        var jsonResponse = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
-        var ballots = jsonResponse["ballots"]?.AsObject();
+        using HttpResponseMessage proposalResponse =
+            await ccfClient.GetAsync($"gov/members/proposals/{proposalId}" +
+            $"?api-version={this.CcfClientManager.GetGovApiVersion()}");
+        await proposalResponse.ValidateStatusCodeAsync(this.Logger);
+        var proposalJson = (await proposalResponse.Content.ReadFromJsonAsync<JsonObject>())!;
+        var ballotSubmitters = proposalJson["ballotSubmitters"]?.AsArray();
         var votes = new JsonArray();
-        if (ballots != null)
+        if (ballotSubmitters != null)
         {
             string voteYes = "export function vote (proposal, proposerId) { return true }";
             string voteNo = "export function vote (proposal, proposerId) { return false }";
-            foreach (var ballot in ballots.AsEnumerable())
+            foreach (var submitter in ballotSubmitters)
             {
-                string? vote = ballot.Value?.ToString() == voteYes ? "accepted" :
-                    ballot.Value?.ToString() == voteNo ? "rejected" : ballot.Value?.ToString();
-                votes.Add(new JsonObject { ["memberId"] = ballot.Key, ["vote"] = vote });
+                string memberId = submitter!.ToString();
+                using HttpResponseMessage ballotResponse =
+                    await ccfClient.GetAsync(
+                        $"gov/members/proposals/{proposalId}/ballots/{memberId}" +
+                        $"?api-version={this.CcfClientManager.GetGovApiVersion()}");
+                await ballotResponse.ValidateStatusCodeAsync(this.Logger);
+                string script = await ballotResponse.Content.ReadAsStringAsync();
+                string? vote = script == voteYes ? "accepted" :
+                    script == voteNo ? "rejected" : script;
+                votes.Add(new JsonObject { ["memberId"] = memberId, ["vote"] = vote });
             }
         }
 

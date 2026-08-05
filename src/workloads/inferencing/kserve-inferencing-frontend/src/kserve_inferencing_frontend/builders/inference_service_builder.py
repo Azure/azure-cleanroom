@@ -1,18 +1,22 @@
 import base64
+import copy
+import json
 import logging
 import os
 import re
 import tempfile
 import threading
+from dataclasses import dataclass
 from typing import List, Optional
 
 import oras.client
 import yaml
+from kubernetes.client import models as k8smodels
+
 from cleanroom_internal.utilities import otel_utilities
 from frontend_internal.cleanroom_application_builder import CleanroomApplicationBuilder
 from frontend_internal.models.cleanroom_application import Sidecar
 from frontend_internal.models.input_models import AttestationType, TelemetrySettings
-from kubernetes.client import models as k8smodels
 
 from ..builders.i_inference_service_builder import (
     IInferenceServiceBuilder,
@@ -28,32 +32,48 @@ from ..models.cleanroom_inferencing_application import (
 from ..models.inference_service_models import InferenceServiceSpec, PredictorSpec
 from ..models.input_models import *
 from ..utilities.constants import Constants
+from ..utilities.container_utils import find_container
 
 logger = logging.getLogger("kserve_application_builder")
 
-# Runtimes supported by the containers-spec builder.
-SUPPORTED_RUNTIMES = {
-    "kserve-sklearnserver",
-    "llamacpp-server",
-}
 
-# Maps runtime name to the CLI argument used to specify the model path.
-RUNTIME_MODEL_ARG_MAP = {
-    "kserve-sklearnserver": "--model_dir",
-    "llamacpp-server": "--model",
-}
+@dataclass
+class RuntimeConfig:
+    """Configuration for a supported KServe runtime."""
 
-# Runtimes that accept the --model_name argument.
-RUNTIMES_WITH_MODEL_NAME = {
-    "kserve-sklearnserver",
-}
+    model_arg: str
+    health_path: str
+    supports_model_name: bool = False
+    startup_failure_threshold: int = 120
+    metrics_path: Optional[str] = None
+    default_args: Optional[List[str]] = None
 
-# Maps runtime name to its health endpoint path for startup probes. The probe
-# gates pod readiness on model loading completion so that KServe does not mark
-# the InferenceService Ready before the model is actually serving.
-RUNTIME_HEALTH_PATH_MAP = {
-    "kserve-sklearnserver": "/v2/health/ready",
-    "llamacpp-server": "/health",
+
+RUNTIMES: dict[str, RuntimeConfig] = {
+    "kserve-sklearnserver": RuntimeConfig(
+        model_arg="--model_dir",
+        health_path="/v2/health/ready",
+        supports_model_name=True,
+        metrics_path="/metrics",
+    ),
+    "llamacpp-server": RuntimeConfig(
+        model_arg="--model",
+        health_path="/health",
+        metrics_path="/metrics",
+        default_args=["--metrics"],
+    ),
+    "llamacpp-server-cuda": RuntimeConfig(
+        model_arg="--model",
+        health_path="/health",
+        metrics_path="/metrics",
+        default_args=["--metrics"],
+    ),
+    "vllm-openai": RuntimeConfig(
+        model_arg="--model",
+        health_path="/health",
+        startup_failure_threshold=360,
+        metrics_path="/metrics",
+    ),
 }
 
 
@@ -154,9 +174,11 @@ class InferenceServiceBuilder(
         )
 
         if self._telemetry and self._telemetry.telemetry_collection_enabled:
+            extra_vars = self._get_telemetry_extra_vars()
             cleanroom_app_builder = cleanroom_app_builder.WithTelemetry(
                 self._telemetry,
                 self._trace_context,
+                extra_vars,
             )
 
         if self._governance_required:
@@ -180,10 +202,7 @@ class InferenceServiceBuilder(
         destination_port = 9081 if has_agent else 8080
         ccr_proxy_fqdn = ""
         if self._model_name and self._namespace:
-            ccr_proxy_fqdn = (
-                f"{self._model_name}-predictor-https"
-                f".{self._namespace}.svc.cluster.local"
-            )
+            ccr_proxy_fqdn = f"{self._model_name}-predictor-https.{self._namespace}.svc"
         cleanroom_app_builder = cleanroom_app_builder.WithCcrProxyHttpsHttp(
             listener_port=443, destination_port=destination_port, fqdn=ccr_proxy_fqdn
         )
@@ -197,10 +216,16 @@ class InferenceServiceBuilder(
         )
 
         volumes: List[k8smodels.V1Volume] = []
-        volumes.append(k8smodels.V1Volume(name="remotemounts", empty_dir={}))
-        volumes.append(k8smodels.V1Volume(name="telemetrymounts", empty_dir={}))
-        volumes.append(k8smodels.V1Volume(name="volumestatusmounts", empty_dir={}))
-        volumes.append(k8smodels.V1Volume(name="shared", empty_dir={}))
+        volumes.append(
+            k8smodels.V1Volume(name=Constants.REMOTE_MOUNTS_VOLUME, empty_dir={})
+        )
+        volumes.append(
+            k8smodels.V1Volume(name=Constants.TELEMETRY_MOUNTS_VOLUME, empty_dir={})
+        )
+        volumes.append(
+            k8smodels.V1Volume(name=Constants.VOLUME_STATUS_MOUNTS_VOLUME, empty_dir={})
+        )
+        volumes.append(k8smodels.V1Volume(name=Constants.SHARED_VOLUME, empty_dir={}))
 
         assert self._predictor is not None
         self._predictor.initContainers = []
@@ -210,33 +235,46 @@ class InferenceServiceBuilder(
 
         # Wire model path arg and model name onto the serving container.
         assert self._predictor.containers is not None
-        serving_container = next(
-            c for c in self._predictor.containers if c.name == "kserve-container"
+        serving_container = find_container(
+            self._predictor.containers, Constants.KSERVE_CONTAINER
         )
         assert self._runtime is not None
-        model_arg_flag = RUNTIME_MODEL_ARG_MAP.get(self._runtime)
+        model_arg_flag = RUNTIMES[self._runtime].model_arg
         if model_arg_flag and self._model_dir:
-            model_path = f"/mnt/remote/{self._model_dir}"
+            model_path = f"{Constants.REMOTE_MOUNT_PATH}/{self._model_dir}"
             serving_container.args = serving_container.args or []
             serving_container.args.extend([model_arg_flag, model_path])
-        if self._model_name and self._runtime in RUNTIMES_WITH_MODEL_NAME:
+        if self._model_name and RUNTIMES[self._runtime].supports_model_name:
             serving_container.args = serving_container.args or []
             serving_container.args.extend(["--model_name", self._model_name])
 
         # Add volume mount for blobfuse model data.
         serving_container.volume_mounts = [
             k8smodels.V1VolumeMount(
-                name="remotemounts",
-                mount_path="/mnt/remote",
+                name=Constants.REMOTE_MOUNTS_VOLUME,
+                mount_path=Constants.REMOTE_MOUNT_PATH,
             )
         ]
 
-        return CleanRoomInferencingApplication(
+        app = CleanRoomInferencingApplication(
             InferenceServiceSpec(predictor=self._predictor),
             predictor_policy=inferencing_pod_policy["predictor"],
             transformer_policy=inferencing_pod_policy["transformer"],
             sidecars=sidecars,
         )
+
+        # Hook for subclasses to customize the built application.
+        self._customize_app(app)
+
+        return app
+
+    def _customize_app(self, app: CleanRoomInferencingApplication):
+        """Override in subclasses to customize the built application.
+
+        Called at the end of Build() before returning. Subclasses should
+        modify the app in-place rather than overriding Build().
+        """
+        pass
 
     def _get_predictor(
         self,
@@ -244,20 +282,39 @@ class InferenceServiceBuilder(
         predictor_settings: PredictorSettings,
     ) -> PredictorSpec:
         runtime = input.model.runtime
-        if runtime not in SUPPORTED_RUNTIMES:
+        if runtime not in RUNTIMES:
             raise ValueError(
                 f"Unsupported runtime: {runtime}. "
-                f"Supported runtimes: {SUPPORTED_RUNTIMES}"
+                f"Supported runtimes: {list(RUNTIMES.keys())}"
             )
         self._runtime = runtime
 
-        # Resolve the digest-pinned container image for this runtime.
-        image = self._resolve_container_image(runtime)
+        # The runtime name is supplied by the caller (the inferencing
+        # agent forwards what the user requested). The implementing
+        # image+digest is not a caller input — it's pinned by the
+        # frontend's bundled digest table (operationally pinned by the
+        # workload release version) and resolved from the runtime name
+        # here.
+        try:
+            image = _resolve_runtime_image(runtime, self._cleanroom_settings)
+        except Exception as e:
+            raise ValueError(
+                f"Failed to resolve image for runtime '{runtime}' "
+                f"from the inferencing digests document: {e}"
+            ) from e
+        if not image:
+            raise ValueError(
+                f"Runtime '{runtime}' not found in the inferencing "
+                "digests document. The runtime name must match an "
+                "entry in the digest table bundled with this frontend. "
+                f"Known runtimes: {list(RUNTIMES.keys())}"
+            )
 
         # Build the serving container using containers spec. A startup probe
         # gates pod readiness on model loading completion so that KServe does
         # not report Ready before the model server can accept requests.
-        health_path = RUNTIME_HEALTH_PATH_MAP.get(runtime, "/health")
+        health_path = RUNTIMES[runtime].health_path
+        failure_threshold = RUNTIMES[runtime].startup_failure_threshold
         container = k8smodels.V1Container(
             name="kserve-container",
             image=image,
@@ -269,7 +326,7 @@ class InferenceServiceBuilder(
                 ),
                 initial_delay_seconds=5,
                 period_seconds=10,
-                failure_threshold=120,
+                failure_threshold=failure_threshold,
             ),
         )
 
@@ -286,9 +343,14 @@ class InferenceServiceBuilder(
                 k8smodels.V1EnvVar(name=e.name, value=e.value) for e in input.model.env
             ]
 
-        # Wire user-provided args.
+        # Wire runtime default args (e.g. --metrics for llama.cpp).
+        runtime_defaults = RUNTIMES[runtime].default_args
+        if runtime_defaults:
+            container.args = list(runtime_defaults)
+
+        # Wire user-provided args (appended after defaults).
         if input.model.args:
-            container.args = list(input.model.args)
+            container.args = (container.args or []) + list(input.model.args)
 
         predictor = PredictorSpec()
         predictor.containers = [container]
@@ -344,50 +406,51 @@ class InferenceServiceBuilder(
                 auto_scaling.behavior = input.auto_scaling.behavior
             predictor.autoScaling = auto_scaling
 
-        predictor.nodeSelector = {"pod-policy": "required"}
+        predictor.nodeSelector = {Constants.POD_POLICY_KEY: Constants.POD_POLICY_VALUE}
+        if self._requires_gpu(predictor):
+            gpu_expr = {
+                "key": Constants.GPU_PRODUCT_LABEL_KEY,
+                "operator": "Exists",
+            }
+            combined: dict = {}
+            if input.affinity:
+                combined = copy.deepcopy(input.affinity)
+            # Deep-merge nodeAffinity: inject the GFD match expression
+            # into every existing nodeSelectorTerm (terms are OR'd, but
+            # expressions within a term are AND'd). This ensures the GPU
+            # constraint is enforced alongside any user-provided terms.
+            user_na = combined.get("nodeAffinity", {})
+            user_required = user_na.get(
+                "requiredDuringSchedulingIgnoredDuringExecution", {}
+            )
+            user_terms = user_required.get("nodeSelectorTerms", [])
+            if user_terms:
+                for term in user_terms:
+                    exprs = term.setdefault("matchExpressions", [])
+                    exprs.append(gpu_expr)
+            else:
+                user_terms.append({"matchExpressions": [gpu_expr]})
+            user_required["nodeSelectorTerms"] = user_terms
+            user_na["requiredDuringSchedulingIgnoredDuringExecution"] = user_required
+            combined["nodeAffinity"] = user_na
+            predictor.affinity = combined
+        elif input.affinity:
+            predictor.affinity = input.affinity
+
         predictor.tolerations = [
             {
-                "key": "pod-policy",
+                "key": Constants.POD_POLICY_KEY,
                 "operator": "Equal",
-                "value": "required",
+                "value": Constants.POD_POLICY_VALUE,
                 "effect": "NoSchedule",
             }
         ]
 
         return predictor
 
-    def _resolve_container_image(self, runtime: str) -> str:
-        """Resolve a runtime name to a digest-pinned image reference."""
-        runtime_digests = self._get_runtime_digests()
-        for entry in runtime_digests:
-            if entry.get("runtime") == runtime:
-                image = entry["image"]
-                digest = entry["digest"]
-                return f"{image}@{digest}"
-
-        raise ValueError(f"Runtime '{runtime}' not found in runtime digests document.")
-
-    def _get_runtime_digests(self) -> list:
-        """Download and cache the runtime digests OCI artifact."""
-        temp_dir = tempfile.gettempdir()
-        digests_path = os.path.join(temp_dir, "inf-runtime-digests.yaml")
-
-        lock = threading.Lock()
-        if not os.path.exists(digests_path):
-            with lock:
-                if not os.path.exists(digests_path):
-                    digests_url = self._cleanroom_settings.runtime_digests_document
-                    logger.warning(f"Using runtime digests document: {digests_url}")
-
-                    insecure = self._cleanroom_settings.use_http
-                    client = oras.client.OrasClient(insecure=insecure)
-                    client.pull(
-                        target=digests_url,
-                        outdir=temp_dir,
-                    )
-
-        with open(digests_path) as f:
-            return yaml.safe_load(f)
+    def _resolve_kserve_agent_image(self) -> Optional[str]:
+        """Resolve the kserve-agent image to a digest-pinned reference."""
+        return resolve_kserve_agent_image(self._cleanroom_settings)
 
     def _get_inferencing_pod_policy(
         self, predictor_sidecars: List[Sidecar], transformer_sidecars: List[Sidecar]
@@ -401,22 +464,107 @@ class InferenceServiceBuilder(
                 Constants.ALLOW_ALL_POLICY_BASE64
             ).decode("utf-8")
             cvm_measurements = self._get_cvm_measurements()
-            first_image = next(iter(cvm_measurements.values()))
-            pcrs = first_image["pcrs"]
+            sku = "gpu" if self._requires_gpu() else "cpu"
+            # TODO: Currently we iterate over ALL known image measurement
+            # sets and union their PCR values. Long-term, the deployment
+            # should query the cluster for the active flex node image
+            # version and look up only the corresponding PCR measurements
+            # from the measurements document, instead of accepting all.
+            all_pcrs: dict[str, list[str]] = {}
+            for image_data in cvm_measurements.values():
+                if sku not in image_data:
+                    continue
+                for pcr_index, pcr_value in image_data[sku]["pcrs"].items():
+                    values = all_pcrs.setdefault(pcr_index, [])
+                    if pcr_value not in values:
+                        values.append(pcr_value)
             return {
                 "predictor": Policy(
                     json=allow_all_json_policy,
                     json_base64=Constants.ALLOW_ALL_POLICY_BASE64,
-                    pcrs=pcrs,
+                    pcrs=all_pcrs,
                 ),
                 "transformer": Policy(
                     json=allow_all_json_policy,
                     json_base64=Constants.ALLOW_ALL_POLICY_BASE64,
-                    pcrs=pcrs,
+                    pcrs=all_pcrs,
                 ),
             }
 
         raise NotImplementedError("Custom policy generation is not implemented yet.")
+
+    def _requires_gpu(self, predictor: PredictorSpec = None) -> bool:
+        """Check if the predictor requests GPU resources."""
+        p = predictor or self._predictor
+        if not p or not p.containers:
+            return False
+        for container in p.containers:
+            if not container.resources:
+                continue
+            for field in (container.resources.requests, container.resources.limits):
+                if field and "nvidia.com/gpu" in field:
+                    return True
+        return False
+
+    def _get_telemetry_extra_vars(self) -> dict:
+        """Build extra telemetry variables for the OTEL collector sidecar.
+
+        Configures:
+        - Resource attributes stamped onto all metrics for filtering
+          and aggregation at pod/model/runtime/contract granularity.
+        - Prometheus scrape targets for containers that expose /metrics.
+        """
+        extra_vars: dict[str, str] = {}
+
+        # Resource attributes enable per-pod, per-model, per-runtime,
+        # per-contract filtering and aggregation in Grafana/Prometheus.
+        resource_attributes = otel_utilities.get_current_baggage()
+        resource_attributes["service.name"] = self._app_name or "kserve-inference"
+        if self._model_name:
+            resource_attributes["model.name"] = self._model_name
+        if self._runtime:
+            resource_attributes["runtime"] = self._runtime
+        if self._contract_id:
+            resource_attributes["contract.id"] = self._contract_id
+
+        extra_vars["resourceAttributes"] = base64.b64encode(
+            json.dumps(resource_attributes).encode("utf-8")
+        ).decode("utf-8")
+
+        # Prometheus scrape targets.
+        scrape_targets: list[dict[str, str]] = []
+
+        if self._runtime and self._runtime in RUNTIMES:
+            runtime_config = RUNTIMES[self._runtime]
+            if runtime_config.metrics_path:
+                scrape_targets.append(
+                    {
+                        "job_name": "kserve-container",
+                        "target": "localhost:8080",
+                        "metrics_path": runtime_config.metrics_path,
+                    }
+                )
+
+        # kserve-agent: injected by KServe when batcher or logger is
+        # configured. Exposes Prometheus metrics on port 9081.
+        has_agent = self._predictor and (
+            self._predictor.batcher is not None or self._predictor.logger is not None
+        )
+        if has_agent:
+            scrape_targets.append(
+                {
+                    "job_name": "kserve-agent",
+                    "target": "localhost:9081",
+                    "metrics_path": "/metrics",
+                }
+            )
+
+        if scrape_targets:
+            extra_vars["prometheusScrapeTargets"] = base64.b64encode(
+                json.dumps(scrape_targets).encode("utf-8")
+            ).decode("utf-8")
+
+        return extra_vars
 
     def _get_cvm_measurements(self):
         temp_dir = tempfile.gettempdir()
@@ -429,7 +577,7 @@ class InferenceServiceBuilder(
                         self._cleanroom_settings.cvm_measurements_document
                     )
                     logger.warning(
-                        "Using CVM measurements document: " f"{measurements_url}"
+                        f"Using CVM measurements document: {measurements_url}"
                     )
 
                     insecure = self._cleanroom_settings.use_http
@@ -442,3 +590,56 @@ class InferenceServiceBuilder(
         with open(os.path.join(temp_dir, "cvm-measurements.yaml")) as f:
             cvm_measurements = yaml.safe_load(f)
         return cvm_measurements
+
+
+def resolve_kserve_agent_image(
+    cleanroom_settings: CleanroomSettings,
+) -> Optional[str]:
+    """Resolve the kserve-agent image to a digest-pinned reference from
+    the inferencing digests OCI artifact. Returns None on failure."""
+    try:
+        return _resolve_runtime_image("kserve-agent", cleanroom_settings)
+    except Exception as e:
+        logger.warning(f"Failed to resolve digest for runtime 'kserve-agent': {e}")
+        return None
+
+
+def _resolve_runtime_image(
+    runtime_name: str,
+    cleanroom_settings: CleanroomSettings,
+) -> Optional[str]:
+    """Resolve a runtime name to a digest-pinned image@digest reference
+    from the inferencing digests OCI artifact. Returns None if no
+    matching entry is found. Raises on fetch/parse errors so callers
+    can decide whether to suppress or propagate."""
+    digests = _get_inferencing_digests(cleanroom_settings)
+    entries = digests if isinstance(digests, list) else [digests]
+    for entry in entries:
+        if entry.get("name") == runtime_name:
+            image = entry["image"]
+            digest = entry["digest"]
+            return f"{image}@{digest}"
+    return None
+
+
+def _get_inferencing_digests(cleanroom_settings: CleanroomSettings) -> list:
+    """Download and cache the inferencing digests OCI artifact."""
+    temp_dir = tempfile.gettempdir()
+    digests_path = os.path.join(temp_dir, "inferencing-digests.yaml")
+
+    lock = threading.Lock()
+    if not os.path.exists(digests_path):
+        with lock:
+            if not os.path.exists(digests_path):
+                digests_url = cleanroom_settings.inferencing_digests_document
+                logger.warning(f"Using inferencing digests document: {digests_url}")
+
+                insecure = cleanroom_settings.use_http
+                client = oras.client.OrasClient(insecure=insecure)
+                client.pull(
+                    target=digests_url,
+                    outdir=temp_dir,
+                )
+
+    with open(digests_path) as f:
+        return yaml.safe_load(f)

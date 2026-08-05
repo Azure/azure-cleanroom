@@ -6,7 +6,10 @@ param
     [string]$location = "centralindia",
     
     [ValidateSet('json', 'parquet')]
-    [string[]]$additionalFormats = @()
+    [string[]]$additionalFormats = @(),
+
+    [ValidateSet('small', 'medium', 'large')]
+    [string]$scaleSku = "small"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,9 +29,15 @@ if ($additionalFormats.Count -gt 0) {
     $additionalFormatsArgs = @("--additional-formats") + $additionalFormats
 }
 
+$scaleSkuArgs = @()
+if ($scaleSku) {
+    $scaleSkuArgs = @("--scale-sku", $scaleSku)
+}
+
 # Run the scenario in an isolated environment using uv
 uv run --package test-big-data-query-analytics --frozen --isolated python3 -u $PSScriptRoot/test-big-data-analytics.py `
     --deployment-config-dir $deploymentConfigDir `
     --location $location `
     --out-dir $outDir `
-    $additionalFormatsArgs
+    $additionalFormatsArgs `
+    $scaleSkuArgs

@@ -1,0 +1,62 @@
+# Step template: test-workloads/test-kserve-inferencing composite.
+# Migrated from .github/actions/test-workloads/test-kserve-inferencing/action.yml.
+# Assumes login-to-azure.yml already ran.
+
+parameters:
+  - name: location
+    type: string
+  - name: deploymentConfigDir
+    type: string
+  - name: models
+    type: string
+    default: ""
+  - name: flexNodeProvisionUsingBakedImage
+    type: string
+    default: "false"
+  - name: repo
+    type: string
+    default: "$(ACR_URL)"
+  - name: tag
+    type: string
+    default: "$(Build.BuildId)"
+
+steps:
+  - template: install-cleanroom-cli.yml
+    parameters:
+      repo: ${{ parameters.repo }}
+      tag: ${{ parameters.tag }}
+  - template: install-uv-python.yml
+  - pwsh: Install-Module -Name powershell-yaml -Force
+    displayName: Install powershell-yaml
+  - template: workload-deploy-clients.yml
+    parameters:
+      deploymentConfigDir: ${{ parameters.deploymentConfigDir }}
+  - pwsh: |
+      $scriptArgs = @{
+        deploymentConfigDir = "${{ parameters.deploymentConfigDir }}"
+        location            = "${{ parameters.location }}"
+        models              = "${{ parameters.models }}"
+      }
+      if ("${{ parameters.flexNodeProvisionUsingBakedImage }}" -eq "true") {
+        $scriptArgs["provisionFlexNodeUsingBakedImage"] = $true
+      }
+      ./test/onebox/model-serving/kserve-inferencing/test-kserve-inferencing.ps1 @scriptArgs
+    displayName: Run kserve inferencing test
+    workingDirectory: $(repoRoot)
+  - pwsh: |
+      ./test/onebox/model-serving/kserve-inferencing/deploy-models.ps1 `
+          -deploymentConfigDir "${{ parameters.deploymentConfigDir }}" -models "tinyllama-gpu" -submitOnly
+    displayName: Validate GPU model CRD submission
+    workingDirectory: $(repoRoot)
+  - bash: |
+      cluster_provider_project_name=$(jq -r '.cluster_provider_project_name' "${{ parameters.deploymentConfigDir }}/deployment-config.json")
+      docker compose -p "$cluster_provider_project_name" logs
+    displayName: Dump cleanroom-cluster-provider logs
+    condition: not(canceled())
+    workingDirectory: $(repoRoot)
+  - pwsh: |
+      ./test/onebox/model-serving/kserve-inferencing/dump-cleanroom-cluster-logs.ps1 `
+          -kubeConfig "${{ parameters.deploymentConfigDir }}/cl-cluster/k8s-credentials.yaml"
+    displayName: Dump cleanroom-cluster logs
+    condition: not(canceled())
+    workingDirectory: $(repoRoot)

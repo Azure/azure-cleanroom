@@ -10,4 +10,5 @@ public record RunQueryInput(
     [property: JsonPropertyName("startDate")] DateTimeOffset? StartDate,
     [property: JsonPropertyName("endDate")] DateTimeOffset? EndDate,
     [property: JsonPropertyName("useOptimizer")] bool UseOptimizer = false,
-    [property: JsonPropertyName("dryRun")] bool DryRun = false);
+    [property: JsonPropertyName("dryRun")] bool DryRun = false,
+    [property: JsonPropertyName("scaleSku")] string? ScaleSku = "small");

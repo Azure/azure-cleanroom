@@ -1,6 +1,6 @@
 package opa
 
-import "github.com/open-policy-agent/opa/topdown"
+import "github.com/open-policy-agent/opa/v1/topdown"
 
 // Wrapper around topdown.BufferTracer that filters out all event types other than Note/Fail type.
 type noteQueryTracer struct {

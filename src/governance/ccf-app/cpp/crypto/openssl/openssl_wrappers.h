@@ -67,17 +67,6 @@ namespace cleanroom::crypto
       }
     }
 
-    /// Throws if rc is 0 and has error
-    inline void CHECK0(int rc)
-    {
-      unsigned long ec = ERR_get_error();
-      if (rc == 0 && ec != 0)
-      {
-        throw std::runtime_error(
-          fmt::format("OpenSSL error: {}", error_string(ec)));
-      }
-    }
-
     /// Throws if ptr is null
     inline void CHECKNULL(void* ptr)
     {

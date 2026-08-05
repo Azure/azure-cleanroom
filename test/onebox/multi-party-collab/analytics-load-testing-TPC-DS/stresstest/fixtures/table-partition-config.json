@@ -1,0 +1,82 @@
+{
+  "publisher": {
+    "tables": [
+      "store_sales", "store_returns", "catalog_sales", "catalog_returns",
+      "web_sales", "web_returns", "inventory", "store", "warehouse", "item",
+      "date_dim", "time_dim"
+    ],
+    "allowed_fields": [
+      "ss_sold_date_sk", "ss_item_sk", "ss_customer_sk", "ss_store_sk",
+      "ss_cdemo_sk", "ss_hdemo_sk", "ss_addr_sk", "ss_promo_sk",
+      "ss_ticket_number", "ss_quantity", "ss_ext_sales_price",
+      "ss_ext_wholesale_cost", "ss_ext_list_price", "ss_ext_discount_amt",
+      "ss_sales_price", "ss_list_price", "ss_wholesale_cost", "ss_coupon_amt",
+      "ss_net_profit", "ss_net_paid", "ss_net_paid_inc_tax",
+      "sr_returned_date_sk", "sr_item_sk", "sr_customer_sk", "sr_store_sk",
+      "sr_ticket_number", "sr_return_quantity", "sr_return_amt",
+      "sr_return_amt_inc_tax", "sr_return_tax", "sr_fee", "sr_refunded_cash",
+      "sr_reversed_charge", "sr_store_credit", "cs_sold_date_sk",
+      "cs_ship_date_sk", "cs_bill_customer_sk", "cs_item_sk",
+      "cs_bill_cdemo_sk", "cs_bill_hdemo_sk", "cs_promo_sk",
+      "cs_order_number", "cs_quantity", "cs_ext_sales_price",
+      "cs_ext_list_price", "cs_list_price", "cr_returned_date_sk",
+      "cr_item_sk", "cr_return_quantity", "cr_refunded_cash",
+      "cr_reversed_charge", "cr_store_credit", "cr_order_number",
+      "ws_sold_date_sk", "ws_bill_customer_sk", "ws_item_sk", "ws_quantity",
+      "ws_ext_sales_price", "ws_ext_list_price", "ws_ext_discount_amt",
+      "ws_list_price", "wr_returned_date_sk", "wr_item_sk",
+      "wr_return_quantity", "inv_date_sk", "inv_item_sk", "inv_warehouse_sk",
+      "inv_quantity_on_hand", "s_store_sk", "s_store_name", "s_state",
+      "s_zip", "s_market_id", "w_warehouse_sk", "w_warehouse_name",
+      "i_item_sk", "i_item_id", "i_item_desc", "i_current_price",
+      "i_category", "i_brand_id", "i_class_id", "i_category_id",
+      "i_product_name", "i_color", "i_manager_id", "i_units", "i_size",
+      "d_date_sk", "d_date", "d_year", "d_moy", "d_dom", "d_month_seq",
+      "d_week_seq", "t_time_sk", "t_hour"
+    ]
+  },
+  "consumer": {
+    "tables": [
+      "customer", "customer_address", "customer_demographics",
+      "household_demographics", "income_band", "promotion", "catalog_page",
+      "web_page", "web_site", "call_center", "ship_mode", "reason"
+    ],
+    "allowed_fields": [
+      "c_customer_sk", "c_customer_id", "c_first_name", "c_last_name",
+      "c_current_addr_sk", "c_current_cdemo_sk", "c_current_hdemo_sk",
+      "c_first_sales_date_sk", "c_first_shipto_date_sk",
+      "c_preferred_cust_flag", "c_birth_country", "c_login",
+      "c_email_address", "ca_address_sk", "ca_state", "ca_country",
+      "ca_street_number", "ca_street_name", "ca_city", "ca_zip", "cd_demo_sk",
+      "cd_marital_status", "cd_education_status", "hd_demo_sk",
+      "hd_dep_count", "hd_buy_potential", "hd_income_band_sk",
+      "ib_income_band_sk", "ib_lower_bound", "ib_upper_bound", "p_promo_sk",
+      "p_promo_name", "cp_catalog_page_sk", "cp_catalog_page_id",
+      "wp_web_page_sk", "wp_web_page_id", "web_site_sk", "web_site_id",
+      "web_name", "cc_call_center_sk", "cc_call_center_id", "cc_name",
+      "sm_ship_mode_sk", "sm_type", "r_reason_sk", "r_reason_desc"
+    ]
+  },
+  "output": {
+    "allowed_fields": [
+      "c_customer_id", "c_first_name", "c_last_name", "customer_id",
+      "customer_first_name", "customer_last_name",
+      "customer_preferred_cust_flag", "customer_birth_country",
+      "customer_login", "customer_email_address", "state", "cnt",
+      "avg(ss_quantity)", "avg(ss_ext_sales_price)",
+      "avg(ss_ext_wholesale_cost)", "sum(ss_ext_wholesale_cost)",
+      "total_return", "avg_return", "total_sales", "total_quantity",
+      "item_count", "category", "channel", "i_brand_id", "i_class_id",
+      "i_category_id", "sum(sales)", "sum(number_sales)", "ty_channel",
+      "ty_brand", "ty_class", "ty_category", "ty_sales", "ty_number_sales",
+      "ly_channel", "ly_brand", "ly_class", "ly_category", "ly_sales",
+      "ly_number_sales", "s_store_name", "paid", "netpaid", "product_name",
+      "store_name", "store_zip", "b_street_number", "b_street_name", "b_city",
+      "b_zip", "c_street_number", "c_street_name", "c_city", "c_zip", "syear",
+      "syear_2", "fsyear", "s2year", "cnt_2", "s11", "s21", "s31", "s12",
+      "s22", "s32", "i_item_desc", "w_warehouse_name", "d_week_seq",
+      "no_promo", "promo", "total_cnt"
+    ],
+    "schema_fields": "c_customer_id:string,c_first_name:string,c_last_name:string,customer_id:string,customer_first_name:string,customer_last_name:string,customer_preferred_cust_flag:string,customer_birth_country:string,customer_login:string,customer_email_address:string,state:string,cnt:long,avg(ss_quantity):number,avg(ss_ext_sales_price):number,avg(ss_ext_wholesale_cost):number,sum(ss_ext_wholesale_cost):number,total_return:number,avg_return:number,total_sales:number,total_quantity:integer,item_count:integer,category:string,channel:string,i_brand_id:long,i_class_id:long,i_category_id:long,sum(sales):number,sum(number_sales):long,ty_channel:string,ty_brand:long,ty_class:long,ty_category:long,ty_sales:number,ty_number_sales:long,ly_channel:string,ly_brand:long,ly_class:long,ly_category:long,ly_sales:number,ly_number_sales:long,s_store_name:string,paid:number,netpaid:number,product_name:string,store_name:string,store_zip:string,b_street_number:string,b_street_name:string,b_city:string,b_zip:string,c_street_number:string,c_street_name:string,c_city:string,c_zip:string,syear:long,syear_2:long,cnt_2:long,fsyear:long,s2year:long,s11:number,s21:number,s31:number,s12:number,s22:number,s32:number,i_item_desc:string,w_warehouse_name:string,d_week_seq:long,no_promo:long,promo:long,total_cnt:long"
+  }
+}

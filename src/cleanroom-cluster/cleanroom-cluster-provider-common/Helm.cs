@@ -496,6 +496,31 @@ public class HelmClient : RunCommand
         await this.Helm(command);
     }
 
+    public async Task InstallKarpenterProviderChart(string release, string ns, string valuesFile)
+    {
+        var chartPath =
+            $"oci://{ImageUtils.GetKarpenterProviderChartPath()}";
+        var chartVersion =
+            ImageUtils.GetKarpenterProviderChartVersion();
+        var command =
+            $"upgrade {release} " +
+            $"{chartPath} " +
+            $"--install " +
+            $"--version {chartVersion} " +
+            $"--namespace {ns} " +
+            $"--create-namespace " +
+            $"--values {valuesFile}";
+
+        if (ImageUtils.GetKarpenterProviderChartPath()
+            .StartsWith("localhost:"))
+        {
+            command += $" --plain-http";
+        }
+
+        command += $" --kubeconfig {this.kubeConfigFile}";
+        await this.Helm(command);
+    }
+
     private async Task HelmRepoAdd(string args)
     {
         try

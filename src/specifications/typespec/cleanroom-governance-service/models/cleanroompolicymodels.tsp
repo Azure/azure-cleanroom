@@ -2,7 +2,7 @@ import "./snpattestation.tsp";
 import "./encrypt.tsp";
 import "./sign.tsp";
 
-namespace Cleanroom.Governance;
+namespace Azure.Cleanroom.Governance;
 
 /**
  * Get clean room policy response
@@ -72,4 +72,69 @@ model ListDelegatePolicyResponse {
 
   /** Delegate ID */
   delegateId: string;
+}
+
+/**
+ * Get delegate policy response
+ */
+model GetDelegatePolicyResponse {
+  /** Delegate policy properties */
+  claims: CleanRoomPolicyProps;
+}
+
+/**
+ * Clean room policy properties for SEV-SNP attestation
+ */
+model CleanRoomPolicyProps {
+  /** Author key digest values */
+  @encodedName("application/json", "x-ms-sevsnpvm-authorkeydigest")
+  authorKeyDigest?: string[];
+
+  /** Family ID values */
+  @encodedName("application/json", "x-ms-sevsnpvm-familyId")
+  familyId?: string[];
+
+  /** Guest SVN values */
+  @encodedName("application/json", "x-ms-sevsnpvm-guestsvn")
+  guestSvn?: int32[];
+
+  /** Host data values */
+  @encodedName("application/json", "x-ms-sevsnpvm-hostdata")
+  hostData?: string[];
+
+  /** ID key digest values */
+  @encodedName("application/json", "x-ms-sevsnpvm-idkeydigest")
+  idKeyDigest?: string[];
+
+  /** Image ID values */
+  @encodedName("application/json", "x-ms-sevsnpvm-imageId")
+  imageId?: string[];
+
+  /** Indicates if debugging is allowed */
+  @encodedName("application/json", "x-ms-sevsnpvm-is-debuggable")
+  isDebuggable?: boolean;
+
+  /** Launch measurement values */
+  @encodedName("application/json", "x-ms-sevsnpvm-launchmeasurement")
+  launchMeasurement?: string[];
+
+  /** Report data values */
+  @encodedName("application/json", "x-ms-sevsnpvm-reportdata")
+  reportData?: string[];
+
+  /** Report ID values */
+  @encodedName("application/json", "x-ms-sevsnpvm-reportid")
+  reportId?: string[];
+
+  /** Indicates if SMT is allowed */
+  @encodedName("application/json", "x-ms-sevsnpvm-smt-allowed")
+  smtAllowed?: boolean;
+
+  /** VMPL values */
+  @encodedName("application/json", "x-ms-sevsnpvm-vmpl")
+  vmpl?: int32[];
+
+  /** Version values */
+  @encodedName("application/json", "x-ms-ver")
+  version?: string[];
 }

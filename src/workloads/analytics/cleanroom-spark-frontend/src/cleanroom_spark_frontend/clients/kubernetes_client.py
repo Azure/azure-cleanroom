@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import time
+from collections import Counter
 from typing import Callable, Dict, Optional
 
 import kubernetes
@@ -19,6 +20,7 @@ from ..telemetry.metrics import get_metrics
 from ..utilities.constants import Constants
 
 logger = logging.getLogger("kubernetes_client")
+logging.getLogger("kubernetes.client.rest").setLevel(logging.WARNING)
 
 
 class KubernetesOperationTracer:
@@ -91,7 +93,6 @@ class KubernetesOperationTracer:
 
 
 class KubernetesAPICaller:
-
     def call(
         self,
         operation: str,
@@ -178,9 +179,7 @@ class KubernetesClient:
                         "namespace": namespace,
                     }
                 ).encode()
-            ).decode(
-                "utf-8"
-            )
+            ).decode("utf-8")
             spark_app.spec.driver.annotations[
                 Constants.CCE_POLICY_CONFIG_MAP_ANNOTATION
             ] = base64.b64encode(
@@ -190,9 +189,7 @@ class KubernetesClient:
                         "namespace": namespace,
                     }
                 ).encode()
-            ).decode(
-                "utf-8"
-            )
+            ).decode("utf-8")
 
             logger.info(
                 f"Submitting job with Name: {name}, Namespace: {namespace}, "
@@ -231,12 +228,14 @@ class KubernetesClient:
             self._api_caller.call(
                 operation="create",
                 resource_type=self._spark_resource_settings.kind.lower(),
-                api_callable=lambda: kubernetes.client.CustomObjectsApi().create_namespaced_custom_object(
-                    group=self._spark_resource_settings.group,
-                    version=self._spark_resource_settings.version,
-                    namespace=namespace,
-                    plural=self._spark_resource_settings.plural,
-                    body=spark_spec,
+                api_callable=lambda: (
+                    kubernetes.client.CustomObjectsApi().create_namespaced_custom_object(
+                        group=self._spark_resource_settings.group,
+                        version=self._spark_resource_settings.version,
+                        namespace=namespace,
+                        plural=self._spark_resource_settings.plural,
+                        body=spark_spec,
+                    )
                 ),
                 name=name,
                 namespace=namespace,
@@ -264,12 +263,14 @@ class KubernetesClient:
             ret_val = self._api_caller.call(
                 operation="get",
                 resource_type=self._spark_resource_settings.kind.lower(),
-                api_callable=lambda: kubernetes.client.CustomObjectsApi().get_namespaced_custom_object(
-                    group=self._spark_resource_settings.group,
-                    version=self._spark_resource_settings.version,
-                    namespace=namespace,
-                    plural=self._spark_resource_settings.plural,
-                    name=name,
+                api_callable=lambda: (
+                    kubernetes.client.CustomObjectsApi().get_namespaced_custom_object(
+                        group=self._spark_resource_settings.group,
+                        version=self._spark_resource_settings.version,
+                        namespace=namespace,
+                        plural=self._spark_resource_settings.plural,
+                        name=name,
+                    )
                 ),
                 name=name,
                 namespace=namespace,
@@ -300,7 +301,33 @@ class KubernetesClient:
             status_dict = ret_val.get("status", {})
             if not status_dict:
                 logger.warning(f"SparkApplication {name} has empty status.")
-            logger.info(f"Status: {status_dict}")
+            executor_state = status_dict.get("executorState", {}) or {}
+            executor_summary = Counter(executor_state.values())
+            status_log = {
+                "applicationState": status_dict.get("applicationState", {}) or {},
+                "driverInfo": status_dict.get("driverInfo", {}) or {},
+                "lastSubmissionAttemptTime": status_dict.get(
+                    "lastSubmissionAttemptTime"
+                ),
+                "sparkApplicationId": status_dict.get("sparkApplicationId"),
+                "submissionAttempts": status_dict.get("submissionAttempts"),
+                "submissionID": status_dict.get("submissionID"),
+                "terminationTime": status_dict.get("terminationTime"),
+                "executorState": {
+                    "succeeded": executor_summary.get("COMPLETED", 0),
+                    "failed": executor_summary.get("FAILED", 0),
+                    "failedExecutors": sorted(
+                        executor_name
+                        for executor_name, state in executor_state.items()
+                        if state == "FAILED"
+                    ),
+                },
+            }
+
+            logger.info(
+                "SparkApplication status: %s",
+                json.dumps(status_log),
+            )
             spark_app_data = {
                 "metadata": metadata_obj,
                 "status": status_dict if status_dict else None,
@@ -351,13 +378,15 @@ class KubernetesClient:
             self._api_caller.call(
                 operation="patch",
                 resource_type=self._spark_resource_settings.kind.lower(),
-                api_callable=lambda: kubernetes.client.CustomObjectsApi().patch_namespaced_custom_object(
-                    group=self._spark_resource_settings.group,
-                    version=self._spark_resource_settings.version,
-                    namespace=namespace,
-                    plural=self._spark_resource_settings.plural,
-                    name=name,
-                    body=patch_body,
+                api_callable=lambda: (
+                    kubernetes.client.CustomObjectsApi().patch_namespaced_custom_object(
+                        group=self._spark_resource_settings.group,
+                        version=self._spark_resource_settings.version,
+                        namespace=namespace,
+                        plural=self._spark_resource_settings.plural,
+                        name=name,
+                        body=patch_body,
+                    )
                 ),
                 name=name,
                 namespace=namespace,
@@ -399,8 +428,10 @@ class KubernetesClient:
             self._api_caller.call(
                 operation="create",
                 resource_type="configmap",
-                api_callable=lambda: kubernetes.client.CoreV1Api().create_namespaced_config_map(
-                    namespace=namespace, body=config_map
+                api_callable=lambda: (
+                    kubernetes.client.CoreV1Api().create_namespaced_config_map(
+                        namespace=namespace, body=config_map
+                    )
                 ),
                 name=name,
                 namespace=namespace,
@@ -410,6 +441,28 @@ class KubernetesClient:
             )
         except kubernetes.client.ApiException as e:
             logger.error(f"Failed to create ConfigMap: {e}")
+            raise
+
+    def patch_config_map_data(self, name: str, namespace: str, data: dict):
+        patch_body = {"data": data}
+
+        try:
+            self._api_caller.call(
+                operation="patch",
+                resource_type="configmap",
+                api_callable=lambda: (
+                    kubernetes.client.CoreV1Api().patch_namespaced_config_map(
+                        name=name, namespace=namespace, body=patch_body
+                    )
+                ),
+                name=name,
+                namespace=namespace,
+            )
+            logger.info(
+                f"ConfigMap {name} patched successfully in namespace {namespace}"
+            )
+        except kubernetes.client.ApiException as e:
+            logger.error(f"Failed to patch ConfigMap: {e}")
             raise
 
     def get_key_from_config_map(
@@ -460,8 +513,10 @@ class KubernetesClient:
             self._api_caller.call(
                 operation="patch",
                 resource_type="configmap",
-                api_callable=lambda: kubernetes.client.CoreV1Api().patch_namespaced_config_map(
-                    name=name, namespace=namespace, body=body
+                api_callable=lambda: (
+                    kubernetes.client.CoreV1Api().patch_namespaced_config_map(
+                        name=name, namespace=namespace, body=body
+                    )
                 ),
                 name=name,
                 namespace=namespace,
@@ -532,8 +587,10 @@ class KubernetesClient:
             self._api_caller.call(
                 operation="create",
                 resource_type="event",
-                api_callable=lambda: kubernetes.client.CoreV1Api().create_namespaced_event(
-                    namespace=namespace, body=event
+                api_callable=lambda: (
+                    kubernetes.client.CoreV1Api().create_namespaced_event(
+                        namespace=namespace, body=event
+                    )
                 ),
                 name=name,
                 namespace=namespace,
@@ -612,8 +669,10 @@ class KubernetesClient:
                 operation="patch",
                 resource_type="mutatingwebhookconfiguration",
                 name=webhook.name,
-                api_callable=lambda: admission_api.replace_mutating_webhook_configuration(
-                    name=webhook.name, body=existing_webhook
+                api_callable=lambda: (
+                    admission_api.replace_mutating_webhook_configuration(
+                        name=webhook.name, body=existing_webhook
+                    )
                 ),
             )
             logger.info(
@@ -629,8 +688,10 @@ class KubernetesClient:
                     operation="create",
                     resource_type="mutatingwebhookconfiguration",
                     name=webhook.name,
-                    api_callable=lambda: admission_api.create_mutating_webhook_configuration(
-                        body=webhook_config
+                    api_callable=lambda: (
+                        admission_api.create_mutating_webhook_configuration(
+                            body=webhook_config
+                        )
                     ),
                 )
             else:
@@ -682,8 +743,10 @@ class KubernetesClient:
             pod_list = self._api_caller.call(
                 operation="list",
                 resource_type="pod",
-                api_callable=lambda: kubernetes.client.CoreV1Api().list_pod_for_all_namespaces(
-                    field_selector=field_selector
+                api_callable=lambda: (
+                    kubernetes.client.CoreV1Api().list_pod_for_all_namespaces(
+                        field_selector=field_selector
+                    )
                 ),
             )
             pods = pod_list.items if pod_list else []
@@ -725,8 +788,10 @@ class KubernetesClient:
             event_list = self._api_caller.call(
                 operation="list",
                 resource_type="event",
-                api_callable=lambda: kubernetes.client.CoreV1Api().list_namespaced_event(
-                    namespace=namespace, field_selector=field_selector
+                api_callable=lambda: (
+                    kubernetes.client.CoreV1Api().list_namespaced_event(
+                        namespace=namespace, field_selector=field_selector
+                    )
                 ),
                 namespace=namespace,
             )
@@ -741,8 +806,10 @@ class KubernetesClient:
             return self._api_caller.call(
                 operation="get",
                 resource_type="configmap",
-                api_callable=lambda: kubernetes.client.CoreV1Api().read_namespaced_config_map(
-                    name=name, namespace=namespace
+                api_callable=lambda: (
+                    kubernetes.client.CoreV1Api().read_namespaced_config_map(
+                        name=name, namespace=namespace
+                    )
                 ),
                 name=name,
                 namespace=namespace,

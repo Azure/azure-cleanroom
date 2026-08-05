@@ -24,6 +24,14 @@ type Config struct {
 	// signature in the annotation "api-server-proxy.io/signature"
 	PolicyVerificationCert string
 
+	// Insecure when true bypasses pod policy verification and admits all pods.
+	Insecure bool
+
+	// RewriteKubeletPort, when non-zero, rewrites the kubelet endpoint port
+	// in node status updates to this value (e.g., 10250 when kubelet-proxy
+	// listens on 10250 and kubelet is on 10251).
+	RewriteKubeletPort int
+
 	// LoadedKubeConfig contains the parsed kubeconfig data (populated after loading)
 	LoadedKubeConfig *LoadedKubeConfig
 }

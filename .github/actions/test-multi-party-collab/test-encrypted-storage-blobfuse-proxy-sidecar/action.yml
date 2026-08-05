@@ -1,0 +1,65 @@
+name: Test Encrypted Storage with Blobfuse Proxy Sidecar
+description: Test Encrypted Storage scenario using the blobfuse-proxy sidecar (mount-all) mode instead of per-pod blobfuse sidecars or a CSI DaemonSet
+inputs:
+  repo:
+    description: The registry URL
+    required: true
+  tag:
+    description: The tag for the built image
+    required: true
+runs:
+  using: composite
+  steps:
+  - name: Login to Azure and refresh token
+    uses: ./.github/actions/login-to-azure
+    env:
+      CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
+      TENANT_ID: ${{ env.AZURE_TENANT_ID }}
+      SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+  - name: Deploy Kind cluster
+    shell: bash
+    run: bash ./test/onebox/kind-up.sh
+
+  - name: Install az cleanroom extension
+    shell: bash
+    run: |
+      oras pull ${{ inputs.repo }}/cli/cleanroom-whl:${{ inputs.tag }}
+      az extension add --allow-preview true --source ./cleanroom-*-py2.py3-none-any.whl -y
+
+  - name: Run collab scenario on Kind with blobfuse-proxy sidecar
+    shell: pwsh
+    run: ./test/onebox/multi-party-collab/encrypted-storage/run-collab.ps1 -registry acr -repo ${{ inputs.repo }} -tag ${{ inputs.tag }} -useBlobfuseProxySidecar
+
+  - name: Dump ob-consumer-client logs
+    if: ${{ !cancelled() }}
+    shell: pwsh
+    run: docker logs ob-consumer-client-cgs-client-1
+
+  - name: Dump ob-publisher-client logs
+    if: ${{ !cancelled() }}
+    shell: pwsh
+    run: docker logs ob-publisher-client-cgs-client-1
+
+  - name: Dump ccf logs
+    if: ${{ !cancelled() }}
+    shell: pwsh
+    run: docker logs ob-ccf-encrypted-storage-ccf-1
+
+  - name: Dump virtual-cleanroom logs
+    if: ${{ !cancelled() }}
+    shell: pwsh
+    run: kubectl logs -l app=virtual-cleanroom --tail=-1 --all-containers --ignore-errors --prefix
+
+  - name: Upload generated
+    uses: actions/upload-artifact@v4
+    with:
+      name: generated-encrypted-storage-blobfuse-proxy-sidecar
+      path: ./test/onebox/multi-party-collab/encrypted-storage/generated
+      overwrite: true
+    if: ${{ !cancelled() }}
+
+  - name: Delete resource groups
+    if: success()
+    shell: pwsh
+    run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=multi-party-collab-${{ env.JOB_ID }}-${{ env.RUN_ID }}"

@@ -128,7 +128,7 @@ Install GCM on Windows:
 Configure Git Credential Manager:
 
 ```bash
-git config --global credential.helper "/mnt/c/Program Files/Git/mingw64/bin/git-credential-manager.exe"
+git config --global credential.helper "/mnt/c/Program\ Files/Git/mingw64/bin/git-credential-manager.exe"
 ```
 
 Clone your repo:
@@ -305,8 +305,7 @@ scala -version
 
 - ms-dotnettools.csharp
 - ms-python.python
-- ms-python.black-formatter
-- ms-python.isort
+- charliermarsh.ruff (Python linter and formatter — replaces black-formatter and isort)
 - golang.go
 - redhat.vscode-yaml
 - ms-azuretools.vscode-docker

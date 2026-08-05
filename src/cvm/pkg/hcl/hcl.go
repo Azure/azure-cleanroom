@@ -25,6 +25,13 @@ const (
 	// SNPReportSize is the size of the raw AMD SNP attestation report.
 	SNPReportSize = 1184
 
+	// SNPReportDataOffset is the byte offset of the report_data field
+	// within the raw AMD SNP report (AMD SEV-SNP ABI, Table 21).
+	SNPReportDataOffset = 0x50
+
+	// SNPReportDataSize is the size of the report_data field (64 bytes).
+	SNPReportDataSize = 64
+
 	// RuntimeDataHeaderSize is the size of the Runtime Data binary header
 	// that precedes the JSON claims (5 × uint32).
 	RuntimeDataHeaderSize = 20

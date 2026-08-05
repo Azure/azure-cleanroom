@@ -16,6 +16,8 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
+from kubernetes.client import models as k8smodels
+
 from cleanroom_sdk.models.cleanroom import (
     AccessPoint,
     AccessPointType,
@@ -36,7 +38,6 @@ from frontend_internal.cleanroom_application_builder import (
 )
 from frontend_internal.models.cleanroom_application import Sidecar
 from frontend_internal.models.input_models import CleanroomSettings
-from kubernetes.client import models as k8smodels
 
 
 def _make_protection(encryption_mode="SSE"):

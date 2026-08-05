@@ -1,6 +1,7 @@
 server:
   extraFlags:
     - web.enable-remote-write-receiver
+    - web.enable-lifecycle
 
   persistentVolume:
     enabled: true
@@ -37,6 +38,54 @@ serverFiles:
           insecure_skip_verify: true
         bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
         metrics_path: /metrics/cadvisor
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_node_name]
+            action: replace
+            target_label: node
+
+      # Scrape DCGM Exporter for GPU hardware metrics (utilization,
+      # memory, temperature, power). Now runs as a host systemd service
+      # on flex nodes instead of a GPU Operator pod. Uses node discovery
+      # to find flex nodes by label and scrapes port 9400 on the node IP.
+      # honor_labels preserves DCGM's native pod/namespace/container
+      # labels which identify the workload consuming the GPU.
+      - job_name: 'dcgm-exporter'
+        honor_labels: true
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_node_label_cleanroom_azure_com_flexnode]
+            regex: "true"
+            action: keep
+          - source_labels: [__meta_kubernetes_node_address_InternalIP]
+            action: replace
+            regex: (.+)
+            replacement: $1:9400
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_node_name]
+            action: replace
+            target_label: node
+
+      # Scrape GPU health exporter for GPU software-stack readiness
+      # metrics (driver, toolkit, CUDA, device-plugin ready states
+      # and device count). Now runs as a host systemd service on flex
+      # nodes instead of GPU Operator's node-status-exporter pod.
+      - job_name: 'gpu-health-exporter'
+        scrape_timeout: 30s
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_node_label_cleanroom_azure_com_flexnode]
+            regex: "true"
+            action: keep
+          - source_labels: [__meta_kubernetes_node_address_InternalIP]
+            action: replace
+            regex: (.+)
+            replacement: $1:8000
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_node_name]
+            action: replace
+            target_label: node
 
       - job_name: 'kubernetes-pods'
         honor_labels: true

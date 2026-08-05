@@ -19,7 +19,9 @@ RUN dotnet restore /app/src/workloads/frontend/frontend-service.sln
 COPY stylecop.json /app
 COPY Menees.Analyzers.Settings.xml /app
 COPY .editorconfig /app
-COPY src/internal /app/src/internal
+COPY src/internal/Attestation /app/src/internal/Attestation
+COPY src/internal/Cose /app/src/internal/Cose
+COPY src/internal/restapi-common /app/src/internal/restapi-common
 COPY src/workloads/frontend /app/src/workloads/frontend
 
 # Publish the application

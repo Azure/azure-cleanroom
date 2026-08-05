@@ -67,7 +67,7 @@ runs:
       run: docker logs ob-publisher-client-cgs-client-1
 
     - name: Upload generated
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
           name: generated-storage-cleanroom-client-caci
           path: ./test/onebox/multi-party-collab/encrypted-storage/cleanroom-client/generated

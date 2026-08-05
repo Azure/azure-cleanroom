@@ -1,0 +1,105 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cleanroom-operator
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cleanroom.azure.com
+  resources:
+  - ccfmembers
+  - ccfnetworks
+  - ccfusers
+  - clusters
+  - environments
+  - governancecontracts
+  - governanceservices
+  - modeldeployments
+  - modelgovernances
+  - modelregistrations
+  - workloadgovernances
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cleanroom.azure.com
+  resources:
+  - ccfmembers/finalizers
+  - ccfnetworks/finalizers
+  - ccfusers/finalizers
+  - clusters/finalizers
+  - environments/finalizers
+  - governancecontracts/finalizers
+  - governanceservices/finalizers
+  - modeldeployments/finalizers
+  - modelgovernances/finalizers
+  - modelregistrations/finalizers
+  - workloadgovernances/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - cleanroom.azure.com
+  resources:
+  - ccfmembers/status
+  - ccfnetworks/status
+  - ccfusers/status
+  - clusters/status
+  - environments/status
+  - governancecontracts/status
+  - governanceservices/status
+  - modeldeployments/status
+  - modelgovernances/status
+  - modelregistrations/status
+  - workloadgovernances/status
+  verbs:
+  - get
+  - patch
+  - update

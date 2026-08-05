@@ -25,7 +25,8 @@ public record FrontendPredictorInput(
     [property: JsonPropertyName("deploymentStrategy")]
     DeploymentStrategySpec? DeploymentStrategy = null,
     [property: JsonPropertyName("scaleMetricType")] string? ScaleMetricType = null,
-    [property: JsonPropertyName("autoScaling")] AutoScalingSpec? AutoScaling = null);
+    [property: JsonPropertyName("autoScaling")] AutoScalingSpec? AutoScaling = null,
+    [property: JsonPropertyName("affinity")] Dictionary<string, object>? Affinity = null);
 
 // Frontend model shape.
 public record FrontendModelInput(

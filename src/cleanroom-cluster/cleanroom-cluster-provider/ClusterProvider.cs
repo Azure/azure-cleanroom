@@ -87,12 +87,14 @@ public class ClusterProvider
     public async Task<CleanRoomClusterKubeConfig?> GetClusterKubeConfig(
         string clusterName,
         JsonObject? providerConfig,
-        KubeConfigAccessRole accessRole)
+        KubeConfigAccessRole accessRole,
+        bool @internal = false)
     {
         return await this.clusterProvider.TryGetClusterKubeConfig(
             clusterName,
             providerConfig,
-            accessRole);
+            accessRole,
+            @internal);
     }
 
     public async Task<CleanRoomClusterHealth?> GetClusterHealth(
@@ -139,5 +141,35 @@ public class ClusterProvider
         return await this.clusterProvider.GenerateKServeInferencingWorkloadDeployment(
             input,
             providerConfig);
+    }
+
+    public async Task CreateFlexNode(
+        string clusterName,
+        string nodeName,
+        string providerID,
+        string policySigningCertPem,
+        JsonObject? providerConfig,
+        IProgress<string> progressReporter)
+    {
+        await this.clusterProvider.CreateFlexNode(
+            clusterName,
+            nodeName,
+            providerID,
+            policySigningCertPem,
+            providerConfig,
+            progressReporter);
+    }
+
+    public async Task DeleteFlexNode(
+        string clusterName,
+        string nodeName,
+        JsonObject? providerConfig,
+        IProgress<string> progressReporter)
+    {
+        await this.clusterProvider.DeleteFlexNode(
+            clusterName,
+            nodeName,
+            providerConfig,
+            progressReporter);
     }
 }

@@ -1,0 +1,223 @@
+################################################################################
+#                  CleanRoom PR Validation (Azure Pipelines)                   #
+#                                                                              #
+# Migrated from .github/workflows/pr_validation.yml — the PR gate orchestrator #
+# that runs lint, resolves which build/test stages are impacted by the PR, and #
+# fans out to the reusable sub-workflows (now ADO job templates).              #
+#                                                                              #
+# Mirrors optimus (Ashish Patil's completed migration) + this repo's pilot:    #
+#  - OneBranch NonOfficial governed template (1ES-compliant pools + SDL)       #
+#  - job lists kept in .pipelines/templates/*-jobs.yml, referenced via         #
+#    `- template:` (the ADO equivalent of GitHub `uses: ./.github/workflows/`) #
+#  - OneBranch checks the repo out into $(Build.SourcesDirectory)/azure-cleanroom
+#                                                                              #
+# --- DYNAMIC FAN-OUT (the hard part) ------------------------------------------#
+# GitHub Actions used a `detect-changes` job whose Python resolver               #
+# (scripts/resolve_pr_impacts.py) emitted `build-groups` + `test-stages` to      #
+# GITHUB_OUTPUT, and downstream reusable workflows were gated with `if:          #
+# contains(needs.detect-changes.outputs.test-stages, '...')`.                    #
+#                                                                              #
+# ADO has no dynamic `needs.outputs` fan-out, so we keep the SAME resolver        #
+# unchanged and adapt only the plumbing:                                         #
+#   1. The `detect_changes` job runs the resolver with GITHUB_OUTPUT pointed at  #
+#      a temp file, then re-emits the two values as ADO OUTPUT variables via     #
+#      `##vso[task.setvariable ...;isOutput=true]`.                              #
+#   2. Each downstream job template sets `dependsOn: detect_changes` and a       #
+#      `condition: contains(dependencies.detect_changes.outputs['resolve.testStages'], '...')`.
+# This is skill option (a): keep the python resolver, gate ADO jobs on its       #
+# output vars. No change to resolve_pr_impacts.py (still works for GHA).         #
+#                                                                              #
+# All CI stages are wired live: lint, detect-changes, build (pr_build_all),      #
+# test-cgs, test-ccf, test-cleanroom-cluster, test-multi-party-collab,           #
+# test-workloads, test-flex-node, and the ci-gate. test-cvm stays disabled       #
+# (agents can't reach the CVM over public IP), matching pr_validation.yml.        #
+# TODO(Phase 1C): fill placeholders (azureServiceConnection, docker-capable 1ES  #
+#   pool, AZURE_* variable group) — see the job templates.                      #
+################################################################################
+
+# Mirrors optimus's OneBranch.Buddy convention: gate PRs via a push trigger on
+# non-main branches + a required branch policy, rather than a native GitHub `pr:`.
+trigger:
+  batch: false
+  branches:
+    include:
+      - "*"
+    exclude:
+      - main
+pr: none
+
+name: pr-validation-$(Build.SourceBranchName)-$(Date:yyyyMMdd).$(Rev:r)
+
+variables:
+  - name: LinuxContainerImage
+    value: "mcr.microsoft.com/onebranch/azurelinux/build:3.0"
+  - name: CDP_DEFINITION_BUILD_COUNT
+    value: $[counter('', 0)]
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: OneBranch.Pipelines/GovernedTemplates
+      ref: refs/heads/main
+
+extends:
+  template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates
+  parameters:
+    cloudvault:
+      enabled: false
+    globalSdl:
+      tsa:
+        enabled: false
+      policheck:
+        break: true
+    stages:
+      - stage: Validate
+        displayName: PR Validation
+        jobs:
+          # --- lint (always runs; first gate) ---------------------------------
+          - job: lint
+            displayName: Ruff format + lint
+            timeoutInMinutes: 30
+            pool:
+              type: linux
+            variables:
+              repoRoot: "$(Build.SourcesDirectory)/azure-cleanroom"
+            steps:
+              - checkout: self
+              - bash: |
+                  set -euo pipefail
+                  # setup-uv@v7 -> install uv, then put it on PATH for this + later steps.
+                  curl -LsSf https://astral.sh/uv/install.sh | sh
+                  echo "##vso[task.prependpath]$HOME/.local/bin"
+                  export PATH="$HOME/.local/bin:$PATH"
+                  ./scripts/ruff-check.sh
+                displayName: Install uv + run Ruff format and lint check
+                workingDirectory: $(repoRoot)
+
+          # --- detect-changes (resolver → ADO output vars) --------------------
+          - job: detect_changes
+            displayName: Resolve impacted CI stages
+            dependsOn: lint
+            timeoutInMinutes: 15
+            pool:
+              type: linux
+            variables:
+              repoRoot: "$(Build.SourcesDirectory)/azure-cleanroom"
+            steps:
+              - checkout: self
+                fetchDepth: 0 # resolver diffs base..head; needs full history
+              - bash: |
+                  set -euo pipefail
+                  # Point the unchanged resolver at a temp GITHUB_OUTPUT file.
+                  export GITHUB_OUTPUT="$(mktemp)"
+                  export CI_EVENT_NAME="pull_request"
+                  # OneBranch/ADO PR build variables -> the SHAs the resolver expects.
+                  export BASE_SHA="$(git rev-parse "origin/$(System.PullRequest.TargetBranch)")"
+                  export HEAD_SHA="$(git rev-parse HEAD)"
+                  python3 ./scripts/resolve_pr_impacts.py
+                  buildGroups="$(grep '^build-groups=' "$GITHUB_OUTPUT" | cut -d= -f2-)"
+                  testStages="$(grep '^test-stages=' "$GITHUB_OUTPUT" | cut -d= -f2-)"
+                  echo "Resolved buildGroups=[$buildGroups] testStages=[$testStages]"
+                  # Re-emit as ADO cross-job OUTPUT variables.
+                  echo "##vso[task.setvariable variable=buildGroups;isOutput=true]$buildGroups"
+                  echo "##vso[task.setvariable variable=testStages;isOutput=true]$testStages"
+                name: resolve
+                displayName: Resolve impacted CI stages
+                workingDirectory: $(repoRoot)
+
+          # --- build (all groups; each build job self-gates on buildGroups) ---
+          # pr_build_all.yml -> job template. Every build job takes
+          # dependsOn: detect_changes (+ its real cross-job needs) and a runtime
+          # condition on resolve.buildGroups, so the whole group fans out exactly
+          # like the GitHub `build` reusable workflow did.
+          - template: templates/pr-build-all-jobs.yml@self
+            parameters:
+              detectChangesJob: detect_changes
+
+          # --- test-cgs (gated on resolver output) ----------------------------
+          - template: templates/pr-cgs-tests-jobs.yml@self
+            parameters:
+              dependsOn: [detect_changes]
+              condition: "and(succeeded(), contains(dependencies.detect_changes.outputs['resolve.testStages'], 'test-cgs'))"
+
+          # --- test-ccf -------------------------------------------------------
+          - template: templates/pr-ccf-jobs.yml@self
+            parameters:
+              dependsOn: [detect_changes]
+              condition: "and(succeeded(), contains(dependencies.detect_changes.outputs['resolve.testStages'], 'test-ccf'))"
+
+          # --- test-cleanroom-cluster -----------------------------------------
+          - template: templates/pr-cleanroom-cluster-jobs.yml@self
+            parameters:
+              dependsOn: [detect_changes]
+              condition: "and(succeeded(), contains(dependencies.detect_changes.outputs['resolve.testStages'], 'test-cleanroom-cluster'))"
+
+          # --- test-multi-party-collab ----------------------------------------
+          - template: templates/pr-multi-party-collab-jobs.yml@self
+            parameters:
+              dependsOn: [detect_changes]
+              condition: "and(succeeded(), contains(dependencies.detect_changes.outputs['resolve.testStages'], 'test-multi-party-collab'))"
+
+          # --- test-workloads -------------------------------------------------
+          - template: templates/pr-workload-samples-jobs.yml@self
+            parameters:
+              dependsOn: [detect_changes]
+              condition: "and(succeeded(), contains(dependencies.detect_changes.outputs['resolve.testStages'], 'test-workloads'))"
+
+          # --- test-flex-node -------------------------------------------------
+          - template: templates/pr-flex-node-jobs.yml@self
+            parameters:
+              dependsOn: [detect_changes]
+              condition: "and(succeeded(), contains(dependencies.detect_changes.outputs['resolve.testStages'], 'test-flex-node'))"
+
+          # test-cvm stays DISABLED (matches pr_validation.yml): GitHub/1ES agents
+          # can't reach the CVM over public IP. Enable once a same-VNet pool exists.
+
+          # --- ci-gate (single required status check) -------------------------
+          # Always runs; aggregates results so branch protection has one stable
+          # required check even when the resolver skips stages (skipped jobs are
+          # "Succeeded (skipped)", which does not fail the gate).
+          #
+          # NOTE: unlike GitHub (where skipped reusable-workflow jobs produced no
+          # child check), an ADO pipeline's overall run status already reflects
+          # every job, so a build/test failure fails the run regardless. This gate
+          # remains the single named required check.
+          # NOTE: the gate depends on lint/detect_changes/cgs_test as anchor
+          # points; the overall ADO run status already reflects every build/test
+          # job, so a failure anywhere fails the run regardless of this list.
+          - job: ci_gate
+            displayName: CI gate
+            condition: always()
+            dependsOn:
+              - lint
+              - detect_changes
+              - cgs_test
+            pool:
+              type: linux
+            variables:
+              lintResult: $[ dependencies.lint.result ]
+              detectResult: $[ dependencies.detect_changes.result ]
+              cgsResult: $[ dependencies.cgs_test.result ]
+            steps:
+              - checkout: none
+              - bash: |
+                  set -uo pipefail
+                  failed=0
+                  declare -A results=(
+                    [lint]="$(lintResult)"
+                    [detect_changes]="$(detectResult)"
+                    [cgs_test]="$(cgsResult)"
+                  )
+                  for job in "${!results[@]}"; do
+                    echo "$job: ${results[$job]}"
+                    if [[ "${results[$job]}" == "Failed" || "${results[$job]}" == "Canceled" ]]; then
+                      failed=1
+                    fi
+                  done
+                  if [[ "$failed" -eq 1 ]]; then
+                    echo "##vso[task.logissue type=error]CI gate failed: one or more jobs failed or were cancelled"
+                    exit 1
+                  fi
+                  echo "CI gate passed: all jobs succeeded or were skipped"
+                displayName: Check job results

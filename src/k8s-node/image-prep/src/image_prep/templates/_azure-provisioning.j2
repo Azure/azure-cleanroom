@@ -1,0 +1,27 @@
+{# Azure provisioning systemd service and script.
+   Reports VM ready to the Azure wireserver and sets the hostname from IMDS.
+   Runs once on boot and disables itself.
+   Ref: https://learn.microsoft.com/en-us/azure/virtual-machines/linux/no-agent
+#}
+  # -- Azure provisioning service (replaces waagent report-ready) -------
+  - path: /usr/local/bin/azure-provisioning.py
+    permissions: "0755"
+    content: |
+      {{ scripts["azure-provisioning"] | indent(6) }}
+
+  - path: /etc/systemd/system/azure-provisioning.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Azure Provisioning (report ready and set hostname)
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/python3 /usr/local/bin/azure-provisioning.py
+      ExecStart=/bin/bash -c "hostnamectl set-hostname $(curl -s -H 'metadata: true' 'http://169.254.169.254/metadata/instance/compute/name?api-version=2019-06-01&format=text')"
+      ExecStart=/usr/bin/systemctl disable azure-provisioning.service
+
+      [Install]
+      WantedBy=multi-user.target

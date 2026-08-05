@@ -700,6 +700,11 @@ export interface components {
             endDate?: string;
             dryRun?: boolean;
             useOptimizer?: boolean;
+            /**
+             * @default small
+             * @enum {string}
+             */
+            scaleSku?: "small" | "medium" | "large";
         };
         QueryRunOutput: {
             jobId: string;

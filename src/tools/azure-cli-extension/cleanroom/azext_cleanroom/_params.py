@@ -4,6 +4,7 @@
 # pylint: disable=missing-module-docstring
 # pylint: disable=missing-function-docstring
 
+import os
 
 from azure.cli.core.commands.parameters import (
     get_enum_type,
@@ -62,7 +63,10 @@ def validate_datasinks(ns):
 
 default_security_policy_creation_option = "cached"
 
-# TODO (gsinha): Changed to "cached" once policy generation is stable and available on mcr.
+# TODO (gsinha): Change to "cached" once an end-to-end CI test deploys
+# workloads with the strict "cached" rego (not "cached-debug") and the
+# workload agent's pod-policy delegation chain succeeds under it. Current
+# CI only exercises "cached-debug" on AKS and "allow-all" on virtual.
 default_workloads_security_policy_creation_option = "allow-all"
 
 
@@ -455,6 +459,22 @@ def load_arguments(self, _):
             options_list=["--security-policy-creation-option"],
             required=False,
             default="cached",
+        )
+        c.argument(
+            "use_csi_driver",
+            action="store_true",
+            help="Use CSI driver inline volumes instead of per-pod blobfuse-launcher sidecars for storage mounts.",
+            options_list=["--use-csi-driver"],
+            required=False,
+            default=False,
+        )
+        c.argument(
+            "use_blobfuse_proxy_sidecar",
+            action="store_true",
+            help="Use a single blobfuse-proxy sidecar in mount-all mode (CACI) instead of per-volume blobfuse-launcher sidecars.",
+            options_list=["--use-blobfuse-proxy-sidecar"],
+            required=False,
+            default=False,
         )
 
     with self.argument_context("cleanroom governance deployment template propose") as c:
@@ -1211,6 +1231,45 @@ def load_arguments(self, _):
             options_list=["--telemetry-folder"],
         )
 
+    # Clean Room operator
+    with self.argument_context("cleanroom operator install-cli") as c:
+        c.argument(
+            "install_location",
+            help="Path to install the kubectl-cleanroom binary.",
+            options_list=["--install-location"],
+            required=False,
+            default=os.path.join(
+                os.path.expanduser("~"), ".local", "bin", "kubectl-cleanroom"
+            ),
+        )
+        c.argument(
+            "client_version",
+            help="Version (image tag) of kubectl-cleanroom to install.",
+            options_list=["--client-version"],
+            required=False,
+            default="latest",
+        )
+        c.argument(
+            "source",
+            help=(
+                "OCI registry or repository to download the binary from "
+                "(e.g. myregistry.azurecr.io or localhost:5000). "
+                "Defaults to the registry URL from --env-file."
+            ),
+            options_list=["--source"],
+            required=False,
+        )
+        c.argument(
+            "env_file",
+            help=(
+                "Path to environment file containing key=value pairs. "
+                "Used to resolve the default --source from "
+                "AZCLI_CLEANROOM_CLUSTER_PROVIDER_CONTAINER_REGISTRY_URL."
+            ),
+            options_list=["--env-file"],
+            required=False,
+        )
+
     # Clean Room cluster provider
     with self.argument_context("cleanroom cluster provider deploy") as c:
         c.argument(
@@ -1280,6 +1339,17 @@ def load_arguments(self, _):
             "node_vm_size",
             help="The VM size for AKS agent pool nodes. Defaults to Standard_D4ds_v5 if not specified. Size selected for AKS must be at least 4 CPU and 16 GB RAM to accommodate virtual nodes being run on them.",
             options_list=["--node-vm-size"],
+            required=False,
+        )
+        c.argument(
+            "ip_tags",
+            nargs="+",
+            help="Space-separated list of IP tags in 'IpTagType=Tag' format to apply to public "
+            "IPs created for the cluster, e.g. 'RoutingPreference=Internet' "
+            "'FirstPartyUsage=/AzureCleanRoom'. The IP tag type can be any value accepted by "
+            "Azure (FirstPartyUsage, NetworkDomain, RoutingPreference are common examples). "
+            "When omitted, the IPs are created untagged.",
+            options_list=["--ip-tags"],
             required=False,
         )
         c.argument(
@@ -1416,43 +1486,10 @@ def load_arguments(self, _):
             required=False,
         )
         c.argument(
-            "enable_flex_node",
-            action="store_true",
-            help="Whether to enable flex node deployment for the cluster",
-            options_list=["--enable-flex-node"],
+            "flex_node_profile",
+            help="Path to a JSON file or inline JSON string with flex node profile configuration.",
+            options_list=["--flex-node-profile"],
             required=False,
-        )
-        c.argument(
-            "flex_node_ssh_private_key",
-            help="Path to a file containing the SSH private key PEM for flex node VM access.",
-            options_list=["--flex-node-ssh-private-key"],
-            required=False,
-        )
-        c.argument(
-            "flex_node_ssh_public_key",
-            help="Path to a file containing the SSH public key for flex node VM access.",
-            options_list=["--flex-node-ssh-public-key"],
-            required=False,
-        )
-        c.argument(
-            "flex_node_policy_signing_cert",
-            help="Path to a file containing the policy signing certificate PEM for api-server-proxy pod verification.",
-            options_list=["--flex-node-policy-signing-cert"],
-            required=False,
-        )
-        c.argument(
-            "flex_node_vm_size",
-            help="The VM size for the flex node (e.g. Standard_DC4as_v5).",
-            options_list=["--flex-node-vm-size"],
-            required=False,
-        )
-        c.argument(
-            "flex_node_count",
-            help="Number of flex nodes to create.",
-            options_list=["--flex-node-count"],
-            required=False,
-            type=int,
-            default=1,
         )
 
     with self.argument_context("cleanroom cluster update") as c:
@@ -1578,43 +1615,10 @@ def load_arguments(self, _):
             required=False,
         )
         c.argument(
-            "enable_flex_node",
-            action="store_true",
-            help="Whether to enable flex node deployment for the cluster",
-            options_list=["--enable-flex-node"],
+            "flex_node_profile",
+            help="Path to a JSON file or inline JSON string with flex node profile configuration.",
+            options_list=["--flex-node-profile"],
             required=False,
-        )
-        c.argument(
-            "flex_node_ssh_private_key",
-            help="Path to a file containing the SSH private key PEM for flex node VM access.",
-            options_list=["--flex-node-ssh-private-key"],
-            required=False,
-        )
-        c.argument(
-            "flex_node_ssh_public_key",
-            help="Path to a file containing the SSH public key for flex node VM access.",
-            options_list=["--flex-node-ssh-public-key"],
-            required=False,
-        )
-        c.argument(
-            "flex_node_policy_signing_cert",
-            help="Path to a file containing the policy signing certificate PEM for api-server-proxy pod verification.",
-            options_list=["--flex-node-policy-signing-cert"],
-            required=False,
-        )
-        c.argument(
-            "flex_node_vm_size",
-            help="The VM size for the flex node (e.g. Standard_DC4as_v5).",
-            options_list=["--flex-node-vm-size"],
-            required=False,
-        )
-        c.argument(
-            "flex_node_count",
-            help="Number of flex nodes to create.",
-            options_list=["--flex-node-count"],
-            required=False,
-            type=int,
-            default=1,
         )
 
     with self.argument_context("cleanroom cluster show") as c:

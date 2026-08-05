@@ -23,6 +23,7 @@ settings:
   applications:
     analytics:
       namespace: <ANALYTICS_NAMESPACE>
+      timeToLiveSeconds: 259200
       image: <CLEANROOM_ANALYTICS_IMAGE_URL>
       policyFile: <CLEANROOM_ANALYTICS_IMAGE_POLICY_DOCUMENT_URL>
       debugMode: <DEBUG_MODE>
@@ -31,12 +32,12 @@ settings:
       sql:
         driver:
           cores: 2
-          memory: "2g"
+          memory: "8g"
           serviceAccount: "spark-operator-spark"
         executor:
           cores: 4
-          memory: "8g"
-          deleteOnTermination: "false"
+          memory: "16g"
+          deleteOnTermination: "true"
           instances:
             min: 1
-            max: 5
+            max: 10

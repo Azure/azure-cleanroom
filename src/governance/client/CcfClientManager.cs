@@ -6,6 +6,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json.Nodes;
 using CoseUtils;
 using Microsoft.Extensions.Http;
+using Microsoft.Extensions.Logging;
 
 namespace Controllers;
 
@@ -85,11 +86,12 @@ public class CcfClientManager
 
     public WorkspaceConfiguration GetWsConfig()
     {
+        var cfg = this.ccfConfig ?? Defaults.CcfConfiguration;
         var ws = new WorkspaceConfiguration()
         {
-            CcfEndpoint = this.ccfConfig?.CcfEndpoint,
-            ServiceCert = this.ccfConfig?.ServiceCert,
-            ServiceCertDiscovery = this.ccfConfig?.CertLocator?.Model
+            CcfEndpoint = cfg?.CcfEndpoint,
+            ServiceCert = cfg?.ServiceCert,
+            ServiceCertDiscovery = cfg?.CertLocator?.Model
         };
 
         if (Defaults.SigningConfiguration != null)
@@ -126,7 +128,13 @@ public class CcfClientManager
     {
         if (Defaults.SigningConfiguration == null)
         {
-            throw new Exception("Invoke /configure first to setup signing configuration.");
+            TryInitializeGovFromEnvironment(this.logger);
+        }
+
+        if (Defaults.SigningConfiguration == null)
+        {
+            throw new Exception(
+                "Invoke /configure first to setup signing configuration.");
         }
 
         var client = this.InitializeClient(EndpointAuthType.Gov);
@@ -135,10 +143,19 @@ public class CcfClientManager
 
     public HttpClient GetAppClient()
     {
-        if (Defaults.HttpsClientCert == null && Defaults.JwtTokenConfiguration == null)
+        if (Defaults.HttpsClientCert == null &&
+            Defaults.JwtTokenConfiguration == null)
         {
-            throw new Exception("Client cert or user token credential is mandatory. Invoke " +
-                "/configure to setup the user authentication configuration.");
+            TryInitializeAppFromEnvironment(this.logger);
+        }
+
+        if (Defaults.HttpsClientCert == null &&
+            Defaults.JwtTokenConfiguration == null)
+        {
+            throw new Exception(
+                "Client cert or user token credential is mandatory. " +
+                "Invoke /configure to setup the user authentication " +
+                "configuration.");
         }
 
         var client = this.InitializeClient(EndpointAuthType.App);
@@ -156,9 +173,134 @@ public class CcfClientManager
         return Version;
     }
 
+    private static void TryInitializeGovFromEnvironment(ILogger logger)
+    {
+        if (Defaults.SigningConfiguration != null)
+        {
+            return;
+        }
+
+        var (signingCert, signingKey) = ReadSigningCredsFromEnv();
+        if (signingCert == null || signingKey == null)
+        {
+            return;
+        }
+
+        logger.LogInformation(
+            "Initializing gov auth from environment variables.");
+        var coseSignKey = new CoseSignKey(signingCert, signingKey);
+        SetGovAuthDefaults(coseSignKey);
+        EnsureCcfDefaultsFromEnvironment(logger);
+    }
+
+    private static void TryInitializeAppFromEnvironment(ILogger logger)
+    {
+        if (Defaults.HttpsClientCert != null || Defaults.JwtTokenConfiguration != null)
+        {
+            return;
+        }
+
+        // Check if local identity auth is requested via environment.
+        string? useLocalIdentity =
+            Environment.GetEnvironmentVariable("CGS_CLIENT_USE_LOCAL_IDENTITY");
+        if (!string.IsNullOrEmpty(useLocalIdentity))
+        {
+            TryInitializeLocalIdpFromEnvironment(logger);
+            return;
+        }
+
+        var (signingCert, signingKey) = ReadSigningCredsFromEnv();
+        if (signingCert == null || signingKey == null)
+        {
+            return;
+        }
+
+        logger.LogInformation(
+            "Initializing app auth from environment variables.");
+        X509Certificate2 httpsClientCert =
+            X509Certificate2.CreateFromPem(signingCert, signingKey);
+        SetAppAuthDefaults(httpsClientCert);
+        EnsureCcfDefaultsFromEnvironment(logger);
+    }
+
+    private static void TryInitializeLocalIdpFromEnvironment(ILogger logger)
+    {
+        string? identityUrl = Environment.GetEnvironmentVariable("LOCAL_IDP_ENDPOINT");
+        if (string.IsNullOrEmpty(identityUrl))
+        {
+            logger.LogWarning(
+                "CGS_CLIENT_USE_LOCAL_IDENTITY is set but LOCAL_IDP_ENDPOINT is not configured.");
+            return;
+        }
+
+        logger.LogInformation(
+            "Initializing app auth from environment using local " +
+            "identity. Endpoint: {Endpoint}",
+            identityUrl);
+        var scope = "https://does.not.matter";
+        var creds = new LocalIdpCachedTokenCredential(identityUrl);
+        var sharableClaims = new JsonObject
+        {
+            ["oid"] = "local-idp-oid",
+            ["preferred_username"] = "local-idp-user",
+            ["sub"] = "local-idp-sub",
+            ["tid"] = "local-idp-tid"
+        };
+        SetAppAuthDefaults(creds, scope, sharableClaims, AuthMode.LocalIdp);
+        EnsureCcfDefaultsFromEnvironment(logger);
+    }
+
+    private static (string? Cert, string? Key) ReadSigningCredsFromEnv()
+    {
+        string? signingCert = ReadFromPathOrValue(
+            "CGS_CLIENT_SIGNING_CERT_PATH", "CGS_CLIENT_SIGNING_CERT");
+        string? signingKey = ReadFromPathOrValue(
+            "CGS_CLIENT_SIGNING_KEY_PATH", "CGS_CLIENT_SIGNING_KEY");
+        return (signingCert, signingKey);
+    }
+
+    private static void EnsureCcfDefaultsFromEnvironment(ILogger logger)
+    {
+        if (Defaults.CcfConfiguration != null)
+        {
+            return;
+        }
+
+        string? ccfEndpoint =
+            Environment.GetEnvironmentVariable("CGS_CLIENT_CCF_ENDPOINT");
+        if (string.IsNullOrEmpty(ccfEndpoint))
+        {
+            return;
+        }
+
+        string? serviceCertPem = ReadFromPathOrValue(
+            "CGS_CLIENT_SERVICE_CERT_PATH", "CGS_CLIENT_SERVICE_CERT");
+
+        logger.LogInformation(
+            "Setting CCF defaults from environment. " +
+            "Endpoint: {Endpoint}",
+            ccfEndpoint);
+        SetCcfDefaults(ccfEndpoint, serviceCertPem, certLocator: null);
+    }
+
+    private static string? ReadFromPathOrValue(string pathEnvVar, string valueEnvVar)
+    {
+        string? path =
+            Environment.GetEnvironmentVariable(pathEnvVar);
+        if (!string.IsNullOrEmpty(path) && File.Exists(path))
+        {
+            return File.ReadAllText(path);
+        }
+
+        string? value =
+            Environment.GetEnvironmentVariable(valueEnvVar);
+        return string.IsNullOrEmpty(value) ? null : value;
+    }
+
     private HttpClient InitializeClient(EndpointAuthType epType)
     {
-        if (this.ccfConfig == null)
+        var config = this.ccfConfig ?? Defaults.CcfConfiguration;
+        if (config == null)
         {
             throw new Exception("CCF endpoint is mandatory.");
         }
@@ -183,18 +325,18 @@ public class CcfClientManager
         }
 
         HttpMessageHandler certValidationHandler;
-        if (this.ccfConfig.CertLocator != null && this.ccfConfig.ServiceCert != null)
+        if (config.CertLocator != null && config.ServiceCert != null)
         {
             certValidationHandler = new AutoRenewingCertHandler(
                 this.logger,
-                this.ccfConfig.CertLocator,
-                GetServerCertValidationHandler(this.ccfConfig.ServiceCert),
+                config.CertLocator,
+                GetServerCertValidationHandler(config.ServiceCert),
                 onRenewal: (serviceCertPem) =>
                     Defaults.CcfConfiguration!.ServiceCert = serviceCertPem);
         }
         else
         {
-            certValidationHandler = GetServerCertValidationHandler(this.ccfConfig.ServiceCert);
+            certValidationHandler = GetServerCertValidationHandler(config.ServiceCert);
         }
 
         // The chain is:
@@ -229,7 +371,7 @@ public class CcfClientManager
 
         var client = new HttpClient(retryPolicyHandler)
         {
-            BaseAddress = new Uri(this.ccfConfig.CcfEndpoint)
+            BaseAddress = new Uri(config.CcfEndpoint)
         };
         return client;
     }

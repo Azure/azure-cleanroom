@@ -9,6 +9,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
@@ -188,6 +189,24 @@ public class TestBase
         this.GovSidecarJwtAzureLoginClient.DefaultRequestHeaders.Add(
             "x-ms-ccr-governance-api-path-prefix",
             $"app/contracts/{this.ContractId}");
+    }
+
+    /// <summary>
+    /// Loads the sample insecure-virtual snp-caci attestation report from the test data.
+    /// </summary>
+    /// <returns>A JSON object containing the attestation report, endorsements and uvm_endorsements
+    /// suitable for use as the <c>attestation</c> field of a request payload.</returns>
+    protected static async Task<JsonObject> GetSnpCaciAttestationAsync()
+    {
+        JsonObject attestationReport = JsonSerializer.Deserialize<JsonObject>(
+            await File.ReadAllTextAsync(
+                "data/encryption/attestation.json"))!["report"]!["snpCACI"]!.AsObject();
+        return new JsonObject
+        {
+            ["evidence"] = attestationReport["attestation"]!.ToString(),
+            ["endorsements"] = attestationReport["platformCertificates"]!.ToString(),
+            ["uvm_endorsements"] = attestationReport["uvmEndorsements"]!.ToString()
+        };
     }
 
     protected async Task ProposeContractAndAcceptCleanRoomPolicy(string contractId, string hostData)
@@ -596,7 +615,7 @@ public class TestBase
     {
         var attestationJson = JsonNode.Parse(
             await File.ReadAllTextAsync("data/cvm/encryption/attestation.json"))!;
-        var pcrs = attestationJson["report"]!["snpCvm"]!["evidence"]!["pcrs"]!.AsObject();
+        var pcrs = attestationJson["report"]!["snpCvm"]!["vtpm"]!["evidence"]!["pcrs"]!.AsObject();
         var pcrClaims = new JsonObject
         {
             ["pcr4"] = pcrs["4"]!.GetValue<string>(),
@@ -644,7 +663,7 @@ public class TestBase
     {
         var attestationJson = JsonNode.Parse(
             await File.ReadAllTextAsync("data/cvm/encryption/attestation.json"))!;
-        var pcrs = attestationJson["report"]!["snpCvm"]!["evidence"]!["pcrs"]!.AsObject();
+        var pcrs = attestationJson["report"]!["snpCvm"]!["vtpm"]!["evidence"]!["pcrs"]!.AsObject();
         var pcrClaims = new JsonObject
         {
             ["pcr4"] = pcrs["4"]!.GetValue<string>(),

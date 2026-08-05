@@ -23,6 +23,7 @@ using Azure.ResourceManager.PrivateDns;
 using Azure.ResourceManager.Resources;
 using Azure.ResourceManager.Resources.Models;
 using CleanRoomProvider;
+using Common;
 using Controllers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -89,6 +90,46 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                     code: "SshPublicKeyMissing",
                     message: "SSH public key is required for flex node VM deployment.");
             }
+
+            if (flexNodeProfile.NodeCount > FlexNodeIpLayout.MaxFlexNodePerCluster)
+            {
+                return new ODataError(
+                    code: "NodeCountExceedsMax",
+                    message: $"NodeCount {flexNodeProfile.NodeCount} exceeds " +
+                        $"MaxNodeCount {FlexNodeIpLayout.MaxFlexNodePerCluster}.");
+            }
+
+            int requiredSubnets =
+                FlexNodeIpLayout.GetRequiredSubnetCount(flexNodeProfile.NodeCount);
+            if (requiredSubnets > FlexNodeIpLayout.MaxSubnets)
+            {
+                return new ODataError(
+                    code: "SubnetCountExceedsMax",
+                    message: $"Requested {flexNodeProfile.NodeCount} flex nodes " +
+                        $"requires {requiredSubnets} subnets, but only " +
+                        $"{FlexNodeIpLayout.MaxSubnets} subnets are available.");
+            }
+
+            if (flexNodeProfile.MaxPodsPerNode > FlexNodeIpLayout.MaxPodsAllowedPerNode)
+            {
+                return new ODataError(
+                    code: "MaxPodsPerNodeExceeded",
+                    message: $"MaxPodsPerNode {flexNodeProfile.MaxPodsPerNode} exceeds " +
+                        $"the maximum allowed value of {FlexNodeIpLayout.MaxPodsAllowedPerNode}.");
+            }
+
+            if (flexNodeProfile.MaxPodsPerNode <= 0)
+            {
+                return new ODataError(
+                    code: "MaxPodsPerNodeInvalid",
+                    message: $"MaxPodsPerNode must be greater than 0.");
+            }
+
+            ODataError? gpuError = ValidateFlexNodeGpuConfig(flexNodeProfile);
+            if (gpuError != null)
+            {
+                return gpuError;
+            }
         }
 
         return null;
@@ -126,6 +167,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         string subscriptionId = providerConfig!["subscriptionId"]!.ToString();
         string resourceGroupName = providerConfig["resourceGroupName"]!.ToString();
         _ = bool.TryParse(providerConfig["forceCreate"]?.ToString(), out bool forceCreate);
+        List<IPTag> ipTags = this.ParsePublicIPTags(providerConfig);
 
         ResourceIdentifier resourceGroupResourceId =
             ResourceGroupResource.CreateResourceIdentifier(subscriptionId, resourceGroupName);
@@ -138,8 +180,18 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         progressReporter.Report("Creating vnet...");
         var vnet = await CreateVnetAsync(location, resourceGroupResource, clClusterName);
 
+        // Create the BYO outbound public IP up-front
+        progressReporter.Report("Creating cluster outbound public IP...");
+        var outboundIP = await this.CreatePublicIP(
+            resourceGroupResource, location, clClusterName, "aks-outbound-ip", forceCreate, ipTags);
+
         progressReporter.Report("Creating aks cluster...");
-        var aks = await CreateAksClusterAsync(location, resourceGroupResource, clClusterName, vnet);
+        var aks = await CreateAksClusterAsync(
+            location, resourceGroupResource, clClusterName, vnet, outboundIP);
+
+        // Now that the cluster exists, grant its identity permissions to manage the BYO outbound
+        // public IP attached to the load balancer.
+        await this.UpdateAksMiPermissionsForPublicIPMgmtAsync(resourceGroupResource, aks);
 
         // If vn2AciResourceGroupName is specified, use that RG for VN2 ACI resources.
         // Otherwise default to the AKS node resource group (MC_*) which is VN2's
@@ -183,6 +235,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 vnet,
                 kubeConfigFile,
                 input.FlexNodeProfile,
+                input.AadProfile,
                 providerConfig,
                 progressReporter);
         }
@@ -200,6 +253,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 clClusterName,
                 forceCreate,
                 noWaitOnReady,
+                providerConfig,
                 progressReporter);
         }
 
@@ -215,6 +269,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 input.AnalyticsWorkloadProfile,
                 forceCreate,
                 noWaitOnReady,
+                ipTags,
                 progressReporter);
         }
 
@@ -230,7 +285,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 kubeConfigFile,
                 input.InferencingWorkloadProfile.KServeProfile,
                 forceCreate,
-                providerConfig,
+                ipTags,
                 progressReporter);
         }
 
@@ -247,7 +302,8 @@ public class AksClusterProvider : ICleanRoomClusterProvider
             ResourceGroupResource resourceGroupResource,
             string clClusterName)
         {
-            var vnetName = this.ToVnetName(clClusterName);
+            var vnetName = await this.ResolveVnetNameAsync(
+                clClusterName, resourceGroupResource, providerConfig);
 
             if (!forceCreate)
             {
@@ -285,8 +341,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 {
                     "10.0.0.0/16",
                     "10.1.0.0/16",
-                    "10.2.0.0/16",
-                    "10.3.0.0/16"
+                    "10.2.0.0/16"
                 }
                 },
                 Subnets =
@@ -314,11 +369,6 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                         }
                     },
                     NatGatewayId = natGateway.Data.Id
-                },
-                new SubnetData()
-                {
-                    Name = FlexNodeSubnetName,
-                    AddressPrefixes = { "10.3.0.0/16" }
                 }
             }
             };
@@ -345,7 +395,8 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                     location,
                     clClusterName,
                     ipName,
-                    forceCreate);
+                    forceCreate,
+                    ipTags);
 
                 return await CreateNatGatewayAsync();
 
@@ -407,9 +458,10 @@ public class AksClusterProvider : ICleanRoomClusterProvider
             string location,
             ResourceGroupResource resourceGroupResource,
             string clClusterName,
-            VirtualNetworkResource vnet)
+            VirtualNetworkResource vnet,
+            PublicIPAddressResource outboundIP)
         {
-            var aksClusterName = this.ToAksName(clClusterName);
+            var aksClusterName = this.ResolveAksName(clClusterName, providerConfig);
             if (!forceCreate)
             {
                 try
@@ -428,7 +480,8 @@ public class AksClusterProvider : ICleanRoomClusterProvider
 
             string nodeVmSize = providerConfig["nodeVmSize"]?.ToString() ?? "Standard_D4ds_v5";
             ManagedClusterAadProfile? aadProfile = null;
-            if (input.FlexNodeProfile != null && input.FlexNodeProfile.Enabled)
+            if (input.AadProfile?.Enabled == true ||
+                (input.FlexNodeProfile != null && input.FlexNodeProfile.Enabled))
             {
                 aadProfile = await this.CreateAadProfileAsync(input.AadProfile, providerConfig);
             }
@@ -482,11 +535,9 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                     OutboundType = "loadBalancer",
                     LoadBalancerProfile = new ManagedClusterLoadBalancerProfile()
                     {
-                        ManagedOutboundIPs =
-                        new ManagedClusterLoadBalancerProfileManagedOutboundIPs()
-                        {
-                            Count = 1
-                        }
+                        // Use the BYO outbound IP created up-front instead of an AKS-managed
+                        // (SNAT) IP so the egress IP carries the service tag from the start.
+                        OutboundPublicIPs = { new WritableSubResource { Id = outboundIP.Id } }
                     },
                     ServiceCidr = "10.4.0.0/16",
                     DnsServiceIP = "10.4.0.10",
@@ -625,8 +676,10 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         ResourceGroupResource resourceGroupResource =
             client.GetResourceGroupResource(resourceGroupResourceId);
 
-        var aks = await this.TryGetManagedCluster(clClusterName, resourceGroupResource);
-        var vnet = await this.TryGetVirtualNetwork(clClusterName, resourceGroupResource);
+        var aks = await this.TryGetManagedCluster(
+            clClusterName, resourceGroupResource, providerConfig);
+        var vnet = await this.TryGetVirtualNetwork(
+            clClusterName, resourceGroupResource, providerConfig);
 
         if (aks == null || vnet == null)
         {
@@ -634,11 +687,11 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         }
 
         _ = bool.TryParse(providerConfig["forceCreate"]?.ToString(), out bool forceCreate);
+        List<IPTag> ipTags = this.ParsePublicIPTags(providerConfig);
         string kubeConfigFile = await GetKubeConfigFile(aks);
 
         if (input.FlexNodeProfile != null && input.FlexNodeProfile.Enabled)
         {
-            aks = await EnabledAadOnAksClusterAsync();
             await this.EnableFlexNodeAsync(
                 client,
                 clClusterName,
@@ -647,6 +700,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 vnet,
                 kubeConfigFile,
                 input.FlexNodeProfile,
+                input.AadProfile,
                 providerConfig,
                 progressReporter);
         }
@@ -664,6 +718,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 clClusterName,
                 forceCreate,
                 noWaitOnReady,
+                providerConfig,
                 progressReporter);
         }
 
@@ -679,6 +734,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 input.AnalyticsWorkloadProfile,
                 forceCreate,
                 noWaitOnReady,
+                ipTags,
                 progressReporter);
         }
 
@@ -694,76 +750,13 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 kubeConfigFile,
                 input.InferencingWorkloadProfile.KServeProfile,
                 forceCreate,
-                providerConfig,
+                ipTags,
                 progressReporter);
         }
 
         progressReporter.Report("Cluster update completed.");
         this.logger.LogInformation($"Cluster update completed: {clClusterName}");
         return await this.GetCluster(clClusterName, providerConfig);
-
-        async Task<ContainerServiceManagedClusterResource> EnabledAadOnAksClusterAsync()
-        {
-            progressReporter.Report("Updating aks cluster to enable AAD integration...");
-            if (aks.Data.AadProfile?.IsManagedAadEnabled == true)
-            {
-                this.logger.LogInformation(
-                    $"AAD is already enabled on aks cluster: {aks.Data.Name}");
-            }
-            else
-            {
-                var aadProfile = await this.CreateAadProfileAsync(input.AadProfile, providerConfig);
-
-                ContainerServiceManagedClusterCollection collection =
-                    resourceGroupResource.GetContainerServiceManagedClusters();
-                this.logger.LogInformation($"Updating aks cluster: {aks.Data.Name}...");
-                ContainerServiceManagedClusterData data = new(new AzureLocation(aks.Data.Location))
-                {
-                    AadProfile = aadProfile
-                };
-
-                // Retry logic for 409 conflict errors when there's an in-progress operation.
-                // Retry up to 10 times with 30s interval (5 minutes total).
-                const int maxRetryCount = 10;
-                var retryInterval = TimeSpan.FromSeconds(30);
-                int retryCount = 0;
-                ArmOperation<ContainerServiceManagedClusterResource> lro;
-
-                while (true)
-                {
-                    try
-                    {
-                        lro = await collection.CreateOrUpdateAsync(
-                            WaitUntil.Completed,
-                            aks.Data.Name,
-                            data);
-                        break;
-                    }
-                    catch (RequestFailedException rfe)
-                    when (retryCount < maxRetryCount &&
-                          rfe.Status == (int)HttpStatusCode.Conflict &&
-                          rfe.ErrorCode == "OperationNotAllowed" &&
-                          rfe.Message.StartsWith("Operation is not allowed because there's an " +
-                              "in progress"))
-                    {
-                        retryCount++;
-                        this.logger.LogWarning(
-                            $"AKS cluster update failed due to in-progress operation. " +
-                            $"Retrying in {retryInterval.TotalSeconds}s " +
-                            $"(attempt {retryCount} of {maxRetryCount})...");
-                        await Task.Delay(retryInterval);
-                    }
-                }
-
-                ContainerServiceManagedClusterResource result = lro.Value;
-                ContainerServiceManagedClusterData resourceData = result.Data;
-
-                this.logger.LogInformation($"Aks cluster update succeeded. id: {resourceData.Id}");
-                aks = result;
-            }
-
-            return aks;
-        }
     }
 
     public async Task<CleanRoomCluster> GetCluster(
@@ -786,8 +779,10 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         ResourceGroupResource resourceGroupResource =
             client.GetResourceGroupResource(resourceGroupResourceId);
 
-        var aks = await this.TryGetManagedCluster(clClusterName, resourceGroupResource);
-        var vnet = await this.TryGetVirtualNetwork(clClusterName, resourceGroupResource);
+        var aks = await this.TryGetManagedCluster(
+            clClusterName, resourceGroupResource, providerConfig);
+        var vnet = await this.TryGetVirtualNetwork(
+            clClusterName, resourceGroupResource, providerConfig);
 
         if (aks != null && vnet != null)
         {
@@ -915,7 +910,8 @@ public class AksClusterProvider : ICleanRoomClusterProvider
     public async Task<CleanRoomClusterKubeConfig?> TryGetClusterKubeConfig(
         string clClusterName,
         JsonObject? providerConfig,
-        KubeConfigAccessRole accessRole)
+        KubeConfigAccessRole accessRole,
+        bool @internal = false)
     {
         var client = new ArmClient(TokenCredentialFactory.GetTenantCredential(providerConfig));
         string subscriptionId = providerConfig!["subscriptionId"]!.ToString();
@@ -924,7 +920,8 @@ public class AksClusterProvider : ICleanRoomClusterProvider
             ResourceGroupResource.CreateResourceIdentifier(subscriptionId, resourceGroupName);
         ResourceGroupResource resourceGroupResource =
             client.GetResourceGroupResource(resourceGroupResourceId);
-        var aks = await this.TryGetManagedCluster(clClusterName, resourceGroupResource);
+        var aks = await this.TryGetManagedCluster(
+            clClusterName, resourceGroupResource, providerConfig);
         if (aks == null)
         {
             return null;
@@ -980,7 +977,8 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         ResourceGroupResource resourceGroupResource =
             client.GetResourceGroupResource(resourceGroupResourceId);
 
-        var aks = await this.TryGetManagedCluster(clClusterName, resourceGroupResource);
+        var aks = await this.TryGetManagedCluster(
+            clClusterName, resourceGroupResource, providerConfig);
         if (aks == null)
         {
             return null;
@@ -1072,6 +1070,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         JsonObject? providerConfig)
     {
         var policyOption = SecurityPolicyConfigInput.Convert(input.SecurityPolicy);
+        this.logger.LogInformation($"policyCreationOption: {policyOption.PolicyCreationOption}");
         string agentPolicyRego;
         var telemetryCollectionEnabled =
             input.TelemetryProfile != null && input.TelemetryProfile.CollectionEnabled;
@@ -1145,6 +1144,59 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 DocumentUrl = ImageUtils.GetKServeInferencingAgentSecurityPolicyDocumentUrl()
             }
         };
+    }
+
+    private static ODataError? ValidateFlexNodeGpuConfig(
+        FlexNodeProfileInput flexNodeProfile)
+    {
+        FlexNodeGpuConfigInput? gpu = flexNodeProfile.Gpu;
+        if (gpu == null)
+        {
+            return null;
+        }
+
+        FlexNodeGpuSharingInput? sharing = gpu.Sharing;
+        if (sharing == null)
+        {
+            return null;
+        }
+
+        string mode = (sharing.Mode ?? "none").Trim().ToLowerInvariant();
+        if (mode != "none" && mode != "mps")
+        {
+            return new ODataError(
+                code: "GpuSharingModeInvalid",
+                message: "GPU sharing mode must be 'none' or 'mps'.");
+        }
+
+        if (mode == "mps")
+        {
+            string vmSize = flexNodeProfile.VmSize ?? "Standard_DC2as_v5";
+            if (!FlexNodeProvider.IsGpuVmSize(vmSize))
+            {
+                return new ODataError(
+                    code: "GpuSharingRequiresGpuVmSize",
+                    message: "MPS GPU sharing requires a GPU VM size.");
+            }
+
+            if (sharing.Replicas == null || sharing.Replicas <= 0)
+            {
+                return new ODataError(
+                    code: "MpsReplicasInvalid",
+                    message: "MPS sharing requires replicas greater than 0.");
+            }
+        }
+        else
+        {
+            if (sharing.Replicas != null)
+            {
+                return new ODataError(
+                    code: "MpsReplicasWithoutMps",
+                    message: "Replicas require sharing mode 'mps'.");
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -1546,9 +1598,10 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         string clClusterName,
         bool forceCreate,
         bool noWaitOnReady,
+        JsonObject? providerConfig,
         IProgress<string> progressReporter)
     {
-        string aksClusterName = this.ToAksName(clClusterName);
+        string aksClusterName = this.ResolveAksName(clClusterName, providerConfig);
         var kubectlClient = new KubectlClient(this.logger, this.configuration, kubeConfigFile);
         var helmClient = new HelmClient(this.logger, this.configuration, kubeConfigFile);
 
@@ -2168,17 +2221,37 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         KServeInferencingDeploymentTemplate deploymentTemplate,
         bool telemetryCollectionEnabled,
         ContainerServiceManagedClusterResource aks,
-        JsonObject? providerConfig,
+        PublicIPAddressResource publicIP,
+        string dnsLabel,
         string kubeConfigFile)
     {
         string ns = Constants.KServeInferencingAgentNamespace;
-        string ccrFqdn = $"kserve-inferencing-agent.{ns}.svc";
+        string ccrFqdn = $"{dnsLabel}.{publicIP.Data.Location}.cloudapp.azure.com";
         var valuesOverrideFiles = await GenerateValuesOverrideFiles();
         var helmClient = new HelmClient(this.logger, this.configuration, kubeConfigFile);
         await helmClient.InstallInferencingAgentChart(
             Constants.KServeInferencingAgentReleaseName,
             ns,
-            valuesOverrideFiles);
+            valuesOverrideFiles,
+            serviceAnnotations: new()
+            {
+                {
+                    "service.beta.kubernetes.io/azure-load-balancer-resource-group",
+                    aks.Data.NodeResourceGroup
+                },
+                {
+                    "service.beta.kubernetes.io/azure-pip-name",
+                    publicIP.Data.Name
+                },
+                {
+                    "service.beta.kubernetes.io/azure-dns-label-name",
+                    dnsLabel
+                },
+                {
+                    Constants.ServiceFqdnAnnotation,
+                    ccrFqdn
+                }
+            });
 
         async Task<List<string>> GenerateValuesOverrideFiles()
         {
@@ -2230,6 +2303,13 @@ public class AksClusterProvider : ICleanRoomClusterProvider
             app = app.Replace(
                 "<CCR_GOVERNANCE_IMAGE_URL>",
                 securityPolicy.Images[AciConstants.ContainerName.CcrGovernance]);
+            app = app.Replace("<OHTTP_ENABLED>", "true");
+            app = app.Replace(
+                "<OHTTP_GATEWAY_IMAGE_URL>",
+                securityPolicy.Images[AciConstants.ContainerName.OhttpGateway]);
+            app = app.Replace(
+                "<INFERENCING_NAMESPACE>",
+                Constants.KServeInferencingWorkloadNamespace);
 
             var telemetryReplacements = new Dictionary<string, string>();
             if (telemetryCollectionEnabled)
@@ -2306,6 +2386,10 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                         AciConstants.ContainerName.OtelCollector,
                         $"{ImageUtils.OtelCollectorImage()}:{ImageUtils.OtelCollectorTag()}"
                     },
+                    {
+                        AciConstants.ContainerName.OhttpGateway,
+                        $"{ImageUtils.OhttpGatewayImage()}:{ImageUtils.OhttpGatewayTag()}"
+                    },
                 }
                 };
             }
@@ -2324,6 +2408,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                     AciConstants.ContainerName.CcrGovernance,
                     AciConstants.ContainerName.Skr,
                     AciConstants.ContainerName.CcrProxy,
+                    AciConstants.ContainerName.OhttpGateway,
                     AciConstants.ContainerName.OtelCollector,
                 ];
             var missingContainers = requiredContainers.Where(r => !policyContainers.ContainsKey(r));
@@ -2435,8 +2520,8 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 "<CLEANROOM_CVM_MEASUREMENTS_DOCUMENT>",
                 $"{ImageUtils.GetCleanroomCvmMeasurementsDocumentUrl()}");
             app = app.Replace(
-                "<RUNTIME_DIGESTS_DOCUMENT>",
-                $"{ImageUtils.GetRuntimeDigestsDocumentUrl()}");
+                "<INFERENCING_DIGESTS_DOCUMENT>",
+                $"{ImageUtils.GetInferencingDigestsDocumentUrl()}");
             app = app.Replace(
                 "<CLEANROOM_SIDECARS_POLICY_DOCUMENT_REGISTRY_URL>",
                 $"{ImageUtils.SidecarsPolicyDocumentRegistryUrl()}");
@@ -2445,6 +2530,9 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 Constants.KServeInferencingWorkloadNamespace);
             app = app.Replace("<ALLOW_ALL>", "true");
             app = app.Replace("<DEBUG_MODE>", "false");
+            app = app.Replace(
+                "<ENABLE_TEST_ENDPOINTS>",
+                values.EnableTestEndpoints.ToString().ToLower());
 
             var telemetryReplacements = new Dictionary<string, string>();
             if (telemetryCollectionEnabled)
@@ -2580,9 +2668,10 @@ public class AksClusterProvider : ICleanRoomClusterProvider
 
     private async Task<ContainerServiceManagedClusterResource?> TryGetManagedCluster(
         string clClusterName,
-        ResourceGroupResource resourceGroupResource)
+        ResourceGroupResource resourceGroupResource,
+        JsonObject? providerConfig)
     {
-        var aksName = this.ToAksName(clClusterName);
+        var aksName = this.ResolveAksName(clClusterName, providerConfig);
 
         try
         {
@@ -2599,9 +2688,11 @@ public class AksClusterProvider : ICleanRoomClusterProvider
 
     private async Task<VirtualNetworkResource?> TryGetVirtualNetwork(
         string clClusterName,
-        ResourceGroupResource resourceGroupResource)
+        ResourceGroupResource resourceGroupResource,
+        JsonObject? providerConfig)
     {
-        var vnetName = this.ToVnetName(clClusterName);
+        var vnetName = await this.ResolveVnetNameAsync(
+            clClusterName, resourceGroupResource, providerConfig);
 
         try
         {
@@ -2787,6 +2878,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         AnalyticsWorkloadProfileInput input,
         bool forceCreate,
         bool noWaitOnReady,
+        List<IPTag> ipTags,
         IProgress<string> progressReporter)
     {
         progressReporter.Report("Installing spark operator...");
@@ -2925,7 +3017,8 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 aks.Data.Location,
                 clClusterName,
                 ipName,
-                forceCreate);
+                forceCreate,
+                ipTags);
             await this.UpdateAksMiPermissionsForPublicIPMgmtAsync(resourceGroupResource, aks);
             string dnsLabel = this.GenerateDnsName(
                 prefix: "analytics",
@@ -2944,7 +3037,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         string kubeConfigFile,
         KServeInferencingWorkloadProfileInput input,
         bool forceCreate,
-        JsonObject? providerConfig,
+        List<IPTag> ipTags,
         IProgress<string> progressReporter)
     {
         progressReporter.Report("Installing cert-manager...");
@@ -2960,6 +3053,16 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         this.logger.LogInformation($"Creating namespace {ns}.");
         await kubectlClient.CreateNamespaceAsync(ns);
         this.logger.LogInformation($"Namespace created.");
+
+        progressReporter.Report($"Creating private dns zone for {ns}...");
+        var privateZone = await this.CreatePrivateDNSZoneAsync(
+            resourceGroupResource,
+            clClusterName,
+            Constants.KServeInferencingWorkloadZoneName,
+            forceCreate);
+
+        progressReporter.Report($"Creating private dns link for {ns}...");
+        await this.CreatePrivateDnsLinkAsync(clClusterName, privateZone, vnet, forceCreate);
 
         progressReporter.Report("Installing KServe...");
         this.logger.LogInformation(
@@ -2992,6 +3095,8 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         this.logger.LogInformation($"Kserve-inferencing-frontend helm chart installation " +
             $"succeeded.");
 
+        progressReporter.Report("Creating Public IP resource for inferencing...");
+        (var publicIP, string dnsLabel) = await SetupPublicIPForInferencingEndpoint();
         progressReporter.Report("Installing kserve-inferencing-agent...");
         this.logger.LogInformation(
             $"Starting installation of kserve-inferencing-agent helm chart on: " +
@@ -3003,7 +3108,8 @@ public class AksClusterProvider : ICleanRoomClusterProvider
             deploymentTemplate,
             telemetryCollectionEnabled,
             aks,
-            providerConfig,
+            publicIP,
+            dnsLabel,
             kubeConfigFile);
         this.logger.LogInformation($"Kserve-inferencing-agent helm chart installation " +
             $"succeeded.");
@@ -3025,6 +3131,32 @@ public class AksClusterProvider : ICleanRoomClusterProvider
             $"Waiting for inferencing agent pod/deployment to become ready.");
         await kubectlClient.WaitForInferencingAgentUp(Constants.KServeInferencingAgentNamespace);
         this.logger.LogInformation($"Inferencing agent pod/deployment are reporting ready.");
+
+        async Task<(PublicIPAddressResource publicIP, string dnsLabel)>
+            SetupPublicIPForInferencingEndpoint()
+        {
+            // https://learn.microsoft.com/en-us/azure/aks/static-ip
+            ResourceIdentifier nodeRgId = ResourceGroupResource.CreateResourceIdentifier(
+                aks.Id.SubscriptionId,
+                aks.Data.NodeResourceGroup);
+            ResourceGroupResource nodeResourceGroupResource =
+                client.GetResourceGroupResource(nodeRgId);
+            string ipName = "inferencing-agent-ip";
+            var pip = await this.CreatePublicIP(
+                nodeResourceGroupResource,
+                aks.Data.Location,
+                clClusterName,
+                ipName,
+                forceCreate,
+                ipTags);
+            await this.UpdateAksMiPermissionsForPublicIPMgmtAsync(
+                nodeResourceGroupResource, aks);
+            string label = this.GenerateDnsName(
+                prefix: "inferencing",
+                clClusterName,
+                nodeResourceGroupResource);
+            return (pip, label);
+        }
     }
 
     private async Task EnableFlexNodeAsync(
@@ -3035,6 +3167,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         VirtualNetworkResource vnet,
         string kubeConfigFile,
         FlexNodeProfileInput flexNodeProfile,
+        AadProfileInput? aadProfileInput,
         JsonObject? providerConfig,
         IProgress<string> progressReporter)
     {
@@ -3042,12 +3175,27 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         ISshSessionFactory sshSessionFactory = new SshProxyClient(this.logger, kubeConfigFile);
         string location = aks.Data.Location;
         _ = bool.TryParse(providerConfig?["forceCreate"]?.ToString(), out bool forceCreate);
+        List<IPTag> ipTags = this.ParsePublicIPTags(providerConfig);
 
-        var flexNodeSubnet = vnet.Data.Subnets.FirstOrDefault(s => s.Name == FlexNodeSubnetName) ??
-            throw new InvalidOperationException(
-                $"Flexnode subnet '{FlexNodeSubnetName}' not found in virtual network.");
+        var vnetTask = UpdateVnetForFlexNodeAsync(
+            resourceGroupResource,
+            clClusterName,
+            vnet);
+        var aksTask = EnabledAadOnAksClusterAsync();
 
-        progressReporter.Report($"Deploying {flexNodeProfile.NodeCount} flex node VM(s)...");
+        await Task.WhenAll(vnetTask, aksTask);
+
+        vnet = await vnetTask;
+        aks = await aksTask;
+
+        var flexNodeSubnetsIds = vnet.Data.Subnets
+            .Where(s => s.Name.StartsWith(FlexNodeSubnetName))
+            .OrderBy(s => s.Name)
+            .Select(s => s.Id)
+            .ToList();
+
+        progressReporter.Report(
+            $"Deploying {flexNodeProfile.NodeCount} flex node VM(s)");
         string tenantId = providerConfig!["tenantId"]!.ToString();
         await this.flexNodeProvider.CreateNodesAsync(
             client,
@@ -3055,12 +3203,145 @@ public class AksClusterProvider : ICleanRoomClusterProvider
             resourceGroupResource,
             aks,
             tenantId,
-            flexNodeSubnet.Id,
+            flexNodeSubnetsIds,
             flexNodeProfile,
             kubectlClient,
             sshSessionFactory,
+            ipTags,
             forceCreate,
             progressReporter);
+
+        async Task<VirtualNetworkResource> UpdateVnetForFlexNodeAsync(
+            ResourceGroupResource resourceGroupResource,
+            string clClusterName,
+            VirtualNetworkResource existingVnet)
+        {
+            progressReporter.Report("Updating VNet for FlexNode...");
+            var vnetName = existingVnet.Data.Name;
+
+            int flexnodeSubnetCount =
+                FlexNodeIpLayout.GetRequiredSubnetCount(flexNodeProfile.NodeCount);
+
+            // Check if FlexNode subnets already exist.
+            var existingFlexNodeSubnets = existingVnet.Data.Subnets
+                .Where(s => s.Name.StartsWith(FlexNodeSubnetName))
+                .ToList();
+
+            if (existingFlexNodeSubnets.Count >= flexnodeSubnetCount)
+            {
+                this.logger.LogInformation(
+                    $"VNet already has {existingFlexNodeSubnets.Count} FlexNode subnets. " +
+                    $"Skipping VNet update.");
+                return existingVnet;
+            }
+
+            this.logger.LogInformation(
+                $"Updating VNet to add FlexNode subnets: {vnetName}");
+
+            VirtualNetworkCollection collection = resourceGroupResource.GetVirtualNetworks();
+
+            // Get existing VNet data.
+            VirtualNetworkData data = existingVnet.Data;
+
+            // Add FlexNode subnets if they don't exist.
+            AddFlexNodeSubnetsToVnetData();
+
+            ArmOperation<VirtualNetworkResource> lro = await collection.CreateOrUpdateAsync(
+                WaitUntil.Completed,
+                vnetName,
+                data);
+            VirtualNetworkResource result = lro.Value;
+
+            this.logger.LogInformation(
+                $"VNet update for FlexNode succeeded. id: {result.Data.Id}");
+            return result;
+
+            void AddFlexNodeSubnetsToVnetData()
+            {
+                int octet = FlexNodeIpLayout.SubnetStartOctet;
+                for (int i = 0; i < flexnodeSubnetCount; i++)
+                {
+                    string subnetName = $"{FlexNodeSubnetName}-{i}";
+                    string prefix = $"10.{octet}.0.0/16";
+
+                    // Only add if subnet doesn't already exist.
+                    if (!data.Subnets.Any(s => s.Name == subnetName))
+                    {
+                        data.AddressSpace.AddressPrefixes.Add(prefix);
+                        data.Subnets.Add(new SubnetData()
+                        {
+                            Name = subnetName,
+                            AddressPrefixes = { prefix }
+                        });
+                    }
+
+                    octet++;
+                }
+            }
+        }
+
+        async Task<ContainerServiceManagedClusterResource> EnabledAadOnAksClusterAsync()
+        {
+            progressReporter.Report("Updating aks cluster to enable AAD integration...");
+            if (aks.Data.AadProfile?.IsManagedAadEnabled == true)
+            {
+                this.logger.LogInformation(
+                    $"AAD is already enabled on aks cluster: {aks.Data.Name}");
+            }
+            else
+            {
+                var aadProfile = await this.CreateAadProfileAsync(aadProfileInput, providerConfig);
+
+                ContainerServiceManagedClusterCollection collection =
+                    resourceGroupResource.GetContainerServiceManagedClusters();
+                this.logger.LogInformation($"Updating aks cluster: {aks.Data.Name}...");
+                ContainerServiceManagedClusterData data = new(new AzureLocation(aks.Data.Location))
+                {
+                    AadProfile = aadProfile
+                };
+
+                // Retry logic for 409 conflict errors when there's an in-progress operation.
+                // Retry up to 10 times with 30s interval (5 minutes total).
+                const int maxRetryCount = 10;
+                var retryInterval = TimeSpan.FromSeconds(30);
+                int retryCount = 0;
+                ArmOperation<ContainerServiceManagedClusterResource> lro;
+
+                while (true)
+                {
+                    try
+                    {
+                        lro = await collection.CreateOrUpdateAsync(
+                            WaitUntil.Completed,
+                            aks.Data.Name,
+                            data);
+                        break;
+                    }
+                    catch (RequestFailedException rfe)
+                    when (retryCount < maxRetryCount &&
+                          rfe.Status == (int)HttpStatusCode.Conflict &&
+                          rfe.ErrorCode == "OperationNotAllowed" &&
+                          rfe.Message.StartsWith("Operation is not allowed because there's an " +
+                              "in progress"))
+                    {
+                        retryCount++;
+                        this.logger.LogWarning(
+                            $"AKS cluster update failed due to in-progress operation. " +
+                            $"Retrying in {retryInterval.TotalSeconds}s " +
+                            $"(attempt {retryCount} of {maxRetryCount})...");
+                        await Task.Delay(retryInterval);
+                    }
+                }
+
+                ContainerServiceManagedClusterResource result = lro.Value;
+                ContainerServiceManagedClusterData resourceData = result.Data;
+
+                this.logger.LogInformation($"Aks cluster update succeeded. id: {resourceData.Id}");
+                aks = result;
+            }
+
+            return aks;
+        }
     }
 
     private async Task<PrivateDnsZoneResource> CreatePrivateDNSZoneAsync(
@@ -3155,12 +3436,37 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         return result;
     }
 
+    // Parses the customer-supplied IP tags (service tags) from the provider config so that
+    // created public IPs can be tagged at creation. A real service tag can only be set at IP
+    // creation time and the address must come from an onboarded tagged IPAM range. The ipTags
+    // entries follow the Azure Public IP Address IpTag schema (ipTagType + tag).
+    // Returns an empty list when no ipTags are configured, which keeps the public IPs untagged.
+    private List<IPTag> ParsePublicIPTags(JsonObject? providerConfig)
+    {
+        var ipTags = new List<IPTag>();
+        if (providerConfig?["ipTags"] is JsonArray ipTagsArray)
+        {
+            foreach (var entry in ipTagsArray)
+            {
+                string? tagValue = entry?["tag"]?.ToString();
+                string? tagType = entry?["ipTagType"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(tagValue) && !string.IsNullOrWhiteSpace(tagType))
+                {
+                    ipTags.Add(new IPTag { IPTagType = tagType, Tag = tagValue });
+                }
+            }
+        }
+
+        return ipTags;
+    }
+
     private async Task<PublicIPAddressResource> CreatePublicIP(
         ResourceGroupResource nodeResourceGroupResource,
         string location,
         string clClusterName,
         string ipName,
-        bool forceCreate)
+        bool forceCreate,
+        List<IPTag> ipTags)
     {
         if (!forceCreate)
         {
@@ -3196,6 +3502,15 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                 Name = PublicIPAddressSkuName.Standard
             }
         };
+
+        // Apply configured service tags (ipTags) at creation time. Service tags can only be
+        // set when the IP is created. An empty list leaves the IP untagged.
+        foreach (var ipTag in ipTags)
+        {
+            data.IPTags.Add(ipTag);
+            this.logger.LogInformation(
+                $"Applying ipTag {ipTag.IPTagType}={ipTag.Tag} to public IP: {ipName}");
+        }
 
         ArmOperation<PublicIPAddressResource> lro = await collection.CreateOrUpdateAsync(
             WaitUntil.Completed,
@@ -3385,6 +3700,9 @@ public class AksClusterProvider : ICleanRoomClusterProvider
             "$ccfNetworkRecoveryMembers",
             values.CcfNetworkRecoveryMembers);
         policyRego = policyRego.Replace(
+            "$inferencingNamespace",
+            Constants.KServeInferencingWorkloadNamespace);
+        policyRego = policyRego.Replace(
             "$telemetryCollectionEnabled", values.TelemetryCollectionEnabled.ToString().ToLower());
         policyRego = policyRego.Replace("$prometheusEndpoint", values.PrometheusEndpoint);
         policyRego = policyRego.Replace("$lokiEndpoint", values.LokiEndpoint);
@@ -3481,6 +3799,49 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         return input + "-aks";
     }
 
+    // Resolves the AKS cluster name to use. If the caller supplied an
+    // "aksClusterName" override in providerConfig, that name is used
+    // as-is (allowing an existing AKS cluster to be targeted). Otherwise
+    // the name is derived from the clean room cluster name.
+    private string ResolveAksName(
+        string clClusterName,
+        JsonObject? providerConfig)
+    {
+        var overrideName =
+            providerConfig?["aksClusterName"]?.ToString();
+        if (!string.IsNullOrWhiteSpace(overrideName))
+        {
+            return overrideName;
+        }
+
+        return this.ToAksName(clClusterName);
+    }
+
+    // Resolves the virtual network name to use for the cluster. When an
+    // existing AKS cluster is targeted (e.g. via the "aksClusterName"
+    // override pointing at a pre-provisioned cluster), the vnet is
+    // discovered from that cluster's agent pool subnet so the existing
+    // networking (subnets, NAT gateway) is reused instead of creating a
+    // divergent vnet named after the clean room cluster. Falls back to the
+    // name derived from the clean room cluster name when no such cluster
+    // exists yet (fresh provisioning).
+    private async Task<string> ResolveVnetNameAsync(
+        string clClusterName,
+        ResourceGroupResource resourceGroupResource,
+        JsonObject? providerConfig)
+    {
+        var cluster = await this.TryGetManagedCluster(
+            clClusterName, resourceGroupResource, providerConfig);
+        var discoveredVnetName = cluster?.Data.AgentPoolProfiles
+            ?.FirstOrDefault()?.VnetSubnetId?.Parent?.Name;
+        if (!string.IsNullOrWhiteSpace(discoveredVnetName))
+        {
+            return discoveredVnetName;
+        }
+
+        return this.ToVnetName(clClusterName);
+    }
+
     private string ToLinkName(string input)
     {
         return input + "-link";
@@ -3558,7 +3919,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         }
     }
 
-    private async Task<ManagedClusterAadProfile> CreateAadProfileAsync(
+    private Task<ManagedClusterAadProfile> CreateAadProfileAsync(
         AadProfileInput? aadProfileInput,
         JsonObject? providerConfig)
     {
@@ -3579,7 +3940,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
             }
         }
 
-        return aadProfile;
+        return Task.FromResult(aadProfile);
     }
 
     internal record InferencingFrontendCcrGovernanceConfig(

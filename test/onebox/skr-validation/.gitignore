@@ -1,0 +1,4 @@
+generated/*
+!generated/cl-skr-validation-eus-rg/
+generated/cl-skr-validation-eus-rg/*
+!generated/cl-skr-validation-eus-rg/resources.json

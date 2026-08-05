@@ -1,0 +1,149 @@
+################################################################################
+#              Blobfuse Nightly DI Test (Azure Pipelines) — scheduled          #
+#                                                                              #
+# Migrated from .github/workflows/blobfuse_nightly.yml (workflow_dispatch +     #
+# workflow_call + schedule cron "0 3 * * *", nightly 03:00 UTC).                #
+#                                                                              #
+# 3 independent jobs: data-integrity CSE, data-integrity CPK, perf.            #
+# Each: free disk -> checkout -> setup-docker -> login -> hashed run id ->      #
+# blobfuse-setup -> the DI/perf composite -> cleanup RG.                        #
+#                                                                              #
+# The blobfuse-setup + blobfuse-data-integrity-cse/cpk composites are ported via #
+# templates/steps/blobfuse-setup.yml + blobfuse-data-integrity-*.yml (which use  #
+# blobfuse-mount.yml / blobfuse-cleanup.yml). The perf benchmark steps beyond    #
+# disk cleanup were not in the captured set (documented placeholder).           #
+#                                                                              #
+# TODO(Phase 1C): azureServiceConnection + 1ES pool with Docker;               #
+#   cleanroom-pr-vars variable group (AZURE_* / ACR_URL).                       #
+################################################################################
+
+schedules:
+  - cron: "0 3 * * *"
+    displayName: Nightly blobfuse DI test (03:00 UTC)
+    branches:
+      include:
+        - develop
+    always: true
+
+trigger: none
+pr: none
+
+name: blobfuse-nightly-$(Date:yyyyMMdd).$(Rev:r)
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: OneBranch.Pipelines/GovernedTemplates
+      ref: refs/heads/main
+
+extends:
+  template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates
+  parameters:
+    cloudvault:
+      enabled: false
+    globalSdl:
+      tsa:
+        enabled: false
+      policheck:
+        break: true
+    stages:
+      - stage: BlobfuseNightly
+        displayName: Blobfuse Nightly DI Test
+        jobs:
+          - job: blobfuse_e2e_data_integrity_cse
+            displayName: Blobfuse E2E data integrity (CSE)
+            timeoutInMinutes: 180
+            pool:
+              type: linux # TODO(Phase 1C): 1ES pool with Docker daemon
+            variables:
+              - template: templates/variables/build-common.yml
+            steps:
+              - bash: sudo rm -rf /opt/hostedtoolcache
+                displayName: Delete huge unnecessary tools folder
+              - checkout: self
+                submodules: recursive
+              - template: templates/steps/setup-docker-on-data-disk.yml
+              - template: templates/steps/login-to-azure.yml
+              - bash: |
+                  HASHED_RUN_ID=$(echo -n "$(Build.BuildId)" | sha256sum | cut -c1-10)
+                  echo "##vso[task.setvariable variable=HASHED_RUN_ID]$HASHED_RUN_ID"
+                displayName: Generate hashed run ID
+              - template: templates/steps/blobfuse-setup.yml
+                parameters:
+                  resourceGroup: blobfusecse-rg-$(HASHED_RUN_ID)
+                  storageAccount: blobfusecse$(HASHED_RUN_ID)
+              - template: templates/steps/blobfuse-data-integrity-cse.yml
+                parameters:
+                  account_type: block
+                  mount_dir_source: $(repoRoot)/blob_source
+                  temp_dir_source: $(repoRoot)/temp_source
+                  config_file_source: $(repoRoot)/config_source.yaml
+                  mount_dir_plain: $(repoRoot)/blob_plain
+                  temp_dir_plain: $(repoRoot)/temp_plain
+                  config_file_plain: $(repoRoot)/config_plain.yaml
+                  mount_dir_encrypted: $(repoRoot)/blob_encrypted
+                  temp_dir_encrypted: $(repoRoot)/temp_encrypted
+                  config_file_encrypted: $(repoRoot)/config_encrypted.yaml
+              - pwsh: az group delete --name "blobfusecse-rg-$(HASHED_RUN_ID)" --yes --no-wait
+                displayName: Cleanup
+                condition: succeeded()
+
+          - job: blobfuse_e2e_data_integrity_cpk
+            displayName: Blobfuse E2E data integrity (CPK)
+            timeoutInMinutes: 180
+            pool:
+              type: linux
+            variables:
+              - template: templates/variables/build-common.yml
+            steps:
+              - bash: sudo rm -rf /opt/hostedtoolcache
+                displayName: Delete huge unnecessary tools folder
+              - checkout: self
+                submodules: recursive
+              - template: templates/steps/setup-docker-on-data-disk.yml
+              - template: templates/steps/login-to-azure.yml
+              - bash: |
+                  HASHED_RUN_ID=$(echo -n "$(Build.BuildId)" | sha256sum | cut -c1-10)
+                  echo "##vso[task.setvariable variable=HASHED_RUN_ID]$HASHED_RUN_ID"
+                displayName: Generate hashed run ID
+              - template: templates/steps/blobfuse-setup.yml
+                parameters:
+                  resourceGroup: blobfusecpk-rg$(HASHED_RUN_ID)
+                  storageAccount: blobfusecpk$(HASHED_RUN_ID)
+              - template: templates/steps/blobfuse-data-integrity-cpk.yml
+                parameters:
+                  account_type: block
+                  mount_dir_source: $(repoRoot)/blob_source
+                  temp_dir_source: $(repoRoot)/temp_source
+                  config_file_source: $(repoRoot)/config_source.yaml
+                  mount_dir: $(repoRoot)/blob_cpk
+                  temp_dir: $(repoRoot)/temp_cpk
+                  config_file: $(repoRoot)/config_cpk.yaml
+              - pwsh: az group delete --name "blobfusecpk-rg$(HASHED_RUN_ID)" --yes --no-wait
+                displayName: Cleanup
+                condition: succeeded()
+
+          - job: blobfuse_perf
+            displayName: Blobfuse perf
+            timeoutInMinutes: 180
+            pool:
+              type: linux
+            variables:
+              - template: templates/variables/build-common.yml
+            steps:
+              - bash: sudo rm -rf /opt/hostedtoolcache
+                displayName: Delete huge unnecessary tools folder
+              - checkout: self
+                submodules: recursive
+              - template: templates/steps/setup-docker-on-data-disk.yml
+              - template: templates/steps/login-to-azure.yml
+              - bash: |
+                  sudo rm -rf /opt/hostedtoolcache
+                  docker system prune -a --volumes -f
+                displayName: Free disk space
+              # NOTE: the remainder of the blobfuse-perf job body (perf benchmark
+              # steps beyond disk cleanup) was not part of the captured composite
+              # set; port from blobfuse_nightly.yml (line 125+) when available.
+              - pwsh: 'Write-Host "blobfuse-perf benchmark steps: port from blobfuse_nightly.yml (line 125+)."'
+                displayName: blobfuse-perf (port remaining steps)

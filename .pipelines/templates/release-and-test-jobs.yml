@@ -1,0 +1,384 @@
+################################################################################
+#        Release to Test + BVT — job definitions (Azure Pipelines)             #
+#                                                                              #
+# Migrated from .github/workflows/release-and-test.yml (workflow_dispatch +     #
+# workflow_call + used by the nightly trigger). Consumed by a release-and-test  #
+# pipeline and referenced by OneBranch.Release.Prod.yml (build_test_msint) and  #
+# release_verification_nightly.                                                 #
+#                                                                              #
+# Structure (mirrors GitHub):                                                   #
+#   build (official build) -> release_to_test (promote to <acr>/internal/...)   #
+#   pick_location                                                               #
+#   BVT jobs (need build + release_to_test [+ pick_location]):                  #
+#     bvt_ml_training (matrix key-store akvpremium), bvt_encrypted_storage,     #
+#     bvt_nginx_hello, bvt_skr_validation, bvt_setup_env_aks,                   #
+#     bvt_big_data_query_analytics_aks, bvt_cleanup_aks                         #
+#                                                                              #
+# release_to_test promotes to environment 'internal' (release-to-prod uses      #
+# 'unlisted'); both share steps/release-groups.yml. BVT tests pull from          #
+# <RELEASE_ACR_NAME>.azurecr.io/internal/azurecleanroom and are fully ported.    #
+#                                                                              #
+# TODO(Phase 1C): releaseServiceConnection / RELEASE_ACR_NAME variable group /  #
+#   1ES pools.                                                                  #
+################################################################################
+
+parameters:
+  - name: tag
+    type: string
+    default: ""
+  - name: releaseType
+    type: string
+    default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client, frontend-service"
+  - name: needsAttestation
+    type: boolean
+    default: false
+
+jobs:
+  # --- build (official build) -----------------------------------------------
+  - template: official-build-jobs.yml
+    parameters:
+      tag: ${{ parameters.tag }}
+      buildType: ${{ parameters.releaseType }}
+
+  # --- release to test: promote images to <acr>/internal/azurecleanroom -------
+  - job: release_to_test
+    displayName: Release to test
+    timeoutInMinutes: 240
+    dependsOn:
+      - build_solutions
+      - build_images
+    pool:
+      type: linux
+    variables:
+      - template: variables/release-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+        fetchTags: true
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      # All release-* promotion groups (environment 'internal'). Gated by
+      # releaseType; see steps/release-groups.yml (shared with prod release).
+      - template: steps/release-groups.yml
+        parameters:
+          tag: ${{ parameters.tag }}
+          environment: internal
+          releaseType: ${{ parameters.releaseType }}
+          needsAttestation: ${{ parameters.needsAttestation }}
+
+  # --- pick a random Azure location (BVT) ------------------------------------
+  - job: pick_location
+    displayName: Pick location
+    pool:
+      type: linux
+    steps:
+      - checkout: none
+      # release-and-test's list INCLUDES westeurope (unlike the PR flows).
+      - bash: |
+          set -euo pipefail
+          locations=("westeurope" "northeurope" "germanywestcentral" "centralindia" "eastasia" "southeastasia")
+          index=$((RANDOM % ${#locations[@]}))
+          selected="${locations[$index]}"
+          echo "Selected location: $selected"
+          echo "##vso[task.setvariable variable=location;isOutput=true]$selected"
+        name: pickLocation
+        displayName: Pick a random Azure location
+
+  # --- BVT: ml-training (matrix key-store) -----------------------------------
+  - job: bvt_ml_training
+    displayName: BVT ml-training
+    timeoutInMinutes: 180
+    dependsOn:
+      - build_solutions
+      - build_images
+      - release_to_test
+    pool:
+      type: linux
+    strategy:
+      matrix:
+        akvpremium: { key-store: akvpremium }
+    variables:
+      - template: variables/release-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+        fetchTags: true
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - pwsh: az acr login --name $(RELEASE_ACR_NAME)
+        displayName: ACR login (internal)
+        workingDirectory: $(repoRoot)
+      - template: steps/install-cleanroom-cli.yml
+        parameters:
+          repo: $(RELEASE_ACR_NAME).azurecr.io/internal/azurecleanroom
+          tag: ${{ parameters.tag }}
+      - pwsh: |
+          $env:TDP_HSM_RESOURCE_GROUP='azcleanroom-emu-bvt-rg'
+          $env:TDP_MHSM_NAME='azcleanroomemubvthsm'
+          $env:TDC_HSM_RESOURCE_GROUP='azcleanroom-emu-bvt-rg'
+          $env:TDC_MHSM_NAME='azcleanroomemubvthsm'
+          ./test/onebox/multi-party-collab/ml-training/run-collab-aci.ps1 -registry acr -repo $(RELEASE_ACR_NAME).azurecr.io/internal/azurecleanroom -tag ${{ parameters.tag }} -kvType "$(key-store)"
+        displayName: Run ml-training collab scenario on CACI
+        workingDirectory: $(repoRoot)
+      - pwsh: docker compose -p ob-ml-training-ccf-provider logs
+        displayName: Dump ccf-provider logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-isv-client-cgs-client-1
+        displayName: Dump ob-isv-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - task: PublishPipelineArtifact@1
+        displayName: Upload generated
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/multi-party-collab/ml-training/generated
+          artifact: bvt-generated-ml-training-$(key-store)
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=$(key-store)-$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # --- BVT: encrypted-storage -------------------------------------------------
+  - job: bvt_encrypted_storage
+    displayName: BVT encrypted-storage
+    timeoutInMinutes: 180
+    dependsOn:
+      - build_solutions
+      - build_images
+      - release_to_test
+    pool:
+      type: linux
+    variables:
+      - template: variables/release-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+        fetchTags: true
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - pwsh: az acr login --name $(RELEASE_ACR_NAME)
+        displayName: ACR login (internal)
+        workingDirectory: $(repoRoot)
+      - template: steps/install-cleanroom-cli.yml
+        parameters:
+          repo: $(RELEASE_ACR_NAME).azurecr.io/internal/azurecleanroom
+          tag: ${{ parameters.tag }}
+      - pwsh: ./test/onebox/multi-party-collab/encrypted-storage/run-collab-aci.ps1 -registry acr -repo $(RELEASE_ACR_NAME).azurecr.io/internal/azurecleanroom -tag ${{ parameters.tag }}
+        displayName: Run encrypted-storage collab scenario on CACI
+        workingDirectory: $(repoRoot)
+      - pwsh: docker compose -p ob-encrypted-storage-ccf-provider logs
+        displayName: Dump ccf-provider logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-consumer-client-cgs-client-1
+        displayName: Dump ob-consumer-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-publisher-client-cgs-client-1
+        displayName: Dump ob-publisher-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - task: PublishPipelineArtifact@1
+        displayName: Upload generated
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/multi-party-collab/encrypted-storage/generated
+          artifact: bvt-generated-encrypted-storage
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # --- BVT: nginx-hello ------------------------------------------------------
+  - job: bvt_nginx_hello
+    displayName: BVT nginx-hello
+    timeoutInMinutes: 180
+    dependsOn:
+      - build_solutions
+      - build_images
+      - release_to_test
+    pool:
+      type: linux
+    variables:
+      - template: variables/release-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+        fetchTags: true
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - pwsh: az acr login --name $(RELEASE_ACR_NAME)
+        displayName: ACR login (internal)
+        workingDirectory: $(repoRoot)
+      - template: steps/install-cleanroom-cli.yml
+        parameters:
+          repo: $(RELEASE_ACR_NAME).azurecr.io/internal/azurecleanroom
+          tag: ${{ parameters.tag }}
+      - pwsh: ./test/onebox/multi-party-collab/nginx-hello/run-collab-aci.ps1 -registry acr -repo $(RELEASE_ACR_NAME).azurecr.io/internal/azurecleanroom -tag ${{ parameters.tag }}
+        displayName: Run nginx-hello collab scenario on CACI
+        workingDirectory: $(repoRoot)
+      - pwsh: docker compose -p ob-nginx-hello-ccf-provider logs
+        displayName: Dump ccf-provider logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ob-nginx-client-cgs-client-1
+        displayName: Dump ob-nginx-client logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - pwsh: docker logs ccr-client-proxy
+        displayName: Dump ccr-client-proxy logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+      - task: PublishPipelineArtifact@1
+        displayName: Upload generated
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/multi-party-collab/nginx-hello/generated/configurations
+          artifact: bvt-generated-nginx-hello
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # --- BVT: skr-validation ---------------------------------------------------
+  - job: bvt_skr_validation
+    displayName: BVT skr-validation
+    timeoutInMinutes: 120
+    dependsOn:
+      - build_solutions
+      - build_images
+      - release_to_test
+      - pick_location
+    pool:
+      type: linux
+    variables:
+      - template: variables/release-common.yml
+      - name: location
+        value: $[ dependencies.pick_location.outputs['pickLocation.location'] ]
+    steps:
+      - checkout: self
+        submodules: recursive
+        fetchTags: true
+      - template: steps/login-to-azure.yml
+      - pwsh: |
+          ./test/onebox/skr-validation/setup-resources.ps1 `
+            -resourceGroup "cl-skr-validation-eus-rg" -location "eastus"
+        displayName: SKR validation setup (one-time, idempotent)
+        workingDirectory: $(repoRoot)
+      - pwsh: |
+          ./test/onebox/skr-validation/run-skr-validation.ps1 `
+            -resourceGroup "cl-skr-validation-eus-rg" -location "$(location)"
+        displayName: Run SKR validation test
+        workingDirectory: $(repoRoot)
+
+  # --- BVT: setup env (AKS) --------------------------------------------------
+  - job: bvt_setup_env_aks
+    displayName: BVT setup env (AKS)
+    timeoutInMinutes: 180
+    dependsOn:
+      - build_solutions
+      - build_images
+      - release_to_test
+      - pick_location
+    pool:
+      type: linux
+    variables:
+      - template: variables/release-common.yml
+      - name: location
+        value: $[ dependencies.pick_location.outputs['pickLocation.location'] ]
+    steps:
+      - checkout: self
+        submodules: recursive
+        fetchTags: true
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - pwsh: az acr login --name $(RELEASE_ACR_NAME)
+        displayName: ACR login (internal)
+        workingDirectory: $(repoRoot)
+      - template: steps/workload-setup-env.yml
+        parameters:
+          infraType: aks
+          location: $(location)
+          outDir: $(repoRoot)/test/onebox/workload-samples-aks/generated
+          registry: acr
+          repo: $(RELEASE_ACR_NAME).azurecr.io/internal/azurecleanroom
+          tag: ${{ parameters.tag }}
+      - task: PublishPipelineArtifact@1
+        displayName: Upload deployment artifacts
+        condition: succeeded()
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/workload-samples-aks/generated
+          artifact: cleanroom-deployment-artifacts-aks
+
+  # --- BVT: big data query analytics (AKS) -----------------------------------
+  - job: bvt_big_data_query_analytics_aks
+    displayName: BVT big data query analytics (AKS)
+    timeoutInMinutes: 180
+    dependsOn:
+      - bvt_setup_env_aks
+      - pick_location
+    pool:
+      type: linux
+    variables:
+      - template: variables/release-common.yml
+      - name: location
+        value: $[ dependencies.pick_location.outputs['pickLocation.location'] ]
+    steps:
+      - checkout: self
+        submodules: recursive
+        fetchTags: true
+      - template: steps/setup-docker-on-data-disk.yml
+      - task: DownloadPipelineArtifact@2
+        displayName: Download deployment artifacts
+        inputs:
+          artifact: cleanroom-deployment-artifacts-aks
+          path: $(repoRoot)/test/onebox/workload-samples-aks/generated
+      - template: steps/login-to-azure.yml
+      - pwsh: az acr login --name $(RELEASE_ACR_NAME)
+        displayName: ACR login (internal)
+        workingDirectory: $(repoRoot)
+      - template: steps/workload-test-big-data-analytics.yml
+        parameters:
+          location: $(location)
+          deploymentConfigDir: $(repoRoot)/test/onebox/workload-samples-aks/generated
+          repo: $(RELEASE_ACR_NAME).azurecr.io/internal/azurecleanroom
+          tag: ${{ parameters.tag }}
+      - task: PublishPipelineArtifact@1
+        displayName: Upload test results
+        condition: not(canceled())
+        inputs:
+          targetPath: $(repoRoot)/test/onebox/workload-samples-aks/generated
+          artifact: big-data-analytics-results-aks
+      - pwsh: |
+          ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-input-$(Agent.JobName)-$(Build.BuildId)"
+          ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-output-$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete AWS buckets
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # --- BVT: cleanup (AKS) ----------------------------------------------------
+  - job: bvt_cleanup_aks
+    displayName: BVT cleanup (AKS)
+    timeoutInMinutes: 60
+    dependsOn:
+      - bvt_big_data_query_analytics_aks
+    condition: succeeded()
+    pool:
+      type: linux
+    variables:
+      - template: variables/release-common.yml
+    steps:
+      - checkout: self
+        submodules: recursive
+        fetchTags: true
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      # JOB_ID pinned to bvt-setup-env-aks in GitHub to target that job's RG tag.
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=bvt-setup-env-aks-$(Build.BuildId)"
+        displayName: Delete resource groups
+        workingDirectory: $(repoRoot)

@@ -7,6 +7,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Org.BouncyCastle.Crypto.Engines;
@@ -266,7 +267,9 @@ public class Attestation
 
             // runtimeClaims are not sent over as any verifier should extract it from the HCL
             //  report blob post verification and rely on that.
-            attestationObject.Remove("runtimeClaims");
+            var vtpm = attestationObject["vtpm"]?.AsObject();
+            var evidence = vtpm?["evidence"]?.AsObject();
+            evidence?.Remove("runtimeClaims");
             content["attestation"] = attestationObject;
         }
         else
@@ -277,17 +280,22 @@ public class Attestation
         }
     }
 
-    private static async Task<AttestationReport> GetCvmReportAsync(byte[] reportData)
+    private static async Task<AttestationReport> GetCvmReportAsync(byte[] reportDataPayload)
     {
+        // Build the 64-byte user data: SHA256(payload) in bytes 0-31,
+        // zeros in bytes 32-63. The CVM attestation agent wraps this
+        // into a user data document (adding gpuCount, version) and
+        // hashes the entire document into the SNP report_data.
+        var payloadHash = SHA256.HashData(reportDataPayload);
+        var userData = new byte[64];
+        Array.Copy(payloadHash, userData, 32);
+
         using var response = await CvmAttestationAgentClient.PostAsync(
             "/snp/attest",
             JsonContent.Create(new
             {
                 nonce = TpmQuoteNonce,
-
-                // SNP report_data is 64 bytes: SHA-256(reportData) (32 bytes) + 32 zero bytes.
-                reportData = Convert.ToBase64String(
-                    SHA256.HashData(reportData).Concat(new byte[32]).ToArray())
+                reportData = Convert.ToBase64String(userData)
             }));
         if (!response.IsSuccessStatusCode)
         {

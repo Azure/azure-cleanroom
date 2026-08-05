@@ -2805,6 +2805,8 @@ namespace httplib
         return "Proxy connection failed";
       case Error::Unknown:
         return "Unknown";
+      case Error::SSLPeerCouldBeClosed_:
+        return "SSL peer could be closed";
       default:
         break;
     }

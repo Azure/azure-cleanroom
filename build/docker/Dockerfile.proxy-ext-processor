@@ -1,5 +1,5 @@
 # Image for building the sidecar executable.
-FROM mcr.microsoft.com/oss/go/microsoft/golang:1.25.9 AS build-image
+FROM mcr.microsoft.com/oss/go/microsoft/golang:1.26.4 AS build-image
 
 # Install prerequisities.
 RUN apt-get update -y && \
@@ -21,7 +21,8 @@ COPY .golangci.yml .
 
 
 # Copy the sidecar source.
-COPY src/internal src/internal
+COPY src/internal/configuration src/internal/configuration
+COPY src/internal/filter src/internal/filter
 COPY src/proxy-ext-processor src/proxy-ext-processor
 
 # Build the sidecar.
@@ -36,7 +37,7 @@ WORKDIR /app/src/
 RUN go test ./...
 
 # Optimize the final image size by creating an image with only the sidecar executable.
-FROM mcr.microsoft.com/mirror/docker/library/ubuntu:22.04
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:24.04
 
 # Install prerequisities.
 RUN apt-get -y update && \

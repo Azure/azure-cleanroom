@@ -6,7 +6,7 @@ import {
   ccf
 } from "@microsoft/ccf-app/global";
 import { Base64 } from "js-base64";
-import { getIssuerSigningKey } from "./oidc/signingkey";
+import { getIssuerSigningKey } from "./oidc/signing-key";
 import { GetTokenRequest, GetTokenResponse } from "../models";
 import { ErrorResponse } from "../utils/ErrorResponse";
 import { parseRequestQuery, toDelegatePolicyKey } from "../utils/utils";

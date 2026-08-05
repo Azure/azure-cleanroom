@@ -68,7 +68,7 @@ USER spark
 ENV PYTHONUNBUFFERED=1
 
 # Need to add this environment variable so the relative imports in the Python code work correctly.
-ENV PYTHONPATH="${PYTHONPATH}:/app/src/analytics_workload"
+ENV PYTHONPATH="/app/src/analytics_workload"
 
 # We will override the entrypoint of the spark image with our own script.
 # This script will wait for all the mount points to be available and then call the original

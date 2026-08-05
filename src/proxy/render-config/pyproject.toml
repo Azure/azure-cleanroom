@@ -1,0 +1,16 @@
+[project]
+name = "render-config"
+version = "0.1.0"
+description = "Envoy proxy configuration renderer for cleanroom"
+requires-python = ">=3.10"
+dependencies = [
+    "jinja2==3.1.6",
+    "pydantic==2.11.7",
+]
+
+[project.scripts]
+render_config = "render_config.main:main"
+
+[build-system]
+requires = ["uv_build>=0.9.3,<0.10.0"]
+build-backend = "uv_build"

@@ -1,5 +1,8 @@
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
+
+RUN apk --no-cache add curl
+RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.11.0
 
 WORKDIR /app
 
@@ -7,22 +10,46 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
+COPY .golangci.yml .
+
 # Copy only the Go source files needed for the build
 COPY src/cvm/cmd/cvm-attestation-verifier/ ./src/cvm/cmd/cvm-attestation-verifier/
 COPY src/cvm/pkg/ ./src/cvm/pkg/
 
-# Build the binary
+# Lint and build the binary
+RUN golangci-lint run -v -c .golangci.yml ./src/cvm/...
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /cvm-attestation-verifier ./src/cvm/cmd/cvm-attestation-verifier
 
-# Runtime stage
-FROM alpine:3.19
+# NVAT CLI build stage.
+FROM ubuntu:24.04 AS nvat-builder
 
-RUN apk --no-cache add ca-certificates
+COPY build/docker/install-nvat.sh /tmp/install-nvat.sh
+COPY build/docker/NVAT_REF /tmp/NVAT_REF
+
+RUN chmod +x /tmp/install-nvat.sh && /tmp/install-nvat.sh /tmp/NVAT_REF
+
+# Runtime stage — requires glibc because nvattest/libnvat are built against it.
+FROM ubuntu:24.04
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libstdc++6 \
+        libxml2 \
+        zlib1g && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy the binary from builder
+# Copy the verifier and pinned NVAT runtime.
 COPY --from=builder /cvm-attestation-verifier /app/cvm-attestation-verifier
+COPY --from=nvat-builder /usr/local/bin/nvattest /usr/local/bin/nvattest
+COPY --from=nvat-builder /usr/local/lib/libnvat.so.1.2.0 /usr/local/lib/
+
+RUN ln -s libnvat.so.1.2.0 /usr/local/lib/libnvat.so.1 && \
+    ln -s libnvat.so.1 /usr/local/lib/libnvat.so && \
+    ldconfig
 
 # Expose the default port
 EXPOSE 8901

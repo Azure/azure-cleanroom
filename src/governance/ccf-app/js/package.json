@@ -11,7 +11,7 @@
     "node": ">=14"
   },
   "dependencies": {
-    "@microsoft/ccf-app": "^6.0.26",
+    "@microsoft/ccf-app": "^7.0.2",
     "js-base64": "^3.7.8"
   },
   "devDependencies": {
@@ -19,6 +19,7 @@
     "@rollup/plugin-commonjs": "^26.0.3",
     "@rollup/plugin-node-resolve": "^15.3.1",
     "@rollup/plugin-typescript": "^11.1.6",
+    "@types/node": "^20.19.40",
     "del-cli": "^5.1.0",
     "eslint": "^8.57.1",
     "globals": "^15.15.0",

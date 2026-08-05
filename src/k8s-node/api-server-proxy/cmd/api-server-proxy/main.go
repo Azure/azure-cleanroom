@@ -27,6 +27,9 @@ func run() int {
 	flag.StringVar(&cfg.PolicyVerificationCert, "policy-verification-cert", "", "Path to public key certificate for verifying pod policy signatures (optional)")
 	flag.BoolVar(&cfg.LogRequests, "log-requests", true, "Log all proxied requests")
 	flag.BoolVar(&cfg.LogPodPayloads, "log-pod-payloads", false, "Log full pod payloads for pod creation requests")
+	flag.BoolVar(&cfg.Insecure, "insecure", false, "Bypass pod policy verification and admit all pods (WARNING: insecure)")
+	flag.IntVar(&cfg.RewriteKubeletPort, "rewrite-kubelet-port", 0,
+		"Rewrite kubelet port in node status updates to this value (0 = disabled)")
 	flag.Parse()
 
 	if cfg.KubeconfigPath == "" {
@@ -42,28 +45,35 @@ func run() int {
 	}
 
 	// Create admission controller
-	var controllers []admission.Controller
-
-	// Add pod policy verification controller if configured
-	if cfg.PolicyVerificationCert != "" {
-		policyController, err := admission.NewPolicyVerificationController(cfg.PolicyVerificationCert)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading policy verification cert: %v\n", err)
-			return 1
-		}
-		controllers = append(controllers, policyController)
-	}
-
-	// Build the final admission controller
 	var admissionController admission.Controller
-	if len(controllers) == 0 {
-		// Default to allowing all pods but logging them
+
+	if cfg.Insecure {
+		fmt.Fprintln(os.Stderr, "WARNING: Insecure mode enabled — all pods will be admitted without policy verification")
 		admissionController = admission.NewLoggingController()
-	} else if len(controllers) == 1 {
-		admissionController = controllers[0]
 	} else {
-		// Chain multiple controllers together
-		admissionController = admission.NewChainController(controllers...)
+		var controllers []admission.Controller
+
+		// Add pod policy verification controller if configured
+		if cfg.PolicyVerificationCert != "" {
+			policyController, err := admission.NewPolicyVerificationController(
+				cfg.PolicyVerificationCert)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error loading policy verification cert: %v\n", err)
+				return 1
+			}
+			controllers = append(controllers, policyController)
+		}
+
+		// Build the final admission controller
+		if len(controllers) == 0 {
+			// Default to allowing all pods but logging them
+			admissionController = admission.NewLoggingController()
+		} else if len(controllers) == 1 {
+			admissionController = controllers[0]
+		} else {
+			// Chain multiple controllers together
+			admissionController = admission.NewChainController(controllers...)
+		}
 	}
 
 	// Create and configure proxy
@@ -92,8 +102,12 @@ func run() int {
 	fmt.Printf("  API Server: %s\n", cfg.LoadedKubeConfig.Server)
 	fmt.Printf("  TLS: %v\n", cfg.TLSCertFile != "")
 	fmt.Printf("  Pod Policy Verification: %v\n", cfg.PolicyVerificationCert != "")
+	fmt.Printf("  Insecure Mode: %v\n", cfg.Insecure)
 	fmt.Printf("  Log Requests: %v\n", cfg.LogRequests)
 	fmt.Printf("  Log Pod Payloads: %v\n", cfg.LogPodPayloads)
+	if cfg.RewriteKubeletPort != 0 {
+		fmt.Printf("  Rewrite Kubelet Port: → %d\n", cfg.RewriteKubeletPort)
+	}
 
 	if err := proxy.Run(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running proxy: %v\n", err)

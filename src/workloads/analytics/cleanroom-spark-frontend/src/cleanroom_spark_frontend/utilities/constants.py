@@ -57,22 +57,46 @@ class Constants:
     OTEL_TRACE_CONTEXT_ENV_KEY = "OTEL_TRACE_CONTEXT_BASE64"
 
 
-class JobRecordConstants:
-    """Constants for JobRecord CRD operations."""
+class CrdConstants:
+    """Constants shared by the cleanroom CRD clients (JobRecord, JobEventRecord)."""
 
-    # JobRecord CRD constants
     GROUP = "cleanroom.azure.com"
-    VERSION = "v1alpha1"
-    PLURAL = "jobrecords"
-    KIND = "JobRecord"
-    HISTORY_LIMIT = 20
 
-    # Retry configuration
+    # Retry configuration for optimistic-concurrency (409) conflicts.
     MAX_RETRY_ATTEMPTS = 5
     RETRY_MULTIPLIER = 1.0
     RETRY_MIN_WAIT = 1.0
     RETRY_MAX_WAIT = 5.0
     RETRY_JITTER = 0.5
+
+
+class JobRecordConstants(CrdConstants):
+    """Constants for JobRecord CRD operations."""
+
+    VERSION = "v1alpha1"
+    PLURAL = "jobrecords"
+    KIND = "JobRecord"
+    HISTORY_LIMIT = 20
+
+
+class JobEventRecordConstants(CrdConstants):
+    """Constants for JobEventRecord CRD operations (persisted job events)."""
+
+    VERSION = "v1alpha1"
+    PLURAL = "jobeventrecords"
+    KIND = "JobEventRecord"
+
+    # Label used to group JobEventRecords by the query they belong to, so the
+    # per-query retention sweep can select them. Matches the SparkApplication
+    # tag key so the app's tags can be copied verbatim onto the record.
+    QUERY_ID_LABEL = "query_id"
+
+    # Maximum number of JobEventRecords (one per job run) retained per query.
+    # When a new record is created, older records for the same query beyond this
+    # count are deleted.
+    PER_QUERY_LIMIT = 10
+    MAX_EVENTS_PER_RECORD = 90
+    MAX_EVENT_MESSAGE_CHARS = 15360
 
 
 class SparkMonitoringConstants:

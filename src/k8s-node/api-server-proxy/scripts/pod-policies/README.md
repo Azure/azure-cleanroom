@@ -37,32 +37,37 @@ Each policy JSON follows the per-container structure:
 
 ## How Policies Are Used in Tests
 
-The test script (`scripts/kind/test-pod-policies.sh`) loads these policy files and:
+The Go integration tests (`test/integration/pod_policy_test.go`) load these policy
+files and:
 
-1. Compacts the JSON (removes whitespace, sorts keys)
-2. Base64-encodes the compacted JSON
-3. Signs the base64 string using `policy-signing-tool.sh`
-4. Creates pod YAML with the policy and signature as annotations
+1. Compact the JSON (removes whitespace, sorts keys)
+2. Base64-encode the compacted JSON
+3. Sign the base64 string using Go's `crypto/rsa` (RSA-PSS SHA-256)
+4. Create pod YAML with the policy and signature as annotations
 
 ## Test Scenarios
 
 | Test | Policy Used | Pod Spec | Expected |
 |------|-------------|----------|----------|
-| TEST 1: Signed pod | `nginx-pod-policy.json` | nginx:latest (matches) | ALLOWED |
-| TEST 2: Unsigned pod | (none) | nginx:latest | REJECTED |
-| TEST 3: Bad signature | `nginx-pod-policy.json` | nginx:latest (invalid sig) | REJECTED |
-| TEST 4: Image mismatch | `nginx-pod-policy.json` | busybox:latest (mismatch) | REJECTED |
-| TEST 5: Full policy pod | `full-policy-pod-policy.json` | All fields match | ALLOWED |
-| TEST 6: Command mismatch | `full-policy-pod-policy.json` | command: /bin/sh (expects /bin/myapp) | REJECTED |
-| TEST 7: Env mismatch | `full-policy-pod-policy.json` | APP_ENV=development (expects production) | REJECTED |
-| TEST 8: Volume mismatch | `full-policy-pod-policy.json` | mountPath: /etc/config (expects /etc/app) | REJECTED |
+| SignedPod_Allowed | `busybox-pod-policy.json` | busybox:latest (matches) | ALLOWED |
+| UnsignedPod_Rejected | (none) | busybox:latest | REJECTED |
+| BadSignature_Rejected | `busybox-pod-policy.json` | busybox:latest (invalid sig) | REJECTED |
+| ImageMismatch_Rejected | `busybox-pod-policy.json` | nginx:latest (mismatch) | REJECTED |
+| FullPolicy_Allowed | `full-policy-pod-policy.json` | All fields match | ALLOWED |
+| CommandMismatch_Rejected | `full-policy-pod-policy.json` | command: /bin/sh (expects /bin/myapp) | REJECTED |
+| EnvMismatch_Rejected | `full-policy-pod-policy.json` | APP_ENV=development (expects production) | REJECTED |
+| VolumeMismatch_Rejected | `full-policy-pod-policy.json` | mountPath: /etc/config (expects /etc/app) | REJECTED |
+| FakeK8sMount_Rejected | `nginx-pod-policy.json` | writable kube-api-access mount | REJECTED |
+| Insecure_Allowed | (none) | unsigned pod, --insecure mode | ALLOWED |
 
 ## Running Tests
 
 ```bash
-# From project root
-make test-kind
+# From src/k8s-node/
+make test-integration-kind    # Kind cluster
+make test-integration-aks     # AKS cluster
 
-# Or directly
-./scripts/kind/test-pod-policies.sh
+# Or run just pod policy tests
+go test -tags "kind,integration" -v -timeout 30m \
+  -run "TestPodPolicy" ./test/integration/
 ```

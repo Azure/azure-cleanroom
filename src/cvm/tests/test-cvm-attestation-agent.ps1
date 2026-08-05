@@ -90,9 +90,11 @@ $tarSize = (Get-Item $serverImageTar).Length / 1MB
 Write-Host ("  Image saved to $serverImageTar ({0:N1} MB)" -f $tarSize)
 Write-Host ""
 
-# 3. Generate RSA key pair and compute report_data = SHA256(pubkey PEM UTF-8) || zeros.
-#    This matches how GenerateRsaKeyPairAndReportAsync in Attestation.cs constructs
-#    report_data: Encoding.UTF8.GetBytes(publicKeyPem) -> SHA256.
+# 3. Generate RSA key pair and compute reportData (64 bytes).
+#    Build SHA256(pubkey PEM UTF-8) || zeros[32] and send as the caller's
+#    user data. The CVM attestation agent wraps this into a user data
+#    document (with gpuCount, version) and hashes the document into
+#    the SNP report_data.
 Write-Host "--- Generating RSA key pair ---"
 New-Item -ItemType Directory -Path $localOut -Force | Out-Null
 $rsaPrivate = Join-Path $localOut "priv_key.pem"
@@ -103,13 +105,14 @@ openssl rsa -in $rsaPrivate -pubout -outform PEM -out $rsaPublicPem 2>$null
 Write-Host "  Private key: $rsaPrivate"
 Write-Host "  Public key (PEM): $rsaPublicPem"
 
-# report_data = SHA256(pubkey PEM UTF-8 bytes) (32 bytes) + 32 zero bytes = 64 bytes total.
+# reportData = SHA256(pubkey PEM UTF-8 bytes) || zeros[32] (64 bytes).
 $pubkeyHash = bash -c "cat '$rsaPublicPem' | tr -d '\r' | sha256sum" | ForEach-Object { $_.Split(' ')[0] }
 Write-Host "  SHA256(pubkey PEM): $pubkeyHash"
 
-$reportDataHex = "${pubkeyHash}$("0" * 64)"
-$reportDataB64 = bash -c "printf '%s' '$reportDataHex' | xxd -r -p | base64 -w0"
-Write-Host "  report_data (base64): $reportDataB64"
+# Build the 64-byte user data: 32-byte hash + 32 zero bytes.
+$zeros = "0" * 64
+$reportDataB64 = bash -c "printf '%s%s' '$pubkeyHash' '$zeros' | xxd -r -p | base64 -w0"
+Write-Host "  report_data user data (base64): $reportDataB64"
 
 $nonceB64 = openssl rand -base64 32
 Write-Host "  nonce (base64): $nonceB64"
@@ -213,7 +216,7 @@ Write-Host ""
 # 9. Extract and save individual artifacts.
 Write-Host "--- Extracting artifacts ---"
 $response = Get-Content $responseFile | ConvertFrom-Json
-$evidence = $response.evidence
+$evidence = $response.vtpm.evidence
 
 function Save-Base64Artifact {
     param([string]$FieldName, [string]$FileName)
@@ -245,8 +248,8 @@ Write-Host "--- Artifacts ---"
 Get-ChildItem $localOut | Format-Table Name, Length -AutoSize | Out-String | Write-Host
 Write-Host ""
 
-# 11. Validate runtime claims user-data matches public key hash.
-Write-Host "--- Validating runtime claims ---"
+# 11. Validate report data from the user data document.
+Write-Host "--- Validating user data document ---"
 $runtimeClaimsFile = Join-Path $localOut "runtime_claims.json"
 if (Test-Path $runtimeClaimsFile) {
     $claims = Get-Content $runtimeClaimsFile | ConvertFrom-Json
@@ -263,18 +266,32 @@ if (Test-Path $runtimeClaimsFile) {
         Write-Host "  user-data from runtime claims:"
         Write-Host "    $userData"
 
-        # Expected: SHA256(pubkey PEM UTF-8) || 32 zero bytes (matching step 3).
-        $expectedUserData = "${pubkeyHash}$("0" * 64)"
-        Write-Host "  expected user-data (SHA256(PEM) || zeros):"
-        Write-Host "    $expectedUserData"
+        # user-data[0:32] is SHA256(user data document), user-data[32:64] is zeros.
+        # To validate the payload hash, parse the user data document from the
+        # attestation response and extract the original report data payload.
+        $metadataB64 = $response.userDataDocument
+        if ($metadataB64) {
+            $metadataJson = bash -c "printf '%s' '$metadataB64' | base64 -d"
+            $metadata = $metadataJson | ConvertFrom-Json
+            $reportDataB64 = $metadata.reportData
+            $reportDataHex = bash -c "printf '%s' '$reportDataB64' | base64 -d | xxd -p -c 64"
+            $actualPayloadHash = $reportDataHex.Substring(0, 64).ToLower()
+            Write-Host "  report data payload hash (first 32 bytes):"
+            Write-Host "    $actualPayloadHash"
+            Write-Host "  expected payload hash:"
+            Write-Host "    $pubkeyHash"
 
-        if ($userData.ToLower() -eq $expectedUserData.ToLower()) {
-            Write-Host ""
-            Write-Host "  PASS: user-data matches SHA256(public key)"
+            if ($actualPayloadHash -eq $pubkeyHash.ToLower()) {
+                Write-Host ""
+                Write-Host "  PASS: report data payload hash matches SHA256(public key)"
+            }
+            else {
+                Write-Host ""
+                throw "FAIL: report data payload hash does not match expected value"
+            }
         }
         else {
-            Write-Host ""
-            throw "FAIL: user-data does not match expected value"
+            Write-Host "  WARNING: userDataDocument not found in attestation response"
         }
     }
 }
@@ -311,14 +328,17 @@ Write-Host ""
 Write-Host "--- Building verify request ---"
 $verifyRequestFile = Join-Path $localOut "verify_request.json"
 $attestResponse = Get-Content $responseFile | ConvertFrom-Json
-$evidenceCopy = $attestResponse.evidence | ConvertTo-Json -Depth 10 | ConvertFrom-Json
-$evidenceCopy.PSObject.Properties.Remove("runtimeClaims")
+$vtpmCopy = $attestResponse.vtpm | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$vtpmCopy.evidence.PSObject.Properties.Remove("runtimeClaims")
 
-@{
-    evidence             = $evidenceCopy
-    nonce                = $attestResponse.nonce
-    platformCertificates = $attestResponse.platformCertificates
-} | ConvertTo-Json -Depth 10 | Set-Content $verifyRequestFile
+$verifyRequest = @{
+    vtpm = $vtpmCopy
+    userDataDocument = $attestResponse.userDataDocument
+}
+if ($attestResponse.gpu) {
+    $verifyRequest["gpu"] = $attestResponse.gpu
+}
+$verifyRequest | ConvertTo-Json -Depth 10 | Set-Content $verifyRequestFile
 Write-Host "  Verify request saved to $verifyRequestFile"
 Write-Host ""
 

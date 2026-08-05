@@ -1,9 +1,4 @@
 {
-  "enclave": {
-    "file": "/usr/lib/ccf/libjs_cleanroom.snp.so",
-    "platform": "SNP",
-    "type": "Release"
-  },
   "network": {
     "node_to_node_interface": {
       "bind_address": "0.0.0.0:8081",
@@ -38,7 +33,7 @@
         "/app/constitution/default/actions.js"
       ],
       "members": [],
-      "initial_service_certificate_validity_days": 30
+      "initial_service_certificate_validity_days": 180
     }
   },
   "attestation": {

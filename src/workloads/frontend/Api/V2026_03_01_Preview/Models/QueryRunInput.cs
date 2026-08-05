@@ -20,4 +20,9 @@ public class QueryRunInput : QueryRunInputBase
     /// (returns SKU settings without execution).
     /// </summary>
     public bool DryRun { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the Spark scale SKU for the query run.
+    /// </summary>
+    public string? ScaleSku { get; set; } = "small";
 }

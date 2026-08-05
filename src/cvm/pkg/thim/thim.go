@@ -57,7 +57,7 @@ func FetchPlatformCertificates() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("THIM HTTP GET: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // Best-effort close on HTTP response body.
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

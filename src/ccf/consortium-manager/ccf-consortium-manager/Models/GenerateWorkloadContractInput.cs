@@ -25,6 +25,8 @@ public class GenerateWorkloadContractInput
 
     public required string PolicyCreationOption { get; set; }
 
+    public bool TelemetryCollectionEnabled { get; set; }
+
     public void Validate()
     {
         if (string.IsNullOrEmpty(this.CcfEndpoint))

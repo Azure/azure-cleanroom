@@ -1,0 +1,12 @@
+output-dir: "{cwd}/generated"
+emit:
+  - "@typespec/openapi3"
+  - "@typespec/http-client-csharp"
+options:
+  "@typespec/openapi3":
+    emitter-output-dir: "{output-dir}/schema"
+    openapi-versions:
+      - 3.1.0
+  "@typespec/http-client-csharp":
+    emitter-output-dir: "{output-dir}/client/csharp"
+    package-name: "Microsoft.Ccf.Client"

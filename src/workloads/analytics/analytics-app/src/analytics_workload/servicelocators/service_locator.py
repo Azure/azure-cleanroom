@@ -1,5 +1,6 @@
-from analytics_workload.adapters.adapters_factory.adapter_factory import AdapterFactory
 from dependency_injector import containers, providers
+
+from analytics_workload.adapters.adapters_factory.adapter_factory import AdapterFactory
 
 
 class ServiceLocator(containers.DeclarativeContainer):

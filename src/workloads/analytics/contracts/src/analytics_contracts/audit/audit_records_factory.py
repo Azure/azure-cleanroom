@@ -24,23 +24,29 @@ class AuditRecordFactory:
 
     @staticmethod
     def DatasetLoadCompleted(
-        source: str, dataset_name: str, job_id: str
+        source: str, dataset_name: str, job_id: str, row_count: str
     ) -> AuditRecord:
         """
         Create DATASET_LOAD_COMPLETED event.
 
-        Message: Dataset: {dataset_name} load completed successfully | job id: {job_id}
+        Message: Dataset: {dataset_name} load completed successfully | rows: {row_count} | job id: {job_id}
         """
         return AuditRecord(
             id=3001,
             name=AuditRecordType.DATASET_LOAD_COMPLETED.value,
-            message="Dataset: {dataset_name} load completed successfully | job id: {job_id}",
+            message="Dataset: {dataset_name} load completed successfully | rows: {row_count} | job id: {job_id}",
             source=source,
-            parameters={"dataset_name": dataset_name, "job_id": job_id},
+            parameters={
+                "dataset_name": dataset_name,
+                "job_id": job_id,
+                "row_count": row_count,
+            },
         )
 
     @staticmethod
-    def DatasetLoadFailed(source: str, dataset_name: str, job_id: str) -> AuditRecord:
+    def DatasetLoadFailed(
+        source: str, dataset_name: str, job_id: str, reason: str
+    ) -> AuditRecord:
         """
         Create DATASET_LOAD_FAILED event.
 
@@ -51,7 +57,10 @@ class AuditRecordFactory:
             name=AuditRecordType.DATASET_LOAD_FAILED.value,
             message="Dataset: {dataset_name} load failed | job id: {job_id}",
             source=source,
-            parameters={"dataset_name": dataset_name, "job_id": job_id},
+            parameters={
+                "dataset_name": dataset_name,
+                "job_id": job_id,
+            },
         )
 
     @staticmethod

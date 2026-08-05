@@ -74,6 +74,7 @@ public class AciConstants
         public const string SparkFrontend = "cleanroom-spark-frontend";
         public const string InferencingAgent = "kserve-inferencing-agent";
         public const string InferencingFrontend = "kserve-inferencing-frontend";
+        public const string OhttpGateway = "ohttp-gateway";
         public const string Skr = "skr";
         public const string OtelCollector = "otel-collector";
     }

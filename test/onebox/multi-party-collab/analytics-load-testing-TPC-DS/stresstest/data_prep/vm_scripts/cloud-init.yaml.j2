@@ -1,0 +1,44 @@
+#cloud-config
+write_files:
+  - path: /etc/tpcds/tpcds.env
+    permissions: "0644"
+    content: |
+{% for key, value in env | dictsort %}
+      {{ key }}='{{ value }}'
+{% endfor %}
+{% for step in step_list %}
+  - path: /usr/local/bin/tpcds-steps/{{ step }}.sh
+    permissions: "0755"
+    content: |
+{% filter indent(width=6, first=True) %}
+{% include step ~ '.sh' %}
+{% endfilter %}
+{% endfor %}
+  - path: /usr/local/bin/tpcds-datagen.sh
+    permissions: "0755"
+    content: |
+{% filter indent(width=6, first=True) %}
+{% include 'tpcds-datagen.sh.j2' %}
+{% endfilter %}
+  - path: /usr/local/bin/tpcds-export-status.sh
+    permissions: "0700"
+    content: |
+{% filter indent(width=6, first=True) %}
+{% include 'tpcds-export-status.sh.j2' %}
+{% endfilter %}
+  - path: /etc/systemd/system/tpcds-datagen.service
+    permissions: "0644"
+    content: |
+{% filter indent(width=6, first=True) %}
+{% include 'tpcds-datagen.service.j2' %}
+{% endfilter %}
+  - path: /etc/systemd/system/tpcds-export-status.service
+    permissions: "0644"
+    content: |
+{% filter indent(width=6, first=True) %}
+{% include 'tpcds-export-status.service.j2' %}
+{% endfilter %}
+runcmd:
+  - systemctl daemon-reload
+  - systemctl enable --now --no-block tpcds-datagen.service
+  - systemctl enable --now --no-block tpcds-export-status.service

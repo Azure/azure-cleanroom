@@ -1,0 +1,554 @@
+# =============================================================================
+# REFERENCE ONLY — NOT DEPLOYED
+#
+# This file is retained as documentation of the GPU Operator Helm chart
+# configuration that was used before deprecation (Stages 1–9). It is no
+# longer packaged or deployed. All GPU components are now host-managed
+# via install-gpu-runtime.sh.
+# =============================================================================
+#
+# Original GPU Operator values for Azure Clean Room (CVM + H100 CC mode).
+#
+# Every value is explicitly listed — nothing is left implicit. All nested
+# defaults (images, versions, resources, etc.) are pinned from the upstream
+# chart v26.3.1 so this file is fully self-contained.
+#
+# Chart version: v26.3.1 (was pinned in Helm.cs:InstallGpuOperatorChart)
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# PLATFORM AND INFRASTRUCTURE
+# ---------------------------------------------------------------------------
+
+# Not running on OpenShift. Upstream default: false.
+platform:
+  openshift: false
+
+# Host filesystem paths used by GPU Operator components to interact with
+# the host. driverInstallDir is where the operator expects driver
+# libraries — since we install the driver manually, this must match the
+# actual host driver location.
+hostPaths:
+  rootFS: "/"
+  driverInstallDir: "/run/nvidia/driver"
+
+# MIG strategy — set to "none" because MIG is not supported on the
+# confidential NCC SKU (MIG not supported in CC/SPT mode).
+# Device plugin and GFD are host-managed with migStrategy: "none" in
+# /etc/nvidia/device-plugin-config.yaml and /etc/nvidia/gfd-config.yaml.
+mig:
+  strategy: none
+
+# No extra Kubernetes manifests to deploy alongside the chart.
+extraObjects: []
+
+# ---------------------------------------------------------------------------
+# ENABLED COMPONENTS
+# ---------------------------------------------------------------------------
+
+# Container Device Interface — standardized device injection used by the
+# normal container GPU path. CDI specs are generated in /var/run/cdi by the
+# host-installed nvidia-container-toolkit (see install-gpu-runtime.sh).
+# NRI plugin (nriPluginEnabled) is supported by the flex node's containerd
+# 2.0.4 (/run/nri/nri.sock exists), but enabling it removes the containerd
+# nvidia runtime drop-in (99-nvidia.toml) and replaces it with NRI-based
+# injection. This broke the GPU Operator's validator pod which depended on
+# runtimeClassName: nvidia (which requires the drop-in handler).
+# GPU Operator is now fully removed (Stage 9), so the validator blocker
+# is gone. NRI remains disabled — the host runtime uses nvidia-ctk's
+# containerd drop-in config, not NRI-based injection.
+cdi:
+  enabled: true
+  nriPluginEnabled: false
+
+# DCGM Exporter — no longer managed by GPU Operator. Installed directly
+# on the host via install-gpu-runtime.sh as a systemd service. The host
+# service runs dcgm-exporter on :9400 with the default counters CSV and
+# -k flag for per-pod GPU attribution via kubelet PodResources API.
+# Config at /etc/dcgm-exporter/default-counters.csv.
+dcgmExporter:
+  enabled: false
+  repository: nvcr.io/nvidia/k8s
+  image: dcgm-exporter
+  version: "4.5.1-4.8.0-distroless"
+  imagePullPolicy: IfNotPresent
+  env: []
+  resources: {}
+  hostPID: false
+  hostNetwork: false
+  service:
+    internalTrafficPolicy: Cluster
+  serviceMonitor:
+    enabled: false
+    interval: 15s
+    honorLabels: false
+    additionalLabels: {}
+    relabelings: []
+
+# NVIDIA Device Plugin — no longer managed by GPU Operator. Installed
+# directly on the host via install-gpu-runtime.sh as a systemd service.
+# The host service runs nvidia-device-plugin with a config file at
+# /etc/nvidia/device-plugin-config.yaml, registering nvidia.com/gpu
+# resources with kubelet via the device plugin gRPC socket.
+devicePlugin:
+  enabled: false
+  repository: nvcr.io/nvidia
+  image: k8s-device-plugin
+  version: "v0.19.0"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  args: []
+  env: []
+  resources: {}
+  config:
+    create: false
+    name: ""
+    default: ""
+    data: {}
+  mps:
+    root: "/run/nvidia/mps"
+
+# Node Feature Discovery — no longer managed by GPU Operator. GFD labels
+# are now applied directly to the node by the host-managed GPU label
+# reconciler (gpu-label-reconciler.timer), which reads GFD's file output
+# and patches node labels via the Kubernetes API using the kubelet's
+# kubeconfig credentials directly (no kubectl dependency). The NFD
+# worker DaemonSet is no longer needed on flex nodes.
+nfd:
+  enabled: false
+  nodefeaturerules: false
+
+# NVIDIA Container Toolkit — no longer managed by GPU Operator. Installed
+# directly on the host via install-gpu-runtime.sh during flex node
+# provisioning. The host toolkit configures containerd with the nvidia
+# runtime and generates CDI specs via nvidia-cdi-refresh.
+toolkit:
+  enabled: false
+  repository: nvcr.io/nvidia/k8s
+  image: container-toolkit
+  version: "v1.19.0"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  resources: {}
+  installDir: "/usr/local/nvidia"
+
+# ---------------------------------------------------------------------------
+# DISABLED COMPONENTS
+# ---------------------------------------------------------------------------
+
+# CC Manager — toggles GPU Confidential Computing mode on/off via a
+# DaemonSet. Not required because CC mode is set once at VM provisioning
+# time by install-gpu-driver.sh (nvidia-smi conf-compute -srs 1). GPU
+# attestation evidence is collected directly from within the inference pod
+# by the cvm-attestation-agent sidecar using the NVIDIA Attestation SDK,
+# which accesses NVML via the mounted host driver libraries.
+# Upstream default: enabled.
+ccManager:
+  enabled: false
+  defaultMode: "on"
+  repository: nvcr.io/nvidia/cloud-native
+  image: k8s-cc-manager
+  version: "v0.3.0"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env:
+    - name: CC_CAPABLE_DEVICE_IDS
+      value: "0x2339,0x2331,0x2330,0x2324,0x2322,0x233d"
+  resources: {}
+
+# Standalone DCGM hostengine — a separate pod running the DCGM daemon.
+# Not required because dcgmExporter uses its embedded nv-hostengine which
+# is simpler and avoids a separate pod dependency.
+dcgm:
+  enabled: false
+  repository: nvcr.io/nvidia/cloud-native
+  image: dcgm
+  version: "4.5.2-1-ubuntu22.04"
+  imagePullPolicy: IfNotPresent
+  args: []
+  env: []
+  resources: {}
+
+# GPU driver — auto-installs NVIDIA driver via a DaemonSet. Not used
+# because the driver is installed manually on the flex node VM
+# (install-gpu-driver.sh). CC mode requires LKCA config and initramfs
+# rebuild before driver install, which must happen at VM provisioning
+# time before Kubernetes starts.
+# Upstream default: enabled.
+driver:
+  enabled: false
+  nvidiaDriverCRD:
+    enabled: false
+    deployDefaultCR: true
+    driverType: gpu
+    nodeSelector: {}
+  kernelModuleType: "auto"
+  usePrecompiled: false
+  repository: nvcr.io/nvidia
+  image: driver
+  version: "580.126.20"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  startupProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 60
+    failureThreshold: 120
+  rdma:
+    enabled: false
+    useHostMofed: false
+  upgradePolicy:
+    autoUpgrade: true
+    maxParallelUpgrades: 1
+    maxUnavailable: "25%"
+    waitForCompletion:
+      timeoutSeconds: 0
+      podSelector: ""
+    gpuPodDeletion:
+      force: false
+      timeoutSeconds: 300
+      deleteEmptyDir: false
+    drain:
+      enable: false
+      force: false
+      podSelector: ""
+      timeoutSeconds: 300
+      deleteEmptyDir: false
+  manager:
+    repository: nvcr.io/nvidia/cloud-native
+    image: k8s-driver-manager
+    version: "v0.10.0"
+    imagePullPolicy: IfNotPresent
+    env: []
+  env: []
+  resources: {}
+  repoConfig:
+    configMapName: ""
+  certConfig:
+    name: ""
+  licensingConfig:
+    secretName: ""
+    nlsEnabled: true
+  virtualTopology:
+    config: ""
+  kernelModuleConfig:
+    name: ""
+  secretEnv: ""
+
+# GDRCopy — CPU-driven low-latency GPU memory copy library. Creates
+# user-space mappings of GPU BAR memory for fast CPU↔GPU data movement.
+# ⛔ BLOCKED: Module is unsigned and rejected by Secure Boot. Canonical
+# does not ship signed gdrcopy modules for -azure-fde kernels. Azure
+# does not persist UEFI/MOK variables through image generalization.
+gdrcopy:
+  enabled: false
+  repository: nvcr.io/nvidia/cloud-native
+  image: gdrdrv
+  version: "v2.5.2"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  args: []
+
+# GPUDirect Storage — enables direct DMA between storage and GPU memory,
+# bypassing CPU. Can speed up model loading from NVMe/NFS into VRAM.
+# ⛔ BLOCKED: GPU Operator sidecar (nvidia-fs:2.27.3) fails to compile on
+# kernel 6.17 azure-fde. Host build (v2.28.4+) compiles but requires MOK
+# enrollment for module signing. Azure does not persist UEFI variables
+# through image generalization, making this unautomatable for image-prep.
+gds:
+  enabled: false
+  repository: nvcr.io/nvidia/cloud-native
+  image: nvidia-fs
+  version: "2.27.3"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  args: []
+
+# GPU Feature Discovery — no longer managed by GPU Operator. Installed
+# directly on the host via install-gpu-runtime.sh as a systemd service.
+# The host service writes GPU labels (model, memory, CUDA version) to
+# /etc/kubernetes/node-feature-discovery/features.d/gfd. The GPU label
+# reconciler reads this file and applies labels to the node via the
+# Kubernetes API. Config at /etc/nvidia/gfd-config.yaml.
+gfd:
+  enabled: false
+  repository: nvcr.io/nvidia
+  image: k8s-device-plugin
+  version: "v0.19.0"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  resources: {}
+
+# Kata Manager — manages Kata container runtime for sandboxed GPU
+# workloads. Not used; GPUs are accessed directly by containers.
+kataManager:
+  enabled: false
+  config: {}
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  resources: {}
+
+# Kata Sandbox Device Plugin — exposes GPUs to Kata containers.
+# Not used; no Kata-based GPU workloads.
+# Upstream default: enabled.
+kataSandboxDevicePlugin:
+  enabled: false
+  repository: nvcr.io/nvidia/cloud-native
+  image: nvidia-sandbox-device-plugin
+  version: "v0.0.2"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  args: []
+  env: []
+  resources: {}
+
+# MIG Manager — manages Multi-Instance GPU partitioning. ⛔ MIG is not
+# supported on the confidential NCC SKU in CC/SPT mode (see
+# CC/SPT mode on confidential NCC SKUs). GPU sharing uses MPS instead.
+# Upstream default: enabled.
+migManager:
+  enabled: false
+  repository: nvcr.io/nvidia/cloud-native
+  image: k8s-mig-manager
+  version: "v0.14.0"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  resources: {}
+  config:
+    default: "all-disabled"
+    create: false
+    name: ""
+    data: {}
+  gpuClientsConfig:
+    name: ""
+
+# Node Status Exporter — no longer managed by GPU Operator. Replaced by
+# a lightweight GPU health exporter installed on the host via
+# install-gpu-runtime.sh as a systemd service. The host service runs a
+# Python script on :8000/metrics that checks driver, toolkit, CUDA, and
+# device plugin status locally — no Kubernetes API access needed. Metric
+# names renamed from gpu_operator_node_* to gpu_node_* (Grafana dashboard
+# updated to match).
+nodeStatusExporter:
+  enabled: false
+  repository: nvcr.io/nvidia
+  image: gpu-operator
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  resources: {}
+
+# Pod Security Admission — configures PSA labels on the GPU Operator
+# namespace. Not used; pod security is managed separately.
+psa:
+  enabled: false
+
+# Sandbox Device Plugin — KubeVirt GPU device plugin for VM-based GPU
+# passthrough. Not used; GPUs are accessed directly by containers, not
+# via KubeVirt VMs.
+# Upstream default: enabled.
+sandboxDevicePlugin:
+  enabled: false
+  repository: nvcr.io/nvidia
+  image: kubevirt-gpu-device-plugin
+  version: "v1.5.0"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  args: []
+  env: []
+  resources: {}
+
+# Sandbox Workloads — enables running GPU workloads inside KubeVirt VMs
+# or Kata containers. Not used; bare-metal container GPU access only.
+sandboxWorkloads:
+  enabled: false
+  defaultWorkload: "container"
+  mode: "kubevirt"
+
+# VFIO Manager — manages VFIO-PCI driver binding for GPU passthrough to
+# VMs or sandboxed workloads. Not used; GPUs are accessed directly by
+# containers via the NVIDIA runtime, not passed through to VMs.
+# Upstream default: enabled.
+vfioManager:
+  enabled: false
+  repository: nvcr.io/nvidia/cloud-native
+  image: k8s-driver-manager
+  version: "v0.10.0"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  resources: {}
+  driverManager:
+    repository: nvcr.io/nvidia/cloud-native
+    image: k8s-driver-manager
+    version: "v0.10.0"
+    imagePullPolicy: IfNotPresent
+    env: []
+
+# vGPU Device Manager — manages virtual GPU device types and
+# configurations. Not used; bare-metal GPU access only, no vGPU.
+# Upstream default: enabled.
+vgpuDeviceManager:
+  enabled: false
+  repository: nvcr.io/nvidia/cloud-native
+  image: vgpu-device-manager
+  version: "v0.4.2"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  config:
+    name: ""
+    default: "default"
+
+# vGPU Manager — NVIDIA Virtual GPU manager for sharing physical GPUs
+# across VMs. Not used; bare-metal GPU access only.
+vgpuManager:
+  enabled: false
+  repository: ""
+  image: vgpu-manager
+  version: ""
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  resources: {}
+  driverManager:
+    repository: nvcr.io/nvidia/cloud-native
+    image: k8s-driver-manager
+    version: "v0.10.0"
+    imagePullPolicy: IfNotPresent
+    env: []
+  kernelModuleConfig:
+    name: ""
+
+# ---------------------------------------------------------------------------
+# OPERATOR AND VALIDATOR INFRASTRUCTURE
+# ---------------------------------------------------------------------------
+
+# GPU Operator controller pod configuration. Ran on control-plane nodes.
+# The runtimeClass "nvidia" was created by the operator for GPU workloads.
+operator:
+  repository: nvcr.io/nvidia
+  image: gpu-operator
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  priorityClassName: system-node-critical
+  runtimeClass: nvidia
+  use_ocp_driver_toolkit: false
+  cleanupCRD: false
+  upgradeCRD: true
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Equal"
+      value: ""
+      effect: "NoSchedule"
+  annotations:
+    openshift.io/scc: restricted-readonly
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 1
+          preference:
+            matchExpressions:
+              - key: "node-role.kubernetes.io/control-plane"
+                operator: In
+                values: [""]
+  logging:
+    timeEncoding: epoch
+    level: info
+    develMode: false
+  resources:
+    limits:
+      cpu: 500m
+      memory: 350Mi
+    requests:
+      cpu: 200m
+      memory: 100Mi
+
+# Validator ran as a DaemonSet on GPU nodes to verify that the GPU stack
+# (driver, runtime, CUDA) was functioning. It was the last GPU Operator
+# component remaining on flex nodes before Stage 9 removed it.
+# The GPU health exporter (Stage 4) now replaces this component's
+# readiness checks. The post-install DaemonSet patching (dnsPolicy,
+# FQDN annotation) has been removed from AksClusterProvider.cs.
+validator:
+  repository: nvcr.io/nvidia
+  image: gpu-operator
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  args: []
+  resources: {}
+  plugin:
+    env: []
+
+# ---------------------------------------------------------------------------
+# NFD SUBCHART CONFIGURATION (DISABLED)
+# NFD is disabled (nfd.enabled: false). GPU labels are applied by the
+# host-managed GPU label reconciler. This configuration is retained for
+# reference in case NFD needs to be temporarily re-enabled for rollback.
+# ---------------------------------------------------------------------------
+
+node-feature-discovery:
+  priorityClassName: system-node-critical
+  gc:
+    enable: true
+    replicaCount: 1
+    serviceAccount:
+      name: node-feature-discovery
+      create: false
+  worker:
+    serviceAccount:
+      name: node-feature-discovery
+      create: false
+    dnsPolicy: Default
+    annotations:
+      kubernetes.azure.com/set-kube-service-host-fqdn: "true"
+    nodeSelector:
+      cleanroom.azure.com/flexnode: "true"
+    tolerations:
+      - key: "pod-policy"
+        operator: "Equal"
+        value: "required"
+        effect: "NoSchedule"
+    config:
+      sources:
+        pci:
+          deviceClassWhitelist:
+            - "02"
+            - "0200"
+            - "0207"
+            - "0300"
+            - "0302"
+          deviceLabelFields:
+            - vendor
+  master:
+    serviceAccount:
+      name: node-feature-discovery
+      create: true
+    config:
+      extraLabelNs:
+        - nvidia.com
+
+# ---------------------------------------------------------------------------
+# GLOBAL DAEMONSET CONFIGURATION
+# ---------------------------------------------------------------------------
+
+# Tolerations that were applied to all GPU Operator DaemonSets (validator
+# was the only one at deprecation time). Does NOT apply to the NFD
+# subchart which has its own tolerations above.
+daemonsets:
+  labels: {}
+  annotations: {}
+  priorityClassName: system-node-critical
+  tolerations:
+    - key: "pod-policy"
+      operator: "Exists"
+      effect: "NoSchedule"
+  updateStrategy: "RollingUpdate"
+  rollingUpdate:
+    maxUnavailable: "1"

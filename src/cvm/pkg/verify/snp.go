@@ -20,8 +20,6 @@ import (
 // ──────────────────────────────────────────────────────────────────────────────
 
 const (
-	snpReportDataOffset  = 0x50 // report_data field (64 bytes)
-	snpReportDataSize    = 64
 	snpSignatureOffset   = 0x2A0 // ECDSA signature (512 bytes)
 	snpSignedRegionEnd   = 0x2A0 // bytes [0, 0x2A0) are signed
 	snpSigComponentBytes = 48    // P-384 = 48 bytes per ECDSA component

@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   cvm-attestation:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=cvm-attestation-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=cvm-attestation-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -41,7 +41,7 @@ jobs:
         run: ./src/cvm/tests/test-cvm-attestation-agent.ps1
 
       - name: Upload generated artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cvm-attestation
           path: ./src/cvm/tests/generated

@@ -1,0 +1,230 @@
+# CodeQL code scanning workflow for azure-cleanroom.
+#
+# This workflow follows the "Create Standalone CodeQL Workflow" pattern
+# recommended in the eng.ms guide "CodeQL on GitHub" for repos whose CI is
+# already on GitHub Actions:
+#   https://eng.ms/docs/coreai/devdiv/one-engineering-system-1es/1es-docs/codeql/github-codeql
+#
+# Why standalone (and not integrated into the existing PR workflows):
+#   Our existing build workflows (pr_build_all.yml etc.) run `dotnet build`
+#   and `go build` inside Docker containers via `pwsh build/*.ps1`. CodeQL's
+#   extractors must attach to the compiler on the runner itself and cannot
+#   trace a build that executes inside a child container. A dedicated
+#   workflow that builds natively on the runner is the only reliable path.
+#
+# Why no autobuild:
+#   The repo has 11 .sln files spread across src/**/ and 5 in-repo go.mod
+#   modules. Autobuild would pick one and miss the rest, producing an
+#   incomplete CodeQL database. We build explicitly below.
+#
+# What happens after this workflow runs:
+#   1. github/codeql-action/analyze uploads the CodeQL database to GitHub.
+#   2. A GitHub App forwards the DB to CodeQL Central (internal to Microsoft),
+#      which runs the full SDL query set including Microsoft-authored SM*
+#      queries (e.g. SM05137 DefaultAzureCredential-in-Production).
+#   3. Findings flow back to this repo's Security -> Code scanning tab and
+#      to the Security Bugs KPI on S360.
+
+name: "CodeQL"
+
+on:
+  push:
+    branches: [ "develop" ]
+  pull_request:
+    branches: [ "develop" ]
+    # Skip PRs that only touch non-code assets.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'samples/**'
+      - 'poc/**'
+      - 'outdated/**'
+      - 'external/**'
+  schedule:
+    # Weekly scheduled scan on develop for SDL compliance
+    # (SDL CA requires a scan of the default branch within 14 days).
+    # Randomized time to avoid collisions with other Microsoft repos.
+    - cron: '17 4 * * 2'
+  # Allow manual runs from the Actions tab - useful for producing a snapshot
+  # immediately after merge to clear the S360 CodeQL.Uploading action item
+  # without waiting for the next push or the weekly cron.
+  workflow_dispatch:
+
+# Cancel superseded PR runs; keep push/schedule runs to completion.
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    # Run on the org's 1ES self-hosted pool - same pool used by
+    # pr_validation.yml/lint. 1ES.JobId includes matrix.language so each of
+    # the 4 language cells gets an independent ephemeral runner slot (they
+    # do NOT serialize on a shared slot).
+    runs-on:
+      - self-hosted
+      - 1ES.Pool=azure-cleanroom-emu
+      - 1ES.JobId=codeql-${{ matrix.language }}-${{ github.run_id }}-${{ github.run_attempt }}
+    timeout-minutes: 120
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 'javascript' analyses both JS and TypeScript sources.
+        language: [ csharp, go, python, javascript ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Do NOT recurse into external/azure-storage-fuse - it is an
+          # upstream project that maintains its own CodeQL configuration.
+          submodules: false
+
+      # ---- Language toolchains (per matrix cell) ------------------------
+
+      - name: Set up .NET
+        if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@v4
+        with:
+          # All csproj files target net10.0 in this repo.
+          dotnet-version: '10.0.x'
+
+      - name: Set up Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          # Highest go directive across in-repo modules is 1.26.3
+          # (src/cleanroom-operator/karpenter-provider). Pin to that
+          # family so every module builds.
+          go-version: '1.26.x'
+          cache: true
+
+      # ---- CodeQL init (must run BEFORE any build step) -----------------
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          # Wires our path_classifiers (test/** excluded from prod alerts).
+          config-file: ./CodeQL.yml
+          # Shift-left: run the extended security query pack on PRs so
+          # developers see findings in the Security tab and PR checks.
+          # The Microsoft SM* SDL queries run separately on CodeQL Central
+          # after the DB is uploaded by the analyze step below.
+          queries: security-extended
+
+      # ---- Custom builds for compiled languages -------------------------
+
+      - name: Build C# solutions
+        if: matrix.language == 'csharp'
+        shell: bash
+        # Builds every .sln under src/. Entries in the `known_broken` map
+        # are still attempted (so CodeQL extracts them once they compile
+        # again) but their failure does NOT fail the step. Any OTHER
+        # solution failure hard-fails the step so regressions cannot
+        # accumulate silently.
+        run: |
+          set -uo pipefail
+
+          # Solutions currently known to fail on a raw hosted-runner build.
+          # Remove entries as owners fix them; value = short reason / WI ref.
+          declare -A known_broken=(
+            # TODO(restapi-async-proxy owner): CS0104 ambiguous OperationStatus
+            # between EntityDataModel.OperationStatus and Controllers.OperationStatus
+            # in src/tools/restapi-async-proxy/IAsyncOperationsManager.cs.
+            ["src/tools/restapi-async-proxy/restapi-async-proxy.sln"]="CS0104 OperationStatus ambiguity"
+          )
+
+          new_failures=()
+          while IFS= read -r -d '' sln; do
+            rel="${sln#./}"
+            if [ -v "known_broken[$rel]" ]; then
+              echo "::group::dotnet build $rel (known-broken: ${known_broken[$rel]})"
+              dotnet build "$rel" -c Release --nologo \
+                || echo "::notice title=Known-broken C# solution still failing (expected)::$rel"
+              echo "::endgroup::"
+              continue
+            fi
+            echo "::group::dotnet build $rel"
+            if ! dotnet build "$rel" -c Release --nologo; then
+              echo "::error title=C# solution build failed::$rel"
+              new_failures+=("$rel")
+            fi
+            echo "::endgroup::"
+          done < <(find src -type f -name '*.sln' -print0)
+
+          if [ "${#new_failures[@]}" -gt 0 ]; then
+            echo "::error::${#new_failures[@]} C# solution(s) failed to build:"
+            printf '::error::  - %s\n' "${new_failures[@]}"
+            echo "::error::Fix the build, or add to 'known_broken' in .github/workflows/codeql.yml with a linked WI."
+            exit 1
+          fi
+
+      - name: Build Go modules
+        if: matrix.language == 'go'
+        shell: bash
+        # Builds every in-repo go.mod. Entries in the `known_broken` map
+        # are still attempted but their failure does NOT fail the step.
+        # Any OTHER module failure hard-fails the step so regressions
+        # cannot accumulate silently.
+        run: |
+          set -uo pipefail
+
+          # Every in-repo go.mod (excludes vendored submodule and test scaffolding).
+          modules=(
+            "."
+            "src/tools/cleanroom-mcp"
+            "src/cleanroom-operator"
+            "src/cleanroom-operator/karpenter-provider"
+            "src/k8s-node/cleanroom-boot"
+          )
+
+          # Modules currently known to fail on a raw hosted-runner build.
+          # Remove entries as owners fix them; value = short reason / WI ref.
+          declare -A known_broken=(
+            # TODO(blobfuse-launcher owner): viper/mapstructure vs pinned
+            # github.com/Azure/azure-storage-fuse/v2 API skew breaks
+            # `go build ./...` at repo root (config_parser.go:229
+            # UnmarshalKey / DecoderConfigOption signature mismatch).
+            ["."]="viper/mapstructure vs azure-storage-fuse API skew"
+          )
+
+          new_failures=()
+          for m in "${modules[@]}"; do
+            if [ -v "known_broken[$m]" ]; then
+              echo "::group::go build $m/... (known-broken: ${known_broken[$m]})"
+              (cd "$m" && go build ./...) \
+                || echo "::notice title=Known-broken Go module still failing (expected)::$m"
+              echo "::endgroup::"
+              continue
+            fi
+            echo "::group::go build $m/..."
+            if ! (cd "$m" && go build ./...); then
+              echo "::error title=Go module build failed::$m"
+              new_failures+=("$m")
+            fi
+            echo "::endgroup::"
+          done
+
+          if [ "${#new_failures[@]}" -gt 0 ]; then
+            echo "::error::${#new_failures[@]} Go module(s) failed to build: ${new_failures[*]}"
+            echo "::error::Fix the build, or add to 'known_broken' in .github/workflows/codeql.yml with a linked WI."
+            exit 1
+          fi
+
+      # Python and JavaScript/TypeScript require no explicit build step;
+      # CodeQL extracts them directly from source during init.
+
+      # ---- Analyze + upload DB (upload triggers CodeQL Central) ---------
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
+          upload: always

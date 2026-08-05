@@ -1,0 +1,4 @@
+[
+  {"name":"app","properties":{"image":"nginx:latest"}},
+  {"name":"init","properties":{"image":"busybox:latest"}}
+]

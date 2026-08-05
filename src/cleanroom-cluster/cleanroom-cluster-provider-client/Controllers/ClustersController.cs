@@ -87,8 +87,9 @@ public class ClustersController : ClusterClientController
                 if (string.IsNullOrEmpty(content.AnalyticsWorkloadProfile.ConfigurationUrl))
                 {
                     return this.BadRequest(new ODataError(
-                    code: "ConfigurationUrlMissing",
-                    message: "A configuration Url must be provided for enabling analytics workload."));
+                        code: "ConfigurationUrlMissing",
+                        message: "A configuration Url must be provided" +
+                            " for enabling analytics workload."));
                 }
             }
 
@@ -99,8 +100,9 @@ public class ClustersController : ClusterClientController
                     content.InferencingWorkloadProfile.KServeProfile.ConfigurationUrl))
                 {
                     return this.BadRequest(new ODataError(
-                    code: "ConfigurationUrlMissing",
-                    message: "A configuration Url must be provided for enabling inferencing workload."));
+                        code: "ConfigurationUrlMissing",
+                        message: "A configuration Url must be provided" +
+                            " for enabling inferencing workload."));
                 }
             }
 
@@ -209,7 +211,8 @@ public class ClustersController : ClusterClientController
                 {
                     return this.BadRequest(new ODataError(
                         code: "ConfigurationUrlMissing",
-                        message: "A configuration Url must be provided for enabling analytics workload."));
+                        message: "A configuration Url must be provided" +
+                            " for enabling analytics workload."));
                 }
             }
 
@@ -221,7 +224,8 @@ public class ClustersController : ClusterClientController
                 {
                     return this.BadRequest(new ODataError(
                         code: "ConfigurationUrlMissing",
-                        message: "A configuration Url must be provided for enabling inferencing workload."));
+                        message: "A configuration Url must be provided" +
+                            " for enabling inferencing workload."));
                 }
             }
 
@@ -324,7 +328,8 @@ public class ClustersController : ClusterClientController
         var kubeConfig = await provider.GetClusterKubeConfig(
             clusterName,
             content.ProviderConfig,
-            content.AccessRole);
+            content.AccessRole,
+            content.Internal);
         if (kubeConfig != null)
         {
             return this.Ok(kubeConfig);
@@ -441,6 +446,92 @@ public class ClustersController : ClusterClientController
             }
 
             return null;
+        }
+    }
+
+    [HttpPut("/clusters/{clusterName}/flexnodes/{nodeName}")]
+    public async Task<IActionResult> CreateFlexNode(
+        [FromRoute] string clusterName,
+        [FromRoute] string nodeName,
+        [FromBody] CreateFlexNodeInput content,
+        [FromQuery] bool async = false)
+    {
+        ClusterProvider provider = this.GetCleanRoomClusterProvider(content.InfraType);
+
+        if (string.IsNullOrEmpty(content.ProviderID))
+        {
+            return this.BadRequest(new ODataError(
+                code: "ProviderIDMissing",
+                message: "providerID must be specified."));
+        }
+
+        if (string.IsNullOrEmpty(content.PolicySigningCertPem))
+        {
+            return this.BadRequest(new ODataError(
+                code: "SigningCertMissing",
+                message: "policySigningCertPem must be specified."));
+        }
+
+        if (async)
+        {
+            await this.queue.PerformAsync(
+                this.operationStore,
+                this.HttpContext,
+                ProvisionFlexNode,
+                this.logger);
+            return this.Accepted();
+        }
+        else
+        {
+            await ProvisionFlexNode(NoOpProgressReporter);
+            return this.Ok();
+        }
+
+        async Task<object?> ProvisionFlexNode(IProgress<string> progressReporter)
+        {
+            await provider.CreateFlexNode(
+                clusterName,
+                nodeName,
+                content.ProviderID,
+                content.PolicySigningCertPem,
+                content.ProviderConfig,
+                progressReporter);
+            return new { nodeName };
+        }
+    }
+
+    [HttpDelete("/clusters/{clusterName}/flexnodes/{nodeName}")]
+    public async Task<IActionResult> DeleteFlexNode(
+        [FromRoute] string clusterName,
+        [FromRoute] string nodeName,
+        [FromBody] GetClusterInput content,
+        [FromQuery] bool async = false)
+    {
+        ClusterProvider provider = this.GetCleanRoomClusterProvider(content.InfraType);
+
+        if (async)
+        {
+            await this.queue.PerformAsync(
+                this.operationStore,
+                this.HttpContext,
+                RemoveFlexNode,
+                this.logger);
+            return this.Accepted();
+        }
+        else
+        {
+            await RemoveFlexNode(NoOpProgressReporter);
+            return this.Ok();
+        }
+
+        async Task<object?> RemoveFlexNode(IProgress<string> progressReporter)
+        {
+            await provider.DeleteFlexNode(
+                clusterName,
+                nodeName,
+                content.ProviderConfig,
+                progressReporter);
+            return new { nodeName };
         }
     }
 

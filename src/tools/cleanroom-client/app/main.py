@@ -17,7 +17,7 @@ from cleanroom_common.azure_cleanroom_core.utilities.helpers import (
 )
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger()

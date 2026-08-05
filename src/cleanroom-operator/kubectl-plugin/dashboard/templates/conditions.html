@@ -1,0 +1,32 @@
+{{define "conditions.html"}}
+<table class="cond-table">
+  <thead>
+    <tr>
+      <th></th>
+      <th>Condition</th>
+      <th>Reason</th>
+      <th>Message</th>
+      <th>Since</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Resource.Conditions}}
+    <tr>
+      <td>
+        <span class="status-icon
+          {{statusClass .Status .Reason}}">
+          {{statusIcon .Status}}</span>
+      </td>
+      <td>{{.Type}}</td>
+      <td>{{.Reason}}</td>
+      <td class="cond-msg"
+        title="{{.Message}}">
+        {{.Message}}</td>
+      <td style="color:var(--text-muted);
+        white-space:nowrap">
+        {{timeAgo .LastTransitionTime}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}

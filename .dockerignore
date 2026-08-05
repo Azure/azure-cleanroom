@@ -2,6 +2,7 @@
 **/bin/
 **/obj/
 **/out/
+**/__pycache__/
 
 # files
 Dockerfile*

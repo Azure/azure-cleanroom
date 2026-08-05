@@ -1,6 +1,11 @@
 # https://www.envoyproxy.io/docs/envoy/latest/start/sandboxes/tls#step-2-test-proxying-https-http
 # https://www.funnel-labs.io/2022/10/19/envoyproxy-5-securing-connections-with-https/
 # https://github.com/envoyproxy/envoy/issues/5514#issuecomment-2162805034 (for redirecting http to https)
+admin:
+  address:
+    socket_address:
+      address: 127.0.0.1
+      port_value: 9901
 static_resources:
   listeners:
   - address:

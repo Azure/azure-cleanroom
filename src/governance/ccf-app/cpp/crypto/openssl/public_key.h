@@ -2,7 +2,7 @@
 // Licensed under the Apache 2.0 License.
 #pragma once
 
-#include "ccf/crypto/public_key.h"
+#include "ccf/crypto/ec_public_key.h"
 #include "openssl_wrappers.h"
 
 #include <openssl/err.h>
@@ -13,7 +13,7 @@
 namespace cleanroom::crypto
 {
   using namespace ccf::crypto;
-  class PublicKey_OpenSSL : public PublicKey
+  class PublicKey_OpenSSL : public ECPublicKey
   {
   protected:
     EVP_PKEY* key = nullptr;
@@ -35,8 +35,8 @@ namespace cleanroom::crypto
     PublicKey_OpenSSL(const JsonWebKeyECPublic& jwk);
     virtual ~PublicKey_OpenSSL();
 
-    using PublicKey::verify;
-    using PublicKey::verify_hash;
+    using ECPublicKey::verify;
+    using ECPublicKey::verify_hash;
 
     virtual bool verify(
       const uint8_t* contents,

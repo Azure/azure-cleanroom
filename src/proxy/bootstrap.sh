@@ -111,7 +111,7 @@ openssl x509 -in "$out_cert" -text -noout
 cat ccr-proxy-config.yaml > /tmp/ccr-proxy-config.yaml
 mkdir -p /var/lib/envoy
 echo "Converting templates to generate listener and cluster configurations..."
-python3 render-config/render_config.py --output-path /var/lib/envoy --template-path templates
+render_config --output-path /var/lib/envoy --template-path templates
 
 echo "Starting envoy with the following configuration:"
 cat /tmp/ccr-proxy-config.yaml

@@ -1,0 +1,102 @@
+# Operator settings
+operator:
+  # Set to false to skip deploying the operator (e.g. for a
+  # bootstrap cluster that only runs the cluster-provider-client).
+  enabled: true
+  image:
+    repository: cleanroom-operator
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+
+  # Environment variables for operator defaults (e.g.
+  # CGS_CLIENT_IMAGE). Populated from --env-file during install.
+  env: {}
+
+  # Azure Workload Identity settings (AKS). Set clientId to the
+  # user-assigned managed identity federated with the
+  # cleanroom-operator service account so the operator can
+  # authenticate to Azure (e.g. OIDC document blob uploads).
+  azure:
+    clientId: ""
+
+# Namespace for all resources
+namespace: cleanroom-system
+
+# In-cluster provider client settings
+providerClient:
+  # Set to false when using an external provider client endpoint
+  enabled: true
+  endpoint: ""
+  image:
+    repository: cleanroom-cluster/cleanroom-cluster-provider-client
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: "2"
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+
+  # Virtual mode: mount Docker socket and shared dir for Kind clusters
+  virtual:
+    enabled: true
+    sharedDir: /tmp/cleanroom-shared
+
+  # Azure Workload Identity settings (AKS provider)
+  azure:
+    clientId: ""
+
+  # Environment variables for image/chart/policy URLs
+  # Populated from --env-file during kubectl cleanroom cluster provider deploy
+  env: {}
+
+# In-cluster CCF provider client settings
+ccfProviderClient:
+  # Set to false when using an external CCF provider client endpoint
+  enabled: true
+  endpoint: ""
+  image:
+    repository: ccf/ccf-provider-client
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: "2"
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+
+  # Environment variables for image URLs
+  # Populated from --env-file during kubectl cleanroom install/dev up
+  env: {}
+
+  # Virtual mode: mount Docker socket for Docker-based CCF nodes
+  virtual:
+    enabled: true
+    hostWorkspaceDir: /tmp/ccf-workspace
+
+  # Azure Workload Identity settings (AKS provider)
+  azure:
+    clientId: ""
+
+# Credentials proxy for local dev with AKS (standalone deployment)
+credentialsProxy:
+  enabled: false
+  azureDir: ""
+  image: cleanroombuild.azurecr.io/workleap/azure-cli-credentials-proxy:1.2.5
+
+# Telemetry (OTLP tracing via aspire-dashboard)
+telemetry:
+  enabled: false
+  otlpEndpoint: ""

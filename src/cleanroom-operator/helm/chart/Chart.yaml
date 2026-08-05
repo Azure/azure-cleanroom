@@ -1,0 +1,6 @@
+apiVersion: v2
+name: cleanroom-operator
+description: Helm chart for the Clean Room Cluster Operator
+type: application
+version: 0.1.0
+appVersion: v1alpha1

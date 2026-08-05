@@ -81,8 +81,22 @@ spec:
             {{- if .Values.frontendService.otelEndpoint }}
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ .Values.frontendService.otelEndpoint | quote }}
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
             - name: CR_FRONTEND_ENABLE_OPEN_TELEMETRY
               value: "true"
+            - name: SERVICE_NAME
+              value: "Frontend-Service"
+            - name: CR_CLUSTER
+              value: {{ .Values.frontendService.cluster | default "Frontend-Cluster" | quote }}
+            - name: BUILD_VERSION
+              value: {{ .Chart.Version | quote }}
+            - name: CONTAINER_NAME
+              value: "Frontend-Service"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             {{- end }}
         - name: cgs-client
           {{- with .Values.securityContext }}
@@ -103,8 +117,28 @@ spec:
           volumeMounts:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.cgsClient.env }}
           env:
+            {{- if .Values.frontendService.otelEndpoint }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.frontendService.otelEndpoint | quote }}
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: CGS_CLIENT_ENABLE_OPEN_TELEMETRY
+              value: "true"
+            - name: SERVICE_NAME
+              value: "Frontend-Service"
+            - name: CR_CLUSTER
+              value: {{ .Values.frontendService.cluster | default "Frontend-Cluster" | quote }}
+            - name: BUILD_VERSION
+              value: {{ .Chart.Version | quote }}
+            - name: CONTAINER_NAME
+              value: "CGS-Client"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- end }}
+            {{- with .Values.cgsClient.env }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
         {{- if .Values.skr.enabled }}

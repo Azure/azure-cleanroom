@@ -2,13 +2,10 @@ import logging
 from functools import wraps
 from typing import Any
 
-import podman
-import podman.api
-import podman.domain
-import podman.domain.containers
-from cleanroom_internal.utilities import mountpoint_utilities, utilities
-from cleanroom_sdk.models.cleanroom import *
 from opentelemetry import trace
+
+from cleanroom_internal.utilities import mountpoint_utilities
+from cleanroom_sdk.models.cleanroom import *
 
 from ..connectors.httpconnectors import (
     ACROAuthHttpConnector,
@@ -23,7 +20,6 @@ def invoke_podman(func):
     @wraps(func)
     async def invoke(*args, **kwargs):
         from podman import PodmanClient
-        from podman.errors import PodmanError
 
         logger = logging.getLogger("podman_utilities")
         tracer = trace.get_tracer("podman_utilities")

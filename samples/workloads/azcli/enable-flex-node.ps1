@@ -10,8 +10,26 @@ param
     [int]
     $flexNodeCount = 1,
 
+    [int]
+    $flexNodeMaxPodsPerNode,
+
     [string]
-    $flexNodeVmSize = ""
+    $flexNodeVmSize = "",
+
+    [string]
+    $gpuSharingMode = "",
+
+    [int]
+    $gpuMpsReplicas = 0,
+
+    [switch]
+    $insecure,
+
+    [switch]
+    $provisionUsingSSH,
+
+    [switch]
+    $requirePreProvisionedKindNodes
 )
 
 #https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
@@ -48,9 +66,6 @@ else {
 }
 
 # Generate SSH key pair for flex node VM access if not exists (only for non-virtual infra).
-$sshPrivateKeyPath = ""
-$sshPublicKeyPath = ""
-
 if ($infraType -ne "virtual") {
     $sshPrivateKeyPath = "$sandbox_common/flex-node-ssh-key.pem"
     $sshPublicKeyPath = "$sandbox_common/flex-node-ssh-key.pub"
@@ -63,16 +78,16 @@ if ($infraType -ne "virtual") {
         # chmod 600 $sshPrivateKeyPath
         # Write-Host "SSH key pair generated at: $sshPrivateKeyPath"
 
-        Write-Host "Downloading SSH keys from Key Vault 'azcleanroompublickv'..."
+        Write-Host "Downloading SSH keys from Key Vault 'azcleanroomemukv'..."
         $privateKeyContent = az keyvault secret show `
-            --vault-name "azcleanroompublickv" `
+            --vault-name "azcleanroomemukv" `
             --name "flex-node-ssh-private-key" `
             --query "value" -o tsv
         $privateKeyContent | Out-File -FilePath $sshPrivateKeyPath
         chmod 600 $sshPrivateKeyPath
 
         $publicKeyContent = az keyvault secret show `
-            --vault-name "azcleanroompublickv" `
+            --vault-name "azcleanroomemukv" `
             --name "flex-node-ssh-public-key" `
             --query "value" -o tsv
         $publicKeyContent | Out-File -FilePath $sshPublicKeyPath
@@ -89,26 +104,59 @@ else {
 
 Write-Output "Enabling flex node on cluster '$clusterName'."
 
-$clusterUpdateArgs = @(
-    "--name", $clusterName,
-    "--infra-type", $infraType,
-    "--enable-flex-node",
-    "--flex-node-policy-signing-cert", $policySigningCertPath,
-    "--flex-node-count", $flexNodeCount,
-    "--provider-config", "$sandbox_common/providerConfig.json",
-    "--provider-client", $clusterProviderProjectName
-)
+# Build the flex node profile JSON.
+$flexNodeProfileObj = @{
+    policySigningCert = $policySigningCertPath
+    nodeCount         = $flexNodeCount
+}
 
 if ($flexNodeVmSize -ne "") {
-    $clusterUpdateArgs += @("--flex-node-vm-size", $flexNodeVmSize)
+    $flexNodeProfileObj["vmSize"] = $flexNodeVmSize
+}
+
+if ($insecure) {
+    $flexNodeProfileObj["insecure"] = $true
+}
+
+if ($provisionUsingSSH) {
+    $flexNodeProfileObj["provisionUsingSSH"] = $true
+}
+
+if ($requirePreProvisionedKindNodes) {
+    $flexNodeProfileObj["requirePreProvisionedKindNodes"] = $true
+}
+
+if ($flexNodeMaxPodsPerNode -gt 0) {
+    $flexNodeProfileObj["maxPodsPerNode"] = $flexNodeMaxPodsPerNode
 }
 
 if ($infraType -ne "virtual") {
-    $clusterUpdateArgs += @(
-        "--flex-node-ssh-private-key", $sshPrivateKeyPath,
-        "--flex-node-ssh-public-key", $sshPublicKeyPath
-    )
+    $flexNodeProfileObj["sshPrivateKey"] = $sshPrivateKeyPath
+    $flexNodeProfileObj["sshPublicKey"] = $sshPublicKeyPath
 }
+
+if ($gpuSharingMode -ne "") {
+    $gpuConfig = @{
+        sharing = @{
+            mode = $gpuSharingMode
+        }
+    }
+    if ($gpuMpsReplicas -gt 0) {
+        $gpuConfig.sharing["replicas"] = $gpuMpsReplicas
+    }
+    $flexNodeProfileObj["gpu"] = $gpuConfig
+}
+
+$flexNodeProfilePath = "$sandbox_common/flex-node-profile.json"
+$flexNodeProfileObj | ConvertTo-Json -Depth 10 | Out-File $flexNodeProfilePath
+
+$clusterUpdateArgs = @(
+    "--name", $clusterName,
+    "--infra-type", $infraType,
+    "--flex-node-profile", $flexNodeProfilePath,
+    "--provider-config", "$sandbox_common/providerConfig.json",
+    "--provider-client", $clusterProviderProjectName
+)
 
 az cleanroom cluster update @clusterUpdateArgs
 

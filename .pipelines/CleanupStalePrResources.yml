@@ -1,0 +1,60 @@
+################################################################################
+#            Cleanup Stale PR Resources (Azure Pipelines) — PILOT               #
+#                                                                              #
+# Migrated from .github/workflows/cleanup_stale_pr_resources.yml               #
+#                                                                              #
+# This is the PILOT conversion for the EMU -> Proxima pipeline migration. It   #
+# is the simplest workflow (single job, single composite action) and exists    #
+# to prove the end-to-end OneBranch/1ES toolchain before converting the        #
+# heavier workflows (PR validation, build, release).                           #
+#                                                                              #
+# Original GitHub Actions trigger:                                             #
+#   on: { workflow_dispatch, schedule: cron "0 1 * * *" }   (daily @ 01:00 UTC)#
+#                                                                              #
+# Pattern mirrors azure-core/optimus (Ashish Patil's completed migration):     #
+#  - OneBranch NonOfficial governed template (1ES compliant pool)              #
+#  - job list kept in a separate template (.pipelines/templates/*-jobs.yml)    #
+#  - OneBranch checks the repo out into $(Build.SourcesDirectory)/azure-cleanroom
+#                                                                              #
+# TODO (ADO-side, needs JIT admin + project setup — Phase 1C):                 #
+#  - Azure OIDC service connection name (replaces azure/login + AZURE_* vars)  #
+#  - 1ES pool with a Docker daemon (cleanup uses setup-docker-on-data-disk)    #
+################################################################################
+
+# GitHub Actions had a native `schedule:` cron. In Azure Pipelines, scheduled
+# runs are declared via `schedules:` and require the pipeline to be created in ADO.
+schedules:
+  - cron: "0 1 * * *"
+    displayName: Daily stale PR resource cleanup (01:00 UTC)
+    branches:
+      include:
+        - develop
+    always: true
+
+trigger: none
+pr: none
+
+name: cleanup-stale-pr-resources-$(Date:yyyyMMdd).$(Rev:r)
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: OneBranch.Pipelines/GovernedTemplates
+      ref: refs/heads/main
+
+extends:
+  template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates
+  parameters:
+    cloudvault:
+      enabled: false
+    globalSdl:
+      tsa:
+        enabled: false
+      policheck:
+        break: true
+    stages:
+      - stage: Cleanup
+        displayName: Cleanup stale PR resources
+        jobs:
+          - template: .pipelines/templates/cleanup-stale-pr-resources-jobs.yml@self

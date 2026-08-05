@@ -2,7 +2,7 @@
 // Licensed under the Apache 2.0 License.
 #pragma once
 
-#include "ccf/crypto/public_key.h"
+#include "ccf/crypto/ec_public_key.h"
 #include "crypto/key_pair.h"
 #include "crypto/openssl/public_key.h"
 #include "openssl_wrappers.h"
@@ -79,13 +79,13 @@ namespace cleanroom::crypto
       Signer signer = Signer::SUBJECT) const override;
 
     virtual std::vector<uint8_t> derive_shared_secret(
-      const PublicKey& peer_key) override;
+      const ECPublicKey& peer_key) override;
 
     virtual CurveID get_curve_id() const override;
 
     virtual std::vector<uint8_t> public_key_raw() const override;
 
-    virtual PublicKey::Coordinates coordinates() const override;
+    virtual ECPublicKey::Coordinates coordinates() const override;
 
     virtual JsonWebKeyECPrivate private_key_jwk(
       const std::optional<std::string>& kid = std::nullopt) const override;

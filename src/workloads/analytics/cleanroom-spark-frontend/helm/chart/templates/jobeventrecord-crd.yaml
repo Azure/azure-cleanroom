@@ -1,0 +1,78 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: jobeventrecords.cleanroom.azure.com
+  labels:
+    {{- include "webserver.labels" . | nindent 4 }}
+spec:
+  group: cleanroom.azure.com
+  names:
+    kind: JobEventRecord
+    listKind: JobEventRecordList
+    plural: jobeventrecords
+    singular: jobeventrecord
+    shortNames:
+      - jer
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - jobId
+              properties:
+                jobId:
+                  type: string
+                  description: Unique identifier for the job whose events are persisted
+            status:
+              type: object
+              properties:
+                events:
+                  type: array
+                  description: >-
+                    Operational and statistics events recorded for the job,
+                    mirrored from Kubernetes events so they survive the ~1h
+                    core-event garbage collection window.
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: Name of the originating Kubernetes event
+                      reason:
+                        type: string
+                        description: Short machine-readable reason for the event
+                      message:
+                        type: string
+                        description: Human-readable event message
+                      type:
+                        type: string
+                        description: Event type (e.g. Normal or Warning)
+                      firstTimestamp:
+                        type: string
+                        format: date-time
+                        description: Timestamp when the event was first recorded
+                      lastTimestamp:
+                        type: string
+                        format: date-time
+                        description: Timestamp when the event was last recorded
+                      count:
+                        type: integer
+                        description: Number of times the event has occurred
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Query ID
+          type: string
+          jsonPath: .metadata.labels['query_id']
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

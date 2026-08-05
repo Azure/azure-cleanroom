@@ -98,6 +98,36 @@
           "regex": true
         },
         {
+          "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "SERVICE_NAME",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CR_CLUSTER",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "BUILD_VERSION",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "CONTAINER_NAME",
+          "value": ".*",
+          "regex": true
+        },
+        {
+          "name": "POD_NAME",
+          "value": ".*",
+          "regex": true
+        },
+        {
           "name": "CR_CCF_CONSORTIUM_MANAGER_ENABLE_OPEN_TELEMETRY",
           "value": ".*",
           "regex": true

@@ -1,6 +1,6 @@
 import "./kvstoremodels.tsp";
 
-namespace Cleanroom.Governance;
+namespace Azure.Cleanroom.Governance;
 
 /**
  * List user invitations response

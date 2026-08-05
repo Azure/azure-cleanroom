@@ -126,3 +126,10 @@ The following environment variables control the configuration of this sidecar:
 | `serviceCert` | `string` | Yes | The base64 representation of the PEM-encoded certificate to use for SSL connection verification when connecting to the `ccrgovEndpoint`.|
 
 Only one of `serviceCert` or `serviceCertPath` need to be specified, not both.
+
+### Request-level override
+The `ccrgovApiPathPrefix` value can be overridden per request by setting:
+`x-ms-ccr-governance-api-path-prefix: app/contracts/<contract-id>`.
+
+When this header is present, it takes precedence over the configured environment
+variable value.

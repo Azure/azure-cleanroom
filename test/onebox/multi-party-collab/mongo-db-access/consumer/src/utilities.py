@@ -1,5 +1,4 @@
 import base64 as b64
-import json
 import logging
 
 import requests

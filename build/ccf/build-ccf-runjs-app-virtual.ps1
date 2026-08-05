@@ -36,7 +36,7 @@ else {
 $root = git rev-parse --show-toplevel
 $buildRoot = "$root/build"
 
-docker image build -t $imageName -f $buildRoot/docker/Dockerfile.ccf_run_js_app.virtual "$root"
+docker image build -t $imageName -f $buildRoot/docker/Dockerfile.ccf_run_js_app "$root"
 
 if ($push) {
     docker push $imageName

@@ -13,7 +13,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\internal\governance-common\governance-common.csproj" />
-    <ProjectReference Include="..\..\..\internal\restapi-common\restapi-common.csproj" />
+    <ProjectReference Include="..\..\..\internal\workload-agent-common\workload-agent-common.csproj" />
   </ItemGroup>
 </Project>

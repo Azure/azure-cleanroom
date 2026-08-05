@@ -1,9 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
-
 namespace FrontendSvc.Models;
 
 public class QueryRunInput
@@ -17,4 +14,6 @@ public class QueryRunInput
     public bool UseOptimizer { get; set; } = false;
 
     public bool DryRun { get; set; } = false;
+
+    public string? ScaleSku { get; set; } = "small";
 }

@@ -13,7 +13,11 @@ param(
 
     [parameter(Mandatory = $false)]
     [string[]]
-    $containers
+    $containers,
+
+    [parameter(Mandatory = $false)]
+    [string]
+    $skipContainersFile
 )
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
@@ -23,9 +27,16 @@ $buildRoot = "$root/build"
 
 . $buildRoot/helpers.ps1
 
+$skipContainers = @()
+if ($skipContainersFile -and (Test-Path $skipContainersFile)) {
+    $skipContainers = @(Get-Content $skipContainersFile)
+}
+
 $clientContainers = @(
     "kserve-inferencing-agent",
-    "kserve-inferencing-frontend"
+    "kserve-inferencing-frontend",
+    "ohttp-gateway",
+    "ohttp-client"
 )
 
 $ccrContainers = @(
@@ -55,7 +66,10 @@ foreach ($container in $clientContainers) {
 $index = 0
 foreach ($container in $ccrContainers) {
     $index++
-    if ($null -eq $containers -or $containers.Contains($container)) {
+    if ($null -ne $skipContainers -and $skipContainers.Contains($container)) {
+        Write-Host -ForegroundColor DarkYellow "Skipping $container (already built) ($index/$($ccrContainers.Count))"
+    }
+    elseif ($null -eq $containers -or $containers.Contains($container)) {
         Write-Host -ForegroundColor DarkGreen "Building $container container ($index/$($ccrContainers.Count))"
         pwsh $buildroot/ccr/build-$container.ps1 -tag $tag -repo $repo -push:$push
     }

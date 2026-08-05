@@ -79,6 +79,17 @@ class ISparkApplicationBuilderWithMainAppFile(ABC):
         pass
 
     @abstractmethod
+    def AddTimeToLiveSeconds(
+        self, time_to_live_seconds: int
+    ) -> "ISparkApplicationBuilderWithTimeToLiveSeconds":
+        """
+        Set the SparkApplication TTL after termination.
+        """
+        pass
+
+
+class ISparkApplicationBuilderWithTimeToLiveSeconds(ABC):
+    @abstractmethod
     def AddDriver(
         self, settings: DriverSettings
     ) -> "ISparkApplicationBuilderWithDriver":

@@ -1,0 +1,24 @@
+# Common job variables shared by every build job in pr-build-all-jobs.yml.
+# Migrated from the identical `env:` block each GitHub job repeated.
+#
+# TODO(Phase 1C): `cleanroom-pr-vars` is the ADO variable group that must provide
+# AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID / ACR_URL — the values
+# that were GitHub repo `vars`. Create it in the ADO project and (if renamed)
+# update the group name here.
+
+variables:
+  - group: cleanroom-pr-vars # TODO(Phase 1C): AZURE_CLIENT_ID/TENANT_ID/SUBSCRIPTION_ID + ACR_URL
+  - name: RUN_ID
+    value: $(Build.BuildId) # was github.run_id
+  - name: RUN_ATTEMPT
+    value: $(System.JobAttempt) # was github.run_attempt
+  - name: JOB_ID
+    value: $(Agent.JobName) # was github.job
+  - name: USE_PREPROVISIONED_OIDC
+    value: "true"
+  - name: repoRoot
+    value: "$(Build.SourcesDirectory)/azure-cleanroom"
+  # OIDC service connection replacing ./.github/actions/login-to-azure.
+  # TODO(Phase 1C): set to the created Azure service connection name.
+  - name: azureServiceConnection
+    value: "cleanroom-pr-oidc"

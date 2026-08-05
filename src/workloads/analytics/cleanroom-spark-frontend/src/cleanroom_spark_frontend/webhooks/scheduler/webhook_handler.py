@@ -11,7 +11,6 @@ logger = logging.getLogger("webhook_handler")
 
 
 class SchedulerWebhookHandler(BaseWebhookHandler):
-
     def __init__(self, scheduler: PodScheduler):
         super().__init__(webhook_name="pod_scheduler")
         self.scheduler = scheduler

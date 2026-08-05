@@ -7,8 +7,9 @@ import {
 } from "@microsoft/ccf-app/global";
 import { Sign } from "../models";
 
-import { MemberInfo, UserData } from "../models";
+import { MemberInfo, MemberData, UserData } from "../models";
 import {
+  CleanRoomPolicyProps,
   DelegatePolicyInfoItem,
   ProposalInfoItem,
   ProposalStoreItem,
@@ -16,7 +17,6 @@ import {
 } from "../models";
 import { ErrorResponse } from "./ErrorResponse";
 import { SetDelegateCleanRoomPolicyRequestData } from "../models";
-import { ICleanRoomPolicyProps } from "../attestation/ICleanRoomPolicyProps";
 import { verifyJwtClaims } from "../attestation/jwtclaims";
 
 export function hex(buf: ArrayBuffer) {
@@ -26,7 +26,18 @@ export function hex(buf: ArrayBuffer) {
 }
 
 export function b64ToBuf(b64: string): ArrayBuffer {
-  return Base64.toUint8Array(b64).buffer;
+  return Base64.toUint8Array(b64).buffer as ArrayBuffer;
+}
+
+// Throws with the supplied message if `value` is not a non-empty string.
+// Treats `null`, `undefined`, non-string values, and whitespace-only strings as missing.
+export function requireNonEmptyString(
+  value: unknown,
+  errorMessage: string
+): asserts value is string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(errorMessage);
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -102,7 +113,7 @@ export function validateCallerAuthorized(
       };
     }
 
-    const tenantId = user.data.tenantId;
+    const tenantId = (user.data as { tenantId?: string }).tenantId;
     const incomingTenantId = request.caller.jwt.payload.tid;
     if (tenantId != incomingTenantId) {
       return {
@@ -206,7 +217,9 @@ function getMemberInfo(memberId: string): MemberInfo {
   );
   const value = memberInfo.get(ccf.strToBuf(memberId));
   if (value !== undefined) {
-    const rawInfo = ccf.bufToJsonCompatible(value);
+    const rawInfo = ccf.bufToJsonCompatible(value) as {
+      member_data?: MemberData;
+    };
     // Map JSON member_data to TypeScript memberData
     return {
       memberData: rawInfo.member_data
@@ -232,7 +245,7 @@ function getUserInfo(userId: string): CcfUserInfo {
   );
   const value = userInfo.get(ccf.strToBuf(userId));
   if (value !== undefined) {
-    const rawInfo = ccf.bufToJsonCompatible(value);
+    const rawInfo = ccf.bufToJsonCompatible(value) as { user_data?: UserData };
     // Map JSON user_data to TypeScript userData.
     return {
       userData: rawInfo.user_data
@@ -463,17 +476,17 @@ export function findOpenProposals(name: string, contractId: string): string[] {
 
 export function getContractCleanRoomPolicyProps(
   contractId: string
-): ICleanRoomPolicyProps {
+): CleanRoomPolicyProps {
   return getCleanRoomPolicyProps(getContractCleanRoomPolicyMapName(contractId));
 }
 
 export function getDelegateCleanRoomPolicyProps(
   key: string
-): ICleanRoomPolicyProps {
+): CleanRoomPolicyProps {
   return getCleanRoomPolicyProps(getDelegateCleanRoomPolicyMapName(key));
 }
 
-export function isEmpty(cleanroomPolicy: ICleanRoomPolicyProps): boolean {
+export function isEmpty(cleanroomPolicy: CleanRoomPolicyProps): boolean {
   return Object.keys(cleanroomPolicy).length === 0;
 }
 
@@ -721,8 +734,8 @@ export function getDelegateCleanRoomPolicyMapName(key: string): string {
   return "public:policies.cleanroom-delegates-" + key;
 }
 
-function getCleanRoomPolicyProps(mapName: string): ICleanRoomPolicyProps {
-  const result: ICleanRoomPolicyProps = {};
+function getCleanRoomPolicyProps(mapName: string): CleanRoomPolicyProps {
+  const result: CleanRoomPolicyProps = {};
   const cleanRoomPolicyMap = ccf.kv[mapName];
   cleanRoomPolicyMap.forEach((values: ArrayBuffer, key: ArrayBuffer) => {
     const kvKey = ccf.bufToStr(key);

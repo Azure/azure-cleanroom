@@ -220,7 +220,9 @@ def generate_statistics_event_method(
             else (
                 "0.0"
                 if python_type == "float"
-                else '""' if python_type == "str" else "False"
+                else '""'
+                if python_type == "str"
+                else "False"
             )
         )
         data_class_fields.append(

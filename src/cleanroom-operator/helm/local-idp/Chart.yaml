@@ -1,0 +1,6 @@
+apiVersion: v2
+name: local-idp
+description: Helm chart for the local IDP (JWT token issuer for dev/test)
+type: application
+version: 0.1.0
+appVersion: latest

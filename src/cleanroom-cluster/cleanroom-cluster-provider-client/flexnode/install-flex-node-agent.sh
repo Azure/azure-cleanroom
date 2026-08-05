@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-AKS_FLEX_NODE_VERSION="v0.0.17"
+AKS_FLEX_NODE_VERSION="v0.0.19"
 
 # Cleanup previous aks-flex-node setup if any
 echo "Running aks-flex-node uninstall script to cleanup previous setup..."
@@ -28,6 +28,24 @@ sed -i 's/^\([[:space:]]*\)install_azure_cli$/\1#install_azure_cli/' /tmp/aks-fl
 sed -i 's/^\([[:space:]]*\)check_azure_cli_auth$/\1#check_azure_cli_auth/' /tmp/aks-flex-node-install.sh
 sed -i 's/^\([[:space:]]*\)setup_permissions$/\1#setup_permissions/' /tmp/aks-flex-node-install.sh
 sudo bash /tmp/aks-flex-node-install.sh
+
+# Migrate containerd config to match the installed containerd version.
+# The upstream AKS Flex Node installer (Azure/AKSFlexNode) installs containerd
+# v2 but generates a v1-format config.toml (using io.containerd.grpc.v1.cri).
+# Containerd v2 expects io.containerd.cri.v1.runtime and ignores the v1 config.
+# This mismatch breaks nvidia-ctk runtime configure (install-gpu-runtime.sh),
+# which reads containerd config dump (always v3 on containerd v2) and writes its
+# drop-in config using the v3 CRI plugin path. The migration is idempotent and
+# version-agnostic — if config is already the correct version, it's a no-op.
+echo "Migrating containerd config to match installed version..."
+if command -v containerd &> /dev/null; then
+    sudo containerd config migrate /etc/containerd/config.toml \
+        > /tmp/containerd-config-migrated.toml && \
+        sudo mv /etc/containerd/config.toml /etc/containerd/config.toml.bak && \
+        sudo mv /tmp/containerd-config-migrated.toml /etc/containerd/config.toml && \
+        sudo systemctl restart containerd
+    echo "containerd config migrated successfully."
+fi
 
 # Enable and start the aks-flex-node-agent service
 echo "Enabling and starting aks-flex-node-agent service..."

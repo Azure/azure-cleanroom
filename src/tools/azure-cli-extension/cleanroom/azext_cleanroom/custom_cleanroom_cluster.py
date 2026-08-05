@@ -14,25 +14,13 @@ import base64
 # This is done to speed up command execution as having all the imports listed at top level is making
 # execution slow for every command even if the top level imported packaged will not be used by that
 # command.
-import hashlib
 import json
 import os
-import shlex
-import tempfile
-import time
 import uuid
-from multiprocessing import Value
 from time import sleep
-from urllib.parse import urlparse
-from venv import create
 
-import jsonschema_specifications
-import oras.oci
 import requests
-import yaml
-from azure.cli.core import get_default_cli
-from azure.cli.core.util import CLIError, get_file_json, is_guid, shell_safe_json_parse
-from knack import CLI
+from azure.cli.core.util import CLIError, get_file_json, shell_safe_json_parse
 from knack.log import get_logger
 
 from .custom import response_error_message
@@ -40,9 +28,7 @@ from .utilities._azcli_helpers import az_cli
 
 logger = get_logger(__name__)
 
-cluster_provider_compose_file: str = (
-    f"{os.path.dirname(__file__)}{os.path.sep}data{os.path.sep}cluster-provider{os.path.sep}docker-compose.yaml"
-)
+cluster_provider_compose_file: str = f"{os.path.dirname(__file__)}{os.path.sep}data{os.path.sep}cluster-provider{os.path.sep}docker-compose.yaml"
 
 
 def cluster_provider_deploy(cmd, provider_client_name, env_file=None):
@@ -122,6 +108,7 @@ def cluster_up(
     location,
     node_vm_size,
     provider_client_name,
+    ip_tags=None,
     env_file=None,
 ):
     if not location:
@@ -162,6 +149,13 @@ def cluster_up(
     }
     if node_vm_size:
         provider_config["nodeVmSize"] = node_vm_size
+    # Only tag the AKS setup's public IPs when the caller supplies service tags via
+    # --ip-tags. When omitted, the IPs are created untagged. Each --ip-tags entry uses the
+    # Azure CLI 'IpTagType=Tag' syntax and is mapped to the Azure Public IP Address IpTag
+    # schema (ipTagType + tag):
+    # https://learn.microsoft.com/en-us/rest/api/virtualnetwork/public-ip-addresses/create-or-update#common.iptag
+    if ip_tags:
+        provider_config["ipTags"] = parse_ip_tags(ip_tags)
     provider_config_file = os.path.join(ws_folder, "providerConfig.json")
     with open(provider_config_file, "w") as f:
         f.write(json.dumps(provider_config, indent=2))
@@ -213,12 +207,7 @@ def cluster_create(
     kserve_inferencing_workload_disable_telemetry_collection,
     kserve_inferencing_workload_security_policy_creation_option,
     kserve_inferencing_workload_security_policy,
-    enable_flex_node,
-    flex_node_ssh_private_key,
-    flex_node_ssh_public_key,
-    flex_node_policy_signing_cert,
-    flex_node_vm_size,
-    flex_node_count,
+    flex_node_profile,
     provider_client_name,
 ):
     provider_endpoint = get_provider_client_endpoint(cmd, provider_client_name)
@@ -276,42 +265,8 @@ def cluster_create(
             }
         }
 
-    if enable_flex_node:
-        ssh_private_key_pem = None
-        ssh_public_key = None
-        policy_signing_cert_pem = None
-        if flex_node_ssh_private_key:
-            if os.path.exists(flex_node_ssh_private_key):
-                with open(flex_node_ssh_private_key, "r") as f:
-                    ssh_private_key_pem = f.read()
-            else:
-                raise CLIError(
-                    f"SSH private key file not found: {flex_node_ssh_private_key}"
-                )
-        if flex_node_ssh_public_key:
-            if os.path.exists(flex_node_ssh_public_key):
-                with open(flex_node_ssh_public_key, "r") as f:
-                    ssh_public_key = f.read().strip()
-            else:
-                raise CLIError(
-                    f"SSH public key file not found: {flex_node_ssh_public_key}"
-                )
-        if flex_node_policy_signing_cert:
-            if os.path.exists(flex_node_policy_signing_cert):
-                with open(flex_node_policy_signing_cert, "r") as f:
-                    policy_signing_cert_pem = f.read()
-            else:
-                raise CLIError(
-                    f"Policy signing cert file not found: {flex_node_policy_signing_cert}"
-                )
-        content["flexNodeProfile"] = {
-            "enabled": True,
-            "sshPrivateKeyPem": ssh_private_key_pem,
-            "sshPublicKey": ssh_public_key,
-            "policySigningCertPem": policy_signing_cert_pem,
-            "vmSize": flex_node_vm_size,
-            "nodeCount": flex_node_count,
-        }
+    if flex_node_profile:
+        content["flexNodeProfile"] = build_flex_node_profile(flex_node_profile)
 
     logger.warning(
         f"Run `docker compose -p {provider_client_name} logs -f` to monitor cluster creation progress."
@@ -347,12 +302,7 @@ def cluster_update(
     kserve_inferencing_workload_disable_telemetry_collection,
     kserve_inferencing_workload_security_policy_creation_option,
     kserve_inferencing_workload_security_policy,
-    enable_flex_node,
-    flex_node_ssh_private_key,
-    flex_node_ssh_public_key,
-    flex_node_policy_signing_cert,
-    flex_node_vm_size,
-    flex_node_count,
+    flex_node_profile,
     provider_client_name,
 ):
     provider_endpoint = get_provider_client_endpoint(cmd, provider_client_name)
@@ -405,42 +355,8 @@ def cluster_update(
             }
         }
 
-    if enable_flex_node:
-        ssh_private_key_pem = None
-        ssh_public_key = None
-        policy_signing_cert_pem = None
-        if flex_node_ssh_private_key:
-            if os.path.exists(flex_node_ssh_private_key):
-                with open(flex_node_ssh_private_key, "r") as f:
-                    ssh_private_key_pem = f.read()
-            else:
-                raise CLIError(
-                    f"SSH private key file not found: {flex_node_ssh_private_key}"
-                )
-        if flex_node_ssh_public_key:
-            if os.path.exists(flex_node_ssh_public_key):
-                with open(flex_node_ssh_public_key, "r") as f:
-                    ssh_public_key = f.read().strip()
-            else:
-                raise CLIError(
-                    f"SSH public key file not found: {flex_node_ssh_public_key}"
-                )
-        if flex_node_policy_signing_cert:
-            if os.path.exists(flex_node_policy_signing_cert):
-                with open(flex_node_policy_signing_cert, "r") as f:
-                    policy_signing_cert_pem = f.read()
-            else:
-                raise CLIError(
-                    f"Policy signing cert file not found: {flex_node_policy_signing_cert}"
-                )
-        content["flexNodeProfile"] = {
-            "enabled": True,
-            "sshPrivateKeyPem": ssh_private_key_pem,
-            "sshPublicKey": ssh_public_key,
-            "policySigningCertPem": policy_signing_cert_pem,
-            "vmSize": flex_node_vm_size,
-            "nodeCount": flex_node_count,
-        }
+    if flex_node_profile:
+        content["flexNodeProfile"] = build_flex_node_profile(flex_node_profile)
 
     logger.warning(
         f"Run `docker compose -p {provider_client_name} logs -f` to monitor cluster update progress."
@@ -789,6 +705,8 @@ def set_docker_compose_env_params():
         os.environ[
             "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_AGENT_CHART_URL"
         ] = ""
+    if "AZCLI_CLEANROOM_CLUSTER_PROVIDER_OHTTP_GATEWAY_IMAGE" not in os.environ:
+        os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_OHTTP_GATEWAY_IMAGE"] = ""
     if (
         "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_IMAGE"
         not in os.environ
@@ -810,11 +728,59 @@ def set_docker_compose_env_params():
         os.environ[
             "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KSERVE_INFERENCING_FRONTEND_CHART_URL"
         ] = ""
+    if "AZCLI_CLEANROOM_CLUSTER_PROVIDER_FLEX_NODE_IMAGE_DIGESTS_URL" not in os.environ:
+        os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_FLEX_NODE_IMAGE_DIGESTS_URL"] = ""
     if (
         "AZCLI_CLEANROOM_CLUSTER_PROVIDER_API_SERVER_PROXY_PACKAGE_URL"
         not in os.environ
     ):
         os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_API_SERVER_PROXY_PACKAGE_URL"] = ""
+    if "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KUBELET_PROXY_PACKAGE_URL" not in os.environ:
+        os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KUBELET_PROXY_PACKAGE_URL"] = ""
+
+
+def parse_ip_tags(ip_tags):
+    # Parses Azure CLI 'IpTagType=Tag' pairs (e.g. 'RoutingPreference=Internet') into the
+    # Azure Public IP Address IpTag schema entries ({"ipTagType": ..., "tag": ...}).
+    parsed = []
+    for item in ip_tags:
+        if "=" not in item:
+            raise CLIError(
+                f"Invalid --ip-tags value '{item}'. Expected 'IpTagType=Tag' format, "
+                "e.g. 'RoutingPreference=Internet'."
+            )
+        tag_type, tag_value = item.split("=", 1)
+        tag_type = tag_type.strip()
+        tag_value = tag_value.strip()
+        if not tag_type or not tag_value:
+            raise CLIError(
+                f"Invalid --ip-tags value '{item}'. Both the IP tag type and tag value "
+                "must be non-empty, e.g. 'RoutingPreference=Internet'."
+            )
+        parsed.append({"ipTagType": tag_type, "tag": tag_value})
+    return parsed
+
+
+def parse_ip_tags(ip_tags):
+    # Parses Azure CLI 'IpTagType=Tag' pairs (e.g. 'RoutingPreference=Internet') into the
+    # Azure Public IP Address IpTag schema entries ({"ipTagType": ..., "tag": ...}).
+    parsed = []
+    for item in ip_tags:
+        if "=" not in item:
+            raise CLIError(
+                f"Invalid --ip-tags value '{item}'. Expected 'IpTagType=Tag' format, "
+                "e.g. 'RoutingPreference=Internet'."
+            )
+        tag_type, tag_value = item.split("=", 1)
+        tag_type = tag_type.strip()
+        tag_value = tag_value.strip()
+        if not tag_type or not tag_value:
+            raise CLIError(
+                f"Invalid --ip-tags value '{item}'. Both the IP tag type and tag value "
+                "must be non-empty, e.g. 'RoutingPreference=Internet'."
+            )
+        parsed.append({"ipTagType": tag_type, "tag": tag_value})
+    return parsed
 
 
 def parse_provider_config(provider_config, infra_type):
@@ -834,3 +800,62 @@ def parse_provider_config(provider_config, infra_type):
 
 def requires_provider_config(infra_type):
     return infra_type == "aks"
+
+
+def _read_file_content(path, label):
+    """Read file content with a user-facing error on missing file."""
+    if not os.path.exists(path):
+        raise CLIError(f"{label} file not found: {path}")
+    with open(path, "r") as f:
+        return f.read()
+
+
+def build_flex_node_profile(flex_node_profile):
+    """Build the flexNodeProfile API body from a profile JSON file or string.
+
+    The profile JSON uses file paths for SSH keys and the policy signing
+    cert. This function resolves those paths to file content for the
+    provider API.
+    """
+    if os.path.exists(flex_node_profile):
+        profile = get_file_json(flex_node_profile)
+    else:
+        profile = shell_safe_json_parse(flex_node_profile)
+
+    ssh_priv_path = profile.get("sshPrivateKey")
+    ssh_private_key_pem = None
+    if ssh_priv_path:
+        ssh_private_key_pem = _read_file_content(ssh_priv_path, "SSH private key")
+
+    ssh_pub_path = profile.get("sshPublicKey")
+    ssh_public_key = None
+    if ssh_pub_path:
+        ssh_public_key = _read_file_content(ssh_pub_path, "SSH public key").strip()
+
+    cert_path = profile.get("policySigningCert")
+    policy_signing_cert_pem = None
+    if cert_path:
+        policy_signing_cert_pem = _read_file_content(cert_path, "Policy signing cert")
+
+    flex_profile = {
+        "enabled": True,
+        "sshPrivateKeyPem": ssh_private_key_pem,
+        "sshPublicKey": ssh_public_key,
+        "policySigningCertPem": policy_signing_cert_pem,
+        "vmSize": profile.get("vmSize"),
+        "nodeCount": profile.get("nodeCount", 1),
+    }
+    max_pods = profile.get("maxPodsPerNode")
+    if max_pods is not None:
+        flex_profile["maxPodsPerNode"] = max_pods
+    if profile.get("insecure", False):
+        flex_profile["insecure"] = True
+    if profile.get("provisionUsingSSH", False):
+        flex_profile["provisionUsingSSH"] = True
+    if profile.get("requirePreProvisionedKindNodes", False):
+        flex_profile["requirePreProvisionedKindNodes"] = True
+    gpu_config = profile.get("gpu")
+    if gpu_config is not None:
+        flex_profile["gpu"] = gpu_config
+
+    return flex_profile

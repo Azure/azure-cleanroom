@@ -77,8 +77,16 @@ public static class IdentityConfigurationUtils
             identityConfig.ApplicationIdentities ??= new List<ApplicationIdentity>();
             identityConfig.ManagedIdentities ??= new List<ManagedIdentity>();
         }
+        else
+        {
+            identityConfig = new Identities
+            {
+                ApplicationIdentities = new List<ApplicationIdentity>(),
+                ManagedIdentities = new List<ManagedIdentity>()
+            };
+        }
 
-        var config = new IdentityConfiguration { Identities = identityConfig! };
+        var config = new IdentityConfiguration { Identities = identityConfig };
         ValidateConfiguration(config);
         return config;
     }

@@ -1,2 +1,9 @@
 # Any files generated during the onebox run are put in this folder.
 encrypted-storage/publisher/input-encrypted/*
+analytics-load-testing-TPC-DS/DSGen-software-code-4.0.0/
+analytics-load-testing-TPC-DS/stresstest/generated/
+analytics-load-testing-TPC-DS/stresstest/runner/generated/
+analytics-load-testing-TPC-DS/stresstest/lib/__pycache__/
+analytics-load-testing-TPC-DS/stresstest/__pycache__/
+analytics-load-testing-TPC-DS/stresstest/runner/__pycache__/
+analytics-load-testing-TPC-DS/stresstest/analysis/__pycache__/

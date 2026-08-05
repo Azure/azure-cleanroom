@@ -940,16 +940,24 @@ components:
           type: string
           title: Datastoreconfigname
         secretStoreConfig:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Secretstoreconfig
         datastoreSecretStore:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Datastoresecretstore
         dekSecretStore:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Deksecretstore
         kekSecretStore:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Keksecretstore
         encryptionMode:
           $ref: '#/components/schemas/EncryptionMode'
@@ -964,10 +972,6 @@ components:
       - identity
       - configName
       - datastoreConfigName
-      - secretStoreConfig
-      - datastoreSecretStore
-      - dekSecretStore
-      - kekSecretStore
       - encryptionMode
       title: ConfigSetLoggingRequest
     ConfigSetTelemetryRequest:
@@ -985,16 +989,24 @@ components:
           type: string
           title: Datastoreconfigname
         secretStoreConfig:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Secretstoreconfig
         datastoreSecretStore:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Datastoresecretstore
         dekSecretStore:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Deksecretstore
         kekSecretStore:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Keksecretstore
         encryptionMode:
           $ref: '#/components/schemas/EncryptionMode'
@@ -1009,10 +1021,6 @@ components:
       - identity
       - configName
       - datastoreConfigName
-      - secretStoreConfig
-      - datastoreSecretStore
-      - dekSecretStore
-      - kekSecretStore
       - encryptionMode
       title: ConfigSetTelemetryRequest
     ConfigValidateRequest:
@@ -1147,6 +1155,7 @@ components:
       enum:
       - CPK
       - CSE
+      - SSE
       title: EncryptionMode
     HTTPValidationError:
       properties:

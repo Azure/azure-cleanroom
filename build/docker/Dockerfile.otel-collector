@@ -5,11 +5,25 @@ COPY src/otel-collector/builder-config.yaml ./builder-config.yaml
 
 RUN ocb --config=builder-config.yaml
 
-FROM mcr.microsoft.com/mirror/docker/library/python:3.11
+FROM cleanroombuild.azurecr.io/mirror/docker/library/python:3.12 AS wheel-builder
 
-WORKDIR /app
-COPY src/otel-collector/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y curl build-essential && rm -rf /var/lib/apt/lists/*
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+COPY src/otel-collector src/otel-collector
+COPY pyproject.toml .
+COPY uv.lock .
+RUN uv sync --frozen
+RUN uv build --package otel-collector --wheel
+
+FROM cleanroombuild.azurecr.io/mirror/docker/library/python:3.12
+
+WORKDIR /setup
+COPY --from=wheel-builder /build/dist/otel_collector*.whl /setup/
+RUN pip install --no-cache-dir /setup/*.whl && rm -rf /setup
 
 COPY --from=collector-builder /build/otelcol-custom/otelcol-custom /usr/local/bin/otelcol-custom
 RUN chmod +x /usr/local/bin/otelcol-custom
@@ -18,12 +32,10 @@ RUN chmod +x /usr/local/bin/otelcol-custom
 # If we don't create this user in the python image, the container fails to start with "unknown user".
 RUN groupadd -g 10001 otel && useradd -m -u 10001 -g otel otel
 
-WORKDIR /app
-COPY src/otel-collector/ .
 RUN mkdir /etc/otel
 RUN chown otel /etc/otel
 
 USER otel
 ENV PYTHONUNBUFFERED=1
 
-ENTRYPOINT ["python3", "otel-collector-launcher.py", "--out-dir", "/etc/otel"]
+ENTRYPOINT ["otel_collector_launcher", "--out-dir", "/etc/otel"]

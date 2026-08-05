@@ -1,0 +1,38 @@
+# Stage 1: Build
+# Karpenter v1.12.0 requires Go >= 1.26.2; the operator
+# image uses 1.25.0 so this provider needs a newer image.
+FROM golang:1.26.3 AS build-image
+
+WORKDIR /app
+
+# Copy the operator module first (needed for the replace directive).
+COPY src/cleanroom-operator/go.mod src/cleanroom-operator/go.sum /operator/
+COPY src/cleanroom-operator/api/ /operator/api/
+COPY src/cleanroom-operator/client/ /operator/client/
+COPY src/cleanroom-operator/flexnodeclaim-controller/ /operator/flexnodeclaim-controller/
+COPY src/cleanroom-operator/internal/ /operator/internal/
+
+# Copy the karpenter-provider source.
+COPY src/cleanroom-operator/karpenter-provider/ ./
+
+# Rewrite the replace directive to point at the operator
+# copy inside the container, then resolve and build.
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    sed -i 's|=> \.\./|=> /operator/|' go.mod && \
+    go mod tidy && \
+    CGO_ENABLED=0 GOOS=linux go build -o /app/karpenter-provider-accr .
+
+# Stage 2: Final image
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:24.04
+
+RUN apt-get -y update && \
+    DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install \
+    ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=build-image --chmod=755 /app/karpenter-provider-accr /karpenter-provider-accr
+
+USER 65532:65532
+
+ENTRYPOINT ["/karpenter-provider-accr"]

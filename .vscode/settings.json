@@ -21,17 +21,17 @@
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "esbenp.prettier-vscode",
   },
+  "[csharp]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "ms-dotnettools.csharp"
+  },
   "[python]": {
-    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
-      "source.organizeImports": "explicit"
+      "source.organizeImports.ruff": "explicit"
     },
   },
-  "isort.args": [
-    "--profile",
-    "black"
-  ],
   "[cpp]": {
     "editor.defaultFormatter": "xaver.clang-format",
     "editor.formatOnSave": true
@@ -65,7 +65,7 @@
     "inferencing"
   ],
   "python.analysis.extraPaths": [
-    ".venv"
+    "test"
   ],
   "files.watcherExclude": {
     "**/target": true

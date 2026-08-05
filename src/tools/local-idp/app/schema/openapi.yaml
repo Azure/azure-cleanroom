@@ -24,6 +24,17 @@ paths:
           content:
             application/json:
               schema: {}
+  /exportkeys:
+    get:
+      summary: Exportkeys
+      description: Export full key material including private key for backup/restore.
+      operationId: exportKeys_exportkeys_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
   /getsigningkey:
     get:
       summary: Getsigningkey
@@ -145,6 +156,22 @@ paths:
           - type: string
           - type: 'null'
           title: Preferred Username
+      - name: azp
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Azp
+      - name: appId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Appid
       responses:
         '200':
           description: Successful Response

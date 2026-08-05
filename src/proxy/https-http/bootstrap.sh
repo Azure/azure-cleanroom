@@ -154,6 +154,73 @@ cat https-http/ccr-https-http-proxy-config.yaml | envsubst \
     '$CCR_ENVOY_LISTENER_HTTPS_ENDPOINT $CCR_ENVOY_LISTENER_HTTPS_PORT $CCR_ENVOY_CLUSTER_TYPE $CCR_ENVOY_DESTINATION_ENDPOINT $CCR_ENVOY_DESTINATION_PORT' \
     > /tmp/ccr-https-http-proxy-config.yaml
 
+# Inject additional routes and clusters if CCR_ENVOY_ADDITIONAL_ROUTES is set.
+# Format: comma-separated "prefix:port" entries, e.g. "/gateway:8090,/other:9090".
+# Each entry adds a prefix-matched route (before the catch-all "/") and a
+# corresponding STATIC cluster pointing to 0.0.0.0:port.
+if [ -n "$CCR_ENVOY_ADDITIONAL_ROUTES" ]; then
+    echo "Injecting additional routes: $CCR_ENVOY_ADDITIONAL_ROUTES"
+    config="/tmp/ccr-https-http-proxy-config.yaml"
+    IFS=',' read -ra ROUTES <<< "$CCR_ENVOY_ADDITIONAL_ROUTES"
+    for route_entry in "${ROUTES[@]}"; do
+        prefix="${route_entry%%:*}"
+        port="${route_entry##*:}"
+        # Derive a cluster name from the prefix, e.g. /gateway -> route_gateway.
+        cluster_name="route_$(echo "$prefix" | tr -d '/')"
+
+        echo "  Adding route: prefix='${prefix}' -> cluster='${cluster_name}' port=${port}"
+
+        # Build the route YAML block to insert before the catch-all "/" route.
+        route_block=$(cat <<ROUTE
+              - match:
+                  prefix: "${prefix}"
+                route:
+                  cluster: ${cluster_name}
+                  timeout: 360s
+ROUTE
+        )
+
+        # Insert the route block before the catch-all "prefix: /" line using
+        # a Python one-liner for reliable multi-line insertion.
+        python3 -c "
+import sys
+block = sys.argv[1]
+lines = open(sys.argv[2]).readlines()
+out = []
+inserted = False
+for i, line in enumerate(lines):
+    # Match the two-line pattern: '- match:' followed by 'prefix: \"/\"'.
+    if (not inserted
+        and '- match:' in line
+        and i + 1 < len(lines)
+        and 'prefix: \"/\"' in lines[i + 1]):
+        out.append(block + '\n')
+        inserted = True
+    out.append(line)
+open(sys.argv[2], 'w').writelines(out)
+" "$route_block" "$config"
+
+        # Append the cluster definition.
+        cat >> "$config" <<EOF
+  - name: ${cluster_name}
+    type: STATIC
+    connect_timeout: 5s
+    load_assignment:
+      cluster_name: ${cluster_name}
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: 0.0.0.0
+                port_value: ${port}
+EOF
+    done
+
+    echo "Final envoy config:"
+    cat "$config"
+fi
+
 echo "Launching envoy"
 # Use exec so that SIGTERM is propagated to the child process and the process can be gracefully stopped.
 exec envoy -c /tmp/ccr-https-http-proxy-config.yaml

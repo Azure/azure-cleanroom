@@ -73,9 +73,12 @@ export function listEvents(
             id: id,
             seqno: eventsMap.getVersionOfPreviousWrite(id),
             timestamp: item.timestamp,
+            // Wire contract uses snake_case `timestamp_iso`; the TypeSpec
+            // type's property is `timestampIso`. Cast through unknown so
+            // the wire-shape literal is preserved.
             timestamp_iso: new Date(Number(item.timestamp)).toISOString(),
             data: item.data
-          }
+          } as unknown as Event
         ]
       }
     };
@@ -325,7 +328,7 @@ export function putEvent(
   }
 
   // Now check the signature.
-  const data: ArrayBuffer = b64ToBuf(body.data);
+  const data: ArrayBuffer = b64ToBuf(body.data as string);
   try {
     verifySignature(body.sign, data);
   } catch (e) {

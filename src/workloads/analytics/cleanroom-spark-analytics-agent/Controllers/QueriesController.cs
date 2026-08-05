@@ -20,9 +20,12 @@ namespace Controllers;
 [ApiController]
 public class QueriesController : AnalyticsClientBaseController
 {
+    private static readonly HashSet<string> ValidScaleSkus =
+        new(Enum.GetNames<ScaleSku>(), StringComparer.OrdinalIgnoreCase);
+
     private readonly ILogger logger;
     private readonly IConfiguration configuration;
-    private readonly SparkFrontendClientManager frontendClientManager;
+    private readonly FrontendClientManager frontendClientManager;
     private readonly SecretsClient secretsClient;
     private readonly Dictionary<string, object> retryContextData;
     private readonly string dateFormat = "yyyy-MM-dd";
@@ -30,7 +33,7 @@ public class QueriesController : AnalyticsClientBaseController
     public QueriesController(
         ILogger logger,
         IConfiguration configuration,
-        SparkFrontendClientManager clientManager,
+        FrontendClientManager clientManager,
         ActiveUserChecker activeUserChecker,
         GovernanceClientManager governanceClientManager)
         : base(logger, configuration, activeUserChecker, governanceClientManager)
@@ -122,7 +125,8 @@ public class QueriesController : AnalyticsClientBaseController
         await this.SetupSparkPodsAccess(frontendJob);
         await this.GovernanceClientManager.GetClient().LogAuditEventAsync(
             $"Starting query execution for queryId: {queryId}. | job id: {runId}.",
-            this.logger);
+            this.logger,
+            "spark-analytics-agent");
         Baggage.SetBaggage(BaggageItemName.RunId, runId);
         Baggage.SetBaggage(BaggageItemName.QueryId, queryId);
         using var response = await frontendClient.PostAsync(
@@ -158,6 +162,16 @@ public class QueriesController : AnalyticsClientBaseController
 
         void ValidateInputs(RunQueryInput runInput)
         {
+            if (!string.IsNullOrWhiteSpace(runInput.ScaleSku) &&
+                !ValidScaleSkus.Contains(runInput.ScaleSku))
+            {
+                throw new ApiException(
+                    HttpStatusCode.BadRequest,
+                    new ODataError(
+                        code: "InvalidScaleSku",
+                        message: "scaleSku must be one of: small, medium, large."));
+            }
+
             var startDate = runInput.StartDate;
             var endDate = runInput.EndDate;
             if (startDate != null || endDate != null)
@@ -246,6 +260,15 @@ public class QueriesController : AnalyticsClientBaseController
             datasets.Add(datasetDoc);
         }
 
+        {
+            // Add the datasink document to the list of documents to check for consent to ensure it
+            // can only be overwritten if the owner has given consent.
+            var datasink = queryDocument.Data.Application.OutputDataset;
+            documentsToConsentCheck.Add(datasink.Specification);
+            var datasetDoc = await this.GetUserDocument<Dataset>(datasink.Specification);
+            datasets.Add(datasetDoc);
+        }
+
         var approvedBy =
             queryDocument.FinalVotes.Where(
                 x => x.Ballot == Ballot.Accepted).Select(x => x.ApproverId).ToList();
@@ -256,7 +279,8 @@ public class QueriesController : AnalyticsClientBaseController
             await this.GovernanceClientManager.GetClient().LogAuditEventAsync(
                 $"Query execution denied for queryId {queryId}: Missing approvals from " +
                 $"dataset owners: {string.Join(", ", missingApprovals)} | job id: {runId}.",
-                this.logger);
+                this.logger,
+                "spark-analytics-agent");
             throw new ApiException(
                 HttpStatusCode.BadRequest,
                 new ODataError(
@@ -275,7 +299,8 @@ public class QueriesController : AnalyticsClientBaseController
                 await this.GovernanceClientManager.GetClient().LogAuditEventAsync(
                     $"Query execution denied for queryId {queryId}. " +
                     $"Reason: {status.Reason.Message} | job id: {runId}.",
-                    this.logger);
+                    this.logger,
+                    "spark-analytics-agent");
                 throw new ApiException(
                     HttpStatusCode.BadRequest,
                     new ODataError(
@@ -714,7 +739,8 @@ public class QueriesController : AnalyticsClientBaseController
                 runInput?.StartDate,
                 runInput?.EndDate,
                 runInput?.DryRun,
-                runInput?.UseOptimizer);
+                runInput?.UseOptimizer,
+                runInput?.ScaleSku);
 
         async Task<GovernanceJobInput> GetGovernanceJobInput()
         {

@@ -32,7 +32,8 @@ else {
   "data": {
     "values": {
       "inferencingFrontendEndpoint": "https://kserve-inferencing-frontend.kserve-inferencing-frontend.svc",
-      "inferencingFrontendSnpHostData": "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20"
+      "inferencingFrontendSnpHostData": "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20",
+      "enableTestEndpoints": true
     }
   }
 }

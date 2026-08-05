@@ -15,7 +15,6 @@ logger = logging.getLogger("base_webhook_handler")
 
 
 class BaseWebhookHandler(ABC):
-
     def __init__(self, webhook_name: str):
         """
         Initialize the base webhook handler.

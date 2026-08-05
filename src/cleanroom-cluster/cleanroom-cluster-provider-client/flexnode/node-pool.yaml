@@ -1,0 +1,33 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: <CLUSTER_NAME>
+  namespace: default
+spec:
+  template:
+    metadata:
+      labels:
+        pod-policy: required
+    spec:
+      nodeClassRef:
+        group: cleanroom.azure.com
+        kind: FlexNodeClass
+        name: <CLUSTER_NAME>
+      startupTaints:
+        - key: for-flex-node
+          value: "true"
+          effect: NoSchedule
+      taints:
+        - key: pod-policy
+          value: required
+          effect: NoSchedule
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values:
+            - amd64
+  disruption:
+    consolidationPolicy: <CONSOLIDATION_POLICY>
+    consolidateAfter: <CONSOLIDATE_AFTER>
+  limits:
+    cpu: "<LIMITS_CPU>"

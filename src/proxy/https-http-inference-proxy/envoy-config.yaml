@@ -1,0 +1,192 @@
+# Envoy config for inference proxy mode. Adds ext_authz for authorization,
+# Lua-based dynamic host rewriting, and dynamic forward proxy for routing
+# inference requests to predictor pods over TLS.
+# https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_authz_filter
+# https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/http/http_proxy#arch-overview-http-dynamic-forward-proxy
+admin:
+  address:
+    socket_address:
+      address: 127.0.0.1
+      port_value: 9901
+static_resources:
+  listeners:
+  - address:
+      socket_address:
+        address: $CCR_ENVOY_LISTENER_HTTPS_ENDPOINT
+        port_value: $CCR_ENVOY_LISTENER_HTTPS_PORT
+    listener_filters:
+      name: envoy.filters.listener.tls_inspector
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.filters.listener.tls_inspector.v3.TlsInspector
+    filter_chains:
+    - filter_chain_match:
+        transport_protocol: raw_buffer
+      filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+          route_config:
+            name: local_redirect
+            virtual_hosts:
+            - name: local_route
+              domains: ["*"]
+              routes:
+              - match: { prefix: "/" }
+                redirect: { https_redirect: true }
+    - filter_chain_match:
+        transport_protocol: tls
+      filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          '@type': "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+          codec_type: auto
+          stat_prefix: ingress_http
+          access_log:
+          - name: envoy.access_loggers.stdout
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+              log_format:
+                text_format: "%DOWNSTREAM_REMOTE_ADDRESS% %REQ(:METHOD)% %REQ(:AUTHORITY)%%REQ(:PATH)% %RESPONSE_CODE% %RESPONSE_FLAGS% %UPSTREAM_HOST% %UPSTREAM_TRANSPORT_FAILURE_REASON% %DURATION%ms\n"
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: backend
+              domains: ["*"]
+              routes:
+              # Inference data plane routes — ext_authz enabled, routed to
+              # predictor pods via dynamic forward proxy.
+              - match:
+                  prefix: "/ai/"
+                route:
+                  cluster: dynamic_predictor
+                  prefix_rewrite: "/"
+                  timeout: 0s
+              # $CCR_ENVOY_ADDITIONAL_ROUTES_MARKER
+              # Control plane and catch-all routes — ext_authz disabled,
+              # routed to local agent.
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: agent
+                  timeout: 360s
+                typed_per_filter_config:
+                  envoy.filters.http.ext_authz:
+                    "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute
+                    disabled: true
+          http_filters:
+          # ext_authz: calls the inferencing-agent /authz endpoint for
+          # authorization check and model name extraction.
+          - name: envoy.filters.http.ext_authz
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+              http_service:
+                server_uri:
+                  uri: "127.0.0.1:$CCR_ENVOY_DESTINATION_PORT"
+                  cluster: agent
+                  timeout: 10s
+                path_prefix: "/authz"
+                authorization_request:
+                  allowed_headers:
+                    patterns:
+                    - exact: "x-ms-cleanroom-authorization"
+                    - exact: "content-type"
+                  headers_to_add:
+                  - key: "x-authz-original-path"
+                    value: "%REQ(:PATH)%"
+                authorization_response:
+                  allowed_upstream_headers:
+                    patterns:
+                    - exact: "x-model-name"
+                    - exact: "x-model-endpoint"
+              transport_api_version: V3
+              failure_mode_allow: false
+              with_request_body:
+                max_request_bytes: 8192
+                allow_partial_message: true
+          # Lua: rewrite Host header using x-model-name from ext_authz response
+          # so that dynamic forward proxy resolves the correct predictor FQDN.
+          - name: envoy.filters.http.lua
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+              default_source_code:
+                inline_string: |
+                  function envoy_on_request(handle)
+                    local endpoint = handle:headers():get("x-model-endpoint")
+                    if endpoint then
+                      handle:headers():replace(":authority", endpoint)
+                      handle:headers():remove("x-model-endpoint")
+                      handle:headers():remove("x-model-name")
+                    end
+                  end
+          - name: envoy.filters.http.dynamic_forward_proxy
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_forward_proxy.v3.FilterConfig
+              dns_cache_config:
+                name: dynamic_forward_proxy_cache
+                dns_lookup_family: V4_ONLY
+                dns_refresh_rate: 30s
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+      transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+          common_tls_context:
+            tls_certificates:
+            - certificate_chain:
+                filename: certs/server-cert.pem
+              private_key:
+                filename: keys/server-key.pem
+  clusters:
+  # Local agent cluster — plain HTTP to localhost.
+  - name: agent
+    type: STATIC
+    connect_timeout: 5s
+    load_assignment:
+      cluster_name: agent
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: $CCR_ENVOY_DESTINATION_ENDPOINT
+                port_value: $CCR_ENVOY_DESTINATION_PORT
+  # Dynamic forward proxy cluster — upstream TLS to predictor pods.
+  - name: dynamic_predictor
+    lb_policy: CLUSTER_PROVIDED
+    connect_timeout: 10s
+    typed_extension_protocol_options:
+      envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+        "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+        upstream_http_protocol_options:
+          auto_sni: true
+          auto_san_validation: true
+        explicit_http_config:
+          http_protocol_options: {}
+    cluster_type:
+      name: envoy.clusters.dynamic_forward_proxy
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.clusters.dynamic_forward_proxy.v3.ClusterConfig
+        dns_cache_config:
+          name: dynamic_forward_proxy_cache
+          dns_lookup_family: V4_ONLY
+          dns_refresh_rate: 30s
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        common_tls_context:
+          tls_params:
+            ecdh_curves:
+            - X25519
+            - P-256
+            - P-384
+          validation_context:
+            trusted_ca:
+              filename: certs/upstream-ca.pem

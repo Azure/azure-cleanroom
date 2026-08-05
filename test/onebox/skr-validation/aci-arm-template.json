@@ -1,0 +1,134 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "containerGroupName": {
+      "defaultValue": "skr-validation-test",
+      "type": "String",
+      "metadata": {
+        "description": "SKR Validation Test Container Group"
+      }
+    },
+    "location": {
+      "defaultValue": "[resourceGroup().location]",
+      "type": "String"
+    },
+    "managedIdentityResourceId": {
+      "type": "String",
+      "metadata": {
+        "description": "Full resource ID of the user-assigned managed identity"
+      }
+    },
+    "maaEndpoint": {
+      "type": "String",
+      "metadata": {
+        "description": "MAA endpoint without https:// prefix (e.g., sharedneu.neu.attest.azure.net)"
+      }
+    },
+    "akvEndpoint": {
+      "type": "String",
+      "metadata": {
+        "description": "Key Vault endpoint without https:// prefix (e.g., myvault.vault.azure.net)"
+      }
+    },
+    "keyName": {
+      "type": "String",
+      "metadata": {
+        "description": "Name of the key to release from Key Vault"
+      }
+    },
+    "ccePolicy": {
+      "type": "String",
+      "metadata": {
+        "description": "Base64-encoded CCE policy generated via az confcom acipolicygen"
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.ContainerInstance/containerGroups",
+      "apiVersion": "2023-05-01",
+      "name": "[parameters('containerGroupName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[parameters('managedIdentityResourceId')]": {}
+        }
+      },
+      "properties": {
+        "containers": [
+          {
+            "name": "skr-sidecar",
+            "properties": {
+              "command": [
+                "/skr.sh"
+              ],
+              "environmentVariables": [
+                {
+                  "name": "LogLevel",
+                  "value": "Debug"
+                }
+              ],
+              "image": "mcr.microsoft.com/aci/skr@sha256:deb7d4a4462b3df7c8e97e4d23c628ef967b2fb2a8b059afb9e2954e21f4bbe5",
+              "resources": {
+                "requests": {
+                  "cpu": 1,
+                  "memoryInGB": 2
+                }
+              },
+              "ports": [
+                {
+                  "port": 8080
+                }
+              ]
+            }
+          },
+          {
+            "name": "skr-test-client",
+            "properties": {
+              "command": [
+                "/tests/skr/skr_client.sh"
+              ],
+              "environmentVariables": [
+                {
+                  "name": "SkrClientMAAEndpoint",
+                  "value": "[parameters('maaEndpoint')]"
+                },
+                {
+                  "name": "SkrClientAKVEndpoint",
+                  "value": "[parameters('akvEndpoint')]"
+                },
+                {
+                  "name": "SkrClientKID",
+                  "value": "[parameters('keyName')]"
+                }
+              ],
+              "image": "mcr.microsoft.com/aci/skr@sha256:deb7d4a4462b3df7c8e97e4d23c628ef967b2fb2a8b059afb9e2954e21f4bbe5",
+              "resources": {
+                "requests": {
+                  "cpu": 0.5,
+                  "memoryInGB": 1
+                }
+              }
+            }
+          }
+        ],
+        "osType": "Linux",
+        "ipAddress": {
+          "type": "Public",
+          "ports": [
+            {
+              "protocol": "tcp",
+              "port": 8080
+            }
+          ]
+        },
+        "sku": "confidential",
+        "confidentialComputeProperties": {
+          "ccePolicy": "[parameters('ccePolicy')]"
+        }
+      }
+    }
+  ]
+}

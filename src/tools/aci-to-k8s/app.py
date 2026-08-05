@@ -2,7 +2,7 @@ import argparse
 import base64
 import json
 import os
-from urllib.parse import urlunparse, urlunsplit
+from urllib.parse import urlunparse
 
 import yaml
 

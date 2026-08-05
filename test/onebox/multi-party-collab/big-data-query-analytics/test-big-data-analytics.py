@@ -71,6 +71,12 @@ def main():
         default=[],
         help="Additional data formats to test besides csv (default: none)",
     )
+    parser.add_argument(
+        "--scale-sku",
+        choices=["small", "medium", "large"],
+        default="small",
+        help="Spark scale SKU to use for submitted SQL jobs (default: small)",
+    )
 
     args = parser.parse_args()
 
@@ -127,6 +133,9 @@ def main():
     if args.additional_formats:
         scenario_args.append("-additionalFormats")
         scenario_args.append(",".join(args.additional_formats))
+    if args.scale_sku:
+        scenario_args.append("-scaleSku")
+        scenario_args.append(args.scale_sku)
 
     cmd = ["pwsh", "-Command", scenario_script] + scenario_args
     print(f"{Colors.CYAN}Starting: {' '.join(cmd)}{Colors.RESET}")

@@ -51,7 +51,7 @@ runs:
       run: |
         ./build/ccr/build-ccr-digests.ps1 -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom -tag ${{ inputs.tag }} -push
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: sidecar-digests-${{ inputs.environment }}.yaml
         path: ./sidecar-digests.yaml

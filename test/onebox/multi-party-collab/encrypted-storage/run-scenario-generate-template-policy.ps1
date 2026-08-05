@@ -25,7 +25,13 @@ param
     [string]$tag = "latest",
 
     [switch]
-    $withSecurityPolicy
+    $withSecurityPolicy,
+
+    [switch]
+    $useCsiDriver,
+
+    [switch]
+    $useBlobfuseProxySidecar
 )
 
 #https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
@@ -205,7 +211,7 @@ az cleanroom secretstore add `
     --name publisher-dek-store `
     --config $publisherSecretStoreConfig `
     --backingstore-type Azure_KeyVault `
-    --backingstore-id $result.dek.kv.id 
+    --backingstore-id $result.dek.kv.id
 
 az cleanroom secretstore add `
     --name publisher-kek-store `
@@ -415,19 +421,33 @@ if ($registry -ne "mcr") {
     $env:AZCLI_CLEANROOM_SIDECARS_VERSIONS_DOCUMENT_URL = "${repo}/sidecar-digests:$tag"
 }
 
+$csiDriverFlag = @()
+if ($useCsiDriver) {
+    $csiDriverFlag = @("--use-csi-driver")
+}
+
+$blobfuseProxySidecarFlag = @()
+if ($useBlobfuseProxySidecar) {
+    $blobfuseProxySidecarFlag = @("--use-blobfuse-proxy-sidecar")
+}
+
 if ($withSecurityPolicy) {
     az cleanroom governance deployment generate `
         --contract-id $contractId `
         --governance-client "ob-consumer-client" `
         --output-dir $outDir/deployments `
-        --security-policy-creation-option cached-debug
+        --security-policy-creation-option cached-debug `
+        @csiDriverFlag `
+        @blobfuseProxySidecarFlag
 }
 else {
     az cleanroom governance deployment generate `
         --contract-id $contractId `
         --governance-client "ob-consumer-client" `
         --output-dir $outDir/deployments `
-        --security-policy-creation-option allow-all
+        --security-policy-creation-option allow-all `
+        @csiDriverFlag `
+        @blobfuseProxySidecarFlag
 }
 
 if ($env:COLLAB_FORCE_MANAGED_IDENTITY -eq "true") {

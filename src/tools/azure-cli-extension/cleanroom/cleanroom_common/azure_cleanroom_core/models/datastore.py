@@ -1,5 +1,4 @@
 import uuid
-from ast import alias
 from enum import Enum, StrEnum
 from typing import List, Optional
 
@@ -199,9 +198,9 @@ class DataStoreEntry(BaseModel):
         if access_mode == DataStoreEntry.AccessMode.Source:
             access_point_type = AccessPointType.Volume_ReadOnly
         else:
-            assert (
-                access_mode == DataStoreEntry.AccessMode.Sink
-            ), f"Unknown access mode {access_mode} for datastore {access_name}."
+            assert access_mode == DataStoreEntry.AccessMode.Sink, (
+                f"Unknown access mode {access_mode} for datastore {access_name}."
+            )
             access_point_type = AccessPointType.Volume_ReadWrite
 
         access_point = AccessPoint(

@@ -1,0 +1,235 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: karpenter-provider-accr
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: karpenter-provider-accr
+rules:
+  # Karpenter core: NodePool and NodeClaim lifecycle.
+  - apiGroups:
+      - karpenter.sh
+    resources:
+      - nodepools
+      - nodepools/status
+      - nodeclaims
+      - nodeclaims/status
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # Cleanroom CRDs: FlexNodeClaim (CRUD) and
+  # FlexNodeClass (read).
+  - apiGroups:
+      - cleanroom.azure.com
+    resources:
+      - flexnodeclaims
+      - flexnodeclaims/status
+      - flexnodeclaims/finalizers
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - cleanroom.azure.com
+    resources:
+      - flexnodeclasses
+      - flexnodeclasses/status
+    verbs:
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # Core resources needed by Karpenter controllers.
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+      - nodes/status
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - delete
+      - get
+      - list
+      - patch
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - persistentvolumes
+      - persistentvolumeclaims
+      - replicationcontrollers
+      - namespaces
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - daemonsets
+      - deployments
+      - replicasets
+      - statefulsets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - policy
+    resources:
+      - poddisruptionbudgets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - storage.k8s.io
+    resources:
+      - storageclasses
+      - csinodes
+      - volumeattachments
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    verbs:
+      - get
+      - list
+      - watch
+  # Coordination for leader election.
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # Admission webhooks registration.
+  - apiGroups:
+      - admissionregistration.k8s.io
+    resources:
+      - validatingwebhookconfigurations
+      - mutatingwebhookconfigurations
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: karpenter-provider-accr
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: karpenter-provider-accr
+subjects:
+  - kind: ServiceAccount
+    name: karpenter-provider-accr
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: karpenter-provider-accr
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: karpenter-provider-accr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: karpenter-provider-accr
+  template:
+    metadata:
+      labels:
+        app: karpenter-provider-accr
+    spec:
+      serviceAccountName: karpenter-provider-accr
+      containers:
+        - name: karpenter-provider-accr
+          image: "{{ .Values.karpenterProvider.image.repository }}:{{ .Values.karpenterProvider.image.tag | toString }}"
+          imagePullPolicy: {{ .Values.karpenterProvider.image.pullPolicy }}
+          env:
+            - name: SYSTEM_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CLUSTER_PROVIDER_ENDPOINT
+              value: "http://cluster-provider-client.{{ .Release.Namespace }}.svc.cluster.local:8080"
+          ports:
+            - name: metrics
+              containerPort: 8000
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+            - name: webhook
+              containerPort: 8443
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.karpenterProvider.resources | nindent 12 }}

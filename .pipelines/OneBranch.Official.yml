@@ -1,0 +1,74 @@
+################################################################################
+#                   CleanRoom Official Build (Azure Pipelines)                 #
+#                                                                              #
+# Migrated from .github/workflows/official_build.yml — the CI build that        #
+# produces official artefacts (containers, CGS app/constitution, CCF, cluster,  #
+# frontend, az cli). Triggered on push to main + tags; extends the OneBranch    #
+# **Official** governed template so artefacts get SBOM/signing/provenance +     #
+# the mandatory SDL suite (CodeQL, PoliCheck, CredScan, BinSkim, ...).          #
+#                                                                              #
+# Mirrors optimus's OneBranch.Official.yml + this repo's pilot conventions.     #
+#                                                                              #
+# Original GitHub triggers: workflow_dispatch + workflow_call (both with `tag`  #
+# and `build-type` inputs). In ADO those become pipeline `parameters` (settable #
+# at manual queue time) plus a push trigger for automatic CI.                   #
+#                                                                              #
+# TODO(Phase 1C): fill placeholders (azureServiceConnection, docker-capable 1ES  #
+#   pool, cleanroom-pr-vars/-official variable group with AZURE_* + ACR_URL).   #
+# TODO(Phase 1E): confirm SDL/CodeQL is enabled on the Official template (see    #
+#   the migration memory — codeql.yml is intentionally not converted).          #
+################################################################################
+
+trigger:
+  batch: false
+  branches:
+    include:
+      - main
+  tags:
+    include:
+      - "*"
+pr: none
+
+name: official-$(Build.SourceBranchName)-$(Date:yyyyMMdd).$(Rev:r)
+
+parameters:
+  # workflow_dispatch/workflow_call `tag` input. Empty => derive short commit hash.
+  - name: tag
+    type: string
+    default: ""
+  # workflow_dispatch/workflow_call `build-type` input (comma list of artefacts).
+  - name: buildType
+    type: string
+    default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client, frontend-service"
+
+variables:
+  - name: LinuxContainerImage
+    value: "mcr.microsoft.com/onebranch/azurelinux/build:3.0"
+  - name: CDP_DEFINITION_BUILD_COUNT
+    value: $[counter('', 0)]
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: OneBranch.Pipelines/GovernedTemplates
+      ref: refs/heads/main
+
+extends:
+  template: v2/OneBranch.Official.CrossPlat.yml@templates
+  parameters:
+    cloudvault:
+      enabled: false
+    globalSdl:
+      tsa:
+        enabled: false
+      policheck:
+        break: true
+    stages:
+      - stage: Build
+        displayName: Official Build
+        jobs:
+          - template: templates/official-build-jobs.yml@self
+            parameters:
+              tag: ${{ parameters.tag }}
+              buildType: ${{ parameters.buildType }}

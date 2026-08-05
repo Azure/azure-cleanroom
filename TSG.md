@@ -13,11 +13,11 @@ This guide walks through the ways to obtain traces / logs from the cleanroom clu
 Every cleanroom cluster deployed with an observability system uses Grafana as the visualization tool. To get access to the Grafana instance for debugging, run the following steps:
 - To get the kubeconfig of the cluster, run `az cleanroom cluster get-kubeconfig`
 - To open the cluster in k9s, run `k9s --kubeconfig <PATH_TO_KUBECONFIG>`
-- Navigate to the "telemetry" namespace and open services. You can use ":svc" to list the services.
-- Find "cleanroom-spark-grafana" and enable port forwarding on that [Use Shift + f].
-  ![k9s View for telemetry namespace](.resources/k9s_cluster.png "k9s View for telemetry namespace")
+- Navigate to the "observability" namespace and open services. You can use ":svc" to list the services.
+- Find "cleanroom-grafana" and enable port forwarding on that [Use Shift + f].
+  ![k9s View for observability namespace](.resources/k9s_cluster.png "k9s View for observability namespace")
 - To find the password, run the following command
-  - `kubectl get secret -n telemetry cleanroom-spark-grafana -o jsonpath='{.data.admin-password}' --kubeconfig <PATH_TO_KUBECONFIG> | base64 -d`
+  - `kubectl get secret -n observability cleanroom-grafana -o jsonpath='{.data.admin-password}' --kubeconfig <PATH_TO_KUBECONFIG> | base64 -d`
 - Once done, go to localhost:3000 on the browser.
 - In the login portal, enter username as "admin" and password from above to login. Once open, you can go to `Explore` and use the below steps to explore traces and logs.
 

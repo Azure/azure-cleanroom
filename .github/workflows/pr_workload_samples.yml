@@ -24,7 +24,7 @@ jobs:
         id: pick
         shell: bash
         run: |
-          # These are the locations where DC4as_v5 SKU is available that we use in Flex Node tests.
+          # These are the locations where DC2as_v5 SKU is available that we use in Flex Node tests.
           # westus is removed as it is being used by another PR validation flow.
           locations=("westeurope" "northeurope" "germanywestcentral" "centralindia" "eastasia" "southeastasia" )
           index=$((RANDOM % ${#locations[@]}))
@@ -33,7 +33,7 @@ jobs:
 
   # Virtual infrastructure tests
   test-big-data-analytics-virtual:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=test-big-data-analytics-virtual-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=test-big-data-analytics-virtual-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -68,7 +68,7 @@ jobs:
           deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples/generated
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: big-data-analytics-results-virtual
           path: ./test/onebox/workload-samples/generated
@@ -88,7 +88,7 @@ jobs:
         run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}"
 
   test-kserve-inferencing-virtual:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=test-kserve-inferencing-virtual-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=test-kserve-inferencing-virtual-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -121,9 +121,10 @@ jobs:
           tag: ${{ github.run_id }}
           location: centralindia
           deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples/generated
+          models: default
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kserve-inferencing-results-virtual
           path: ./test/onebox/workload-samples/generated
@@ -138,7 +139,7 @@ jobs:
   # AKS infrastructure tests
   setup-env-aks:
     needs: [pick-location]
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=setup-env-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=setup-env-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -165,7 +166,7 @@ jobs:
           outDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
 
       - name: Upload deployment artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cleanroom-deployment-artifacts-aks
           path: ./test/onebox/workload-samples-aks/generated
@@ -174,7 +175,7 @@ jobs:
 
   test-big-data-analytics-aks:
     needs: [pick-location, setup-env-aks]
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=test-big-data-analytics-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=test-big-data-analytics-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -206,7 +207,7 @@ jobs:
           deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: big-data-analytics-results-aks
           path: ./test/onebox/workload-samples-aks/generated
@@ -227,7 +228,7 @@ jobs:
 
   test-kserve-inferencing-aks:
     needs: [pick-location, setup-env-aks]
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=test-kserve-inferencing-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=test-kserve-inferencing-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -257,10 +258,10 @@ jobs:
           tag: ${{ github.run_id }}
           location: ${{ needs.pick-location.outputs.location }}
           deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
-          models: gpt2
+          models: default
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kserve-inferencing-results-aks
           path: ./test/onebox/workload-samples-aks/generated
@@ -274,7 +275,7 @@ jobs:
 
   cleanup-aks:
     needs: [test-big-data-analytics-aks, test-kserve-inferencing-aks]
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=cleanup-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=cleanup-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}

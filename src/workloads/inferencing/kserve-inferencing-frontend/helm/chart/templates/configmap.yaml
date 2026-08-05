@@ -21,6 +21,7 @@ data:
         applicationFile: {{ .Values.settings.applications.inferencing.applicationFile | quote }}
         allowAll: {{ .Values.settings.applications.inferencing.allowAll | quote }}
         debugMode: {{ .Values.settings.applications.inferencing.debugMode | quote }}
+        enableTestEndpoints: {{ .Values.settings.applications.inferencing.enableTestEndpoints | quote }}
         kserve:
           predictor:
             cores: {{ .Values.settings.applications.inferencing.kserve.predictor.cores | quote }}

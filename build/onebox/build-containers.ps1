@@ -23,6 +23,8 @@ $PSNativeCommandUseErrorActionPreference = $true
 
 . $PSScriptRoot/../helpers.ps1
 
+$totalStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+
 $root = git rev-parse --show-toplevel
 $buildRoot = "$root/build"
 
@@ -41,7 +43,8 @@ $ccrContainers = @(
     "otel-collector",
     "local-skr",
     "local-idp",
-    "skr"
+    "skr",
+    "cleanroom-csi-driver"
 )
 
 $cvmContainers = @(
@@ -77,6 +80,10 @@ if ($push -and $repo -eq "localhost:5000") {
 
 Write-Host -ForegroundColor DarkGreen "Running $($MyInvocation.MyCommand.Name)..."
 
+# Track containers already built so child scripts can skip them.
+$builtContainersFile = Join-Path ([IO.Path]::GetTempPath()) "cleanroom-built-containers.txt"
+New-Item -Path $builtContainersFile -ItemType File -Force | Out-Null
+
 $index = 0
 $anyCcrArtifactsBuilt = $false
 foreach ($container in $ccrContainers) {
@@ -85,6 +92,7 @@ foreach ($container in $ccrContainers) {
         Write-Host -ForegroundColor DarkGreen "Building $container container ($index/$($ccrContainers.Count))"
         pwsh $buildRoot/ccr/build-$container.ps1 -tag $tag -repo $repo -push:$push
         $anyCcrArtifactsBuilt = $true
+        Add-Content -Path $builtContainersFile -Value $container
     }
     else {
         Write-Host -ForegroundColor DarkBlue "Skipping building $container container ($index/$($ccrContainers.Count))"
@@ -116,6 +124,7 @@ foreach ($container in $cvmContainers) {
         if ($container -eq "cvm-attestation-agent") {
             $anyCcrArtifactsBuilt = $true
         }
+        Add-Content -Path $builtContainersFile -Value $container
     }
     else {
         Write-Host -ForegroundColor DarkBlue "Skipping building $container container ($index/$($cvmContainers.Count))"
@@ -133,6 +142,14 @@ foreach ($container in $cvmContainers) {
 
 if ($null -eq $containers -or $containers.Contains("api-server-proxy")) {
     pwsh $buildRoot/k8s-node/build-api-server-proxy.ps1 -tag $tag -repo $repo -push:$push
+}
+
+if ($null -eq $containers -or $containers.Contains("kubelet-proxy")) {
+    pwsh $buildRoot/k8s-node/build-kubelet-proxy.ps1 -tag $tag -repo $repo -push:$push
+}
+
+if ($null -eq $containers -or $containers.Contains("cleanroom-boot")) {
+    pwsh $buildRoot/k8s-node/build-cleanroom-boot.ps1 -tag $tag -repo $repo -push:$push
 }
 
 if ($null -eq $containers -or $containers.Contains("ccr-artefacts")) {
@@ -155,19 +172,30 @@ if ($env:GITHUB_ACTIONS -ne "true") {
         -outDir $digestFileDir `
         -push:$push
 
-    pwsh $buildRoot/inferencing/build-inf-runtime-digests.ps1 `
+    pwsh $buildRoot/ccr/build-cvm-measurements-virtual.ps1 `
         -repo $repo `
         -tag $tag `
         -outDir $digestFileDir `
         -push:$push
 
-    pwsh $buildRoot/ccf/build-ccf-infra-containers.ps1 -tag $tag -repo $repo -push:$push -pushPolicy:$withRegoPolicy -containers:$containers
-    pwsh $buildRoot/cleanroom-cluster/build-cleanroom-cluster-infra-containers.ps1 -tag $tag -repo $repo -push:$push -pushPolicy:$withRegoPolicy -containers:$containers
-    pwsh $buildRoot/workloads/analytics/build-workload-infra-containers.ps1 -tag $tag -repo $repo -push:$push -pushPolicy:$withRegoPolicy -containers:$containers
-    pwsh $buildRoot/workloads/inferencing/build-workload-infra-containers.ps1 -tag $tag -repo $repo -push:$push -pushPolicy:$withRegoPolicy -containers:$containers
+    pwsh $buildRoot/inferencing/build-inferencing-digests.ps1 `
+        -repo $repo `
+        -tag $tag `
+        -outDir $digestFileDir `
+        -push:$push
+
+    pwsh $buildRoot/ccf/build-ccf-infra-containers.ps1 -tag $tag -repo $repo -push:$push -pushPolicy:$withRegoPolicy -containers:$containers -skipContainersFile $builtContainersFile
+    pwsh $buildRoot/cleanroom-cluster/build-cleanroom-cluster-infra-containers.ps1 -tag $tag -repo $repo -push:$push -pushPolicy:$withRegoPolicy -containers:$containers -skipContainersFile $builtContainersFile
+    pwsh $buildRoot/cleanroom-operator/build-cleanroom-operator-infra-containers.ps1 -tag $tag -repo $repo -push:$push -pushPolicy:$withRegoPolicy -containers:$containers -skipContainersFile $builtContainersFile
+    pwsh $buildRoot/workloads/analytics/build-workload-infra-containers.ps1 -tag $tag -repo $repo -push:$push -pushPolicy:$withRegoPolicy -containers:$containers -skipContainersFile $builtContainersFile
+    pwsh $buildRoot/workloads/inferencing/build-workload-infra-containers.ps1 -tag $tag -repo $repo -push:$push -pushPolicy:$withRegoPolicy -containers:$containers -skipContainersFile $builtContainersFile
     pwsh $buildRoot/workloads/frontend/build-frontend-infra-containers.ps1 -tag $tag -repo $repo -push:$push -pushPolicy:$withRegoPolicy -containers:$containers
 
     if ($null -eq $containers -or $containers.Contains("azcliext")) {
         pwsh $buildRoot/build-azcliext-cleanroom.ps1 -repo $repo -tag $tag -push:$push
     }
 }
+
+$totalStopwatch.Stop()
+$elapsed = $totalStopwatch.Elapsed
+Write-Host -ForegroundColor DarkGreen "Total time taken: $($elapsed.ToString('hh\:mm\:ss'))"

@@ -48,7 +48,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer db.Close()
+	defer db.Close() //nolint:errcheck // Best-effort close.
 
 	err = db.Ping()
 	if err != nil {
@@ -62,14 +62,14 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer outputFile.Close()
+	defer outputFile.Close() //nolint:errcheck // Best-effort close.
 
 	fmt.Println("Executing query")
 	rows, err := db.Query("SELECT id, first_name FROM users WHERE gender=$1", "Female")
 	if err != nil {
 		panic(err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck // Best-effort close.
 	var rowCount int
 	for rows.Next() {
 		rowCount++
@@ -79,7 +79,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		_, err := outputFile.WriteString(fmt.Sprintf("id: %d firstName: %s\n", id, firstName))
+		_, err := fmt.Fprintf(outputFile, "id: %d firstName: %s\n", id, firstName)
 		if err != nil {
 			panic(err)
 		}
@@ -231,7 +231,7 @@ func GetDbPassword(passwordConfig *WrappedSecretConfig) (string, error) {
 }
 
 func httpResponseBody(httpResponse *http.Response) ([]byte, error) {
-	defer httpResponse.Body.Close()
+	defer httpResponse.Body.Close() //nolint:errcheck // Best-effort close.
 	httpResponseBodyBytes, err := io.ReadAll(httpResponse.Body)
 	if err != nil {
 		return nil, errors.Wrapf(err, "reading HTTP response body failed")

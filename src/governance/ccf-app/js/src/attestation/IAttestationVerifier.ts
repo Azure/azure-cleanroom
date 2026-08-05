@@ -3,8 +3,12 @@
 
 // Generic attestation result returned by any IAttestationVerifier.
 export interface AttestationResult {
-  // The report data value from the attestation (hex string).
+  // The report data from the attestation (hex string). For CVM, this is the
+  // report data payload extracted from the validated user data document.
   reportData: string;
+
+  // Optional CVM-specific signed GPU count from the user data document.
+  gpuCount?: number;
 }
 
 // Interface that abstracts attestation verification so that different TEE
