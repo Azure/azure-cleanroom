@@ -3,7 +3,7 @@ azure-core==1.38.0
 azure-cli-core==2.84.0
 python-on-whales==0.71.0
 pycryptodome==3.19.1
-cryptography==48.0.1
+cryptography==50.0.0
 docker
 build==1.2.2-post1
 oras==0.1.29

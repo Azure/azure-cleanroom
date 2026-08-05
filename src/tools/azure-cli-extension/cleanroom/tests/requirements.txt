@@ -14,7 +14,7 @@ azure-common
 
 # Cryptography dependencies (for configuration encryption/decryption)
 pycryptodome==3.19.1
-cryptography==48.0.1
+cryptography==50.0.0
 
 # Development and testing utilities
 azdev==0.1.67
