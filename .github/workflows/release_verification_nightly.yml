@@ -18,13 +18,13 @@ jobs:
     permissions:
       id-token: write
       contents: read  # This is required for actions/checkout
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=ml-training-nightly-${{ matrix.key-store }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=ml-training-nightly-${{ matrix.key-store }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: test
     env:
       TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
-      TDP_MHSM_NAME: 'azcleanroomemubvthsm'
+      TDP_MHSM_NAME: 'azcleanroombvthsm2'
       TDC_HSM_RESOURCE_GROUP: 'azcleanroom-public-bvt-rg'
-      TDC_MHSM_NAME: 'azcleanroomemubvthsm'
+      TDC_MHSM_NAME: 'azcleanroombvthsm2'
       USE_PREPROVISIONED_OIDC: "true"
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -66,7 +66,7 @@ jobs:
           kvType: ${{ matrix.key-store }}
 
   encrypted-storage-nightly:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=encrypted-storage-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=encrypted-storage-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: test
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -108,7 +108,7 @@ jobs:
           tag: ${{ env.MCR_RELEASE_VERSION }}
 
   nginx-hello-nightly:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=nginx-hello-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=nginx-hello-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: test
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -167,7 +167,7 @@ jobs:
 
   setup-env-aks-nightly:
     needs: [pick-location]
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=setup-env-aks-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=setup-env-aks-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: test
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -207,7 +207,7 @@ jobs:
         if: success()
 
   big-data-query-analytics-nightly:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=big-data-query-analytics-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=big-data-query-analytics-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: [setup-env-aks-nightly, pick-location]
     environment: test
     env:
@@ -265,7 +265,7 @@ jobs:
         run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}"
 
   cleanup-aks-nightly:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=cleanup-aks-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=cleanup-aks-nightly-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: [big-data-query-analytics-nightly]
     environment: test
     env:

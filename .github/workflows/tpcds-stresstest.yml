@@ -75,7 +75,7 @@ jobs:
       ref: ${{ inputs.ref }}
 
   tpcds-stresstest:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=tpcds-stresstest-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=tpcds-stresstest-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: [build]
     environment: pr
     env:

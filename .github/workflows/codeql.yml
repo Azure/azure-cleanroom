@@ -64,7 +64,7 @@ jobs:
     # do NOT serialize on a shared slot).
     runs-on:
       - self-hosted
-      - 1ES.Pool=azure-cleanroom-emu
+      - 1ES.Pool=azure-cleanroom-public
       - 1ES.JobId=codeql-${{ matrix.language }}-${{ github.run_id }}-${{ github.run_attempt }}
     timeout-minutes: 120
     permissions:
