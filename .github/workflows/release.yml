@@ -24,7 +24,14 @@ jobs:
       - name: Validate tag points to the current commit
         shell: pwsh
         run: |
-          $commitSha = $(gh api repos/${{ github.repository }}/git/refs/tags/${{ inputs.tag }} | ConvertFrom-Json).object.sha
+          $ref = gh api repos/${{ github.repository }}/git/refs/tags/${{ inputs.tag }} | ConvertFrom-Json
+          # For an annotated tag the ref points at a tag object; dereference it to get the commit SHA.
+          if ($ref.object.type -eq "tag") {
+            $commitSha = $(gh api repos/${{ github.repository }}/git/tags/$($ref.object.sha) | ConvertFrom-Json).object.sha
+          }
+          else {
+            $commitSha = $ref.object.sha
+          }
           Write-Host "Commit SHA for tag '${{ inputs.tag }}': $commitSha"
           if ($commitSha -ne "${{ github.workflow_sha }}") {
             throw "The input tag '${{ inputs.tag }}' and the current commit SHA '${{ github.workflow_sha }}' do not match. Are both pointing to the same commit?"
