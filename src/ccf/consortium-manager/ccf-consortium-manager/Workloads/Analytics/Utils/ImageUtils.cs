@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System.Text;
@@ -17,7 +17,7 @@ namespace CleanRoomProvider;
 public static class ImageUtils
 {
     private const string McrRegistryUrl = "mcr.microsoft.com/azurecleanroom";
-    private const string McrTag = "9.0.0";
+    private const string McrTag = "10.0.0";
 
     public static async Task<(string, SecurityPolicyDocument)> DownloadAndExpandAnalyticsAgentPolicy(
         SecurityPolicyCreationOption policyCreationOption,
