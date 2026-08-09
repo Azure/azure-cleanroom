@@ -45,7 +45,10 @@ if ($push) {
     $bundleDigest = cat "$sandbox_common/bundle.json" | jq -S -j | sha256sum | cut -d ' ' -f 1
 
     Push-Location $sandbox_common
-    oras push "$repo/cgs-js-app:$tag,$bundleDigest" ./bundle.json `
+    oras push "$repo/cgs-js-app:$tag" ./bundle.json `
+        --annotation "cleanroom.version=$tag" `
+        --annotation "bundle.json.digest=sha256:$bundleDigest"
+    oras push "$repo/cgs-js-app:$bundleDigest" ./bundle.json `
         --annotation "cleanroom.version=$tag" `
         --annotation "bundle.json.digest=sha256:$bundleDigest"
     Pop-Location
@@ -81,7 +84,10 @@ cgs-js-app:
     $constitutionDigest = cat "$sandbox_common/constitution.json" | jq -S -j | sha256sum | cut -d ' ' -f 1
 
     Push-Location $sandbox_common
-    oras push "$repo/cgs-constitution:$tag,$constitutionDigest" ./constitution.json `
+    oras push "$repo/cgs-constitution:$tag" ./constitution.json `
+        --annotation "cleanroom.version=$tag" `
+        --annotation "constitution.js.digest=sha256:$constitutionDigest"
+    oras push "$repo/cgs-constitution:$constitutionDigest" ./constitution.json `
         --annotation "cleanroom.version=$tag" `
         --annotation "constitution.js.digest=sha256:$constitutionDigest"
     Pop-Location
