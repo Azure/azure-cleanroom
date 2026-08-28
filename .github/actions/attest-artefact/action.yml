@@ -27,14 +27,14 @@ runs:
 
     - name: Generate artefact attestation (internal images)
       if: ${{ inputs.environment == 'internal' }}
-      uses: actions/attest-build-provenance@v1
+      uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1.4.4
       with:
         subject-name: ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom/${{ inputs.name }}
         subject-digest: ${{ steps.get-digest.outputs.digest }}
 
     - name: Generate artefact attestation (unlisted images)
       if: ${{ inputs.environment == 'unlisted' }}
-      uses: actions/attest-build-provenance@v1
+      uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1.4.4
       with:
         subject-name: mcr.microsoft.com/azurecleanroom/${{ inputs.name }}
         subject-digest: ${{ steps.get-digest.outputs.digest }}

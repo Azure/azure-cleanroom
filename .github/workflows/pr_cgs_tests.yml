@@ -19,7 +19,7 @@ jobs:
     runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=cgs-test-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -46,7 +46,7 @@ jobs:
 
       - name: CGS test reporter
         if: always()
-        uses: dorny/test-reporter@v3
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
         with:
           name: Test report-CGS  # Name of the check run which will be created
           path: ./src/governance/test/TestResults/TestRunResult-CGS.trx    # Path to test results

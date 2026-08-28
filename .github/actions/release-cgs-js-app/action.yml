@@ -27,7 +27,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: azure/login@v2
+    - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
       with:
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
@@ -39,7 +39,7 @@ runs:
     - shell: bash
       run: az acr login --name ${{ inputs.registry-name }}
 
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
       id: download-cgs-js-app
       with:
         name: cgs-js-app-${{ inputs.tag }}.json

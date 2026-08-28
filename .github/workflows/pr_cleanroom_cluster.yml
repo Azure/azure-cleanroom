@@ -44,7 +44,7 @@ jobs:
         RUN_ID: ${{ github.run_id }}
         JOB_ID: ${{ github.job }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -83,7 +83,7 @@ jobs:
         run: pwsh ./samples/workloads/azcli/dump-cleanroom-cluster-logs.ps1
 
       - name: Upload generated artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: aks-cleanroom-cluster
           path: ./samples/workloads/azcli/sandbox_common
@@ -105,7 +105,7 @@ jobs:
         RUN_ID: ${{ github.run_id }}
         JOB_ID: ${{ github.job }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -153,7 +153,7 @@ jobs:
         RUN_ID: ${{ github.run_id }}
         JOB_ID: ${{ github.job }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -194,7 +194,7 @@ jobs:
         run: pwsh ./samples/workloads/azcli/dump-cleanroom-cluster-logs.ps1
         
       - name: Upload generated artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: aks-cleanroom-cluster-flexnode
           path: ./samples/workloads/azcli/sandbox_common
@@ -216,7 +216,7 @@ jobs:
         RUN_ID: ${{ github.run_id }}
         JOB_ID: ${{ github.job }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
