@@ -44,7 +44,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -68,7 +68,7 @@ jobs:
           deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples/generated
 
       - name: Upload test results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: big-data-analytics-results-virtual
           path: ./test/onebox/workload-samples/generated
@@ -99,7 +99,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -124,7 +124,7 @@ jobs:
           models: default
 
       - name: Upload test results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kserve-inferencing-results-virtual
           path: ./test/onebox/workload-samples/generated
@@ -150,7 +150,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -166,7 +166,7 @@ jobs:
           outDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
 
       - name: Upload deployment artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cleanroom-deployment-artifacts-aks
           path: ./test/onebox/workload-samples-aks/generated
@@ -186,14 +186,14 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
       - name: Download deployment artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: cleanroom-deployment-artifacts-aks
           path: ./test/onebox/workload-samples-aks/generated
@@ -207,7 +207,7 @@ jobs:
           deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
 
       - name: Upload test results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: big-data-analytics-results-aks
           path: ./test/onebox/workload-samples-aks/generated
@@ -239,14 +239,14 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
       - uses: ./.github/actions/setup-docker-on-data-disk
 
       - name: Download deployment artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: cleanroom-deployment-artifacts-aks
           path: ./test/onebox/workload-samples-aks/generated
@@ -261,7 +261,7 @@ jobs:
           models: default
 
       - name: Upload test results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kserve-inferencing-results-aks
           path: ./test/onebox/workload-samples-aks/generated
@@ -286,7 +286,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
     if: success()
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Login to Azure and refresh token
         uses: ./.github/actions/login-to-azure

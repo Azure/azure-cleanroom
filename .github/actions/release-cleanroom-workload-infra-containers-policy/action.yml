@@ -26,7 +26,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: azure/login@v2
+    - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
       with:
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
@@ -51,19 +51,19 @@ runs:
       run: |
         ./build/workloads/analytics/build-workload-infra-containers-policy.ps1 -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom -tag ${{ inputs.tag }} -push
 
-    - uses: actions/upload-artifact@v7
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: cleanroom-spark-analytics-agent-security-policy-${{ inputs.environment }}.yaml
         path: ./.policies/cleanroom-spark-analytics-agent-security-policy/cleanroom-spark-analytics-agent-security-policy.yaml
         overwrite: true
 
-    - uses: actions/upload-artifact@v7
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: cleanroom-spark-frontend-security-policy-${{ inputs.environment }}.yaml
         path: ./.policies/cleanroom-spark-frontend-security-policy/cleanroom-spark-frontend-security-policy.yaml
         overwrite: true
 
-    - uses: actions/upload-artifact@v7
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: cleanroom-spark-analytics-app-security-policy-${{ inputs.environment }}.yaml
         path: ./.policies/cleanroom-spark-analytics-app-security-policy/cleanroom-spark-analytics-app-security-policy.yaml
@@ -73,13 +73,13 @@ runs:
       run: |
         ./build/workloads/inferencing/build-workload-infra-containers-policy.ps1 -repo ${{ inputs.registry-name }}.azurecr.io/${{ inputs.environment }}/azurecleanroom -tag ${{ inputs.tag }} -push
 
-    - uses: actions/upload-artifact@v7
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: cleanroom-kserve-inferencing-agent-security-policy-${{ inputs.environment }}.yaml
         path: ./.policies/cleanroom-kserve-inferencing-agent-security-policy/cleanroom-kserve-inferencing-agent-security-policy.yaml
         overwrite: true
 
-    - uses: actions/upload-artifact@v7
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: cleanroom-kserve-inferencing-frontend-security-policy-${{ inputs.environment }}.yaml
         path: ./.policies/cleanroom-kserve-inferencing-frontend-security-policy/cleanroom-kserve-inferencing-frontend-security-policy.yaml

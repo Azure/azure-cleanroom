@@ -80,7 +80,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # Do NOT recurse into external/azure-storage-fuse - it is an
           # upstream project that maintains its own CodeQL configuration.
@@ -90,14 +90,14 @@ jobs:
 
       - name: Set up .NET
         if: matrix.language == 'csharp'
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           # All csproj files target net10.0 in this repo.
           dotnet-version: '10.0.x'
 
       - name: Set up Go
         if: matrix.language == 'go'
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           # Highest go directive across in-repo modules is 1.26.3
           # (src/cleanroom-operator/karpenter-provider). Pin to that
@@ -108,7 +108,7 @@ jobs:
       # ---- CodeQL init (must run BEFORE any build step) -----------------
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           languages: ${{ matrix.language }}
           # Wires our path_classifiers (test/** excluded from prod alerts).
@@ -224,7 +224,7 @@ jobs:
       # ---- Analyze + upload DB (upload triggers CodeQL Central) ---------
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           category: "/language:${{ matrix.language }}"
           upload: always

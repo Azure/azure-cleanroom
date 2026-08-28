@@ -31,7 +31,7 @@ jobs:
         AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
         AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -123,7 +123,7 @@ jobs:
       # Prevent Github from cancelling other jobs of the matrix if one of them fails.
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -236,7 +236,7 @@ jobs:
       # Prevent Github from cancelling other jobs of the matrix if one of them fails.
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -351,7 +351,7 @@ jobs:
       # Prevent Github from cancelling other jobs of the matrix if one of them fails.
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -470,7 +470,7 @@ jobs:
         RUN_ID: ${{ github.run_id }}
         JOB_ID: ${{ github.job }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -575,7 +575,7 @@ jobs:
         RUN_ID: ${{ github.run_id }}
         JOB_ID: ${{ github.job }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -670,7 +670,7 @@ jobs:
         RUN_ID: ${{ github.run_id }}
         JOB_ID: ${{ github.job }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -776,7 +776,7 @@ jobs:
         RUN_ID: ${{ github.run_id }}
         JOB_ID: ${{ github.job }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -868,7 +868,7 @@ jobs:
         RUN_ID: ${{ github.run_id }}
         JOB_ID: ${{ github.job }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -963,7 +963,7 @@ jobs:
         RUN_ID: ${{ github.run_id }}
         JOB_ID: ${{ github.job }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
@@ -1061,7 +1061,7 @@ jobs:
         RUN_ID: ${{ github.run_id }}
         JOB_ID: ${{ github.job }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 

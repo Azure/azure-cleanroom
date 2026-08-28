@@ -38,7 +38,7 @@ jobs:
       fail-fast: false
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
           fetch-tags: true
@@ -81,7 +81,7 @@ jobs:
       contents: read  # This is required for actions/checkout
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
           fetch-tags: true
@@ -123,7 +123,7 @@ jobs:
       contents: read  # This is required for actions/checkout
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
           fetch-tags: true
@@ -182,7 +182,7 @@ jobs:
       contents: read  # This is required for actions/checkout
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
           fetch-tags: true
@@ -199,7 +199,7 @@ jobs:
           outDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
 
       - name: Upload deployment artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: cleanroom-deployment-artifacts-aks-nightly
           path: ./test/onebox/workload-samples-aks/generated
@@ -223,7 +223,7 @@ jobs:
       contents: read  # This is required for actions/checkout
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
           fetch-tags: true
@@ -231,7 +231,7 @@ jobs:
       - uses: ./.github/actions/setup-docker-on-data-disk
 
       - name: Download deployment artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: cleanroom-deployment-artifacts-aks-nightly
           path: ./test/onebox/workload-samples-aks/generated
@@ -245,7 +245,7 @@ jobs:
           deploymentConfigDir: ${{ github.workspace }}/test/onebox/workload-samples-aks/generated
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: big-data-analytics-results-aks-nightly
           path: ./test/onebox/workload-samples-aks/generated
@@ -282,7 +282,7 @@ jobs:
     if: success()
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
           fetch-tags: true
