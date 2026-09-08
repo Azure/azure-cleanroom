@@ -12,7 +12,7 @@ public static class ImageUtils
 {
     private const string McrRegistryUrl = "mcr.microsoft.com/azurecleanroom";
 
-    private const string DefaultVersion = "10.0.0";
+    private const string DefaultVersion = "11.0.0";
     private const string DefaultReleaseChartUrl =
         "https://azure.github.io/azure-cleanroom";
 
