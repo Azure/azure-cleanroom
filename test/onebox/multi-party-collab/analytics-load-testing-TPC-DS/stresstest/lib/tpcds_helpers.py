@@ -1352,12 +1352,15 @@ def submit_query(
     query_doc_id: str,
     run_id: str = "",
     run_id_prefix: str = "",
-) -> str:
+    scale_sku: str = "",
+) -> dict[str, Any]:
     if not run_id:
         suffix = str(uuid.uuid4())[:8]
         prefix = re.sub(r"[^a-z0-9-]", "-", run_id_prefix.lower()).strip("-")
         run_id = f"{prefix}-{suffix}" if prefix else suffix
     body: dict[str, Any] = {"runId": run_id}
+    if scale_sku:
+        body["scaleSku"] = scale_sku
     params = json.dumps(body)
     try:
         result = subprocess.run(
@@ -1387,7 +1390,9 @@ def submit_query(
             raise TransientPollError(f"Submit failed for {query_doc_id}: {err}")
         raise RuntimeError(f"Submit failed for {query_doc_id}: {err}")
     try:
-        return json.loads(result.stdout)["id"]
+        response = json.loads(result.stdout)
+        response["id"]
+        return response
     except (json.JSONDecodeError, KeyError) as e:
         raise RuntimeError(
             f"Submit for {query_doc_id} succeeded (rc=0) but stdout is "

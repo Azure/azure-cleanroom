@@ -8,8 +8,8 @@ export function resolve(proposal, proposerId, votes) {
 
   // Operators proposing operator changes can accept them without a vote.
   const resolution = operatorResolve(proposal, proposerId, votes);
-  if (resolution == "Accepted") {
-    return "Accepted";
+  if (resolution != "Open") {
+    return resolution;
   }
 
   // Require all active members to vote. If authoring a custom constitution ensure

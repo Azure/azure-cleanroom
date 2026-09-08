@@ -212,7 +212,6 @@ components:
           default: ''
       required:
       - protocol
-      - url
 
     StoreType:
       type: string

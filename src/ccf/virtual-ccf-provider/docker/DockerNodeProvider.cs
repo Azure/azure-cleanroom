@@ -114,6 +114,7 @@ public class DockerNodeProvider : ICcfNodeProvider
             // Ignore already exists.
         }
 
+        string nodeImage = await ImageUtils.CcfRunJsAppVirtualImageReference();
         var createContainerParams = new CreateContainerParameters
         {
             Labels = new Dictionary<string, string>
@@ -132,7 +133,7 @@ public class DockerNodeProvider : ICcfNodeProvider
                 }
             },
             Name = containerName,
-            Image = $"{ImageUtils.CcfRunJsAppVirtualImage()}:{ImageUtils.CcfRunJsAppVirtualTag()}",
+            Image = nodeImage,
             Env =
             [
                 $"CONFIG_DATA_TGZ={tgzConfigData}",
@@ -201,8 +202,10 @@ public class DockerNodeProvider : ICcfNodeProvider
             createContainerParams);
 
         NodeEndpoint nodeEndpoint = await this.CreateAndStartNodeContainer(createContainerParams);
-        await this.CreateAndStartCvmAttestationVerifierContainer(networkName, nodeEndpoint);
+        await this.CreateAndStartCvmAttestationVerifierContainer(
+            networkName, nodeEndpoint);
         await this.CreateAndStartRecoveryAgentContainer(networkName, nodeEndpoint);
+
         return nodeEndpoint;
     }
 
@@ -297,6 +300,7 @@ public class DockerNodeProvider : ICcfNodeProvider
         // gets uncompressed and expanded in the container.
         string tgzConfigData = await Utils.PackDirectory(nodeConfigDataDir);
 
+        string nodeImage = await ImageUtils.CcfRunJsAppVirtualImageReference();
         var createContainerParams = new CreateContainerParameters
         {
             Labels = new Dictionary<string, string>
@@ -315,7 +319,7 @@ public class DockerNodeProvider : ICcfNodeProvider
                 }
             },
             Name = containerName,
-            Image = $"{ImageUtils.CcfRunJsAppVirtualImage()}:{ImageUtils.CcfRunJsAppVirtualTag()}",
+            Image = nodeImage,
             Env =
             [
                 $"CONFIG_DATA_TGZ={tgzConfigData}",
@@ -384,7 +388,8 @@ public class DockerNodeProvider : ICcfNodeProvider
             createContainerParams);
 
         NodeEndpoint nodeEndpoint = await this.CreateAndStartNodeContainer(createContainerParams);
-        await this.CreateAndStartCvmAttestationVerifierContainer(networkName, nodeEndpoint);
+        await this.CreateAndStartCvmAttestationVerifierContainer(
+            networkName, nodeEndpoint);
         await this.CreateAndStartRecoveryAgentContainer(networkName, nodeEndpoint);
         return nodeEndpoint;
     }
@@ -493,6 +498,7 @@ public class DockerNodeProvider : ICcfNodeProvider
             // Ignore already exists.
         }
 
+        string nodeImage = await ImageUtils.CcfRunJsAppVirtualImageReference();
         var createContainerParams = new CreateContainerParameters
         {
             Labels = new Dictionary<string, string>
@@ -511,7 +517,7 @@ public class DockerNodeProvider : ICcfNodeProvider
                 }
             },
             Name = containerName,
-            Image = $"{ImageUtils.CcfRunJsAppVirtualImage()}:{ImageUtils.CcfRunJsAppVirtualTag()}",
+            Image = nodeImage,
             Env =
             [
                 $"CONFIG_DATA_TGZ={tgzConfigData}",
@@ -580,7 +586,8 @@ public class DockerNodeProvider : ICcfNodeProvider
             createContainerParams);
 
         NodeEndpoint nodeEndpoint = await this.CreateAndStartNodeContainer(createContainerParams);
-        await this.CreateAndStartCvmAttestationVerifierContainer(networkName, nodeEndpoint);
+        await this.CreateAndStartCvmAttestationVerifierContainer(
+            networkName, nodeEndpoint);
         await this.CreateAndStartRecoveryAgentContainer(networkName, nodeEndpoint);
         return nodeEndpoint;
     }
@@ -899,8 +906,7 @@ public class DockerNodeProvider : ICcfNodeProvider
         await this.client.Images.CreateImageAsync(
             new ImagesCreateParameters
             {
-                FromImage = ImageUtils.CcfRunJsAppVirtualImage(),
-                Tag = ImageUtils.CcfRunJsAppVirtualTag(),
+                FromImage = createParams.Image,
             },
             authConfig: null,
             new Progress<JSONMessage>(m => this.logger.LogInformation(m.ToProgressMessage())));
@@ -922,16 +928,17 @@ public class DockerNodeProvider : ICcfNodeProvider
     {
         var containerName = "cvm-attestation-verifier-nw-" + nodeEndpoint.NodeName;
 
+        string fromImage = await ImageUtils.CvmAttestationVerifierImageReference();
         var imageParams = new ImagesCreateParameters
         {
-            FromImage = ImageUtils.CvmAttestationVerifierImage(),
-            Tag = ImageUtils.CvmAttestationVerifierTag(),
+            FromImage = fromImage,
         };
         await this.client.Images.CreateImageAsync(
             imageParams,
             authConfig: null,
             new Progress<JSONMessage>(m => this.logger.LogInformation(m.ToProgressMessage())));
 
+        string nodeImage = await ImageUtils.CcfRunJsAppVirtualImageReference();
         var createContainerParams = new CreateContainerParameters
         {
             Labels = new Dictionary<string, string>
@@ -950,7 +957,7 @@ public class DockerNodeProvider : ICcfNodeProvider
                 }
             },
             Name = containerName,
-            Image = $"{imageParams.FromImage}:{imageParams.Tag}",
+            Image = imageParams.FromImage,
             HostConfig = new HostConfig
             {
                 NetworkMode = networkName,
@@ -977,10 +984,10 @@ public class DockerNodeProvider : ICcfNodeProvider
             containerName,
             nodeEndpoint);
 
+        string fromImage = await ImageUtils.CcfRecoveryAgentImageReference();
         var imageParams = new ImagesCreateParameters
         {
-            FromImage = ImageUtils.CcfRecoveryAgentImage(),
-            Tag = ImageUtils.CcfRecoveryAgentTag(),
+            FromImage = fromImage,
         };
         await this.client.Images.CreateImageAsync(
             imageParams,
@@ -1003,6 +1010,7 @@ public class DockerNodeProvider : ICcfNodeProvider
             insecureVirtualDir,
             recursive: true);
 
+        string nodeImage = await ImageUtils.CcfRunJsAppVirtualImageReference();
         var createContainerParams = new CreateContainerParameters
         {
             Labels = new Dictionary<string, string>
@@ -1021,7 +1029,7 @@ public class DockerNodeProvider : ICcfNodeProvider
                 }
             },
             Name = containerName,
-            Image = $"{imageParams.FromImage}:{imageParams.Tag}",
+            Image = imageParams.FromImage,
             Env =
             [
                 $"CCF_ENDPOINT={nodeEndpoint.ClientRpcAddress}",

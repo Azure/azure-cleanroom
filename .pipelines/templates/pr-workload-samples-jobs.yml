@@ -1,0 +1,267 @@
+# Workload sample PR test jobs (migrated from
+# .github/workflows/pr_workload_samples.yml). Consumed by PR-Validation.yml,
+# gated on testStages contains 'test-workloads'. DAG: pick_location_workloads;
+# big_data/kserve virtual (centralindia); setup_env_aks -> big_data/kserve aks ->
+# cleanup_aks. See MIGRATION.md for detail.
+# test-workloads/test-<scenario> -> upload-artifact -> [delete-bucket] ->
+# remove-resources. The setup-env + test-* composites are ported via
+# steps/workload-setup-env.yml, steps/workload-test-big-data-analytics.yml and
+# steps/workload-test-kserve-inferencing.yml.
+
+parameters:
+  - name: dependsOn
+    type: object
+    default: []
+  - name: condition
+    type: string
+    default: ""
+
+jobs:
+  - job: pick_location_workloads
+    displayName: Pick location
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux
+    variables:
+      ob_outputDirectory: "$(Build.SourcesDirectory)/out"
+    steps:
+      # No `checkout: none` — OneBranch container jobs auto-inject a checkout and
+      # reject an explicit `checkout: none` alongside it.
+      - template: steps/pick-location.yml
+
+  - job: test_big_data_analytics_virtual
+    displayName: Big data analytics (virtual)
+    timeoutInMinutes: 120
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux
+      isCustom: true
+      name: cleanroom-emu-ado
+    variables:
+      repoRoot: "$(Build.SourcesDirectory)"
+      ob_outputDirectory: "$(Build.SourcesDirectory)/out"
+      outDir: "$(Build.SourcesDirectory)/test/onebox/workload-samples/generated"
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - template: steps/workload-setup-env.yml
+        parameters:
+          infraType: virtual
+          location: centralindia
+          outDir: $(outDir)
+      - template: steps/workload-test-big-data-analytics.yml
+        parameters:
+          location: centralindia
+          deploymentConfigDir: $(outDir)
+      - bash: |
+          set -euo pipefail
+          mkdir -p "$(ob_outputDirectory)/big-data-analytics-results-virtual"
+          cp -r "$(outDir)/." "$(ob_outputDirectory)/big-data-analytics-results-virtual/" 2>/dev/null || true
+        displayName: Collect test results to output
+        condition: not(canceled())
+      - pwsh: |
+          ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-input-$(Agent.JobName)-$(Build.BuildId)"
+          ./test/onebox/multi-party-collab/big-data-query-analytics/delete-bucket.ps1 -bucketName "consumer-output-$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete AWS buckets
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  - job: test_kserve_inferencing_virtual
+    displayName: KServe inferencing (virtual)
+    timeoutInMinutes: 120
+    dependsOn: ${{ parameters.dependsOn }}
+    ${{ if ne(parameters.condition, '') }}:
+      condition: ${{ parameters.condition }}
+    pool:
+      type: linux
+      isCustom: true
+      name: cleanroom-emu-ado
+    variables:
+      repoRoot: "$(Build.SourcesDirectory)"
+      ob_outputDirectory: "$(Build.SourcesDirectory)/out"
+      outDir: "$(Build.SourcesDirectory)/test/onebox/workload-samples/generated"
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - template: steps/workload-setup-env.yml
+        parameters:
+          infraType: virtual
+          location: centralindia
+          outDir: $(outDir)
+      - template: steps/workload-test-kserve-inferencing.yml
+        parameters:
+          location: centralindia
+          deploymentConfigDir: $(outDir)
+          models: default
+      - bash: |
+          set -euo pipefail
+          mkdir -p "$(ob_outputDirectory)/kserve-inferencing-results-virtual"
+          cp -r "$(outDir)/." "$(ob_outputDirectory)/kserve-inferencing-results-virtual/" 2>/dev/null || true
+        displayName: Collect test results to output
+        condition: not(canceled())
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        condition: succeeded()
+        workingDirectory: $(repoRoot)
+
+  # --- AKS DAG: setup-env-aks -> {big-data, kserve} -aks -> cleanup-aks ---
+  - job: setup_env_aks
+    displayName: Setup env (AKS)
+    timeoutInMinutes: 120
+    dependsOn: pick_location_workloads
+    condition: succeeded()
+    pool:
+      type: linux
+      isCustom: true
+      name: cleanroom-emu-ado
+    variables:
+      repoRoot: "$(Build.SourcesDirectory)"
+      ob_outputDirectory: "$(Build.SourcesDirectory)/out"
+      location: $[ dependencies.pick_location_workloads.outputs['pickLocation.location'] ]
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - template: steps/workload-setup-env.yml
+        parameters:
+          infraType: aks
+          location: $(location)
+          outDir: $(repoRoot)/test/onebox/workload-samples/generated
+      # Custom (isCustom bare-VM) jobs do NOT auto-publish $(ob_outputDirectory), so
+      # publish the drop EXPLICITLY. The custom-job guard requires the artifact name
+      # to equal ob_customArtifactName = drop_<stage>_<job> = drop_Validate_setup_env_aks,
+      # which is exactly what the AKS test jobs download.
+      - bash: |
+          set -euo pipefail
+          mkdir -p "$(ob_outputDirectory)/workload-samples-env-aks"
+          cp -r "$(repoRoot)/test/onebox/workload-samples/generated/." "$(ob_outputDirectory)/workload-samples-env-aks/" 2>/dev/null || true
+        displayName: Stage env artifacts into drop
+        condition: not(canceled())
+      - task: PublishPipelineArtifact@1
+        displayName: Publish env drop
+        condition: not(canceled())
+        inputs:
+          targetPath: $(ob_outputDirectory)
+          artifact: drop_Validate_setup_env_aks
+
+  - job: test_big_data_analytics_aks
+    displayName: Big data analytics (AKS)
+    # 150 (was 120): on capacity-constrained AKS the Spark apps can sit in
+    # SUBMITTED for a long time before the cluster schedules the driver/executor
+    # pods (build 175745571 was CANCELED at the 120-min cap with apps still
+    # SUBMITTED). 150 gives the batch more room to get scheduled + run.
+    timeoutInMinutes: 150
+    dependsOn:
+      - pick_location_workloads
+      - setup_env_aks
+    condition: succeeded()
+    pool:
+      type: linux
+      isCustom: true
+      name: cleanroom-emu-ado
+    variables:
+      repoRoot: "$(Build.SourcesDirectory)"
+      ob_outputDirectory: "$(Build.SourcesDirectory)/out"
+      location: $[ dependencies.pick_location_workloads.outputs['pickLocation.location'] ]
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - task: DownloadPipelineArtifact@2
+        displayName: Download env artifacts (from setup-env drop)
+        inputs:
+          artifact: drop_Validate_setup_env_aks
+          targetPath: $(Build.SourcesDirectory)/_setupenv_drop
+      - bash: |
+          set -euo pipefail
+          mkdir -p "$(repoRoot)/test/onebox/workload-samples/generated"
+          cp -r "$(Build.SourcesDirectory)/_setupenv_drop/workload-samples-env-aks/." "$(repoRoot)/test/onebox/workload-samples/generated/" 2>/dev/null || true
+        displayName: Restore env artifacts from drop
+      - template: steps/workload-test-big-data-analytics.yml
+        parameters:
+          location: $(location)
+          deploymentConfigDir: $(repoRoot)/test/onebox/workload-samples/generated
+      - bash: |
+          set -euo pipefail
+          mkdir -p "$(ob_outputDirectory)/big-data-analytics-results-aks"
+          cp -r "$(repoRoot)/test/onebox/workload-samples/generated/." "$(ob_outputDirectory)/big-data-analytics-results-aks/" 2>/dev/null || true
+        displayName: Collect test results to output
+        condition: not(canceled())
+
+  - job: test_kserve_inferencing_aks
+    displayName: KServe inferencing (AKS)
+    timeoutInMinutes: 120
+    dependsOn:
+      - pick_location_workloads
+      - setup_env_aks
+    condition: succeeded()
+    pool:
+      type: linux
+      isCustom: true
+      name: cleanroom-emu-ado
+    variables:
+      repoRoot: "$(Build.SourcesDirectory)"
+      ob_outputDirectory: "$(Build.SourcesDirectory)/out"
+      location: $[ dependencies.pick_location_workloads.outputs['pickLocation.location'] ]
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/setup-docker-on-data-disk.yml
+      - template: steps/login-to-azure.yml
+      - task: DownloadPipelineArtifact@2
+        displayName: Download env artifacts (from setup-env drop)
+        inputs:
+          artifact: drop_Validate_setup_env_aks
+          targetPath: $(Build.SourcesDirectory)/_setupenv_drop
+      - bash: |
+          set -euo pipefail
+          mkdir -p "$(repoRoot)/test/onebox/workload-samples/generated"
+          cp -r "$(Build.SourcesDirectory)/_setupenv_drop/workload-samples-env-aks/." "$(repoRoot)/test/onebox/workload-samples/generated/" 2>/dev/null || true
+        displayName: Restore env artifacts from drop
+      - template: steps/workload-test-kserve-inferencing.yml
+        parameters:
+          location: $(location)
+          deploymentConfigDir: $(repoRoot)/test/onebox/workload-samples/generated
+          models: default
+      - bash: |
+          set -euo pipefail
+          mkdir -p "$(ob_outputDirectory)/kserve-inferencing-results-aks"
+          cp -r "$(repoRoot)/test/onebox/workload-samples/generated/." "$(ob_outputDirectory)/kserve-inferencing-results-aks/" 2>/dev/null || true
+        displayName: Collect test results to output
+        condition: not(canceled())
+
+  - job: cleanup_aks
+    displayName: Cleanup (AKS)
+    timeoutInMinutes: 60
+    dependsOn:
+      - test_big_data_analytics_aks
+      - test_kserve_inferencing_aks
+    condition: always()
+    pool:
+      type: linux
+      isCustom: true
+      name: cleanroom-emu-ado
+    variables:
+      repoRoot: "$(Build.SourcesDirectory)"
+      ob_outputDirectory: "$(Build.SourcesDirectory)/out"
+    steps:
+      - checkout: self
+        submodules: recursive
+      - template: steps/login-to-azure.yml
+      - pwsh: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=$(Agent.JobName)-$(Build.BuildId)"
+        displayName: Delete resource groups
+        workingDirectory: $(repoRoot)

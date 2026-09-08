@@ -1,0 +1,100 @@
+################################################################################
+# Release to Test + BVT — scheduled + manual (migrated from
+# .github/workflows/release-and-test.yml). Runs two ways: nightly `schedules:`
+# cron (01:00 IST / 19:30 UTC, default params) and manual queue with tag/releaseType.
+# BUILDS from source -> releases to the internal test ACR -> runs the BVT suite
+# (distinct from ReleaseVerificationNightly, which is no-build from MCR).
+# Extends OneBranch NonOfficial wrapping templates/release-and-test-jobs.yml.
+# See MIGRATION.md for detail.
+################################################################################
+
+schedules:
+  - cron: "30 19 * * *"
+    displayName: Nightly release-to-test + BVT (01:00 IST / 19:30 UTC)
+    branches:
+      include:
+        - develop
+    always: true
+
+trigger: none
+pr: none
+
+name: release-and-test-$(Date:yyyyMMdd).$(Rev:r)
+
+parameters:
+  - name: tag
+    type: string
+    default: ""
+  - name: releaseType
+    type: string
+    default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client, frontend-service"
+  - name: needsAttestation
+    type: boolean
+    default: true
+
+variables:
+  # Shared build vars (var group + ACR_URL + AZURE_* + RUN_ID/RUN_ATTEMPT/JOB_ID +
+  # GITHUB_ACTIONS=true) at PIPELINE scope so custom (isCustom) jobs' own vars can
+  # stay pure maps (OneBranch reads ob_outputDirectory statically). File-relative
+  # (pre-extends), no @self.
+  - template: templates/variables/build-common.yml
+  - name: LinuxContainerImage
+    value: "mcr.microsoft.com/onebranch/azurelinux/build:3.0"
+  - name: CDP_DEFINITION_BUILD_COUNT
+    value: $[counter('', 0)]
+  # OneBranch requires ob_outputDirectory on every job (container + custom). Set a
+  # pipeline-level default so docker-free jobs inherit it; custom jobs also set it
+  # in their own pure-map vars.
+  - name: ob_outputDirectory
+    value: "$(Build.SourcesDirectory)/out"
+  # Release ACR name hoisted as a PLAIN pipeline var (NOT the cleanroom-release-vars
+  # group) to avoid a variable-name collision: cleanroom-release-vars and
+  # cleanroom-pr-vars (from build-common) BOTH define AZURE_CLIENT_ID/TENANT_ID/
+  # SUBSCRIPTION_ID with DIFFERENT values, so both groups cannot coexist at pipeline
+  # scope. The isCustom BVT jobs need RELEASE_ACR_NAME as a pure-map-compatible macro,
+  # so expose just this one value here (EMU/pilot registry, non-secret).
+  - name: RELEASE_ACR_NAME
+    value: "cleanroomemubvtregistry"
+  # Release OIDC service connection name (used as a literal template param by the
+  # release/BVT login steps). Provisioned as cleanroom-prod-release-oidc.
+  - name: releaseServiceConnection
+    value: "cleanroom-prod-release-oidc"
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: OneBranch.Pipelines/GovernedTemplates
+      ref: refs/heads/main
+
+extends:
+  template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates
+  parameters:
+    cloudvault:
+      enabled: false
+    # NOTE: no golang internalModuleProxy here. The build now runs on the custom
+    # (isCustom) pool via release-build-jobs.yml using the PUBLIC feeds (plain
+    # `docker build`; the Dockerfiles self-compile pulling public NuGet/Go inside
+    # the build container). Only the scheduled OneBranch Official build (CodeQL)
+    # uses the governed pool + internal feed + internalModuleProxy.
+    globalSdl:
+      tsa:
+        enabled: false
+      policheck:
+        break: true
+    stages:
+      # Stage MUST be named `Build` so the OneBranch mandated drop artifact name
+      # (drop_<stage>_<job> = drop_Build_build_artefacts) matches the
+      # PublishPipelineArtifact in the shared official-build-jobs.yml build_artefacts
+      # job (same stage name OneBranch.Official.yml uses).
+      - stage: Build
+        displayName: Release to Test + BVT
+        jobs:
+          # build (official build) -> release_to_test (promote to internal ACR)
+          # -> pick_location -> 7 BVT jobs. Same template consumed by
+          # OneBranch.Release.Prod.yml (build_test_msint).
+          - template: .pipelines/templates/release-and-test-jobs.yml@self
+            parameters:
+              tag: ${{ parameters.tag }}
+              releaseType: ${{ parameters.releaseType }}
+              needsAttestation: ${{ parameters.needsAttestation }}

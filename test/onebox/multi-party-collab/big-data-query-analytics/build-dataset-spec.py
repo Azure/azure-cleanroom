@@ -41,7 +41,6 @@ def build_dataset_specification(
     identity_name: Optional[str] = None,
     client_id: Optional[str] = None,
     tenant_id: Optional[str] = None,
-    issuer_url: Optional[str] = None,
     dek_secret_id: Optional[str] = None,
     dek_kv_url: Optional[str] = None,
     kek_secret_id: Optional[str] = None,
@@ -60,7 +59,6 @@ def build_dataset_specification(
     :param identity_name: Friendly name of the identity.
     :param client_id: Azure identity client ID.
     :param tenant_id: Azure identity tenant ID.
-    :param issuer_url: Token issuer URL for the identity.
     :param dek_secret_id: DEK secret ID.
     :param dek_kv_url: DEK Key Vault URL.
     :param kek_secret_id: KEK secret ID.
@@ -128,7 +126,6 @@ def build_dataset_specification(
             "name": identity_name,
             "clientId": client_id,
             "tenantId": tenant_id,
-            "issuerUrl": issuer_url,
         }
 
     # Add DEK if provided.
@@ -169,7 +166,6 @@ def main():
     parser.add_argument("--identity-name", help="Friendly name of the identity")
     parser.add_argument("--client-id", help="Azure identity client ID")
     parser.add_argument("--tenant-id", help="Azure identity tenant ID")
-    parser.add_argument("--issuer-url", help="Token issuer URL for the identity")
     parser.add_argument("--dek-secret-id", help="DEK secret ID")
     parser.add_argument("--dek-kv-url", help="DEK Key Vault URL")
     parser.add_argument("--kek-secret-id", help="KEK secret ID")
@@ -195,7 +191,6 @@ def main():
         identity_name=args.identity_name,
         client_id=args.client_id,
         tenant_id=args.tenant_id,
-        issuer_url=args.issuer_url,
         dek_secret_id=args.dek_secret_id,
         dek_kv_url=args.dek_kv_url,
         kek_secret_id=args.kek_secret_id,

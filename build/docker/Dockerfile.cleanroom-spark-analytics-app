@@ -1,5 +1,8 @@
 FROM cleanroombuild.azurecr.io/mirror/docker/library/python:3.12 AS builder
 
+ARG UV_DEFAULT_INDEX=https://pypi.org/simple
+ENV UV_DEFAULT_INDEX=$UV_DEFAULT_INDEX
+
 WORKDIR /build
 
 RUN apt-get update && apt-get install -y curl build-essential && rm -rf /var/lib/apt/lists/*
@@ -12,7 +15,7 @@ COPY src/internal/cleanroom-internal src/internal/cleanroom-internal
 COPY src/sdk src/sdk
 COPY pyproject.toml .
 COPY uv.lock .
-RUN uv sync --frozen
+RUN uv lock && uv sync --frozen
 
 RUN uv build --all-packages --wheel
 
@@ -26,6 +29,9 @@ RUN sbt assembly
 
 FROM cleanroombuild.azurecr.io/mirror/docker/library/ubuntu/spark:4.0.0-python3
 
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ENV PIP_INDEX_URL=$PIP_INDEX_URL
+
 USER root
 
 WORKDIR /setup
@@ -35,9 +41,9 @@ COPY --from=builder /build/dist/cleanroom_sdk*.whl /setup/
 COPY --from=builder /build/dist/analytics_contracts*.whl /setup/
 
 # Install pip and wheels
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --break-system-packages \
-  && python3 -m pip install --no-cache-dir --break-system-packages *.whl \
-  && rm -f *.whl
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --break-system-packages && \
+    python3 -m pip install --no-cache-dir --break-system-packages *.whl && \
+    rm -f *.whl
 
 WORKDIR /app
 COPY /src/workloads/analytics/analytics-app .

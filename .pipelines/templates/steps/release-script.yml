@@ -1,0 +1,59 @@
+# Step template: script-based release group (build+push a policy/digest/version
+# artefact to the prod ACR). Converts the common composite shape:
+#   azure/login -> az acr login -> Install-Module powershell-yaml
+#   -> [az extension add confcom] -> <build/release .ps1 -push> -> attest-artefact
+#
+# Attestation is provided by the OneBranch Official template's governed
+# provenance/signing (see steps/release-container.yml TODO(Phase 1E)), so no
+# explicit attest step is emitted here.
+#
+# `script` receives $repo (= <registry>.azurecr.io/<environment>/azurecleanroom)
+# and $tag already set, matching the composites' -repo/-tag arguments.
+
+parameters:
+  - name: displayName
+    type: string
+  - name: script
+    type: string
+  - name: tag
+    type: string
+  - name: environment
+    type: string
+  - name: installConfcom
+    type: boolean
+    default: false
+  - name: registryName
+    type: string
+    default: "$(RELEASE_ACR_NAME)"
+  - name: azureServiceConnection
+    type: string
+    # Literal (compile-time) SC name — a $(var) default fails pipeline compile.
+    default: "cleanroom-prod-release-oidc"
+
+steps:
+  - ${{ if parameters.installConfcom }}:
+      - task: AzureCLI@2
+        displayName: "Install confcom extension (${{ parameters.displayName }})"
+        inputs:
+          azureSubscription: ${{ parameters.azureServiceConnection }}
+          scriptType: pscore
+          scriptLocation: inlineScript
+          inlineScript: |
+            az extension add --name confcom -y --allow-preview true
+            az version
+  - task: AzureCLI@2
+    displayName: ${{ parameters.displayName }}
+    inputs:
+      azureSubscription: ${{ parameters.azureServiceConnection }}
+      scriptType: pscore
+      scriptLocation: inlineScript
+      workingDirectory: $(repoRoot)
+      inlineScript: |
+        $ErrorActionPreference = "Stop"
+        $registry = "${{ parameters.registryName }}"
+        $environment = "${{ parameters.environment }}"
+        $tag = "${{ parameters.tag }}"
+        $repo = "$registry.azurecr.io/$environment/azurecleanroom"
+        az acr login --name $registry
+        Install-Module -Name powershell-yaml -Force
+        ${{ parameters.script }}

@@ -1,0 +1,7 @@
+apiVersion: v2
+name: release-metadata
+description: Versioned cleanroom release metadata, read via 'helm show values'. Not
+  deployable; a library chart so 'helm install'/'helm template' are refused by Helm.
+type: library
+# Release/catalog version; mirrored in values.yaml metadata.release.
+version: 1.0.0

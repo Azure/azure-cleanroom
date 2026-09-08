@@ -1,0 +1,58 @@
+# Step template: test-workloads/setup-env composite.
+# Migrated from .github/actions/test-workloads/setup-env/action.yml.
+# Assumes login-to-azure.yml already ran.
+
+parameters:
+  - name: infraType
+    type: string
+    default: virtual
+  - name: location
+    type: string
+    default: centralindia
+  - name: outDir
+    type: string
+    default: "$(repoRoot)/test/onebox/workload-samples/generated"
+  - name: registry
+    type: string
+    default: acr
+  - name: repo
+    type: string
+    default: "$(ACR_URL)"
+  - name: tag
+    type: string
+    default: "$(Build.BuildId)"
+
+steps:
+  - pwsh: Install-Module -Name powershell-yaml -Force
+    displayName: Install powershell-yaml
+  - template: install-cleanroom-cli.yml
+    parameters:
+      repo: ${{ parameters.repo }}
+      tag: ${{ parameters.tag }}
+  - pwsh: |
+      ./test/onebox/workloads/setup-env.ps1 `
+          -infraType ${{ parameters.infraType }} `
+          -registry ${{ parameters.registry }} `
+          -repo ${{ parameters.repo }} `
+          -tag ${{ parameters.tag }} `
+          -location ${{ parameters.location }} `
+          -outDir ${{ parameters.outDir }}
+    displayName: Setup environment
+    workingDirectory: $(repoRoot)
+  - pwsh: docker compose -p ob-workload-cluster-provider logs
+    displayName: Dump cleanroom-cluster-provider logs
+    condition: not(canceled())
+    workingDirectory: $(repoRoot)
+  - pwsh: docker compose -p ob-workload-ccf-provider logs
+    displayName: Dump ccf-provider logs
+    condition: not(canceled())
+    workingDirectory: $(repoRoot)
+  - ${{ if eq(parameters.infraType, 'virtual') }}:
+      - pwsh: docker compose -p ob-workload-ccf logs
+        displayName: Dump ccf logs
+        condition: not(canceled())
+        workingDirectory: $(repoRoot)
+  - pwsh: docker logs ob-workload-owner-client-cgs-client-1
+    displayName: Dump owner-client logs
+    condition: not(canceled())
+    workingDirectory: $(repoRoot)

@@ -18,7 +18,7 @@
 # Environment Variables:
 #   LOCATION         Azure region (default: centralindia, overridden by --location)
 #   VM_SIZE          VM size (default: Standard_DC2as_v5)
-#   VM_IMAGE         VM image (default: Canonical:ubuntu-24_04-lts:cvm:24.04.202604160)
+#   VM_IMAGE         VM image (default: Canonical:ubuntu-24_04-lts:cvm:24.04.202607310)
 #
 # Prerequisites:
 #   - deploy-cluster.sh must have been run successfully
@@ -36,7 +36,7 @@ source "$SCRIPT_DIR/common.sh"
 AKS_FLEX_NODE_VERSION="v0.0.19"
 LOCATION="${LOCATION:-centralindia}"
 VM_SIZE="${VM_SIZE:-Standard_DC2as_v5}"
-VM_IMAGE="${VM_IMAGE:-Canonical:ubuntu-24_04-lts:cvm:24.04.202604160}"
+VM_IMAGE="${VM_IMAGE:-Canonical:ubuntu-24_04-lts:cvm:24.04.202607310}"
 MAX_PODS_PER_NODE="${MAX_PODS_PER_NODE:-110}"
 GENERATED_DIR="$SHARED_AKS_GENERATED_DIR"
 
@@ -171,15 +171,15 @@ create_vm() {
     local ssh_public_key_file="$GENERATED_DIR/${VM_NAME}-ssh.pub"
 
     # Always download SSH keys from Azure Key Vault.
-    log_info "Downloading SSH keys from Key Vault 'azcleanroompublickv'..."
+    log_info "Downloading SSH keys from Key Vault 'azcleanroomemukv'..."
     az keyvault secret show \
-        --vault-name "azcleanroompublickv" \
+        --vault-name "azcleanroomemukv" \
         --name "flex-node-ssh-private-key" \
         --query "value" -o tsv > "$SSH_PRIVATE_KEY_FILE"
     chmod 600 "$SSH_PRIVATE_KEY_FILE"
 
     az keyvault secret show \
-        --vault-name "azcleanroompublickv" \
+        --vault-name "azcleanroomemukv" \
         --name "flex-node-ssh-public-key" \
         --query "value" -o tsv > "$ssh_public_key_file"
     log_info "SSH keys downloaded from Key Vault."

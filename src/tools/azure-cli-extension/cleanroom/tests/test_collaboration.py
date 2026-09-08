@@ -595,7 +595,6 @@ def test_identity_manager_integration():
             name="federated-identity",
             client_id="fed-client-id",
             tenant_id="fed-tenant-id",
-            token_issuer_url="https://fed-issuer.com",
             backing_identity_name="base-oidc",
         )
         assert len(collaboration.identities) == 4

@@ -1,3 +1,31 @@
+function Get-BuildOverrides {
+    $buildOverrides = @()
+
+    if (-not [string]::IsNullOrWhiteSpace($env:UV_DEFAULT_INDEX)) {
+        $buildOverrides += "--build-arg=UV_DEFAULT_INDEX=$($env:UV_DEFAULT_INDEX)"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:PIP_INDEX_URL)) {
+        $buildOverrides += "--build-arg=PIP_INDEX_URL=$($env:PIP_INDEX_URL)"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:RestoreSources)) {
+        $buildOverrides += "--build-arg=RestoreSources=$($env:RestoreSources)"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:NPM_CONFIG_REGISTRY)) {
+        $buildOverrides += "--build-arg=NPM_CONFIG_REGISTRY=$($env:NPM_CONFIG_REGISTRY)"
+    }
+
+    Write-Host "Using build overrides: $($buildOverrides -join ' ')"
+    return $buildOverrides
+}
+
+function Build-DockerImage {
+    $buildOverrides = @(Get-BuildOverrides)
+    docker image build @buildOverrides @args
+}
+
 function Get-Digest {
     [CmdletBinding()]
     param (
@@ -13,21 +41,8 @@ function Get-Digest {
         [string]$platform = "linux/amd64"
     )
 
-    $manifest = oras manifest fetch $repo/"$containerName":$tag
-    $manifestJson = $manifest | ConvertFrom-Json
 
-    # If this is a manifest list (multi-arch), extract the platform-specific digest.
-    if ($manifestJson.mediaType -eq "application/vnd.docker.distribution.manifest.list.v2+json" -or
-        $manifestJson.mediaType -eq "application/vnd.oci.image.index.v1+json") {
-        $os, $arch = $platform -split "/"
-        $entry = $manifestJson.manifests | Where-Object {
-            $_.platform.architecture -eq $arch -and $_.platform.os -eq $os
-        } | Select-Object -First 1
-        if (-not $entry) {
-            throw "No manifest found for platform $platform in $repo/$containerName`:$tag"
-        }
-        return $entry.digest
-    }
+    $manifest = oras manifest fetch $repo/"$containerName":$tag
 
     # Single-arch manifest: compute digest from the raw manifest content.
     $manifestRaw = ""

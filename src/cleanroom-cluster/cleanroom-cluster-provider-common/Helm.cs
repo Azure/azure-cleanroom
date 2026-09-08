@@ -37,7 +37,7 @@ public class HelmClient : RunCommand
         var command = $"upgrade {release} " +
             $"vn2/virtualnode " +
             $"--install " +
-            $"--version 1.3307.26033004 " +
+            $"--version 1.3410.26081102 " +
             $"--set aciResourceGroupName={aciResourceGroupName} " +
             $"--set customTags={customTags} " +
             $"--namespace vn2-release " +
@@ -539,10 +539,56 @@ public class HelmClient : RunCommand
         }
     }
 
-    private Task<int> Helm(string args)
+    private async Task<int> Helm(string args)
     {
         var binary = Environment.ExpandEnvironmentVariables(this.config["HELM_PATH"] ?? "helm");
-        return this.ExecuteCommand(binary, args);
+
+        // Transient control-plane/network errors while talking to the AKS
+        // API server can fail an otherwise-valid helm command mid-install (e.g.
+        // 'UPGRADE FAILED: ... http2: client connection lost' while creating a Secret).
+        // 'helm upgrade --install' is idempotent, so retry on known-transient errors.
+        const int maxAttempts = 3;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await this.ExecuteCommand(binary, args);
+            }
+            catch (ExecuteCommandException e)
+                when (attempt < maxAttempts && IsTransientHelmError(e.Message))
+            {
+                var delay = TimeSpan.FromSeconds(5 * attempt);
+                this.logger.LogWarning(
+                    "Helm command failed with a transient error " +
+                    "(attempt {Attempt}/{MaxAttempts}); retrying in {DelaySeconds}s. " +
+                    "Error: {Error}",
+                    attempt,
+                    maxAttempts,
+                    delay.TotalSeconds,
+                    e.Message);
+                await Task.Delay(delay);
+            }
+        }
+
+        static bool IsTransientHelmError(string? message)
+        {
+            if (string.IsNullOrEmpty(message))
+            {
+                return false;
+            }
+
+            string[] transientMarkers =
+            {
+                "http2: client connection lost",
+                "connection reset by peer",
+                "unexpected EOF",
+                "TLS handshake timeout",
+                "i/o timeout",
+            };
+
+            return transientMarkers.Any(
+                marker => message.Contains(marker, StringComparison.OrdinalIgnoreCase));
+        }
     }
 
     public class HelmChartAnalyticsAgentServiceValues

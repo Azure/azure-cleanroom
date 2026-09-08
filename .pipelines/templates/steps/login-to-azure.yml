@@ -1,0 +1,127 @@
+# Azure login via OIDC workload-identity-federation service connection (migrated
+# from .github/actions/login-to-azure). `AzureCLI@2` with the SC does the
+# federated login (SC encapsulates client/tenant/subscription); the SC's
+# keep-alive auto-refreshes the token for later plain pwsh/bash steps in the job
+# (native equivalent of GitHub's 4-min `az login` refresh loop). See MIGRATION.md.
+
+parameters:
+  # Name of the Azure OIDC service connection. MUST be a literal (compile-time)
+  # value — ADO resolves/authorizes SCs before runtime vars expand, so a $(var)
+  # default fails compilation. Callers needing a different SC pass it explicitly.
+  - name: azureServiceConnection
+    type: string
+    default: "cleanroom-pr-oidc"
+  # The SC's GUID id, used on the OIDC token request (defaults to cleanroom-pr-oidc).
+  - name: serviceConnectionId
+    type: string
+    default: "438432a3-0271-4894-9b3c-3db2a5f11d75"
+  - name: clientId
+    type: string
+    default: "4d2f1740-9546-4b0f-91fb-bfd528455315"
+  - name: tenantId
+    type: string
+    default: "72f988bf-86f1-41af-91ab-2d7cd011db47"
+  - name: subscriptionId
+    type: string
+    default: "fccb68eb-8ccf-49a6-a69a-7ea3c2867e9c"
+
+# --- WHY NOT AzureCLI@2 --------------------------------------------------------
+# On the 1ES **custom (isCustom) bare-VM pool** (cleanroom-emu-ado), an
+# `AzureCLI@2` login does NOT persist: that task logs into an isolated,
+# task-scoped AZURE_CONFIG_DIR that is torn down when the task ends, so the next
+# plain bash/pwsh step (create storage, run collab scenario, `az group create`)
+# sees the default ~/.azure with no login and fails with:
+#     ERROR: Please run 'az login' to setup account.
+# (Verified on builds 174904874/174904877, 2026-08-03 — the login step itself
+#  reported success, but every downstream az call failed.)
+#
+# --- THE FIX (mirrors optimus e2e-cloudtest-jobs.yml + the GitHub composite) ----
+# Do the Workload-Identity-Federation token exchange MANUALLY in a plain Bash
+# task — the same recipe AzureCLI@2 uses internally (see
+# EntraWifUserServiceConnectionUtils.ts in
+# microsoft/azure-pipelines-tasks-common-packages). The resulting `az login`
+# lands in the DEFAULT ~/.azure and, because bare-VM jobs run directly on the VM
+# (not per-task containers), that filesystem-level login persists across every
+# later task in the job. A background loop then re-mints a fresh OIDC assertion
+# every 4 minutes (WIF/federated logins get no refresh token — once the Entra
+# token expires only a fresh OIDC assertion can renew it).
+steps:
+  # This AzureCLI@2 task's ONLY purpose is to register an explicit,
+  # ADO-YAML-compiler-recognized reference to the service connection — REQUIRED
+  # for the manual OIDC token request in the next step to be authorized at all.
+  # Without ANY task using a recognized `azureSubscription:`-style input, the
+  # manual OIDC exchange fails deterministically with "There is no explicit
+  # reference to service connection ... from current stage ..." (verified on
+  # build 174907862, 2026-08-03). This task's own login/logout is irrelevant and
+  # discarded — the NEXT (Bash) step does the actual persistent login, and runs
+  # AFTER this task's end-of-task cleanup, so its login isn't wiped.
+  - task: AzureCLI@2
+    displayName: Register service-connection reference (for OIDC)
+    inputs:
+      azureSubscription: ${{ parameters.azureServiceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: az account show
+
+  - task: Bash@3
+    displayName: Login to Azure (WIF, persists for the whole job)
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      SYSTEM_OIDCREQUESTURI: $(System.OidcRequestUri)
+    inputs:
+      targetType: inline
+      script: |
+        set -euo pipefail
+
+        CLIENT_ID="${{ parameters.clientId }}"
+        TENANT_ID="${{ parameters.tenantId }}"
+        SERVICE_CONNECTION_ID="${{ parameters.serviceConnectionId }}"
+        SUBSCRIPTION_ID="${{ parameters.subscriptionId }}"
+
+        login_with_fresh_oidc_token() {
+          local body_file http_status oidc_token
+          body_file=$(mktemp)
+          # -d "" forces curl to send Content-Length: 0 — a bodyless POST
+          # without it gets rejected with 411 Length Required by this endpoint.
+          http_status=$(curl -s -o "$body_file" -w '%{http_code}' -X POST \
+            --oauth2-bearer "$SYSTEM_ACCESSTOKEN" \
+            -H "Content-Type: application/json" \
+            -d "" \
+            "${SYSTEM_OIDCREQUESTURI}?api-version=7.1&serviceConnectionId=${SERVICE_CONNECTION_ID}")
+          if [ "$http_status" != "200" ]; then
+            echo "OIDC token request failed with HTTP $http_status:" >&2
+            cat "$body_file" >&2
+            rm -f "$body_file"
+            return 1
+          fi
+          oidc_token=$(python3 -c "import json; print(json.load(open('$body_file'))['oidcToken'])")
+          rm -f "$body_file"
+          az login --service-principal -u "$CLIENT_ID" -t "$TENANT_ID" --federated-token "$oidc_token" --output none
+          az account set --subscription "$SUBSCRIPTION_ID"
+        }
+
+        # ADO's "explicit reference to service connection" check on the OIDC
+        # token endpoint can transiently reject an otherwise-valid request for
+        # some matrix legs while others succeed — retry the first login a few
+        # times (Microsoft's own EntraWifUserServiceConnectionUtils.ts retries
+        # for the same reason).
+        login_succeeded=false
+        for attempt in 1 2 3 4 5; do
+          if login_with_fresh_oidc_token; then
+            login_succeeded=true
+            break
+          fi
+          echo "Login attempt $attempt failed; retrying in 5s..." >&2
+          sleep 5
+        done
+        if [ "$login_succeeded" != "true" ]; then
+          echo "Login to Azure failed after 5 attempts." >&2
+          exit 1
+        fi
+        az account show
+
+        # Refresh every 4 minutes for the rest of the job — same interval as the
+        # GitHub Actions mechanism this ports (proactively beats the short-lived
+        # OIDC assertion window rather than reacting to an expired token).
+        ( while true; do sleep 240; login_with_fresh_oidc_token || true; done ) &
+        disown

@@ -1,4 +1,4 @@
-FROM otel/opentelemetry-collector-contrib:0.103.0
+FROM mcr.microsoft.com/oss/otel/opentelemetry-collector-contrib:0.103.0
 
 WORKDIR /
 

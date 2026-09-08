@@ -1,0 +1,38 @@
+# Job definitions for CleanupStalePrResources.yml (migrated from the single
+# cleanup-stale-resources job in cleanup_stale_pr_resources.yml): checkout ->
+# setup-docker -> login -> `cleanup.ps1 -environment pr`. See MIGRATION.md.
+# this must target a 1ES pool that provides Docker (see optimus's separate
+# docker/kind pool). Marked TODO until the ADO 1ES pool is provisioned (Phase 1C).
+
+jobs:
+  - job: cleanup_stale_pr_resources
+    displayName: Cleanup stale PR resources
+    # GitHub's cleanup_stale_pr_resources.yml sets no timeout-minutes, so its job
+    # inherits the GitHub Actions default of 360 min. cleanup.ps1 legitimately
+    # needs ~2h (it does ~2000 sequential `az ad sp show` existence checks + a
+    # full role-assignment/RG scan), so a 120-min cap cut it off mid-run. Match
+    # the source's effective budget.
+    timeoutInMinutes: 360
+    pool:
+      type: linux
+    variables:
+      ob_outputDirectory: "$(Build.SourcesDirectory)/out"
+    steps:
+      - checkout: self
+        submodules: recursive
+
+      # NOTE: cleanup.ps1 is pure `az`/PowerShell (no docker), so the
+      # setup-docker-on-data-disk step is intentionally omitted here — it would
+      # require a docker-capable pool that this cleanup job doesn't need.
+
+      - task: AzureCLI@2
+        displayName: Execute cleanup
+        inputs:
+          # Service connection inputs must be a literal (compile-time) value —
+          # ADO resolves/authorizes them before runtime variables expand.
+          azureSubscription: cleanroom-pr-oidc
+          scriptType: pscore
+          scriptLocation: inlineScript
+          workingDirectory: $(Build.SourcesDirectory)/azure-cleanroom
+          inlineScript: |
+            pwsh ./.github/scripts/cleanup.ps1 -environment "pr"

@@ -1,5 +1,6 @@
 # Use the official .NET Core SDK as the base image
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG RestoreSources=https://api.nuget.org/v3/index.json
 
 # Set the working directory
 WORKDIR /app
@@ -15,7 +16,8 @@ COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
 COPY src/internal/Cose/*.csproj /app/src/internal/Cose/
 COPY src/workloads/frontend/Models /app/src/workloads/frontend/Models
 COPY src/workloads/frontend/Utils /app/src/workloads/frontend/Utils
-RUN dotnet restore /app/test/onebox/frontendservice/mock-server/mock-server.sln
+RUN dotnet restore --source "$RestoreSources" \
+    /app/test/onebox/frontendservice/mock-server/mock-server.sln
 
 # copy everything else and build app
 COPY stylecop.json /app

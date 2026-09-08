@@ -1,0 +1,11 @@
+# Step template: install uv + pin python (3.12, 3.10).
+# Migrated from the repeated composite steps (astral-sh/setup-uv@v7 + uv python install).
+
+steps:
+  - bash: curl -LsSf https://astral.sh/uv/install.sh | sh
+    displayName: Install uv
+  - bash: |
+      export PATH="$HOME/.local/bin:$PATH"
+      uv python install 3.12 3.10
+    displayName: Install python (3.12, 3.10)
+    workingDirectory: $(repoRoot)

@@ -34,7 +34,8 @@ else {
 $root = git rev-parse --show-toplevel
 $buildRoot = "$root/build"
 
-docker image build -t $imageName -f $buildRoot/docker/Dockerfile.cgs-ui "$root"
+Build-DockerImage `
+    -t $imageName -f $buildRoot/docker/Dockerfile.cgs-ui "$root"
 
 if ($push) {
     docker push $imageName

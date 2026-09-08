@@ -1,17 +1,18 @@
 {
   "scale_factor": 700,
-  "source_timestamp": "2026-07-06T22:18:12.176938",
+  "source_timestamp": "2026-09-02T00:00:00",
   "policy": {
     "success_rate_allow_failure_below_pct": 80.0,
     "outlier_rule": "exclude rows above Q3 + 1.5*IQR (Tukey upper fence) within the latest run for the same scale/query/format",
-    "ci_threshold_rule": "ci fails iff observed_p95(post-Tukey-trim) > baseline_p95_seconds * 2.0 (i.e. ~100% slower than the recorded p95 baseline); the 2.0x comes from the --duration-threshold-grace-pct default (100%) in verify_run.py"
+    "ci_threshold_rule": "ci fails iff observed_p95(post-Tukey-trim) > baseline_p95_seconds * 2.0 (i.e. ~100% slower than the recorded p95 baseline); the 2.0x comes from the --duration-threshold-grace-pct default (100%) in verify_run.py",
+    "sku_note": "baseline_p95_seconds recalibrated 2026-09-02 to the observed p95 of sf700 on the small scaleSku (run 33599319124, D4ds_v5 x3, vn2=2, p4). sf700 now maps to small in SCALE_SKU_BY_SCALE_FACTOR; small has fewer/smaller executors (5x8g vs medium 10x16g) so durations are higher than the previous medium-SKU baselines. The avg_metrics/avg_phase_timings below are retained from the prior medium-SKU capture for reference and are NOT used for gating; only baseline_p95_seconds governs the duration check."
   },
   "thresholds": [
     {
       "scale_factor": 700,
       "query": "query1",
       "format": "csv",
-      "baseline_p95_seconds": 731.261,
+      "baseline_p95_seconds": 822.6,
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 276.36,
         "running_to_completed_seconds": 454.901
@@ -42,7 +43,7 @@
       "scale_factor": 700,
       "query": "query1",
       "format": "parquet",
-      "baseline_p95_seconds": 640.26,
+      "baseline_p95_seconds": 821.2,
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 273.23,
         "running_to_completed_seconds": 367.031
@@ -73,7 +74,7 @@
       "scale_factor": 700,
       "query": "query14",
       "format": "csv",
-      "baseline_p95_seconds": 3474.031,
+      "baseline_p95_seconds": 7231.26,
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 210.363,
         "running_to_completed_seconds": 3263.668
@@ -104,7 +105,7 @@
       "scale_factor": 700,
       "query": "query14",
       "format": "parquet",
-      "baseline_p95_seconds": 3397.186,
+      "baseline_p95_seconds": 5940.7,
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 131.731,
         "running_to_completed_seconds": 3265.455
@@ -135,7 +136,7 @@
       "scale_factor": 700,
       "query": "query24",
       "format": "csv",
-      "baseline_p95_seconds": 1551.103,
+      "baseline_p95_seconds": 2643.8,
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 213.551,
         "running_to_completed_seconds": 1337.552
@@ -166,7 +167,7 @@
       "scale_factor": 700,
       "query": "query24",
       "format": "parquet",
-      "baseline_p95_seconds": 1286.057,
+      "baseline_p95_seconds": 2187.8,
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 198.751,
         "running_to_completed_seconds": 1087.306
@@ -197,7 +198,7 @@
       "scale_factor": 700,
       "query": "query64",
       "format": "csv",
-      "baseline_p95_seconds": 2647.354,
+      "baseline_p95_seconds": 5071.1,
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 271.868,
         "running_to_completed_seconds": 2375.486
@@ -228,7 +229,7 @@
       "scale_factor": 700,
       "query": "query64",
       "format": "parquet",
-      "baseline_p95_seconds": 2257.79,
+      "baseline_p95_seconds": 4009.6,
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 200.483,
         "running_to_completed_seconds": 2057.307
@@ -259,7 +260,7 @@
       "scale_factor": 700,
       "query": "query72",
       "format": "csv",
-      "baseline_p95_seconds": 948.686,
+      "baseline_p95_seconds": 1610.1,
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 198.613,
         "running_to_completed_seconds": 750.073
@@ -290,7 +291,7 @@
       "scale_factor": 700,
       "query": "query72",
       "format": "parquet",
-      "baseline_p95_seconds": 749.747,
+      "baseline_p95_seconds": 1144.9,
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 201.712,
         "running_to_completed_seconds": 548.035

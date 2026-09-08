@@ -35,9 +35,8 @@ if (!$tag.Contains('.')) {
 if (!$localenv) {
     . $PSScriptRoot/helpers.ps1
     create_version_file "$PSScriptRoot/../src/tools/azure-cli-extension/cleanroom/azext_cleanroom/version.py" $whlTag
-
     # See https://docs.docker.com/build/guide/export/ for --output usage reference.
-    docker image build `
+    Build-DockerImage `
         --output=$output --target=dist `
         -f $PSScriptRoot/docker/Dockerfile.azcliext.cleanroom "$PSScriptRoot/.."
     Write-Host "Built $output/cleanroom-$whlTag-py2.py3-none-any.whl"

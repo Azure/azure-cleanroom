@@ -186,7 +186,7 @@ class ProtocolType(Enum):
 
 class ServiceEndpoint(BaseModel):
     protocol: ProtocolType
-    url: str
+    url: str | None = None
     configuration: str | None = ""
 
 

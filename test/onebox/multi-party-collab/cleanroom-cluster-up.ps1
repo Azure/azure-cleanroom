@@ -7,7 +7,10 @@ param (
     [string]$tag,
     [string]$clusterProviderProjectName = "ob-cleanroom-cluster-provider",
     [string]$outDir = "",
-    [string[]]$ipTags = @()
+    # Default to the non-prod first-party service tag so all public IPs created for the AKS
+    # cluster in test/onebox runs are tagged. Pass -ipTags to override (each entry is
+    # 'IpTagType=Tag'); pass @() to create the IPs untagged.
+    [string[]]$ipTags = @("FirstPartyUsage=/AzureCleanRoomsNonProd")
 )
 
 # https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
@@ -91,6 +94,23 @@ $clusterUpArgs = @(
 )
 if ($ipTags.Count -gt 0) {
     $clusterUpArgs += @("--ip-tags") + $ipTags
+}
+# Honor CLEANROOM_CLUSTER_NODE_VM_SIZE (e.g. the TPC-DS stress pipelines set
+# Standard_D8ds_v5) so the system agentpool is sized via providerConfig.nodeVmSize.
+# Without this, `az cleanroom cluster up` omits nodeVmSize and the cluster
+# provider defaults the agentpool to Standard_D4ds_v5.
+if ($env:CLEANROOM_CLUSTER_NODE_VM_SIZE) {
+    Write-Host "Using node VM size from CLEANROOM_CLUSTER_NODE_VM_SIZE: $($env:CLEANROOM_CLUSTER_NODE_VM_SIZE)"
+    $clusterUpArgs += @("--node-vm-size", $env:CLEANROOM_CLUSTER_NODE_VM_SIZE)
+}
+# Honor CLEANROOM_CLUSTER_INITIAL_NODE_COUNT (e.g. the TPC-DS stress pipelines set
+# the agent-pool node count) so the system agentpool is seeded via
+# providerConfig.initialNodeCount. Without this, `az cleanroom cluster up` omits
+# initialNodeCount and the cluster provider defaults the agentpool to a 2..5
+# autoscaling range regardless of the requested node count.
+if ($env:CLEANROOM_CLUSTER_INITIAL_NODE_COUNT) {
+    Write-Host "Using initial node count from CLEANROOM_CLUSTER_INITIAL_NODE_COUNT: $($env:CLEANROOM_CLUSTER_INITIAL_NODE_COUNT)"
+    $clusterUpArgs += @("--initial-node-count", $env:CLEANROOM_CLUSTER_INITIAL_NODE_COUNT)
 }
 az cleanroom cluster up @clusterUpArgs
 

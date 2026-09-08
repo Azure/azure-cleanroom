@@ -1,5 +1,6 @@
 # Use the official .NET Core SDK as the base image
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG RestoreSources=https://api.nuget.org/v3/index.json
 
 # Set the working directory
 WORKDIR /app
@@ -20,7 +21,7 @@ COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
 COPY src/sdk/cleanroom-sdk/Azure.Cleanroom.Sdk.csproj /app/src/sdk/cleanroom-sdk/Azure.Cleanroom.Sdk.csproj
 COPY src/sdk/clients/cgs-client/Azure.Cleanroom.Governance.Client.csproj /app/src/sdk/clients/cgs-client/Azure.Cleanroom.Governance.Client.csproj
 COPY src/sdk/clients/ccf-client/Microsoft.Ccf.Client.csproj /app/src/sdk/clients/ccf-client/Microsoft.Ccf.Client.csproj
-RUN dotnet restore /app/src/governance/governance.sln
+RUN dotnet restore --source "$RestoreSources" /app/src/governance/governance.sln
 
 # copy everything else and build app
 COPY stylecop.json /app

@@ -2753,6 +2753,7 @@ def cluster_up_cmd(
     location,
     node_vm_size,
     provider_client_name,
+    initial_node_count=None,
     ip_tags=None,
     env_file=None,
 ):
@@ -2767,6 +2768,7 @@ def cluster_up_cmd(
         location,
         node_vm_size,
         provider_client_name,
+        initial_node_count,
         ip_tags,
         env_file,
     )

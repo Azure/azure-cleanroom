@@ -486,6 +486,10 @@ export interface components {
             userIdentifier?: string;
             /** @description Whether this collaborator is the owner of the collaboration. */
             isOwner?: boolean;
+            /** @description The Entra object ID (oid) of the collaborator, when known. */
+            objectId?: string;
+            /** @description The Entra tenant ID (tid) of the collaborator, when known. */
+            tenantId?: string;
         };
         /** ListCollaboratorsResponse */
         ListCollaboratorsResponse: {
@@ -662,10 +666,16 @@ export interface components {
             awsCgsSecretId?: string;
             /** @enum {string} */
             encryptionMode: "CSE" | "CPK" | "SSE";
+            /** @default  */
+            subdirectory: string;
         };
         DatasetIdentity: {
             clientId: string;
-            issuerUrl: string;
+            /**
+             * @deprecated
+             * @description No longer supported. Requests that set this property are rejected; configure issuer URLs through governance.
+             */
+            issuerUrl?: string;
             tenantId: string;
             name: string;
         };
@@ -704,7 +714,7 @@ export interface components {
              * @default small
              * @enum {string}
              */
-            scaleSku?: "small" | "medium" | "large";
+            scaleSku: "small" | "medium" | "large";
         };
         QueryRunOutput: {
             jobId: string;

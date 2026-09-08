@@ -50,6 +50,20 @@ pwsh $build/onebox/build-containers.ps1 `
     -repo $repo -tag $tag -withRegoPolicy:$pushPolicy
 
 # ---------------------------------------------------------------------------
+# Publish release-metadata catalog
+# ---------------------------------------------------------------------------
+# The catalog is a Helm chart whose version derives from the build tag (Get-SemanticVersionFromTag),
+# so producer and consumer agree. -includeDevImages adds onebox-only images (e.g. local-skr) that are
+# never released to MCR; -skipMissing tolerates any image not built in this run.
+pwsh $build/build-release-metadata-chart.ps1 `
+    -repo $repo `
+    -publishRepo $repo `
+    -tag $tag `
+    -push `
+    -skipMissing `
+    -includeDevImages
+
+# ---------------------------------------------------------------------------
 # Generate env file
 # ---------------------------------------------------------------------------
 pwsh $PSScriptRoot/generate-dev-up-env.ps1 `

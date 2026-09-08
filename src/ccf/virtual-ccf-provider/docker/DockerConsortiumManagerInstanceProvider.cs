@@ -128,10 +128,10 @@ public class DockerConsortiumManagerInstanceProvider : ICcfConsortiumManagerInst
         JsonObject? providerConfig)
     {
         string containerName = "consortium-manager-" + instanceName;
+        string fromImage = await ImageUtils.CcfConsortiumManagerImageReference();
         var imageParams = new ImagesCreateParameters
         {
-            FromImage = ImageUtils.CcfConsortiumManagerImage(),
-            Tag = ImageUtils.CcfConsortiumManagerTag(),
+            FromImage = fromImage,
         };
         await this.client.Images.CreateImageAsync(
             imageParams,
@@ -187,7 +187,7 @@ public class DockerConsortiumManagerInstanceProvider : ICcfConsortiumManagerInst
                 }
             },
             Name = containerName,
-            Image = $"{imageParams.FromImage}:{imageParams.Tag}",
+            Image = imageParams.FromImage,
             Env = envVars,
             ExposedPorts = new Dictionary<string, EmptyStruct>
             {

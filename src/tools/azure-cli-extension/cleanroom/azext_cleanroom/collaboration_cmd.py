@@ -147,7 +147,6 @@ def collaboration_identity_add_az_federated_cmd(
     client_id: str,
     tenant_id: str,
     backing_identity_name: str,
-    token_issuer_url: str = "",
     collaboration_config_file: str = CollaborationConfiguration.default_collaboration_config_file(),
 ):
     """Add an Azure Identity backed by federated credentials to the current collaboration context.
@@ -157,7 +156,6 @@ def collaboration_identity_add_az_federated_cmd(
     :param tenant_id: Tenant ID of the Azure Identity.
     :param backing_identity_name: Friendly name of an existing identity in the configuration
         that will back this federated identity.
-    :param token_issuer_url: The URL of the token issuer for federation.
     :param collaboration_config_file: Path to the collaboration configuration file.
     """
 
@@ -181,7 +179,6 @@ def collaboration_identity_add_az_federated_cmd(
             name=identity_name,
             client_id=client_id,
             tenant_id=tenant_id,
-            token_issuer_url=token_issuer_url,
             backing_identity_name=backing_identity_name,
         )
     except CleanroomSpecificationError as e:
@@ -424,7 +421,8 @@ def collaboration_dataset_publish_cmd(
         )
 
     dataset_access_identity = IdentityManager(
-        collaboration_context.identities, logger
+        collaboration_context.identities,
+        logger,
     ).get_identity(identity_name)
 
     # Attach an access policy to the dataset.
@@ -529,7 +527,7 @@ def collaboration_dataset_publish_cmd(
         cmd,
         document_id=dataset_name,
         contract_id=contract_id,
-        data=dataset_spec.model_dump_json(),
+        data=dataset_spec.model_dump_json(exclude_none=True),
         labels=json.dumps({"type": "dataset"}),
         approvers=json.dumps(dataset_approvers),
         gov_client_name=collaboration_context.governance_client_name,

@@ -27,8 +27,9 @@ public class DatasetDocumentPublisher(
             var labels = this.GetLabels();
             var approvers = this.GetApprovers(input);
             var datasetSpecification = this.GetDatasetSpecification(id, input);
-            var data = JsonSerializer.Serialize(
-                datasetSpecification, this.JsonSerializerOptions);
+            string data = JsonSerializer.Serialize(
+                datasetSpecification,
+                this.JsonSerializerOptions);
 
             this.Logger.LogInformation(
                 $"Publishing user document with id {id} for contract {contractId}");

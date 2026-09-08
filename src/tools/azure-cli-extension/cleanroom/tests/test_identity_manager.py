@@ -123,7 +123,6 @@ def test_azure_federated_identity():
             name="test-federated-success",
             client_id="fed-client-id",
             tenant_id="fed-tenant-id",
-            token_issuer_url="https://test-issuer.com",
             backing_identity_name="base-identity",
         )
 
@@ -139,6 +138,11 @@ def test_azure_federated_identity():
         assert isinstance(
             federated_identity.tokenIssuer, FederatedIdentityBasedTokenIssuer
         )
+        assert (
+            federated_identity.tokenIssuer.issuer.protocol
+            == ProtocolType.AzureAD_Federated
+        )
+        assert federated_identity.tokenIssuer.issuer.url is None
         assert federated_identity.tokenIssuer.federatedIdentity.name == "base-identity"
 
         print("✓ Azure Federated Identity creation successful")

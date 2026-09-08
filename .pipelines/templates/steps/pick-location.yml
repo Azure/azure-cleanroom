@@ -1,0 +1,21 @@
+# Step template: pick a random Azure location and publish it as an OUTPUT var.
+# Migrated from the `pick-location` job repeated in pr_cleanroom_cluster.yml and
+# pr_workload_samples.yml. Use in a small job that other jobs then read via
+#   dependencies.<job>.outputs['pickLocation.location']
+#
+# Location list mirrors the GitHub workflows (DC2as_v5 SKU regions; westeurope +
+# westus intentionally excluded — quota / used by another flow).
+
+steps:
+  - bash: |
+      set -euo pipefail
+      # germanywestcentral temporarily removed: persistent AKSCapacityHeavyUsage
+      # (400 AKSCapacityHeavyUsage) was failing setup-env randomly (~1/5 runs).
+      # Re-add it once Azure restores AKS capacity in that region.
+      locations=("northeurope" "centralindia" "eastasia" "southeastasia")
+      index=$((RANDOM % ${#locations[@]}))
+      selected="${locations[$index]}"
+      echo "Selected location: $selected"
+      echo "##vso[task.setvariable variable=location;isOutput=true]$selected"
+    name: pickLocation
+    displayName: Pick a random Azure location

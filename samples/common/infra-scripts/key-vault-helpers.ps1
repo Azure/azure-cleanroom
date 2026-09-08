@@ -19,13 +19,25 @@ function Create-Hsm {
 
         Write-Host "Activating HSM"
         $activationResult = az keyvault security-domain download --hsm-name $hsmName --sd-wrapping-keys $outDir/cert_0.cer $outDir/cert_1.cer $outDir/cert_2.cer --sd-quorum 2 --security-domain-file "securitydomain$hsmName.json"
-
-        Write-Host "Assigning permissions to object ID $adminObjectId"
-        $roleAssignment = az keyvault role assignment create --role "Managed HSM Crypto Officer" --scope "/" --assignee-object-id $adminObjectId --hsm-name $hsmName
-        $roleAssignment = az keyvault role assignment create --role "Managed HSM Crypto User" --scope "/" --assignee-object-id $adminObjectId --hsm-name $hsmName
     }
     else {
         Write-Host "HSM is already active"
+    }
+
+    # Ensure the admin identity has crypto data-plane roles on every invocation. A shared or
+    # already-active HSM skips the activation block above, so without this the caller keeps only
+    # "Managed HSM Administrator" (role management) but lacks keys/import/action, causing
+    # wrap-deks (az keyvault key import) to fail with AccessDenied. Idempotent: only creates the
+    # assignment when it is missing.
+    foreach ($role in @("Managed HSM Crypto Officer", "Managed HSM Crypto User")) {
+        $existing = az keyvault role assignment list --hsm-name $hsmName --scope "/" --role $role --assignee-object-id $adminObjectId | ConvertFrom-Json
+        if (-not $existing -or $existing.Count -eq 0) {
+            Write-Host "Assigning '$role' to object ID $adminObjectId"
+            az keyvault role assignment create --role $role --scope "/" --assignee-object-id $adminObjectId --hsm-name $hsmName | Out-Null
+        }
+        else {
+            Write-Host "Object ID $adminObjectId already has '$role'"
+        }
     }
 
     return $mhsmResult

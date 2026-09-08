@@ -1,5 +1,6 @@
 # Use the official .NET Core SDK as the base image
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG RestoreSources=https://api.nuget.org/v3/index.json
 
 # Set the working directory
 WORKDIR /app
@@ -12,7 +13,7 @@ COPY src/tools/local-skr/*.sln /app/src/tools/local-skr/
 COPY src/tools/local-skr/*.csproj /app/src/tools/local-skr/
 COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
-RUN dotnet restore /app/src/tools/local-skr/local-skr.sln
+RUN dotnet restore --source "$RestoreSources" /app/src/tools/local-skr/local-skr.sln
 
 # copy everything else and build app
 COPY stylecop.json /app

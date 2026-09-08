@@ -1,5 +1,6 @@
 # Use the official .NET Core SDK as the base image
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG RestoreSources=https://api.nuget.org/v3/index.json
 
 # Set the working directory
 WORKDIR /app
@@ -21,7 +22,7 @@ COPY src/identity/Common/Utilities/*.csproj /app/src/identity/Common/Utilities/
 COPY src/identity/Common/CredentialStore/*.csproj /app/src/identity/Common/CredentialStore/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
 COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
-RUN dotnet restore /app/src/identity/Identity.sln
+RUN dotnet restore --source "$RestoreSources" /app/src/identity/Identity.sln
 
 # copy everything else and build app
 COPY stylecop.json /app

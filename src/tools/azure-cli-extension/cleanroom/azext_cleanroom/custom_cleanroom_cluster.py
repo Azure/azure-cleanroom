@@ -108,6 +108,7 @@ def cluster_up(
     location,
     node_vm_size,
     provider_client_name,
+    initial_node_count=None,
     ip_tags=None,
     env_file=None,
 ):
@@ -149,6 +150,10 @@ def cluster_up(
     }
     if node_vm_size:
         provider_config["nodeVmSize"] = node_vm_size
+    # Seed the AKS agent pool with an initial node count. When omitted the cluster
+    # provider defaults the pool to its own minimum (2..5 autoscale).
+    if initial_node_count:
+        provider_config["initialNodeCount"] = initial_node_count
     # Only tag the AKS setup's public IPs when the caller supplies service tags via
     # --ip-tags. When omitted, the IPs are created untagged. Each --ip-tags entry uses the
     # Azure CLI 'IpTagType=Tag' syntax and is mapped to the Azure Public IP Address IpTag
@@ -737,28 +742,6 @@ def set_docker_compose_env_params():
         os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_API_SERVER_PROXY_PACKAGE_URL"] = ""
     if "AZCLI_CLEANROOM_CLUSTER_PROVIDER_KUBELET_PROXY_PACKAGE_URL" not in os.environ:
         os.environ["AZCLI_CLEANROOM_CLUSTER_PROVIDER_KUBELET_PROXY_PACKAGE_URL"] = ""
-
-
-def parse_ip_tags(ip_tags):
-    # Parses Azure CLI 'IpTagType=Tag' pairs (e.g. 'RoutingPreference=Internet') into the
-    # Azure Public IP Address IpTag schema entries ({"ipTagType": ..., "tag": ...}).
-    parsed = []
-    for item in ip_tags:
-        if "=" not in item:
-            raise CLIError(
-                f"Invalid --ip-tags value '{item}'. Expected 'IpTagType=Tag' format, "
-                "e.g. 'RoutingPreference=Internet'."
-            )
-        tag_type, tag_value = item.split("=", 1)
-        tag_type = tag_type.strip()
-        tag_value = tag_value.strip()
-        if not tag_type or not tag_value:
-            raise CLIError(
-                f"Invalid --ip-tags value '{item}'. Both the IP tag type and tag value "
-                "must be non-empty, e.g. 'RoutingPreference=Internet'."
-            )
-        parsed.append({"ipTagType": tag_type, "tag": tag_value})
-    return parsed
 
 
 def parse_ip_tags(ip_tags):

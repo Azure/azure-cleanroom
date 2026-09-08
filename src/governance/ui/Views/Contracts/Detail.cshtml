@@ -78,16 +78,22 @@
                     This contract proposal is pending member votes.
                 </div>
                 <div>
-                    <a asp-controller="Contracts" asp-action="VoteAccept" asp-route-id="@Model.Id"
-                           asp-route-proposalId="@Model.ProposalId" class="btn btn-success me-2">
-                        <i class="fas fa-check me-1"></i>
-                        Accept
-                    </a>
-                    <a asp-controller="Contracts" asp-action="VoteReject" asp-route-id="@Model.Id"
-                           asp-route-proposalId="@Model.ProposalId" class="btn btn-danger">
-                        <i class="fas fa-times me-1"></i>
-                        Reject
-                    </a>
+                    <form asp-controller="Contracts" asp-action="VoteAccept" asp-route-id="@Model.Id"
+                           asp-route-proposalId="@Model.ProposalId" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-success me-2">
+                            <i class="fas fa-check me-1"></i>
+                            Accept
+                        </button>
+                    </form>
+                    <form asp-controller="Contracts" asp-action="VoteReject" asp-route-id="@Model.Id"
+                           asp-route-proposalId="@Model.ProposalId" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-times me-1"></i>
+                            Reject
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>

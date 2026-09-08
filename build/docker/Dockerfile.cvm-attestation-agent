@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.26-alpine AS builder
+FROM cleanroombuild.azurecr.io/mirror/docker/library/golang:1.26-alpine AS builder
 
 RUN apk --no-cache add curl
 RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.11.0
@@ -21,7 +21,7 @@ RUN golangci-lint run -v -c .golangci.yml ./src/cvm/...
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /cvm-attestation-agent ./src/cvm/cmd/cvm-attestation-agent
 
 # NVAT CLI build stage.
-FROM ubuntu:24.04 AS nvat-builder
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:24.04 AS nvat-builder
 
 COPY build/docker/install-nvat.sh /tmp/install-nvat.sh
 COPY build/docker/NVAT_REF /tmp/NVAT_REF
@@ -30,7 +30,7 @@ RUN chmod +x /tmp/install-nvat.sh && /tmp/install-nvat.sh /tmp/NVAT_REF
 
 # Runtime stage — requires glibc (not Alpine/musl) because nvattest loads the
 # host's libnvidia-ml.so through NVML, and that library is built against glibc.
-FROM ubuntu:24.04
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:24.04
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \

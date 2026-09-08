@@ -21,7 +21,8 @@ else {
 }
 
 $root = git rev-parse --show-toplevel
-docker image build -t $imageName `
+Build-DockerImage `
+    -t $imageName `
     -f $root/build/docker/Dockerfile.ohttp-gateway $root
 if ($push) {
     docker push $imageName

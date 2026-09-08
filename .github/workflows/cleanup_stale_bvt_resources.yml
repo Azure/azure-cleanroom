@@ -3,7 +3,7 @@ name: Cleanup stale resources created by BVTs
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 2 * * 0"
+    - cron: "45 18 * * *"  # 00:15 IST daily (18:45 UTC prev day)
 
 permissions:
   id-token: write
@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   cleanup-stale-resources:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=cleanup-stale-bvt-resources-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=cleanup-stale-bvt-resources-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: test
     steps:
     - uses: actions/checkout@v4

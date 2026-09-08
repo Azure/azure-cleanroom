@@ -136,6 +136,31 @@ public class UvmCoseSign1Message
                 throw new Exception($"Unexpected x5chain type {reader.PeekState()}.");
             }
 
+            if (certCollection.Count < 2)
+            {
+                throw new Exception("UVM certificate chain must contain a leaf and root.");
+            }
+
+            var leafCert = certCollection[0];
+            var rootCert = certCollection[certCollection.Count - 1];
+
+            // Validate that the root cert is the one mentioned in the issuer did:x509 value.
+            string[] didTokens = TrustedMicrosoftIssValue.Split(":");
+            if (didTokens[3] != "sha256")
+            {
+                throw new Exception($"Unsupported hash algo type {didTokens[3]} in did:X509.");
+            }
+
+            string value =
+                Base64UrlEncoder.Encode(rootCert.GetCertHash(HashAlgorithmName.SHA256));
+            string expectedRoot = didTokens[4];
+            if (value != expectedRoot)
+            {
+                throw new Exception(
+                    $"unexpected certificate fingerprint '{value}' when " +
+                    $"expecting '{expectedRoot}'.");
+            }
+
             // Example certCollection:
             // [0] CN=ContainerPlat->Microsoft SCD Products RSA CA
             // [1] Microsoft SCD Products RSA CA->Microsoft Supply Chain RSA Root CA 2022
@@ -146,47 +171,26 @@ public class UvmCoseSign1Message
                 chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
                 chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
                 chain.ChainPolicy.VerificationFlags =
-                    X509VerificationFlags.AllowUnknownCertificateAuthority |
                     X509VerificationFlags.IgnoreNotTimeValid;
-
-                var parsedRootCert = certCollection[certCollection.Count - 1];
-                var parsedLeafCert = certCollection[0];
-                foreach (var cert in certCollection.Reverse())
+                chain.ChainPolicy.CustomTrustStore.Add(rootCert);
+                for (int i = 1; i < certCollection.Count - 1; i++)
                 {
-                    if (!chain.Build(cert))
-                    {
-                        StringBuilder sb =
-                            new($"'{cert.Subject}' certificate chain was not valid.");
-                        if (chain.ChainStatus.Length > 0)
-                        {
-                            sb.Append(
-                                $" chainStatus: {JsonSerializer.Serialize(chain.ChainStatus)}");
-                        }
+                    chain.ChainPolicy.ExtraStore.Add(certCollection[i]);
+                }
 
-                        throw new Exception(sb.ToString());
+                if (!chain.Build(leafCert))
+                {
+                    StringBuilder sb = new($"'{leafCert.Subject}' certificate chain was not valid.");
+                    for (int i = 0; i < chain.ChainStatus.Length; i++)
+                    {
+                        X509ChainStatus status = chain.ChainStatus[i];
+                        sb.Append(
+                            $" ChainStatus[{i}]: {status.Status} - " +
+                            status.StatusInformation.Trim());
                     }
 
-                    chain.ChainPolicy.CustomTrustStore.Add(cert);
+                    throw new Exception(sb.ToString());
                 }
-            }
-
-            var leafCert = certCollection[0];
-            var rootCert = certCollection[certCollection.Count - 1];
-
-            // Validate that the root cert is the one mentioned in the issuer did:x509 value.
-            var didTokens = TrustedMicrosoftIssValue.Split(":");
-            if (didTokens[3] != "sha256")
-            {
-                throw new Exception($"Unsupported hash algo type {didTokens[3]} in did:X509.");
-            }
-
-            var value = Base64UrlEncoder.Encode(rootCert.GetCertHash(HashAlgorithmName.SHA256));
-            var expectedRoot = didTokens[4];
-            if (value != expectedRoot)
-            {
-                throw new Exception(
-                    $"unexpected certificate fingerprint '{value}' when " +
-                    $"expecting '{expectedRoot}'.");
             }
 
             // Validate that the leaf cert is having the expected eku.

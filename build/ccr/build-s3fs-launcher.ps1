@@ -21,8 +21,8 @@ else {
 }
 
 $root = git rev-parse --show-toplevel
-
-docker image build -t $imageName -f $PSScriptRoot/../docker/Dockerfile.s3fs-launcher $root
+Build-DockerImage `
+    -t $imageName -f $PSScriptRoot/../docker/Dockerfile.s3fs-launcher $root
 if ($push) {
     docker push $imageName
 }

@@ -147,7 +147,13 @@
                 // Try to parse and format as JSON
                 const parsed = JSON.parse(content);
                 const formatted = JSON.stringify(parsed, null, 2);
-                contentElement.innerHTML = '<code>' + formatted + '</code>';
+
+                // Rebuild via DOM APIs (textContent) instead of innerHTML so that
+                // untrusted policy data cannot be parsed as markup and executed as script.
+                contentElement.textContent = '';
+                const code = document.createElement('code');
+                code.textContent = formatted;
+                contentElement.appendChild(code);
 
                 formatButton.innerHTML = '<i class="fas fa-check me-1"></i>Formatted!';
                 formatButton.classList.remove('btn-outline-secondary');

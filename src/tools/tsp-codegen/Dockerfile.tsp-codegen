@@ -1,5 +1,6 @@
 # Use the official .NET Core SDK as the base image
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS base
+ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
 
 RUN apt-get update && \
     apt-get install -y python3 python3-pip python3-venv pipx && \

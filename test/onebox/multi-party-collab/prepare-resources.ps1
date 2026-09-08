@@ -49,6 +49,16 @@ $sandbox_common = $outDir
 Write-Host "Creating resource group $resourceGroup in $RESOURCE_GROUP_LOCATION"
 az group create --location $RESOURCE_GROUP_LOCATION --name $resourceGroup --tags $resourceGroupTags
 
+# The managed identity (and its federated credentials) can live in a separate
+# resource group from the data (storage account / key vault). This lets the data
+# resource group carry a delete-lock while the identity resource group stays
+# unlocked and can be torn down after the run, so federated credentials never
+# leak. Defaults to $resourceGroup for backward compatibility.
+if ($MANAGED_IDENTITY_RESOURCE_GROUP -ne $resourceGroup) {
+    Write-Host "Creating identity resource group $MANAGED_IDENTITY_RESOURCE_GROUP in $RESOURCE_GROUP_LOCATION"
+    az group create --location $RESOURCE_GROUP_LOCATION --name $MANAGED_IDENTITY_RESOURCE_GROUP --tags $resourceGroupTags
+}
+
 $objectId = GetLoggedInEntityObjectId
 $result = @{
     kek          = @{}
@@ -108,14 +118,14 @@ if ($identityType -eq "service_principal") {
 
 }
 else {
-    Write-Host "Creating managed identity $MANAGED_IDENTITY_NAME in resource group $resourceGroup"
+    Write-Host "Creating managed identity $MANAGED_IDENTITY_NAME in resource group $MANAGED_IDENTITY_RESOURCE_GROUP"
     $script:managedIdentityResult = $null;
     & {
         # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock
         $PSNativeCommandUseErrorActionPreference = $false
         # Add retry as at times the managed identity creation fails with a 499 error.
         foreach ($value in 1..5) {
-            $script:managedIdentityResult = az identity create -n $MANAGED_IDENTITY_NAME -g $resourceGroup | ConvertFrom-Json;
+            $script:managedIdentityResult = az identity create -n $MANAGED_IDENTITY_NAME -g $MANAGED_IDENTITY_RESOURCE_GROUP | ConvertFrom-Json;
             if ($script:managedIdentityResult) { break } else { Write-Host "Managed identity creation failed. Will retry after 5s..."; Start-Sleep 5 }
         }
     }

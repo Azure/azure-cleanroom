@@ -1,0 +1,76 @@
+# Promotes ONE built container image to a target registry with SBOM attach +
+# optional attestation (migrated from .github/actions/release-container:
+# download tarball -> az/acr login -> docker load -> tag -> push (:tag,:latest)
+# -> oras attach SBOM -> attest). Registry path:
+# <registry>.azurecr.io/<environment>/azurecleanroom/<name>:<tag>. Runs on
+# pool: { type: linux }. See MIGRATION.md for detail.
+#   (was secrets.RELEASE_CLIENT_ID/TENANT_ID/SUBSCRIPTION_ID) — distinct from the
+#   PR SC. registryName was secrets.RELEASE_ACR_NAME (variable group).
+# TODO(Phase 1E): GitHub `attest-artefact` (build provenance/attestation) has no
+#   1:1 ADO task — OneBranch Official provides governed provenance/signing. Confirm
+#   coverage; the explicit attest step is left as a documented no-op below.
+
+parameters:
+  - name: name
+    type: string
+  - name: artefactName
+    type: string
+    default: "" # defaults to name when empty
+  - name: tag
+    type: string
+  - name: environment
+    type: string
+  - name: registryName
+    type: string
+    default: "$(RELEASE_ACR_NAME)"
+  - name: azureServiceConnection
+    type: string
+    # Literal (compile-time) SC name — a $(var) default fails pipeline compile.
+    default: "cleanroom-prod-release-oidc"
+  - name: needsAttestation
+    type: boolean
+    default: true
+
+steps:
+  - task: DownloadPipelineArtifact@2
+  - task: DownloadPipelineArtifact@2
+    displayName: Download ${{ coalesce(parameters.artefactName, parameters.name) }} image tarball
+    inputs:
+      # The custom (isCustom) build publishes ALL image tarballs in a single
+      # OneBranch-mandated drop `drop_Build_build_images`; pattern-download only
+      # this image's tarball to avoid pulling the whole multi-GB drop per call.
+      artifact: drop_Build_build_images
+      patterns: "${{ coalesce(parameters.artefactName, parameters.name) }}-${{ parameters.tag }}.tar"
+      path: $(Pipeline.Workspace)/release/${{ parameters.name }}
+
+  - task: AzureCLI@2
+    displayName: Promote ${{ parameters.name }} to ${{ parameters.environment }}
+    inputs:
+      azureSubscription: ${{ parameters.azureServiceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -euo pipefail
+        REG="${{ parameters.registryName }}"
+        ENVIRONMENT="${{ parameters.environment }}"
+        NAME="${{ parameters.name }}"
+        ARTEFACT="${{ coalesce(parameters.artefactName, parameters.name) }}"
+        TAG="${{ parameters.tag }}"
+        SRC="$(Pipeline.Workspace)/release/${NAME}"
+
+        az acr login --name "$REG"
+
+        docker load -i "${SRC}/${ARTEFACT}-${TAG}.tar"
+        TARGET="${REG}.azurecr.io/${ENVIRONMENT}/azurecleanroom/${NAME}"
+
+        docker tag "${ARTEFACT}:${TAG}" "${TARGET}:${TAG}"
+        docker push "${TARGET}:${TAG}"
+
+        docker tag "${ARTEFACT}:${TAG}" "${TARGET}:latest"
+        docker push "${TARGET}:latest"
+
+  - ${{ if parameters.needsAttestation }}:
+      - pwsh: |
+          Write-Host "TODO(Phase 1E): GitHub attest-artefact has no 1:1 ADO task."
+          Write-Host "OneBranch Official provides governed provenance/signing for ${{ parameters.name }}:${{ parameters.tag }}."
+        displayName: "TODO: Attest ${{ parameters.name }}"

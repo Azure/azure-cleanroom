@@ -21,7 +21,8 @@ else {
 }
 
 $root = git rev-parse --show-toplevel
-docker image build -t $imageName --target virtual -f $PSScriptRoot/../docker/Dockerfile.ccr-governance $root
+Build-DockerImage `
+    -t $imageName --target virtual -f $PSScriptRoot/../docker/Dockerfile.ccr-governance $root
 
 if ($push) {
   docker push $imageName

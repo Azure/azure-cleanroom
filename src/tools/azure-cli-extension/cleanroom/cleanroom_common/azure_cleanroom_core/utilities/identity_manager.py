@@ -50,8 +50,8 @@ class IdentityManager:
         name: str,
         client_id: str,
         tenant_id: str,
-        token_issuer_url: str,
         backing_identity_name: str,
+        token_issuer_url: str | None = None,
     ) -> None:
         from ..exceptions.exception import CleanroomSpecificationError, ErrorCode
 

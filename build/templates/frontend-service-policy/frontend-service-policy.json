@@ -66,6 +66,11 @@
           "regex": true
         },
         {
+          "name": "CR_FRONTEND_ALLOWED_AUDIENCES",
+          "value": ".*",
+          "regex": true
+        },
+        {
           "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
           "value": ".*",
           "regex": true

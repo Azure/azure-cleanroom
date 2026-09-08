@@ -4,7 +4,9 @@
   "policy": {
     "success_rate_allow_failure_below_pct": 80.0,
     "outlier_rule": "exclude rows above Q3 + 1.5*IQR (Tukey upper fence) within the latest run for the same scale/query/format",
-    "ci_threshold_rule": "ci fails iff observed_p95(post-Tukey-trim) > baseline_p95_seconds * 2.0 (i.e. ~100% slower than the recorded p95 baseline); the 2.0x comes from the --duration-threshold-grace-pct default (100%) in verify_run.py"
+    "ci_threshold_rule": "ci fails iff observed_p95(post-Tukey-trim) > baseline_p95_seconds * 2.0 (i.e. ~100% slower than the recorded p95 baseline); the 2.0x comes from the --duration-threshold-grace-pct default (100%) in verify_run.py",
+    "baseline_p95_by_parallel_rule": "when an entry has baseline_p95_by_parallel, verify_run.py selects the baseline calibrated for this run's --parallel (config.parallel in the metrics file): exact key match, else the largest calibrated concurrency <= run parallel, else the flat baseline_p95_seconds. High-concurrency slots (e.g. p16) need higher baselines because near the cluster pod ceiling queries queue for executor slots and wall-clock p95 inflates well beyond the single-query baseline.",
+    "baseline_p95_by_parallel_source": "p16 values calibrated from run 33268750394 (SF100 D8ds_v5 x2 vn4 p16, centralindia) observed post-Tukey p95 on 2026-08-30; all 10 query/format cells COMPLETED 100%."
   },
   "thresholds": [
     {
@@ -12,6 +14,9 @@
       "query": "query1",
       "format": "csv",
       "baseline_p95_seconds": 588.361,
+      "baseline_p95_by_parallel": {
+        "16": 890.7
+      },
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 304.026,
         "running_to_completed_seconds": 284.335
@@ -43,6 +48,9 @@
       "query": "query1",
       "format": "parquet",
       "baseline_p95_seconds": 556.624,
+      "baseline_p95_by_parallel": {
+        "16": 652.6
+      },
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 272.317,
         "running_to_completed_seconds": 284.308
@@ -74,6 +82,9 @@
       "query": "query14",
       "format": "csv",
       "baseline_p95_seconds": 979.042,
+      "baseline_p95_by_parallel": {
+        "16": 2408.91
+      },
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 230.691,
         "running_to_completed_seconds": 748.352
@@ -105,6 +116,9 @@
       "query": "query14",
       "format": "parquet",
       "baseline_p95_seconds": 875.669,
+      "baseline_p95_by_parallel": {
+        "16": 1755.69
+      },
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 129.567,
         "running_to_completed_seconds": 746.103
@@ -136,6 +150,9 @@
       "query": "query24",
       "format": "csv",
       "baseline_p95_seconds": 770.185,
+      "baseline_p95_by_parallel": {
+        "16": 1476.7
+      },
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 221.999,
         "running_to_completed_seconds": 548.186
@@ -167,6 +184,9 @@
       "query": "query24",
       "format": "parquet",
       "baseline_p95_seconds": 587.121,
+      "baseline_p95_by_parallel": {
+        "16": 1425.65
+      },
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 129.346,
         "running_to_completed_seconds": 457.776
@@ -198,6 +218,9 @@
       "query": "query64",
       "format": "csv",
       "baseline_p95_seconds": 853.065,
+      "baseline_p95_by_parallel": {
+        "16": 1803.59
+      },
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 198.7,
         "running_to_completed_seconds": 654.365
@@ -229,6 +252,9 @@
       "query": "query64",
       "format": "parquet",
       "baseline_p95_seconds": 959.362,
+      "baseline_p95_by_parallel": {
+        "16": 1754.8
+      },
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 201.511,
         "running_to_completed_seconds": 757.851
@@ -260,6 +286,9 @@
       "query": "query72",
       "format": "csv",
       "baseline_p95_seconds": 678.779,
+      "baseline_p95_by_parallel": {
+        "16": 1333.4
+      },
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 130.007,
         "running_to_completed_seconds": 548.771
@@ -291,6 +320,9 @@
       "query": "query72",
       "format": "parquet",
       "baseline_p95_seconds": 754.665,
+      "baseline_p95_by_parallel": {
+        "16": 1239.4
+      },
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 201.683,
         "running_to_completed_seconds": 552.981

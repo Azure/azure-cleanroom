@@ -2,6 +2,8 @@
 # mariner bumps up the python version.
 # FROM mcr.microsoft.com/cbl-mariner/base/python:3 as openapi-image
 FROM mcr.microsoft.com/mirror/docker/library/python:3.11 AS openapi-image
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ENV PIP_INDEX_URL=$PIP_INDEX_URL
 WORKDIR /code
 COPY ./requirements.txt /code/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
@@ -17,6 +19,8 @@ FROM scratch AS openapi-dist
 COPY --from=openapi-image /code/openapi.yaml ./
 
 FROM mcr.microsoft.com/mirror/docker/library/python:3.11
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ENV PIP_INDEX_URL=$PIP_INDEX_URL
 WORKDIR /code
 COPY ./requirements.txt /code/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
@@ -30,7 +34,8 @@ RUN chmod 755 /usr/bin/azcopy
 COPY ./dist /dist
 
 # Installing with --system flag so that container if running as non-root user is able to use the extension.
-RUN az extension add -y --source /dist/cleanroom-*-py2.py3-none-any.whl --allow-preview true --system
+RUN az extension add -y --source /dist/cleanroom-*-py2.py3-none-any.whl \
+    --allow-preview true --system
 
 # Pip install the whl so that fastapi can build on the functionality provided within.
 RUN pip install /dist/cleanroom-*-py2.py3-none-any.whl

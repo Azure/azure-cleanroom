@@ -23,8 +23,8 @@ else {
 $root = git rev-parse --show-toplevel
 $external = Join-Path $root -ChildPath "/external"
 git submodule update --init --recursive $external/azure-storage-fuse
-
-docker image build -t $imageName -f $PSScriptRoot/../docker/Dockerfile.blobfuse-launcher $root
+Build-DockerImage `
+    -t $imageName -f $PSScriptRoot/../docker/Dockerfile.blobfuse-launcher $root
 if ($push) {
     docker push $imageName
 }

@@ -145,7 +145,7 @@ function Assign-Permission-StorageAccount {
 
 $isMhsm = $($kvType -eq "mhsm")
 if ($identityType -eq "managed_identity") {
-  $appId = (az identity show --name $MANAGED_IDENTITY_NAME --resource-group $resourceGroup | ConvertFrom-Json).principalId
+  $appId = (az identity show --name $MANAGED_IDENTITY_NAME --resource-group $MANAGED_IDENTITY_RESOURCE_GROUP | ConvertFrom-Json).principalId
 }
 else {
   $app = az ad sp list --display-name $ENTERPRISE_APP_NAME | ConvertFrom-Json
@@ -188,7 +188,7 @@ else {
     # left untouched.
     $existingCreds = (az identity federated-credential list `
       --identity-name $MANAGED_IDENTITY_NAME `
-      --resource-group $resourceGroup `
+      --resource-group $MANAGED_IDENTITY_RESOURCE_GROUP `
       --query "[].name" -o tsv) -split "`n" | Where-Object { $_ -ne "" }
     $credCount = ($existingCreds | Measure-Object).Count
     $maxCreds = 20
@@ -206,7 +206,7 @@ else {
         Write-Host "  Deleting stale credential: $cred"
         az identity federated-credential delete `
           --identity-name $MANAGED_IDENTITY_NAME `
-          --resource-group $resourceGroup `
+          --resource-group $MANAGED_IDENTITY_RESOURCE_GROUP `
           --name $cred `
           --yes 2>$null
       }
@@ -216,7 +216,7 @@ else {
     az identity federated-credential create `
       --name "$subject-federation" `
       --identity-name $MANAGED_IDENTITY_NAME `
-      --resource-group $resourceGroup `
+      --resource-group $MANAGED_IDENTITY_RESOURCE_GROUP `
       --issuer $issuerUrl `
       --subject $subject `
       --audiences "api://AzureADTokenExchange"

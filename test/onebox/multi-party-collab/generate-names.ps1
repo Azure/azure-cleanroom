@@ -49,6 +49,7 @@ mkdir -p $outDir
 `$KEK_NAME = $($overrides['$KEK_NAME'] ?? "`"tdckek`"")
 `$BACKUP_KEYVAULT_NAME = $($overrides['$BACKUP_KEYVAULT_NAME'] ?? "`"$backupKv`"")
 `$MANAGED_IDENTITY_NAME = $($overrides['$MANAGED_IDENTITY_NAME'] ?? "`"${uniqueString}-mi`"")
+`$MANAGED_IDENTITY_RESOURCE_GROUP = $($overrides['$MANAGED_IDENTITY_RESOURCE_GROUP'] ?? "`"$resourceGroup`"")
 `$OIDC_STORAGE_ACCOUNT_NAME = $($overrides['$OIDC_STORAGE_ACCOUNT_NAME'] ?? "`"${uniqueString}oidcsa`"")
 `$OIDC_CONTAINER_NAME = $($overrides['$OIDC_CONTAINER_NAME'] ?? "`"$resourceGroup`"")
 `$TELEMETRY_STORAGE_ACCOUNT_NAME = $($overrides['$TELEMETRY_STORAGE_ACCOUNT_NAME'] ?? "`"${uniqueString}logsa`"")

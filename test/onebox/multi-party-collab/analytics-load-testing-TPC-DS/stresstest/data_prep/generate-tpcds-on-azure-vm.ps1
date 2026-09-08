@@ -72,6 +72,20 @@ param(
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 
+# The default 3072 GB disk holds ~1 TB csv + parquet + toolkit for sf1000. A
+# larger scale factor (e.g. sf2000 ~2 TB csv) needs a proportionally bigger disk,
+# so when the caller did not pin -dataDiskSizeGb, auto-size it from the scale
+# factor (~3 GB/sf, rounded up to a 1024 GB boundary). Never shrinks below the
+# default, so small scale factors are unaffected (sf1000 stays 3072).
+if (-not $PSBoundParameters.ContainsKey('dataDiskSizeGb')) {
+    $scaledDiskGb = [int]([math]::Ceiling(($scaleFactor * 3.0) / 1024.0) * 1024)
+    if ($scaledDiskGb -gt $dataDiskSizeGb) {
+        Write-Host ("Auto-sizing data disk {0} GB -> {1} GB for scaleFactor={2}." -f `
+            $dataDiskSizeGb, $scaledDiskGb, $scaleFactor)
+        $dataDiskSizeGb = $scaledDiskGb
+    }
+}
+
 $stressTestDir = (Get-Item $PSScriptRoot).Parent.FullName
 $tableConfigPath = Join-Path $stressTestDir "fixtures/table-partition-config.json"
 $tableConfig = Get-Content -Raw -Path $tableConfigPath | ConvertFrom-Json
@@ -83,8 +97,10 @@ $formats = $dataFormats -split "," |
 
 $vmName = "tpcds-datagen-vm"
 $vmScriptsDir = Join-Path $PSScriptRoot "vm_scripts"
-$toolkitContainer = "tpcds-toolkit"
-$statusContainer = "tpcds-status"
+# Per-scale-factor transient containers so multiple scale factors can generate
+# in parallel without clobbering each other's status blob / toolkit staging.
+$toolkitContainer = "tpcds-toolkit-sf$scaleFactor"
+$statusContainer = "tpcds-status-sf$scaleFactor"
 $statusBlob = "status.json"
 
 # Ordered data-generation steps; each maps to vm_scripts/<step>.sh.
@@ -511,6 +527,18 @@ $stepEnv = @{
 
 $cloudInit = New-TpcdsCloudInit -Env $stepEnv -Steps $steps -StatusSasUrl $statusSasUrl
 $cloudInit = $cloudInit -replace "`r`n", "`n"
+
+# Fail fast on an empty/degenerate render. A 'python3' that is a Windows .cmd
+# shim mangles the multi-line '-c' render script (cmd %* drops everything after
+# the first newline), so Jinja writes nothing yet exits 0 - producing an empty
+# cloud-init that the VM silently ignores (orchestrator never runs, no status
+# blob). 'python3' must be a real interpreter (a python3.exe) with jinja2.
+if ([string]::IsNullOrWhiteSpace($cloudInit) -or $cloudInit.Length -lt 200) {
+    throw ("Rendered cloud-init is empty or too small ($($cloudInit.Length) " +
+        "bytes). Jinja rendering via 'python3' likely failed silently. Ensure " +
+        "'python3' resolves to a real python3.exe (not a .cmd/.bat shim) with " +
+        "the jinja2 package installed.")
+}
 
 # az passes --custom-data through latin-1; a stray non-ASCII char (e.g. an
 # em-dash pasted into a vm_script or comment) would otherwise fail deep inside

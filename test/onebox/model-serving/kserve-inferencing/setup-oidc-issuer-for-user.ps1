@@ -19,13 +19,13 @@ mkdir -p $outDir
 $root = git rev-parse --show-toplevel
 Import-Module $root/samples/common/infra-scripts/azure-helpers.psm1 -Force -DisableNameChecking
 
-# Check if OIDC issuer is already set (user level).
+# Check whether an issuer is already set for the authenticated caller's tenant.
 $oidcInfo = (az cleanroom governance oidc-issuer show `
         --governance-client $governanceClient | ConvertFrom-Json)
 
-if ($null -ne $oidcInfo -and $null -ne $oidcInfo.issuerUrl) {
-    Write-Host -ForegroundColor Yellow "OIDC issuer already set, skipping."
-    $issuerUrl = $oidcInfo.issuerUrl
+if ($null -ne $oidcInfo -and $null -ne $oidcInfo.tenantData.issuerUrl) {
+    Write-Host -ForegroundColor Yellow "OIDC issuer already set for the caller's tenant, skipping."
+    $issuerUrl = $oidcInfo.tenantData.issuerUrl
     Write-Output $issuerUrl > $outDir/issuer-url.txt
     return
 }
@@ -97,7 +97,9 @@ az storage blob upload `
     --overwrite `
     --auth-mode login
 
-# User-level OIDC issuer — no proposal needed.
 $issuerUrl = "$webUrl${oidcContainerName}"
+az cleanroom governance oidc-issuer set-issuer-url `
+    --governance-client $governanceClient `
+    --url $issuerUrl
 Write-Output $issuerUrl > $outDir/issuer-url.txt
 Write-Host "OIDC issuer URL: $issuerUrl"

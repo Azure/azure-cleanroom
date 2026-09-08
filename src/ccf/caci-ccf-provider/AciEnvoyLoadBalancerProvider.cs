@@ -105,7 +105,7 @@ public class AciEnvoyLoadBalancerProvider : AciLoadBalancerProvider, ICcfLoadBal
 
         ContainerGroupCollection collection = resourceGroupResource.GetContainerGroups();
 
-        ContainerGroupData data = CreateContainerGroupData(
+        ContainerGroupData data = await CreateContainerGroupData(
             location,
             networkName,
             lbName,
@@ -131,20 +131,21 @@ public class AciEnvoyLoadBalancerProvider : AciLoadBalancerProvider, ICcfLoadBal
             $"fqdn: {resourceData.IPAddress.Fqdn}");
         return resourceData;
 
-        static ContainerGroupData CreateContainerGroupData(
+        static async Task<ContainerGroupData> CreateContainerGroupData(
             string location,
             string networkName,
             string lbName,
             string dnsNameLabel,
             string tgzConfigData)
         {
+            string proxyImage = await ImageUtils.CcrProxyImageReference();
             return new ContainerGroupData(
                 new AzureLocation(location),
                 new ContainerInstanceContainer[]
                 {
                 new(
                     $"ccr-envoy",
-                    $"{ImageUtils.CcrProxyImage()}:{ImageUtils.CcrProxyTag()}",
+                    proxyImage,
                     new ContainerResourceRequirements(new ContainerResourceRequestsContent(1.5, 1)))
                     {
                         Ports =
@@ -181,7 +182,7 @@ public class AciEnvoyLoadBalancerProvider : AciLoadBalancerProvider, ICcfLoadBal
                     {
                         AciConstants.CcfNetworkResourceNameTag,
                         lbName
-                    }
+                    },
                 },
                 IPAddress = new ContainerGroupIPAddress(
                     new ContainerGroupPort[]

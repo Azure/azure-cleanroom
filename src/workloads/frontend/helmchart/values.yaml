@@ -7,7 +7,8 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  frontendImage: "frontend-service"
+  # Frontend service container image (set to {registry}/frontend-service:{tag} at deploy time).
+  frontendImage: ""
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
 
@@ -20,7 +21,8 @@ ports:
 
 # CGS client sidecar container configuration.
 cgsClient:
-  image: "cgs-client"
+  # CGS client sidecar container image (set to {registry}/cgs-client:{tag} at deploy time).
+  image: ""
   resources: {}
   volumeMounts: []
   env: []
@@ -96,6 +98,11 @@ frontendService:
   firstPartyAppCertificateName: "FIRST_PARTY_APP_CERTIFICATE_NAME"
   # Token scope for the first-party app credential.
   firstPartyAppTokenScope: "FIRST_PARTY_APP_TOKEN_SCOPE"
+  # Comma-separated allowed inbound token audiences (the frontend-service Entra app id and/or its
+  # api://<appid> form). Empty ⇒ fail-closed in confidential production. Rejects off-audience JWT
+  # replay (MSRC 134393). Audience validation is enforced only in confidential SNP/CACI (non-dev)
+  # and disabled in dev/insecure-virtual in code — there is no runtime switch to bypass it.
+  allowedAudiences: ""
   # Azure AD tenant ID.
   tenantId: "TENANT_ID"
   # OTLP endpoint for OpenTelemetry logs/traces/metrics (e.g. http://geneva-otlp:4317).

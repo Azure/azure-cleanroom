@@ -40,7 +40,8 @@ else {
     $imageName = "frontend-service:$tag"
 }
 
-docker image build -t $imageName -f $buildRoot/docker/Dockerfile.frontend-service "$root"
+Build-DockerImage `
+    -t $imageName -f $buildRoot/docker/Dockerfile.frontend-service "$root"
 
 # Package the helm chart as well.
 Push-Location $root/src/workloads/frontend/helmchart

@@ -378,12 +378,10 @@ public class QueriesController : AnalyticsClientBaseController
                 }
 
                 string subject = string.Join("-", inputJob.ContractId, dataset.OwnerId);
-                string? issuer = accessIdentity.TokenIssuer?.Issuer?.Url;
                 string kekAccessToken = await GetAccessToken(
                     accessIdentity.ClientId,
                     accessIdentity.TenantId,
                     subject,
-                    issuer,
                     scope: encSecrets.Kek.Secret.BackingResource.Provider.Url.ToLower()
                         .Contains("vault.azure.net") ?
                         "https://vault.azure.net/.default" :
@@ -392,7 +390,6 @@ public class QueriesController : AnalyticsClientBaseController
                     accessIdentity.ClientId,
                     accessIdentity.TenantId,
                     subject,
-                    issuer,
                     scope: "https://vault.azure.net/.default");
 
                 byte[] dek = await this.secretsClient.UnwrapSecret(new UnwrapSecretRequest
@@ -429,7 +426,6 @@ public class QueriesController : AnalyticsClientBaseController
                 string clientId,
                 string tenantId,
                 string sub,
-                string? issuer,
                 string scope)
             {
                 var aud = "api://AzureADTokenExchange";
@@ -440,10 +436,6 @@ public class QueriesController : AnalyticsClientBaseController
                     {
                         var govClient = this.GovernanceClientManager.GetClient();
                         string url = $"/oauth/token?sub={sub}&tenantId={tenantId}&aud={aud}";
-                        if (!string.IsNullOrEmpty(issuer))
-                        {
-                            url += $"&iss={issuer}";
-                        }
 
                         JsonObject? result = await RetryPolicies.DefaultPolicy.ExecuteAsync(
                             async (ctx) =>

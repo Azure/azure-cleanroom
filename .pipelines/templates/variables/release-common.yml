@@ -1,0 +1,16 @@
+# Common variables for the release pipelines: maps the GitHub release secrets
+# (RELEASE_ACR_NAME + RELEASE_CLIENT/TENANT/SUBSCRIPTION_ID) to the
+# cleanroom-release-vars variable group + a single prod-release OIDC service
+# connection (releaseServiceConnection). See MIGRATION.md for detail.
+
+variables:
+  - group: cleanroom-release-vars # TODO(Phase 1C): RELEASE_ACR_NAME
+  - name: releaseServiceConnection
+    value: "cleanroom-prod-release-oidc" # TODO(Phase 1C): prod-release OIDC SC
+  - name: repoRoot
+    value: "$(Build.SourcesDirectory)/azure-cleanroom"
+  # OneBranch governed type:linux jobs require ob_outputDirectory as a static
+  # (compile-time) map value in the job's own variables. Every release/BVT job
+  # includes this template, so define it here once.
+  - name: ob_outputDirectory
+    value: "$(Build.SourcesDirectory)/out"

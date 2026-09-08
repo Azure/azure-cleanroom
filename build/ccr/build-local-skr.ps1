@@ -22,7 +22,8 @@ else {
     $imageName = "local-skr:$tag"
 }
 
-docker image build -t $imageName -f $buildRoot/docker/Dockerfile.local-skr "$buildRoot/.."
+Build-DockerImage `
+    -t $imageName -f $buildRoot/docker/Dockerfile.local-skr "$buildRoot/.."
 if ($push) {
     docker push $imageName
 }

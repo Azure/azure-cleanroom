@@ -43,7 +43,7 @@ jobs:
       build-type: ${{ inputs.release-type }}
 
   release-to-test:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=release-to-test-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=release-to-test-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: test
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
@@ -374,6 +374,25 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           needs-attestation: ${{ inputs.needs-attestation }}
 
+      # All images/policies/artefacts are now released to the internal registry; publish the
+      # release-metadata catalog as an OCI artifact (oci://<acr>/internal/azurecleanroom/
+      # release-metadata) so consumers such as 'az cleanroom ccf network up' can resolve image
+      # digests by the tag-derived catalog version (Get-SemanticVersionFromTag). References point
+      # at the same internal registry (-publishRepo) since these images aren't mirrored to MCR.
+      # -skipMissing tolerates any image not built/released in this run.
+      - name: Publish release-metadata catalog
+        shell: pwsh
+        run: |
+          az acr login --name ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+          Install-Module -Name powershell-yaml -Force
+          $repo = "${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom"
+          ./build/build-release-metadata-chart.ps1 `
+            -repo $repo `
+            -publishRepo $repo `
+            -tag ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }} `
+            -push `
+            -skipMissing
+
       - name: Verify attestation
         if: ${{ inputs.needs-attestation }}
         uses: ./.github/actions/verify-attestation
@@ -403,7 +422,7 @@ jobs:
           echo "Selected location: ${locations[$index]}"
 
   bvt-ml-training:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=bvt-ml-training-${{ matrix.key-store }}-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=bvt-ml-training-${{ matrix.key-store }}-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: [build, release-to-test]
     environment: test
     env:
@@ -413,10 +432,10 @@ jobs:
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       RUN_ID: ${{ github.run_id }}
       JOB_ID: ${{ github.job }}
-      TDP_HSM_RESOURCE_GROUP: 'azcleanroom-public-rg'
-      TDP_MHSM_NAME: 'azcleanroombvthsm2'
-      TDC_HSM_RESOURCE_GROUP: 'azcleanroom-public-rg'
-      TDC_MHSM_NAME: 'azcleanroombvthsm2'
+      TDP_HSM_RESOURCE_GROUP: 'azcleanroom-emu-bvt-rg'
+      TDP_MHSM_NAME: 'azcleanroomemubvthsm'
+      TDC_HSM_RESOURCE_GROUP: 'azcleanroom-emu-bvt-rg'
+      TDC_MHSM_NAME: 'azcleanroomemubvthsm'
       USE_PREPROVISIONED_OIDC: "true"
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
@@ -450,7 +469,7 @@ jobs:
           kvType: ${{ matrix.key-store }}
 
   bvt-encrypted-storage:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=bvt-encrypted-storage-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=bvt-encrypted-storage-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: [build, release-to-test]
     environment: test
     env:
@@ -487,7 +506,7 @@ jobs:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
 
   bvt-nginx-hello:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=bvt-nginx-hello-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=bvt-nginx-hello-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: [build, release-to-test]
     environment: test
     env:
@@ -524,7 +543,7 @@ jobs:
           tag: ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }}
 
   bvt-skr-validation:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=bvt-skr-validation-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=bvt-skr-validation-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: [build, release-to-test, pick-location]
     environment: test
     env:
@@ -564,7 +583,7 @@ jobs:
             -location "${{ needs.pick-location.outputs.location }}"
 
   bvt-setup-env-aks:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=bvt-setup-env-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=bvt-setup-env-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: [build, release-to-test, pick-location]
     environment: test
     env:
@@ -611,7 +630,7 @@ jobs:
         if: success()
 
   bvt-big-data-query-analytics-aks:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=bvt-big-data-query-analytics-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=bvt-big-data-query-analytics-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: [bvt-setup-env-aks, pick-location]
     environment: test
     env:
@@ -675,7 +694,7 @@ jobs:
         run: ./test/onebox/multi-party-collab/remove-resources.ps1 -tag "github_actions=${{ env.JOB_ID }}-${{ env.RUN_ID }}"
 
   bvt-cleanup-aks:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=bvt-cleanup-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=bvt-cleanup-aks-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: [bvt-big-data-query-analytics-aks]
     environment: test
     env:

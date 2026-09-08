@@ -28,7 +28,7 @@ else {
 }
 
 # See https://docs.docker.com/build/guide/export/ for --output usage reference.
-docker image build `
+Build-DockerImage `
     --output=$sandbox_common --target=dist `
     -f $buildRoot/docker/Dockerfile.governance.ccf-app "$root/src/governance/ccf-app/js"
 

@@ -40,7 +40,8 @@ else {
     $imageName = "mock-server:$tag"
 }
 
-docker image build -t $imageName -f $buildRoot/docker/Dockerfile.mock_server "$root"
+Build-DockerImage `
+    -t $imageName -f $buildRoot/docker/Dockerfile.mock_server "$root"
 
 if ($push) {
     docker push $imageName

@@ -21,7 +21,8 @@ else {
 }
 
 $root = git rev-parse --show-toplevel
-docker image build -t $imageName -f $PSScriptRoot/../docker/Dockerfile.ccr-secrets $root
+Build-DockerImage `
+    -t $imageName -f $PSScriptRoot/../docker/Dockerfile.ccr-secrets $root
 
 if ($push) {
     docker push $imageName

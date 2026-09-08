@@ -55,7 +55,7 @@ CLASSIFIERS = [
 DEPENDENCIES = [
     "python-on-whales==0.71.0",
     "pycryptodome==3.19.1",
-    "cryptography==43.0.1",
+    "cryptography==50.0.0",
     "docker>=6.1.0",
     "oras==0.1.29",
 ]

@@ -1,0 +1,70 @@
+# Step template: test-workloads/test-big-data-analytics-longhaul composite.
+# Migrated from .github/actions/test-workloads/test-big-data-analytics-longhaul.
+# Assumes login-to-azure.yml already ran.
+
+parameters:
+  - name: deploymentConfigDir
+    type: string
+  - name: durationMinutes
+    type: string
+    default: "240"
+  - name: pauseMinutes
+    type: string
+    default: "20"
+  - name: enableChaos
+    type: string
+    default: "false"
+  - name: repo
+    type: string
+    default: "$(ACR_URL)"
+  - name: tag
+    type: string
+    default: "$(Build.BuildId)"
+
+steps:
+  - template: install-cleanroom-cli.yml
+    parameters:
+      repo: ${{ parameters.repo }}
+      tag: ${{ parameters.tag }}
+  - template: install-uv-python.yml
+  - bash: |
+      set -euo pipefail
+      cfg="${{ parameters.deploymentConfigDir }}/deployment-config.json"
+      project_name=$(jq -r '.project_name' "$cfg")
+      initial_member_name=$(jq -r '.initial_member_name' "$cfg")
+      ccf_endpoint=$(jq -r '.ccf_endpoint' "$cfg")
+      out_dir=$(jq -r '.out_dir' "$cfg")
+      az cleanroom governance client deploy \
+        --ccf-endpoint "$ccf_endpoint" \
+        --signing-key "$out_dir/ccf/${initial_member_name}_privk.pem" \
+        --signing-cert "$out_dir/ccf/${initial_member_name}_cert.pem" \
+        --service-cert "$out_dir/ccf/service_cert.pem" \
+        --name "$project_name" \
+        --env-file "$out_dir/ccf/governance-client.env"
+    displayName: Deploy governance client
+    workingDirectory: $(repoRoot)
+  - pwsh: |
+      $chaosFlag = ""
+      if ("${{ parameters.enableChaos }}" -eq "true") {
+        $chaosFlag = "-enableChaos"
+      }
+      pwsh -Command ./test/onebox/multi-party-collab/big-data-query-analytics/test-longhaul.ps1 `
+        -deploymentConfigDir "${{ parameters.deploymentConfigDir }}" `
+        -durationMinutes ${{ parameters.durationMinutes }} `
+        -pauseMinutes ${{ parameters.pauseMinutes }} `
+        $chaosFlag
+    displayName: Run longhaul test
+    workingDirectory: $(repoRoot)
+  - bash: |
+      cluster_provider_project_name=$(jq -r '.cluster_provider_project_name' "${{ parameters.deploymentConfigDir }}/deployment-config.json")
+      docker compose -p "$cluster_provider_project_name" logs
+    displayName: Dump cleanroom-cluster-provider logs
+    condition: not(canceled())
+    workingDirectory: $(repoRoot)
+  - pwsh: |
+      ./test/onebox/multi-party-collab/big-data-query-analytics/dump-cleanroom-cluster-logs.ps1 `
+          -kubeConfig "${{ parameters.deploymentConfigDir }}/cl-cluster/k8s-credentials.yaml" `
+          -jobConfig "${{ parameters.deploymentConfigDir }}/analytics-workload/jobConfig.json"
+    displayName: Dump cleanroom-cluster logs
+    condition: not(canceled())
+    workingDirectory: $(repoRoot)

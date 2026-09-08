@@ -71,10 +71,10 @@ public class DockerEnvoyLoadBalancerProvider : DockerLoadBalancerProvider, ICcfL
         // gets uncompressed and expanded in the container.
         string tgzConfigData = await Utils.PackDirectory(scratchDir);
 
+        string fromImage = await ImageUtils.CcrProxyImageReference();
         var imageParams = new ImagesCreateParameters
         {
-            FromImage = ImageUtils.CcrProxyImage(),
-            Tag = ImageUtils.CcrProxyTag(),
+            FromImage = fromImage,
         };
 
         await this.Client.Images.CreateImageAsync(
@@ -100,7 +100,7 @@ public class DockerEnvoyLoadBalancerProvider : DockerLoadBalancerProvider, ICcfL
                 }
             },
             Name = containerName,
-            Image = $"{imageParams.FromImage}:{imageParams.Tag}",
+            Image = imageParams.FromImage,
             Env = new List<string>
             {
                 $"CONFIG_DATA_TGZ={tgzConfigData}"

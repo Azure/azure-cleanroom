@@ -21,7 +21,8 @@ else {
 }
 
 $root = git rev-parse --show-toplevel
-docker image build -t $imageName -f $PSScriptRoot/../docker/Dockerfile.identity $root
+Build-DockerImage `
+    -t $imageName -f $PSScriptRoot/../docker/Dockerfile.identity $root
 if ($push) {
   docker push $imageName
 }

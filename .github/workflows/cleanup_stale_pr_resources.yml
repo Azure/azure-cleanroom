@@ -3,7 +3,7 @@ name: Cleanup stale resources created by PRs
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 1 * * *"
+    - cron: "30 18 * * *"  # 00:00 IST daily (18:30 UTC prev day)
 
 permissions:
   id-token: write
@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   cleanup-stale-resources:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=cleanup-stale-pr-resources-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=cleanup-stale-pr-resources-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     steps:
     - uses: actions/checkout@v4

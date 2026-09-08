@@ -1,0 +1,43 @@
+# Builds ONE container image + SBOM the OneBranch governed way via
+# `onebranch.pipeline.imagebuildinfo@1` (BuildKit build + automatic SBOM + saves
+# the tarball to saveImageToPath). Replaces .github/actions/build-container-and-
+# artefacts. Each unique image is emitted once in official-build-jobs.yml. MUST
+# run on pool: { type: docker } (image-build only; keep Bash/PowerShell/AzureCLI
+# on linux). See MIGRATION.md for detail.
+#
+# TODO(Phase 1C): `registry` is the ACR the governed build tags against — set to
+# the real cleanroom ACR once known (placeholder below).
+
+parameters:
+  - name: name
+    type: string
+  - name: dockerfile
+    type: string
+  - name: context
+    type: string
+    default: "."
+  - name: buildArgs
+    type: string
+    default: ""
+  # Runtime build tag (parameters.tag or derived short commit hash), passed from
+  # the linux solutions job as an output variable.
+  - name: buildTag
+    type: string
+    default: "$(buildTag)"
+
+steps:
+  - task: onebranch.pipeline.imagebuildinfo@1
+    displayName: Build ${{ parameters.name }} image tarball
+    inputs:
+      repositoryName: ${{ parameters.name }}
+      dockerFileRelPath: ${{ parameters.dockerfile }}
+      dockerFileContextPath: ${{ parameters.context }}
+      registry: cdpxlinux.azurecr.io # TODO(Phase 1C): cleanroom governed ACR
+      saveImageToPath: images/${{ parameters.name }}.tar
+      build_tag: ${{ parameters.buildTag }}
+      buildkit: 1
+      enable_network: true
+      enable_pull: true
+      enable_acr_push: false
+      ${{ if ne(parameters.buildArgs, '') }}:
+        arguments: ${{ parameters.buildArgs }}

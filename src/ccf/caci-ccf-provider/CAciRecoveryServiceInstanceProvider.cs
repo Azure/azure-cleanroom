@@ -329,16 +329,15 @@ public class CAciRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstancePr
                 {
                     {
                         AciConstants.ContainerName.CcfRecoveryService,
-                        $"{ImageUtils.CcfRecoveryServiceImage()}:" +
-                        $"{ImageUtils.CcfRecoveryServiceTag()}"
+                        await ImageUtils.CcfRecoveryServiceImageReference()
                     },
                     {
                         AciConstants.ContainerName.Skr,
-                        $"{ImageUtils.SkrImage()}:{ImageUtils.SkrTag()}"
+                        await ImageUtils.SkrImageReference()
                     },
                     {
                         AciConstants.ContainerName.CcrProxy,
-                        $"{ImageUtils.CcrProxyImage()}:{ImageUtils.CcrProxyTag()}"
+                        await ImageUtils.CcrProxyImageReference()
                     }
                 }
                 };
@@ -525,7 +524,7 @@ public class CAciRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstancePr
                     {
                         AciConstants.CcfRecoveryServiceResourceNameTag,
                         instanceName
-                    }
+                    },
                 },
                 IPAddress = new ContainerGroupIPAddress(
                     new ContainerGroupPort[]

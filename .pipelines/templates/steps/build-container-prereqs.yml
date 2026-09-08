@@ -1,0 +1,48 @@
+# Shared prerequisite steps for the container-build jobs in pr-build-all-jobs.yml.
+#
+# Collapses the identical prefix that every build group repeated in
+# .github/workflows/pr_build_all.yml:
+#   ./.github/actions/setup-docker-on-data-disk
+#   (optional) sudo usermod -aG docker $USER        -> addDockerUser
+#   (optional) Install-Module powershell-yaml       -> installYaml
+#   (optional) az extension add --name confcom       -> installConfcom
+#   ./.github/actions/login-to-azure                -> OIDC service connection
+#   az acr login -n $(ACR_URL)
+#
+# `checkout` stays in the calling job (OneBranch requires it as the first step).
+#
+# TODO(Phase 1C): ACR_URL + the AZURE_* values come from an ADO variable group
+# (was GitHub repo `vars`). azureServiceConnection is the OIDC SC placeholder.
+
+parameters:
+  - name: addDockerUser
+    type: boolean
+    default: false
+  - name: installYaml
+    type: boolean
+    default: false
+  - name: installConfcom
+    type: boolean
+    default: false
+
+steps:
+  - template: setup-docker-on-data-disk.yml
+
+  - ${{ if parameters.addDockerUser }}:
+      - bash: sudo usermod -aG docker $USER
+        displayName: Add docker user
+
+  - ${{ if parameters.installYaml }}:
+      - pwsh: Install-Module -Name powershell-yaml -Force
+        displayName: Install powershell-yaml
+
+  - ${{ if parameters.installConfcom }}:
+      - pwsh: |
+          az extension add --name confcom -y --allow-preview true
+          az version
+        displayName: Install confcom extension
+
+  - template: login-to-azure.yml
+
+  - pwsh: az acr login -n $(ACR_URL)
+    displayName: Log in to Azure Container Registry

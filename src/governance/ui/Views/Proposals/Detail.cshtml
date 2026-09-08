@@ -56,10 +56,12 @@
                     </div>
                     @if (Model.CanWithdraw)
                     {
-                        <a asp-controller="Proposals" asp-action="Withdraw" asp-route-proposalId="@System.Net.WebUtility.HtmlEncode(Model.ProposalId)"
-                            class="btn btn-outline-warning">
-                            <i class="fas fa-times me-1"></i>Withdraw Proposal
-                        </a>
+                        <form asp-controller="Proposals" asp-action="Withdraw" asp-route-proposalId="@System.Net.WebUtility.HtmlEncode(Model.ProposalId)" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-outline-warning">
+                                <i class="fas fa-times me-1"></i>Withdraw Proposal
+                            </button>
+                        </form>
                     }
                 </div>
             </div>
@@ -73,20 +75,26 @@
                         This proposal is open for voting.
                     </div>
                     <div class="d-flex gap-2">
-                        <a asp-controller="Proposals" asp-action="VoteAccept" asp-route-proposalId="@System.Net.WebUtility.HtmlEncode(Model.ProposalId)"
-                            class="btn btn-success">
-                            <i class="fas fa-check me-1"></i>Accept
-                        </a>
-                        <a asp-controller="Proposals" asp-action="VoteReject" asp-route-proposalId="@System.Net.WebUtility.HtmlEncode(Model.ProposalId)"
-                            class="btn btn-danger">
-                            <i class="fas fa-times me-1"></i>Reject
-                        </a>
+                        <form asp-controller="Proposals" asp-action="VoteAccept" asp-route-proposalId="@System.Net.WebUtility.HtmlEncode(Model.ProposalId)" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-check me-1"></i>Accept
+                            </button>
+                        </form>
+                        <form asp-controller="Proposals" asp-action="VoteReject" asp-route-proposalId="@System.Net.WebUtility.HtmlEncode(Model.ProposalId)" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-times me-1"></i>Reject
+                            </button>
+                        </form>
                         @if (Model.CanWithdraw)
                         {
-                            <a asp-controller="Proposals" asp-action="Withdraw" asp-route-proposalId="@System.Net.WebUtility.HtmlEncode(Model.ProposalId)"
-                                class="btn btn-outline-secondary">
-                                <i class="fas fa-trash me-1"></i>Withdraw
-                            </a>
+                            <form asp-controller="Proposals" asp-action="Withdraw" asp-route-proposalId="@System.Net.WebUtility.HtmlEncode(Model.ProposalId)" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-outline-secondary">
+                                    <i class="fas fa-trash me-1"></i>Withdraw
+                                </button>
+                            </form>
                         }
                     </div>
                 </div>

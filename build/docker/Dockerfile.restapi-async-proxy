@@ -1,5 +1,6 @@
 # Use the official .NET Core SDK as the base image
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG RestoreSources=https://api.nuget.org/v3/index.json
 
 # Set the working directory
 WORKDIR /app
@@ -11,7 +12,8 @@ COPY Directory.Build.props /app
 COPY src/tools/restapi-async-proxy/*.sln /app/src/tools/restapi-async-proxy/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
 COPY src/tools/restapi-async-proxy/*.csproj /app/src/tools/restapi-async-proxy/
-RUN dotnet restore /app/src/tools/restapi-async-proxy/restapi-async-proxy.sln
+RUN dotnet restore --source "$RestoreSources" \
+    /app/src/tools/restapi-async-proxy/restapi-async-proxy.sln
 
 # copy everything else and build app
 COPY stylecop.json /app

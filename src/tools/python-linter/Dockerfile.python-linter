@@ -1,5 +1,5 @@
 # Use the official .NET Core SDK as the base image
-FROM python:3.10-slim AS base
+FROM mcr.microsoft.com/mirror/docker/library/python:3.10-slim AS base
 
 RUN pip install ruff
 

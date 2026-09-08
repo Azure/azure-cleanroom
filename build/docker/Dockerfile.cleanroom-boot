@@ -1,5 +1,5 @@
 # Build stage -- compile the Go binary.
-FROM golang:1.26 AS builder
+FROM cleanroombuild.azurecr.io/mirror/docker/library/golang:1.26 AS builder
 
 WORKDIR /app
 

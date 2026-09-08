@@ -66,7 +66,21 @@ param
 
     [string]$publisherStorageAccount = "avwgndilajulqsa",
 
-    [string]$consumerStorageAccount = "nldjeffcxauamsa"
+    [string]$consumerStorageAccount = "nldjeffcxauamsa",
+
+    # Suffix used for the per-run identity resource groups
+    # ("<data-rg>-id-<identitySuffix>"). CI passes the GitHub run id so the
+    # workflow can derive (and delete) the exact resource-group names without a
+    # manifest. Defaults to the contractId hash for standalone/local runs.
+    [string]$identitySuffix = "",
+
+    # Minimum size (bytes) of the largest real (non-placeholder) blob in a
+    # pre-loaded datastore container for it to be treated as TPC-DS data. The
+    # check ignores the 10-byte "ghaction-b" write-access marker blob that every
+    # container carries, so the floor only needs to exceed that marker and any
+    # empty/truncated file. Small dimension tables (e.g. warehouse) are only a
+    # few hundred bytes and are legitimately smaller than 1 KiB, so keep it low.
+    [long]$minDataBlobBytes = 64
 )
 
 # https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
@@ -77,7 +91,7 @@ $PSNativeCommandUseErrorActionPreference = $true
 # (e.g. CI passes `-queryIds "query1 query14 query24"` as one quoted arg).
 if ($queryIds.Count -eq 1 -and $queryIds[0] -match '[,\s]') {
     $queryIds = $queryIds[0] -split '[,\s]+' | ForEach-Object { $_.Trim() } |
-        Where-Object { $_ -ne '' }
+    Where-Object { $_ -ne '' }
 }
 
 $root = git rev-parse --show-toplevel
@@ -93,8 +107,8 @@ if (-not (Test-Path -Path $serviceCert)) {
 }
 
 $formats = $dataFormats -split "," |
-    ForEach-Object { $_.Trim().Trim('"', "'") } |
-    Where-Object { $_ -ne "" }
+ForEach-Object { $_.Trim().Trim('"', "'") } |
+Where-Object { $_ -ne "" }
 $generatedRoot = Join-Path $stressTestDir "generated"
 
 $tableConfigPath = Join-Path $stressTestDir "fixtures/table-partition-config.json"
@@ -123,11 +137,11 @@ if ($queryIds.Count -gt 0) {
     }
     if ($selectedSqlText -ne "") {
         $publisherTables = @($publisherTables | Where-Object {
-            $selectedSqlText -match "\b$([regex]::Escape($_))\b"
-        })
+                $selectedSqlText -match "\b$([regex]::Escape($_))\b"
+            })
         $consumerTables = @($consumerTables | Where-Object {
-            $selectedSqlText -match "\b$([regex]::Escape($_))\b"
-        })
+                $selectedSqlText -match "\b$([regex]::Escape($_))\b"
+            })
         Write-Output ("Filtered tables to those referenced by selected " +
             "queries: publisher=[$($publisherTables -join ',')] " +
             "consumer=[$($consumerTables -join ',')]")
@@ -178,20 +192,6 @@ $consumerDatastoreConfig = "$datastoreOutdir/tpcds-consumer-datastore-config"
 $consumerSecretStoreConfig = "$datastoreOutdir/secrets/tpcds-consumer-secretstore-config"
 $consumerLocalSecretStore = "$datastoreOutdir/secrets/tpcds-consumer-secretstore-local"
 
-Write-Output "=== Step 1: Setting owner tenant ID ==="
-$ownerTenantId = az account show --query "tenantId" --output tsv
-$proposalId = (az cleanroom governance member set-tenant-id `
-        --identifier $ownerName `
-        --tenant-id $ownerTenantId `
-        --query "proposalId" `
-        --output tsv `
-        --governance-client $ownerClient)
-
-az cleanroom governance proposal vote `
-    --proposal-id $proposalId `
-    --action accept `
-    --governance-client $ownerClient
-
 Write-Output "=== Step 2: Setting up local IDP and users ==="
 $idpPort = "8399"
 pwsh $root/test/onebox/multi-party-collab/setup-local-idp.ps1 `
@@ -207,6 +207,18 @@ if ($env:CODESPACES -ne "true" -and $env:GITHUB_ACTIONS -ne "true") {
 else {
     $localIdpEndpoint = "http://172.17.0.1:$idpPort"
 }
+
+# Place the managed identity + its federated credentials in a per-run, unlocked
+# resource group that is separate from the (delete-locked) storage/key-vault
+# data resource group. The identity resource group is torn down at the end of
+# the run (see the FIC/identity cleanup), so federated credentials never leak on
+# a shared, locked managed identity. The suffix is the GitHub run id in CI (so
+# the workflow can derive the exact names for cleanup) and falls back to the
+# contractId hash for standalone/local runs; either way it is unique per run so
+# concurrent runs never collide.
+$runSuffix = if (-not [string]::IsNullOrWhiteSpace($identitySuffix)) { $identitySuffix } else { ($contractId -split '-')[-1] }
+$publisherIdentityResourceGroup = "$publisherResourceGroup-id-$runSuffix"
+$consumerIdentityResourceGroup = "$consumerResourceGroup-id-$runSuffix"
 
 $publisherTenantId = [Guid]::NewGuid().ToString()
 $publisherUserId = [Guid]::NewGuid().ToString("N")
@@ -294,12 +306,14 @@ az cleanroom collaboration context add `
 
 Write-Output "=== Step 4: Setting up datastores ==="
 
-$publisherOverrides = ""
+$publisherOverrides = "$outDir/$publisherResourceGroup/overrides"
+New-Item -ItemType Directory -Force -Path (Split-Path $publisherOverrides) | Out-Null
+$publisherOverrideLines = @()
 if (-not [string]::IsNullOrWhiteSpace($publisherStorageAccount)) {
-    $publisherOverrides = "$outDir/$publisherResourceGroup/overrides"
-    New-Item -ItemType Directory -Force -Path (Split-Path $publisherOverrides) | Out-Null
-    "`$STORAGE_ACCOUNT_NAME = `"$publisherStorageAccount`"" | Set-Content -Path $publisherOverrides
+    $publisherOverrideLines += "`$STORAGE_ACCOUNT_NAME = `"$publisherStorageAccount`""
 }
+$publisherOverrideLines += "`$MANAGED_IDENTITY_RESOURCE_GROUP = `"$publisherIdentityResourceGroup`""
+$publisherOverrideLines | Set-Content -Path $publisherOverrides
 
 pwsh $PSScriptRoot/../../../prepare-resources.ps1 `
     -resourceGroup $publisherResourceGroup `
@@ -316,7 +330,7 @@ az tag update --resource-id $publisherRgId --operation merge `
     --tags SkipCleanup=true --output none
 
 $publisherResult = Get-Content "$outDir/$publisherResourceGroup/resources.generated.json" |
-    ConvertFrom-Json
+ConvertFrom-Json
 
 az cleanroom secretstore add `
     --name publisher-local-store `
@@ -348,19 +362,20 @@ foreach ($format in $formats) {
         pwsh $root/test/onebox/multi-party-collab/wait-for-container-access.ps1 `
             --containerName $datastoreName `
             --storageAccountId $publisherResult.sa.id
-        $blobCount = az storage blob list `
+        $maxBlobBytes = az storage blob list `
             --account-name $publisherResult.sa.name `
             --container-name $datastoreName `
             --auth-mode login `
             --only-show-errors `
-            --num-results 1 `
-            --query "length(@)" -o tsv
+            --query "max([?name != 'ghaction-b'].properties.contentLength)" -o tsv
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to list blobs in publisher datastore '$datastoreName' (exit $LASTEXITCODE). Check RBAC/auth."
         }
-        if (-not $blobCount -or [int]$blobCount -eq 0) {
-            throw ("Publisher datastore '$datastoreName' is empty in SA " +
-                "'$($publisherResult.sa.name)'. Either pre-load via " +
+        if (-not $maxBlobBytes -or [long]$maxBlobBytes -lt $minDataBlobBytes) {
+            throw ("Publisher datastore '$datastoreName' has no real data in SA " +
+                "'$($publisherResult.sa.name)' (largest blob '$maxBlobBytes' bytes < " +
+                "$minDataBlobBytes-byte minimum; looks like an empty or placeholder " +
+                "container). Pre-load actual TPC-DS data via " +
                 "generate-tpcds-on-azure-vm.ps1 against this SA, or pass " +
                 "-publisherStorageAccount <name> to use a pre-populated SA.")
         }
@@ -380,12 +395,14 @@ az cleanroom secretstore add `
     --backingstore-id $publisherResult.kek.kv.id `
     --attestation-endpoint $publisherResult.maa_endpoint
 
-$consumerOverrides = ""
+$consumerOverrides = "$outDir/$consumerResourceGroup/overrides"
+New-Item -ItemType Directory -Force -Path (Split-Path $consumerOverrides) | Out-Null
+$consumerOverrideLines = @()
 if (-not [string]::IsNullOrWhiteSpace($consumerStorageAccount)) {
-    $consumerOverrides = "$outDir/$consumerResourceGroup/overrides"
-    New-Item -ItemType Directory -Force -Path (Split-Path $consumerOverrides) | Out-Null
-    "`$STORAGE_ACCOUNT_NAME = `"$consumerStorageAccount`"" | Set-Content -Path $consumerOverrides
+    $consumerOverrideLines += "`$STORAGE_ACCOUNT_NAME = `"$consumerStorageAccount`""
 }
+$consumerOverrideLines += "`$MANAGED_IDENTITY_RESOURCE_GROUP = `"$consumerIdentityResourceGroup`""
+$consumerOverrideLines | Set-Content -Path $consumerOverrides
 
 pwsh $PSScriptRoot/../../../prepare-resources.ps1 `
     -resourceGroup $consumerResourceGroup `
@@ -402,7 +419,7 @@ az tag update --resource-id $consumerRgId --operation merge `
     --tags SkipCleanup=true --output none
 
 $consumerResult = Get-Content "$outDir/$consumerResourceGroup/resources.generated.json" |
-    ConvertFrom-Json
+ConvertFrom-Json
 
 az cleanroom secretstore add `
     --name consumer-local-store `
@@ -435,19 +452,20 @@ foreach ($format in $formats) {
             --containerName $datastoreName `
             --storageAccountId $consumerResult.sa.id
 
-        $blobCount = az storage blob list `
+        $maxBlobBytes = az storage blob list `
             --account-name $consumerResult.sa.name `
             --container-name $datastoreName `
             --auth-mode login `
             --only-show-errors `
-            --num-results 1 `
-            --query "length(@)" -o tsv
+            --query "max([?name != 'ghaction-b'].properties.contentLength)" -o tsv
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to list blobs in consumer datastore '$datastoreName' (exit $LASTEXITCODE). Check RBAC/auth."
         }
-        if (-not $blobCount -or [int]$blobCount -eq 0) {
-            throw ("Consumer datastore '$datastoreName' is empty in SA " +
-                "'$($consumerResult.sa.name)'. Either pre-load via " +
+        if (-not $maxBlobBytes -or [long]$maxBlobBytes -lt $minDataBlobBytes) {
+            throw ("Consumer datastore '$datastoreName' has no real data in SA " +
+                "'$($consumerResult.sa.name)' (largest blob '$maxBlobBytes' bytes < " +
+                "$minDataBlobBytes-byte minimum; looks like an empty or placeholder " +
+                "container). Pre-load actual TPC-DS data via " +
                 "generate-tpcds-on-azure-vm.ps1 against this SA, or pass " +
                 "-consumerStorageAccount <name> to use a pre-populated SA.")
         }
@@ -486,7 +504,7 @@ $lifecyclePolicy = @{
                     snapshot = @{
                         delete = @{ daysAfterCreationGreaterThan = $outputTtlDays }
                     }
-                    version = @{
+                    version  = @{
                         delete = @{ daysAfterCreationGreaterThan = $outputTtlDays }
                     }
                 }
@@ -528,7 +546,7 @@ Write-Output "=== Step 5: Creating and approving contract ==="
 $agent = Get-Content $ccfOutDir/ccf.recovery-agent.json | ConvertFrom-Json
 $agentEndpoint = $agent.endpoint
 $agentNetworkReport = curl --fail-with-body -k -s -S $agentEndpoint/network/report |
-    ConvertFrom-Json
+ConvertFrom-Json
 $reportDataContent = $agentNetworkReport.reportDataPayload | base64 -d | ConvertFrom-Json
 
 $recoveryMembers = az cleanroom governance member show `
@@ -705,15 +723,38 @@ az cleanroom governance proposal vote `
 Write-Output "=== Step 7: OIDC setup and dataset publishing ==="
 
 $identity = $(az resource show --ids $publisherResult.mi.id --query "properties") |
-    ConvertFrom-Json
+ConvertFrom-Json
+
+# TEST ONLY: This is a single tenant scenario masquerading as a multi-tenant scenario.
+# We will assert that the actual tenant where the resources exist is the same for all the involved parties.
+$ownerTenantId = az account show --query "tenantId" --output tsv
+if ($identity.tenantId -ne $ownerTenantId) {
+    throw "Publisher's access identity tenant Id $($identity.tenantId) does not match owner's tenant Id $ownerTenantId."
+}
+
+$proposalId = (az cleanroom governance member set-tenant-id `
+        --identifier $ownerName `
+        --tenant-id $ownerTenantId `
+        --query "proposalId" `
+        --output tsv `
+        --governance-client $ownerClient)
+az cleanroom governance proposal vote `
+    --proposal-id $proposalId `
+    --action accept `
+    --governance-client $ownerClient
 
 pwsh $PSScriptRoot/../../../setup-oidc-issuer.ps1 `
     -resourceGroup $publisherResourceGroup `
     -outDir $outDir `
-    -oidcIssuerLevel "user" `
-    -governanceClient $publisherProjectName
+    -oidcIssuerLevel "member-tenant" `
+    -governanceClient $ownerClient
 
-$publisherIssuerUrl = Get-Content $outDir/$publisherResourceGroup/issuer-url.txt
+$issuerUrl = Get-Content $outDir/$publisherResourceGroup/issuer-url.txt
+
+# Store the same issuer under the publisher user.
+az cleanroom governance oidc-issuer set-issuer-url `
+    --governance-client $publisherProjectName `
+    --url $issuerUrl
 
 az cleanroom collaboration context set `
     --collaboration-name $publisherProjectName
@@ -722,7 +763,6 @@ az cleanroom collaboration identity add az-federated `
     --identity-name publisher-identity `
     --client-id $identity.clientId `
     --tenant-id $identity.tenantId `
-    --token-issuer-url $publisherIssuerUrl `
     --backing-identity cleanroom_cgs_oidc
 
 $publisherDatasets = @{}
@@ -757,15 +797,15 @@ foreach ($format in $formats) {
 }
 
 $identity = $(az resource show --ids $consumerResult.mi.id --query "properties") |
-    ConvertFrom-Json
+ConvertFrom-Json
+if ($identity.tenantId -ne $ownerTenantId) {
+    throw "Consumer's access identity tenant Id $($identity.tenantId) does not match owner's tenant Id $ownerTenantId."
+}
 
-pwsh $PSScriptRoot/../../../setup-oidc-issuer.ps1 `
-    -resourceGroup $consumerResourceGroup `
-    -outDir $outDir `
-    -oidcIssuerLevel "user" `
-    -governanceClient $consumerProjectName
-
-$consumerIssuerUrl = Get-Content $outDir/$consumerResourceGroup/issuer-url.txt
+# Store the same issuer under the consumer user.
+az cleanroom governance oidc-issuer set-issuer-url `
+    --governance-client $consumerProjectName `
+    --url $issuerUrl
 
 az cleanroom collaboration context set `
     --collaboration-name $consumerProjectName
@@ -774,7 +814,6 @@ az cleanroom collaboration identity add az-federated `
     --identity-name consumer-identity `
     --client-id $identity.clientId `
     --tenant-id $identity.tenantId `
-    --token-issuer-url $consumerIssuerUrl `
     --backing-identity cleanroom_cgs_oidc
 
 $consumerDatasets = @{}
@@ -969,7 +1008,7 @@ $subject = $contractId + "-" + $publisherUserId
 pwsh $PSScriptRoot/../../../setup-access.ps1 `
     -resourceGroup $publisherResourceGroup `
     -subject $subject `
-    -issuerUrl $publisherIssuerUrl `
+    -issuerUrl $issuerUrl `
     -outDir $outDir `
     -kvType akvpremium
 
@@ -977,7 +1016,7 @@ $subject = $contractId + "-" + $consumerUserId
 pwsh $PSScriptRoot/../../../setup-access.ps1 `
     -resourceGroup $consumerResourceGroup `
     -subject $subject `
-    -issuerUrl $consumerIssuerUrl `
+    -issuerUrl $issuerUrl `
     -outDir $outDir `
     -kvType akvpremium
 

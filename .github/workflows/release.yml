@@ -15,7 +15,7 @@ on:
 
 jobs:
   pre-release-validation:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=pre-release-validation-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=pre-release-validation-${{ github.run_id }}-${{ github.run_attempt }}"]
     permissions:
       contents: read  # This is required for reading tags
     env:
@@ -54,14 +54,14 @@ jobs:
 
   # Add release specific tests here
   release-tests:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=release-tests-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=release-tests-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: ["build-test-msint"]
     steps:
       - name: Run release test
         run: echo 'No release tests configured!'
 
   release-to-prod:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=release-to-prod-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=release-to-prod-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: production
     # Permission needed for logging into Azure - https://github.com/marketplace/actions/azure-login#workflow-examples
     permissions:
@@ -406,11 +406,14 @@ jobs:
     uses: ./.github/workflows/release_verification_nightly.yml
 
   create-github-release:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=create-github-release-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=create-github-release-${{ github.run_id }}-${{ github.run_attempt }}"]
     needs: ["release-to-prod", "post-release-validation"]
     # Permission and environment variables below are needed to create a GitHub release
     permissions:
       contents: write
+      pull-requests: write # cr index --pr opens the release-metadata index PR
+      id-token: write # azure/login (OIDC) in the release-metadata action
+      attestations: write # provenance attestation for the release-metadata .tgz
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -663,6 +666,23 @@ jobs:
       - name: Create GitHub release
         run: |
           gh release create ${{ inputs.tag }} --verify-tag --generate-notes
+
+      # Publish the versioned release-metadata catalog: upload the chart .tgz as a
+      # Release asset and open a PR updating index.yaml on the default branch. Always
+      # runs (gated on post-release-validation). Every release is a full rebuild, so the
+      # catalog is a complete snapshot resolved fresh at the release tag -- there are no
+      # partial releases and nothing is carried forward. External consumers see it once
+      # a human merges the PR. In-pipeline validation never consumes this catalog.
+      - name: Release metadata chart
+        uses: ./.github/actions/release-metadata
+        with:
+          tag: ${{ inputs.tag }}
+          environment: unlisted
+          registry-name: ${{ secrets.RELEASE_ACR_NAME }}
+          pages-branch: ${{ github.event.repository.default_branch }}
+          client-id: ${{ secrets.RELEASE_CLIENT_ID }}
+          tenant-id: ${{ secrets.RELEASE_TENANT_ID }}
+          subscription-id: ${{ secrets.RELEASE_SUBSCRIPTION_ID }}
 
       - name: Upload identity assets
         if: ${{ contains(steps.get-released-containers.outputs.released_containers, 'identity') }}

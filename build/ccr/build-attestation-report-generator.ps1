@@ -22,7 +22,8 @@ else {
     $imageName = "attestation-report-generator:$tag"
 }
 
-docker image build -t $imageName -f $buildRoot/docker/Dockerfile.attestation-report-generator "$buildRoot/.."
+Build-DockerImage `
+    -t $imageName -f $buildRoot/docker/Dockerfile.attestation-report-generator "$buildRoot/.."
 if ($push) {
     docker push $imageName
 }

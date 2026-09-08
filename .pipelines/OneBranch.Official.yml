@@ -1,0 +1,92 @@
+################################################################################
+# CleanRoom Official Build (migrated from .github/workflows/official_build.yml).
+# Produces official artefacts (containers, CGS app/constitution, CCF, cluster,
+# frontend, az cli). Triggered on push to main + tags; extends the OneBranch
+# Official governed template for SBOM/signing/provenance + the SDL suite
+# (CodeQL, PoliCheck, CredScan, BinSkim, ...). This is the ONLY CodeQL surface.
+# See MIGRATION.md for detail.
+################################################################################
+
+trigger:
+  batch: false
+  branches:
+    include:
+      - main
+  tags:
+    include:
+      - "*"
+pr: none
+
+# Weekly scheduled governed build — this is the CodeQL / SDL surface.
+# Mirrors .github/workflows/codeql.yml's weekly scan (cron '17 4 * * 2',
+# Tuesday 04:17 UTC on develop, for the SDL CA "scan default branch within
+# 14 days" requirement). This is the ONE pipeline that runs CodeQL, and it
+# MUST run on the governed pool: build_solutions builds C#/Go natively (with
+# CodeQL 3000 auto-injected) restoring from the internal azure-cleanroomservice
+# NuGet feed + 1ES Go module proxy (the governed pool firewalls public feeds).
+schedules:
+  - cron: "17 4 * * 2"
+    displayName: Weekly SDL CodeQL scan (Tue 04:17 UTC)
+    branches:
+      include:
+        - develop
+    always: true
+
+name: official-$(Build.SourceBranchName)-$(Date:yyyyMMdd).$(Rev:r)
+
+parameters:
+  # workflow_dispatch/workflow_call `tag` input. Empty => derive short commit hash.
+  - name: tag
+    type: string
+    default: ""
+  # workflow_dispatch/workflow_call `build-type` input (comma list of artefacts).
+  - name: buildType
+    type: string
+    default: "cleanroom-containers, governance-client-containers, cgs-js-app, cgs-constitution, ccf-provider-client, ccf-network-containers, ccf-recovery-service-containers, ccf-consortium-manager-containers, cleanroom-workload-infra-containers, cleanroom-cluster-provider-client, frontend-service"
+
+variables:
+  - name: LinuxContainerImage
+    value: "mcr.microsoft.com/onebranch/azurelinux/build:3.0"
+  - name: CDP_DEFINITION_BUILD_COUNT
+    value: $[counter('', 0)]
+  # Hoisted to pipeline top-level so every job (governed container jobs + the
+  # isCustom build_solutions job) inherits the var group + GITHUB_ACTIONS/JOB_ID/
+  # RUN_ID. isCustom jobs override repoRoot in their own pure-map variables
+  # (bare-VM checkout lands at $(Build.SourcesDirectory)).
+  - template: templates/variables/build-common.yml
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: OneBranch.Pipelines/GovernedTemplates
+      ref: refs/heads/main
+
+extends:
+  template: v2/OneBranch.Official.CrossPlat.yml@templates
+  parameters:
+    cloudvault:
+      enabled: false
+    # The governed pool is network-isolated: native `go build` (blobfuse-launcher
+    # in build_solutions) can't reach the public Go module proxy. This 1ES/OneBranch
+    # feature flag routes Go module fetches through the centralized internal Go proxy
+    # (sets GOPROXY + GOPRIVATE for dev.azure.com/*.visualstudio.com/go.goms.io
+    # automatically). See https://aka.ms/goproxy. Native NuGet uses the internal
+    # azure-cleanroomservice feed via .pipelines/nuget.config + NuGetAuthenticate.
+    featureFlags:
+      golang:
+        internalModuleProxy:
+          enabled: true
+    globalSdl:
+      tsa:
+        enabled: false
+      policheck:
+        break: true
+    stages:
+      - stage: Build
+        displayName: Official Build
+        jobs:
+          - template: .pipelines/templates/official-build-jobs.yml@self
+            parameters:
+              tag: ${{ parameters.tag }}
+              buildType: ${{ parameters.buildType }}

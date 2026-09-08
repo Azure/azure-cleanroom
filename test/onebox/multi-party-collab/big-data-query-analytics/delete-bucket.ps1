@@ -8,8 +8,8 @@ param (
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 
-$awsAccessKeyId = az keyvault secret show  --vault-name azcleanroompublickv -n aws-access-key-id --query value -o tsv
-$awsSecretAccessKey = az keyvault secret show  --vault-name azcleanroompublickv -n aws-secret-access-key --query value -o tsv
+$awsAccessKeyId = az keyvault secret show  --vault-name azcleanroomemukv -n aws-access-key-id --query value -o tsv
+$awsSecretAccessKey = az keyvault secret show  --vault-name azcleanroomemukv -n aws-secret-access-key --query value -o tsv
 $awsDefaultRegion = "us-west-1"
 
 $awsCliImage = "cleanroomsamples.azurecr.io/aws-cli:2.27.62"
@@ -39,3 +39,12 @@ if ($script:bucketExists) {
         $awsCliImage `
         s3 rb s3://$bucketName --force
 }
+else {
+    Write-Output "Bucket $bucketName does not exist; nothing to delete."
+}
+
+# The head-bucket existence probe above leaves a non-zero $LASTEXITCODE when the
+# bucket does not exist. That is a valid no-op for this delete helper, so reset
+# the exit code to avoid failing the calling task (e.g. the ADO PowerShell task
+# treats a non-zero $LASTEXITCODE at script end as a failure).
+$global:LASTEXITCODE = 0

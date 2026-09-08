@@ -21,8 +21,10 @@
   - [7.8. Install python and uv for dependency management](#78-install-python-and-uv-for-dependency-management)
     - [7.8.1. Integrate uv with VSCode for development](#781-integrate-uv-with-vscode-for-development)
     - [7.8.2. How to create a new python project (using uv)](#782-how-to-create-a-new-python-project-using-uv)
-  - [7.9. Install sbt and Scala](#79-install-sbt-and-scala)
-  - [7.10. Recommended VS Code Extensions](#710-recommended-vs-code-extensions)
+  - [7.9. Configure the local package proxies](#79-configure-the-local-package-proxies)
+    - [7.9.1. Verify direnv](#791-verify-direnv)
+  - [7.10. Install sbt and Scala](#710-install-sbt-and-scala)
+  - [7.11. Recommended VS Code Extensions](#711-recommended-vs-code-extensions)
 - [8. Deploy `nginx-hello` Locally (Build → Kind Up → Run-Collab)](#8-deploy-nginx-hello-locally-build--kind-up--run-collab)
   - [8.1. Step 1: Navigate to Project Root](#81-step-1-navigate-to-project-root)
   - [8.2. Step 2: Build Cleanroom Containers](#82-step-2-build-cleanroom-containers)
@@ -263,7 +265,106 @@ cd ~/azure-cleanroom
 uv build --wheel --all-packages
 ```
 
-### 7.9. Install sbt and Scala
+### 7.9. Configure the local package proxies
+
+Container builds use public PyPI by default. Developers who need the Microsoft package feed proxy
+can use `direnv` to load a repository-local configuration without affecting GitHub Actions or
+host-side uv commands.
+
+Install `direnv` on Ubuntu or WSL:
+
+```bash
+curl -sfL https://direnv.net/install.sh |
+    sudo env bin_path=/usr/local/bin bash
+direnv version
+```
+
+The Ubuntu 24.04 apt package is too old to provide the PowerShell Core hook. Use the current binary
+installer above and ensure `direnv version` reports 2.33.0 or later.
+
+Install `direnv` on macOS:
+
+```bash
+brew install direnv
+```
+
+Add the hook for Bash:
+
+```bash
+echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Add the hook for Zsh:
+
+```bash
+echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Add the hook for PowerShell Core:
+
+```powershell
+New-Item -ItemType File -Path $PROFILE -Force
+'Invoke-Expression "$(direnv hook pwsh)"' | Add-Content -Path $PROFILE
+. $PROFILE
+```
+
+Create and allow the developer-local configuration from the repository root:
+
+```bash
+cp .env.local.example .env.local
+direnv allow
+```
+
+If `.env.local` already exists, add the new values from `.env.local.example` and run
+`direnv reload`.
+
+The package managers and local Docker builds will now use `UV_DEFAULT_INDEX`, `PIP_INDEX_URL`,
+`RestoreSources`, and `NPM_CONFIG_REGISTRY`. To return to public package feeds, remove
+`.env.local` and re-enter the repository directory.
+
+#### 7.9.1. Verify direnv
+
+Change out of and back into the repository so the shell hook runs.
+
+For Bash or Zsh:
+
+```bash
+cd ..
+cd azure-cleanroom
+echo "$UV_DEFAULT_INDEX"
+echo "$PIP_INDEX_URL"
+echo "$RestoreSources"
+echo "$NPM_CONFIG_REGISTRY"
+direnv status
+```
+
+For PowerShell Core:
+
+```powershell
+cd ..
+cd azure-cleanroom
+$env:UV_DEFAULT_INDEX
+$env:PIP_INDEX_URL
+$env:RestoreSources
+$env:NPM_CONFIG_REGISTRY
+direnv status
+```
+
+The environment variable should print:
+
+```text
+https://packagefeedproxy.microsoft.io/pypi/simple
+https://packagefeedproxy.microsoft.io/pypi/simple
+https://packagefeedproxy.microsoft.io/nuget/v3/index.json
+https://packagefeedproxy.microsoft.io/npm/
+```
+
+If any value is blank, confirm that `.env.local` contains all values from `.env.local.example`, run
+`direnv allow`, reload the shell profile, and change out of and back into the repository again.
+
+### 7.10. Install sbt and Scala
 
 **Install JDK (prerequisite for sbt)**
 
@@ -301,7 +402,7 @@ sudo apt-get install scala
 scala -version
 ```
 
-### 7.10. Recommended VS Code Extensions
+### 7.11. Recommended VS Code Extensions
 
 - ms-dotnettools.csharp
 - ms-python.python

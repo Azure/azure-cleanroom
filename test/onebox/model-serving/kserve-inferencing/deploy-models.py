@@ -1050,7 +1050,8 @@ def test_inferencing_via_agent_framework(
 
     try:
         install_result = _exec_in_pod(
-            "pip install --quiet --pre openai httpx agent-framework-core agent-framework-openai"
+            "pip install --quiet --pre openai httpx==0.28.1 "
+            "agent-framework-core agent-framework-openai"
         )
         if install_result.returncode != 0:
             print(

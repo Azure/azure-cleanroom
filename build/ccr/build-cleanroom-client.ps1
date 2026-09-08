@@ -22,18 +22,17 @@ else {
 
 $root = git rev-parse --show-toplevel
 $buildRoot = "$root/build"
-
-docker image build `
+Build-DockerImage `
     --output="$root/src/tools/cleanroom-client/dist" `
     --target=dist `
     -f $buildRoot/docker/Dockerfile.azcliext.cleanroom "$buildRoot/.."
 
-docker image build `
+Build-DockerImage `
     -t $imageName `
     -f $buildRoot/docker/Dockerfile.cleanroom-client "$root/src/tools/cleanroom-client"
 
 # Extract the open-api spec.
-docker image build `
+Build-DockerImage `
     --output="$root/src/tools/cleanroom-client/app/schema" `
     --target=openapi-dist `
     -f $buildRoot/docker/Dockerfile.cleanroom-client "$root/src/tools/cleanroom-client"

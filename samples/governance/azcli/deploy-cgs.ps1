@@ -507,7 +507,10 @@ $proposalId = (az cleanroom governance proposal create --content `
 "@ --governance-client $projectName | jq -r '.proposalId')
 
 Write-Output "Accepting the set_member_data proposal"
-curl -sS -X POST localhost:$port/proposals/$proposalId/ballots/vote_accept | jq
+$proposal = (curl -sS -X POST localhost:$port/proposals/$proposalId/ballots/vote_accept | ConvertFrom-Json)
+if ($proposal.proposalState -ne "Accepted") {
+    throw "Expecting unanimously approved member proposal $proposalId to be Accepted but state is $($proposal.proposalState)."
+}
 
 if (!$NoTest) {
     pwsh $PSScriptRoot/initiate-set-contract-flow.ps1 -projectName $projectName -issuerUrl "$ccfEndpoint/app/oidc"

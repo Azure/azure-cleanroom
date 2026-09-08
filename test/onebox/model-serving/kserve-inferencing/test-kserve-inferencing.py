@@ -445,6 +445,7 @@ def main():
     allow_all = config.get("allow_all", False)
     infra_type = config["infra_type"]
     owner_client = config["project_name"]
+    owner_name = config["initial_member_name"]
 
     # Generate contract ID
     contract_id = args.contract_id or "inferencing-" + str(uuid.uuid4())[:8]
@@ -472,6 +473,8 @@ def main():
         ccf_endpoint,
         "-ownerClient",
         owner_client,
+        "-ownerName",
+        owner_name,
         "-models",
         args.models,
         "-location",

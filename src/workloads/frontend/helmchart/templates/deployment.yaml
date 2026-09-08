@@ -78,6 +78,8 @@ spec:
               value: {{ .Values.ccrProxy.serviceCertOutputFile | quote }}
             - name: SKR_PORT
               value: {{ .Values.skr.port | quote }}
+            - name: CR_FRONTEND_ALLOWED_AUDIENCES
+              value: {{ .Values.frontendService.allowedAudiences | default "" | quote }}
             {{- if .Values.frontendService.otelEndpoint }}
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ .Values.frontendService.otelEndpoint | quote }}

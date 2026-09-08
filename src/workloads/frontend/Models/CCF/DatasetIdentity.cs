@@ -11,9 +11,10 @@ public class DatasetIdentity
     [RequiredNotNullOrWhiteSpace]
     public required string ClientId { get; set; }
 
+    [Obsolete("IssuerUrl is no longer supported. Configure issuer URLs through governance.")]
     [JsonPropertyName("issuerUrl")]
-    [RequiredNotNullOrWhiteSpace]
-    public required string IssuerUrl { get; set; }
+    [ValidateIsNull]
+    public string? IssuerUrl { get; set; }
 
     [JsonPropertyName("tenantId")]
     [RequiredNotNullOrWhiteSpace]
@@ -38,7 +39,6 @@ public class DatasetIdentity
             ClientId = identity.ClientId,
             Name = identity.Name,
             TenantId = identity.TenantId,
-            IssuerUrl = identity.TokenIssuer["issuer"]?["url"]?.ToString() ?? string.Empty,
         };
     }
 }

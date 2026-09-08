@@ -479,6 +479,28 @@ public class AksClusterProvider : ICleanRoomClusterProvider
             }
 
             string nodeVmSize = providerConfig["nodeVmSize"]?.ToString() ?? "Standard_D4ds_v5";
+
+            // Agent (system) node pool sizing. The caller can supply "initialNodeCount" to seed
+            // the pool's initial size so the VN2 infra pods land immediately on a pre-sized pool,
+            // while the cluster autoscaler stays enabled. Min is set to the initial count so the
+            // autoscaler never scales the pool below the pre-sized nodes (only up), and Max is
+            // widened to the initial count when it exceeds the default ceiling. When
+            // "initialNodeCount" is not supplied, this reduces to the historical 2..5 autoscaling
+            // defaults.
+            const int DefaultMinNodeCount = 2;
+            const int DefaultMaxNodeCount = 5;
+            int initialNodeCount = DefaultMinNodeCount;
+            if (int.TryParse(
+                    providerConfig["initialNodeCount"]?.ToString(),
+                    out int requestedInitialNodeCount) &&
+                requestedInitialNodeCount > 0)
+            {
+                initialNodeCount = requestedInitialNodeCount;
+            }
+
+            int nodePoolMinCount = initialNodeCount;
+            int nodePoolMaxCount = Math.Max(DefaultMaxNodeCount, initialNodeCount);
+
             ManagedClusterAadProfile? aadProfile = null;
             if (input.AadProfile?.Enabled == true ||
                 (input.FlexNodeProfile != null && input.FlexNodeProfile.Enabled))
@@ -515,9 +537,9 @@ public class AksClusterProvider : ICleanRoomClusterProvider
                     new ManagedClusterAgentPoolProfile(AgentPoolName)
                     {
                         VnetSubnetId = new ResourceIdentifier(vnet.Id + $"/subnets/{AksSubnetName}"),
-                        Count = 2,
-                        MinCount = 2,
-                        MaxCount = 5,
+                        Count = initialNodeCount,
+                        MinCount = nodePoolMinCount,
+                        MaxCount = nodePoolMaxCount,
                         EnableAutoScaling = true,
                         VmSize = nodeVmSize,
                         OSType = ContainerServiceOSType.Linux,
@@ -806,7 +828,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
             if (analyticsWorkloadEnabled)
             {
                 int nodeCount = await kubectlClient.GetStatefulSetReplicaCountAsync(
-                    "vn2",
+                    "vn2-release",
                     "vn2-virtualnode");
                 workloadPoolProfile = new WorkloadPoolProfile
                 {
@@ -2949,7 +2971,7 @@ public class AksClusterProvider : ICleanRoomClusterProvider
         var workloadPoolProfile = input.PoolProfile;
         if (workloadPoolProfile != null)
         {
-            const string vn2Namespace = "vn2";
+            const string vn2Namespace = "vn2-release";
             const string vn2StatefulSetName = "vn2-virtualnode";
 
             var kubectlClient = new KubectlClient(

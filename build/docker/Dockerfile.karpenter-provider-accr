@@ -1,7 +1,7 @@
 # Stage 1: Build
 # Karpenter v1.12.0 requires Go >= 1.26.2; the operator
 # image uses 1.25.0 so this provider needs a newer image.
-FROM golang:1.26.3 AS build-image
+FROM cleanroombuild.azurecr.io/mirror/docker/library/golang:1.26.3 AS build-image
 
 WORKDIR /app
 
