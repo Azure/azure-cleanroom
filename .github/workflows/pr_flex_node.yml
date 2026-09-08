@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   flex-node-test:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=flex-node-${{ github.run_id }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=flex-node-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     env:
       CLUSTER_NAME: api-server-proxy-ci

@@ -34,7 +34,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-emu", "1ES.JobId=build-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"]
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=build-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"]
     environment: test
     steps:
       - name: Setup .NET
