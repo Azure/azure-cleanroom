@@ -38,7 +38,7 @@ jobs:
     environment: test
     steps:
       - name: Setup .NET
-        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -59,7 +59,7 @@ jobs:
         run: sudo apt-get install libfuse3-dev fuse3 -y
 
       - name: Checkout repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           fetch-tags: true
@@ -113,7 +113,7 @@ jobs:
 
       - name: Build cleanroom client artefacts
         if: ${{ contains(inputs.build-type, 'cleanroom-containers') }}
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           file: ./build/docker/Dockerfile.azcliext.cleanroom
           context: ${{ github.workspace }}

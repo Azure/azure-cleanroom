@@ -27,7 +27,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -51,7 +51,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -75,7 +75,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -99,7 +99,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -123,7 +123,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -147,7 +147,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -171,7 +171,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -195,7 +195,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -219,7 +219,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -252,7 +252,7 @@ jobs:
       TDC_MHSM_NAME: 'azcleanroompublichsm'
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -277,7 +277,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -301,7 +301,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -325,7 +325,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 

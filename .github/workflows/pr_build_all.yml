@@ -45,7 +45,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -87,7 +87,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -129,7 +129,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -171,7 +171,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -213,7 +213,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -255,7 +255,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -298,7 +298,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -341,7 +341,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -384,7 +384,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -428,7 +428,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -472,7 +472,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -529,7 +529,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -568,7 +568,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -611,7 +611,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -655,7 +655,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -703,7 +703,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -747,7 +747,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -795,7 +795,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -842,7 +842,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -885,7 +885,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -943,7 +943,7 @@ jobs:
       RUN_ATTEMPT: ${{ github.run_attempt }}
       USE_PREPROVISIONED_OIDC: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -977,7 +977,7 @@ jobs:
     runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=generate-dev-up-env-${{ github.run_id }}-${{ github.run_attempt }}"]
     environment: pr
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -991,7 +991,7 @@ jobs:
             -outDir ${{ runner.temp }}/dev-up-env
 
       - name: Upload dev-up.env artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dev-up-env
           path: ${{ runner.temp }}/dev-up-env/dev-up.env
