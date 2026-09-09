@@ -76,7 +76,7 @@ function Get-LokiLogs {
     )
     $lokiEndpoint = "http://localhost:8484/api/v1/namespaces/observability/services/http:cleanroom-loki:3100/proxy"
 
-    $timeout = New-TimeSpan -Minutes 1
+    $timeout = New-TimeSpan -Minutes 5
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     & {
         # Disable $PSNativeCommandUseErrorActionPreference for this scriptblock

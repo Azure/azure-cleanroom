@@ -16,6 +16,9 @@ param (
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 
+$root = git rev-parse --show-toplevel
+. $root/build/helpers.ps1
+
 if ($outDir -eq "") {
     $outDir = "$($MyInvocation.PSScriptRoot)/sandbox_common"
 }
@@ -23,17 +26,28 @@ if ($outDir -eq "") {
 # set environment variables so that ccf provider client container uses these when it
 # gets started via the ccf up command below.
 $env:AZCLI_CCF_PROVIDER_CLIENT_IMAGE = "$repo/ccf/ccf-provider-client:$tag"
-$env:AZCLI_CCF_PROVIDER_PROXY_IMAGE = "$repo/ccr-proxy:$tag"
-$env:AZCLI_CCF_PROVIDER_SKR_IMAGE = "$repo/skr:$tag"
-$env:AZCLI_CCF_PROVIDER_RUN_JS_APP_VIRTUAL_IMAGE = "$repo/ccf/app/run-js/virtual:$tag"
-$env:AZCLI_CCF_PROVIDER_LOCAL_SKR_IMAGE = "$repo/local-skr:$tag"
-$env:AZCLI_CCF_PROVIDER_RUN_JS_APP_SNP_IMAGE = "$repo/ccf/app/run-js/snp:$tag"
-$env:AZCLI_CCF_PROVIDER_RECOVERY_AGENT_IMAGE = "$repo/ccf/ccf-recovery-agent:$tag"
-$env:AZCLI_CCF_PROVIDER_CVM_ATTESTATION_VERIFIER_IMAGE = "$repo/cvm/cvm-attestation-verifier:$tag"
-$env:AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_IMAGE = "$repo/ccf/ccf-recovery-service:$tag"
 $env:AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL = "$repo"
-$env:AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL = "$repo/policies/ccf/ccf-network-security-policy:$tag"
-$env:AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_SECURITY_POLICY_DOCUMENT_URL = "$repo/policies/ccf/ccf-recovery-service-security-policy:$tag"
+# The release-metadata catalog is resolved by the ccf-provider-client CONTAINER via
+# 'helm show values oci://...', so it must use a container-reachable endpoint, not the
+# host-side localhost:5000 (which resolves to the container itself).
+$ociEndpoint = $repo
+if ($repo.StartsWith("localhost:5000")) {
+    if ($env:CODESPACES -ne "true" -and $env:GITHUB_ACTIONS -ne "true") {
+        $ociEndpoint = "host.docker.internal:5000"
+    }
+    elseif ($env:CODESPACES -eq "true") {
+        $ociEndpoint = "ccr-registry:5000"
+    }
+    else {
+        # 172.17.0.1: https://stackoverflow.com/questions/48546124/what-is-the-linux-equivalent-of-host-docker-internal
+        $ociEndpoint = "172.17.0.1:5000"
+    }
+}
+$env:AZCLI_CCF_PROVIDER_RELEASE_METADATA_CHART_URL = "oci://$ociEndpoint/release-metadata"
+# The catalog is a Helm chart; its version derives from the image tag via the same helper the
+# publisher uses (Get-SemanticVersionFromTag), so consumer and producer agree.
+$catalogVersion = Get-SemanticVersionFromTag $tag
+$env:AZCLI_CCF_PROVIDER_RELEASE_VERSION = $catalogVersion
 
 $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$tag"
 $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$tag"

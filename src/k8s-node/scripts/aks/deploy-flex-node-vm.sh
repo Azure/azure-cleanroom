@@ -18,7 +18,7 @@
 # Environment Variables:
 #   LOCATION         Azure region (default: centralindia, overridden by --location)
 #   VM_SIZE          VM size (default: Standard_DC2as_v5)
-#   VM_IMAGE         VM image (default: Canonical:ubuntu-24_04-lts:cvm:24.04.202604160)
+#   VM_IMAGE         VM image (default: Canonical:ubuntu-24_04-lts:cvm:24.04.202607310)
 #
 # Prerequisites:
 #   - deploy-cluster.sh must have been run successfully
@@ -36,7 +36,7 @@ source "$SCRIPT_DIR/common.sh"
 AKS_FLEX_NODE_VERSION="v0.0.19"
 LOCATION="${LOCATION:-centralindia}"
 VM_SIZE="${VM_SIZE:-Standard_DC2as_v5}"
-VM_IMAGE="${VM_IMAGE:-Canonical:ubuntu-24_04-lts:cvm:24.04.202604160}"
+VM_IMAGE="${VM_IMAGE:-Canonical:ubuntu-24_04-lts:cvm:24.04.202607310}"
 MAX_PODS_PER_NODE="${MAX_PODS_PER_NODE:-110}"
 GENERATED_DIR="$SHARED_AKS_GENERATED_DIR"
 

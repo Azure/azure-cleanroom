@@ -217,10 +217,20 @@ if ($registry -ne "mcr") {
         docker push $repo/cgs-client:$localTag
         docker tag $repo/cgs-ui:latest $repo/cgs-ui:$localTag
         docker push $repo/cgs-ui:$localTag
+
+        pwsh $root/build/build-release-metadata-chart.ps1 `
+            -repo $repo `
+            -publishRepo $repo `
+            -tag $localTag `
+            -push `
+            -skipMissing `
+            -includeDevImages
     }
     else {
         $localTag = $tag
     }
+
+    $catalogVersion = Get-SemanticVersionFromTag $localTag
 }
 $CCF_RESOURCE_GROUP_LOCATION = ""
 $CCF_RESOURCE_GROUP = ""
@@ -319,20 +329,26 @@ $envVars = @{}
 $envVarCgsClient = @{}
 
 if ($registry -ne "mcr") {
+    # The release-metadata catalog is resolved by the ccf-provider-client CONTAINER via
+    # 'helm show values oci://...', so it must use a container-reachable endpoint, not the
+    # host-side localhost:5000 (which resolves to the container itself).
+    $ociEndpoint = $repo
+    if ($repo.StartsWith("localhost:5000")) {
+        if ($env:CODESPACES -ne "true" -and $env:GITHUB_ACTIONS -ne "true") {
+            $ociEndpoint = "host.docker.internal:5000"
+        }
+        elseif ($env:CODESPACES -eq "true") {
+            $ociEndpoint = "ccr-registry:5000"
+        }
+        else {
+            # 172.17.0.1: https://stackoverflow.com/questions/48546124/what-is-the-linux-equivalent-of-host-docker-internal
+            $ociEndpoint = "172.17.0.1:5000"
+        }
+    }
     $envVars["AZCLI_CCF_PROVIDER_CLIENT_IMAGE"] = "$repo/ccf/ccf-provider-client:$localTag"
-    $envVars["AZCLI_CCF_PROVIDER_PROXY_IMAGE"] = "$repo/ccr-proxy:$localTag"
-    $envVars["AZCLI_CCF_PROVIDER_SKR_IMAGE"] = "$repo/skr:$localTag"
-    $envVars["AZCLI_CCF_PROVIDER_LOCAL_SKR_IMAGE"] = "$repo/local-skr:$localTag"
-    $envVars["AZCLI_CCF_PROVIDER_RUN_JS_APP_VIRTUAL_IMAGE"] = "$repo/ccf/app/run-js/virtual:$localTag"
-    $envVars["AZCLI_CCF_PROVIDER_RUN_JS_APP_SNP_IMAGE"] = "$repo/ccf/app/run-js/snp:$localTag"
-    $envVars["AZCLI_CCF_PROVIDER_RECOVERY_AGENT_IMAGE"] = "$repo/ccf/ccf-recovery-agent:$localTag"
-    $envVars["AZCLI_CCF_PROVIDER_CVM_ATTESTATION_VERIFIER_IMAGE"] = "$repo/cvm/cvm-attestation-verifier:$localTag"
-    $envVars["AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_IMAGE"] = "$repo/ccf/ccf-recovery-service:$localTag"
-    $envVars["AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_IMAGE"] = "$repo/ccf/ccf-consortium-manager:$localTag"
     $envVars["AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL"] = "$repo"
-    $envVars["AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL"] = "$repo/policies/ccf/ccf-network-security-policy:$localTag"
-    $envVars["AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_SECURITY_POLICY_DOCUMENT_URL"] = "$repo/policies/ccf/ccf-recovery-service-security-policy:$localTag"
-    $envVars["AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_SECURITY_POLICY_DOCUMENT_URL"] = "$repo/policies/ccf/ccf-consortium-manager-security-policy:$localTag"
+    $envVars["AZCLI_CCF_PROVIDER_RELEASE_METADATA_CHART_URL"] = "oci://$ociEndpoint/release-metadata"
+    $envVars["AZCLI_CCF_PROVIDER_RELEASE_VERSION"] = $catalogVersion
 
     $envVarCgsClient["AZCLI_CGS_CLIENT_IMAGE"] = "$repo/cgs-client:$localTag"
     $envVarCgsClient["AZCLI_CGS_UI_IMAGE"] = "$repo/cgs-ui:$localTag"
@@ -340,6 +356,8 @@ if ($registry -ne "mcr") {
 else {
     # Empty values so that default azurecr.io paths baked in the AZCLI_CCF_PROVIDER_CLIENT_IMAGE get used.
     $envVars["AZCLI_CCF_PROVIDER_CLIENT_IMAGE"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_RELEASE_VERSION"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_RELEASE_METADATA_CHART_URL"] = ""
     $envVars["AZCLI_CCF_PROVIDER_PROXY_IMAGE"] = ""
     $envVars["AZCLI_CCF_PROVIDER_SKR_IMAGE"] = ""
     $envVars["AZCLI_CCF_PROVIDER_LOCAL_SKR_IMAGE"] = ""

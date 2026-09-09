@@ -1,0 +1,12 @@
+schemaVersion: 1.0.0
+providers:
+  - provider: InventoryAsCode
+    version: 1.0.0
+    metadata:
+      isProduction: true
+      accountableOwners:
+        service: a67ab109-c3b4-45f5-865a-ae3dcde5ee1b
+      routing:
+        defaultAreaPath:
+          org: msazure
+          path: 'One\Azure Compute\Azure Clean Room Service'

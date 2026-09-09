@@ -9,7 +9,12 @@ param
     $outDir = "",
 
     [string]
-    $configEndpointFile = ""
+    $configEndpointFile = "",
+
+    # Number of VN2 workload-pool nodes. Defaults to the CLEANROOM_ANALYTICS_POOL_NODE_COUNT
+    # env var when set (the TPC-DS stress test sets 3); otherwise 2 (e.g. big-data e2e).
+    [int]
+    $analyticsWorkloadPoolNodeCount = ($env:CLEANROOM_ANALYTICS_POOL_NODE_COUNT ?? 2)
 )
 
 #https://learn.microsoft.com/en-us/powershell/scripting/learn/experimental-features?view=powershell-7.4#psnativecommanderroractionpreference
@@ -55,7 +60,7 @@ az cleanroom cluster update `
     --analytics-workload-config-url $configUrl `
     --analytics-workload-config-url-ca-cert $configUrlCaCert `
     --analytics-workload-security-policy-creation-option $securityPolicyCreationOption `
-    --analytics-workload-pool-node-count 2 `
+    --analytics-workload-pool-node-count $analyticsWorkloadPoolNodeCount `
     --provider-config $sandbox_common/providerConfig.json `
     --provider-client $clusterProviderProjectName
 

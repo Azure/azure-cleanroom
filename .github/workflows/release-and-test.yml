@@ -374,6 +374,25 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           needs-attestation: ${{ inputs.needs-attestation }}
 
+      # All images/policies/artefacts are now released to the internal registry; publish the
+      # release-metadata catalog as an OCI artifact (oci://<acr>/internal/azurecleanroom/
+      # release-metadata) so consumers such as 'az cleanroom ccf network up' can resolve image
+      # digests by the tag-derived catalog version (Get-SemanticVersionFromTag). References point
+      # at the same internal registry (-publishRepo) since these images aren't mirrored to MCR.
+      # -skipMissing tolerates any image not built/released in this run.
+      - name: Publish release-metadata catalog
+        shell: pwsh
+        run: |
+          az acr login --name ${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}
+          Install-Module -Name powershell-yaml -Force
+          $repo = "${{ secrets.registry-name || vars.RELEASE_ACR_NAME }}.azurecr.io/internal/azurecleanroom"
+          ./build/build-release-metadata-chart.ps1 `
+            -repo $repo `
+            -publishRepo $repo `
+            -tag ${{ inputs.tag || steps.get-short-commit-hash.outputs.tag }} `
+            -push `
+            -skipMissing
+
       - name: Verify attestation
         if: ${{ inputs.needs-attestation }}
         uses: ./.github/actions/verify-attestation

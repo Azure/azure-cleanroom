@@ -3,7 +3,7 @@ name: Cleanup stale resources created by PRs
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 1 * * *"
+    - cron: "30 18 * * *"  # 00:00 IST daily (18:30 UTC prev day)
 
 permissions:
   id-token: write

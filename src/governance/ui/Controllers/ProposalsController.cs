@@ -3,6 +3,7 @@
 
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using CgsUI.Models;
 using Microsoft.AspNetCore.Mvc;
 
@@ -24,6 +25,12 @@ public class ProposalsController : Controller
     [Route("Proposals/{proposalId}")]
     public async Task<IActionResult> Detail(string proposalId)
     {
+        if (string.IsNullOrWhiteSpace(proposalId) ||
+            !Regex.IsMatch(proposalId, "^[A-Za-z0-9._-]{1,128}$"))
+        {
+            return this.BadRequest("Invalid proposalId.");
+        }
+
         using var client = new HttpClient();
         string proposalUrl =
             $"{this.configuration.GetEndpoint()}/proposals/{proposalId}";
@@ -92,6 +99,8 @@ public class ProposalsController : Controller
         });
     }
 
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     [Route("Proposals/{proposalId}/Withdraw")]
     public async Task<IActionResult> Withdraw(string proposalId)
     {
@@ -102,6 +111,8 @@ public class ProposalsController : Controller
         return this.RedirectToAction(nameof(this.Detail), new { proposalId });
     }
 
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     [Route("Proposal/{proposalId}/VoteAccept")]
     public async Task<IActionResult> VoteAccept(string proposalId)
     {
@@ -134,6 +145,8 @@ public class ProposalsController : Controller
         }
     }
 
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     [Route("Proposal/{proposalId}/VoteReject")]
     public async Task<IActionResult> VoteReject(string proposalId)
     {

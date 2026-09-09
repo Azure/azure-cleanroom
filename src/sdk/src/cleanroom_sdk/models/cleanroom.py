@@ -186,7 +186,7 @@ class ProtocolType(Enum):
 
 class ServiceEndpoint(BaseModel):
     protocol: ProtocolType
-    url: str
+    url: str | None = None
     configuration: str | None = ""
 
 
@@ -271,7 +271,6 @@ class AccessPoint(BaseModel):
     path: str
     store: Resource
     identity: Identity | None = None
-    subdirectory: str | None = None
     protection: PrivacyProxySettings
     subdirectory: str | None = ""
 

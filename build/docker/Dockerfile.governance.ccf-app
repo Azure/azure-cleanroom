@@ -3,6 +3,7 @@
 # mirror till mariner bumps up the node version.
 # FROM mcr.microsoft.com/cbl-mariner/base/nodejs:18 AS build-image
 FROM mcr.microsoft.com/mirror/docker/library/node:20 AS build-image
+ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
 
 USER node
 RUN mkdir -p /home/node/app && chown -R node:node /home/node/app

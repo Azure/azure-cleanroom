@@ -38,25 +38,25 @@ if ($outDir -eq "") {
 #   Convert: echo <hex> | xxd -r -p | base64
 #
 $measurements = [ordered]@{
-    "Canonical:ubuntu-24_04-lts:cvm:24.04.202604160" = [ordered]@{
+    "Canonical:ubuntu-24_04-lts:cvm:24.04.202607310" = [ordered]@{
         cpu = [ordered]@{
             pcrs = [ordered]@{
                 "0"  = "hCdbL0MSzU/Gy+axUq08NoPlE9nx4jw0/KFgyMynpqc="
-                "1"  = "uRQ/dq/+1VXYYq/PBqqaaCrGia8hy4DpC4VP2oO4bRU="
+                "1"  = "F7yW/nkHLKzBadspX6G2C8dWUfqmpd/YKvPFQejQK8M="
                 "2"  = "PUWM/lXMA+ofRD8VYr7sjfUcdeFKn8+acjShPxmOeWk="
                 "3"  = "PUWM/lXMA+ofRD8VYr7sjfUcdeFKn8+acjShPxmOeWk="
-                "4"  = "q2E0ay/lOjzmOOyxhvVYDbv3vVIp0mGAeumf2LzoGU4="
-                "5"  = "+WofNrqDfYPeyQGWK1OPYDrIVV2f/ODnMqkhdR78eek="
-                "6"  = "O8FVMbX1SZIc6iw45VQUaraq+6ZgwZ7ek/PC8IFkzds="
-                "7"  = "OyDgIkFv32HXLk2jK0NUeBvj3gYIEWl20o/9rYw0HSo="
+                "4"  = "Tj919q1Q/Rgz1959ZZpF+H09iMix5qazS0zRuagXWss="
+                "5"  = "nzZvUgB1C/6E8TH961WEdZSl8dQwlRPq9HbKJ9f+zDw="
+                "6"  = "FxW1lK+mXKTMYHyRXlKWNLFy4PugiGUtEtLvgukD5kE="
+                "7"  = "8BTly/opfueHqXarxRvB1n4j4bnkpgEooRBt0K3vDFs="
                 "8"  = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-                "9"  = "mAKnGa8k7WMM0xrJIAPtZgP1Jvpk8FPWfhwpFAwwtYw="
-                "10" = "2fR1RhY3vJedXotcvgg9jvuvaMQ2w+oux9EN4LQF8JM="
-                "11" = "w0KBDzvLb2D1gZ8G3giyTzx6OHWhjjJQfjJSmDazLak="
+                "9"  = "ZQ70W+2+FQ5U3+To8c3HHjqgYKlkqx2oRu1Pl6URfQI="
+                "10" = "X5wMZ2/+OEsgRBF37XdU4Cy53/Ow9Lp3Tmu49XPx6Y8="
+                "11" = "ikWrUbD2LMjLR0oK6yRoTVqc9D05ggIJ62CB0IQToKQ="
                 "12" = "8aFCxTWG5+IiPsdOX00aSUKVax/ZrHj6/N+FEXqjRdo="
                 "13" = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
                 "14" = "MG+di5TxfZPcbnz49cedZS60xsTRPeLd3CSvQW4T7K8="
-                "15" = "016WIdy91OF6lUF7dZwhUhyFdsGrPl//sZwTrwPsrbo="
+                "15" = "5xTTWW3XBoZ0KGp/yqx2icKoBmgew/N3WkEH/RAIxyo="
                 "16" = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
                 "17" = "//////////////////////////////////////////8="
                 "18" = "//////////////////////////////////////////8="

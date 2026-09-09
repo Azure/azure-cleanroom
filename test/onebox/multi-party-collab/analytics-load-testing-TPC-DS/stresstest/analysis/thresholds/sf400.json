@@ -1,10 +1,11 @@
 {
   "scale_factor": 400,
-  "source_timestamp": "2026-07-11T12:45:38.073616",
+  "source_timestamp": "2026-08-27T00:00:00.000000",
   "policy": {
     "success_rate_allow_failure_below_pct": 80.0,
     "outlier_rule": "exclude rows above Q3 + 1.5*IQR (Tukey upper fence) within the latest run for the same scale/query/format",
-    "ci_threshold_rule": "ci fails iff observed_p95(post-Tukey-trim) > baseline_p95_seconds * 2.0 (i.e. ~100% slower than the recorded p95 baseline); the 2.0x comes from the --duration-threshold-grace-pct default (100%) in verify_run.py"
+    "ci_threshold_rule": "ci fails iff observed_p95(post-Tukey-trim) > baseline_p95_seconds * 2.0 (i.e. ~100% slower than the recorded p95 baseline); the 2.0x comes from the --duration-threshold-grace-pct default (100%) in verify_run.py",
+    "baseline_note": "query14/query24/query64 baselines re-based on 2026-08-27 to the observed p95 of an 8-way parallel sf400 stress run (run 33038902583); parallel execution runs ~2.0-2.8x slower than the isolated 2026-07-11 capture, so the earlier isolated baselines are no longer representative of the parallel scenario."
   },
   "thresholds": [
     {
@@ -73,7 +74,7 @@
       "scale_factor": 400,
       "query": "query14",
       "format": "csv",
-      "baseline_p95_seconds": 2095.988,
+      "baseline_p95_seconds": 5462.83,
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 197.363,
         "running_to_completed_seconds": 1898.624
@@ -104,7 +105,7 @@
       "scale_factor": 400,
       "query": "query14",
       "format": "parquet",
-      "baseline_p95_seconds": 1884.365,
+      "baseline_p95_seconds": 4158.0,
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 129.775,
         "running_to_completed_seconds": 1754.59
@@ -135,7 +136,7 @@
       "scale_factor": 400,
       "query": "query24",
       "format": "csv",
-      "baseline_p95_seconds": 843.302,
+      "baseline_p95_seconds": 2817.93,
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 197.594,
         "running_to_completed_seconds": 645.708
@@ -166,7 +167,7 @@
       "scale_factor": 400,
       "query": "query24",
       "format": "parquet",
-      "baseline_p95_seconds": 776.302,
+      "baseline_p95_seconds": 1963.45,
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 130.87,
         "running_to_completed_seconds": 645.433
@@ -197,7 +198,7 @@
       "scale_factor": 400,
       "query": "query64",
       "format": "csv",
-      "baseline_p95_seconds": 1808.589,
+      "baseline_p95_seconds": 3625.62,
       "avg_phase_timings_seconds": {
         "submitted_to_running_seconds": 198.778,
         "running_to_completed_seconds": 1609.811

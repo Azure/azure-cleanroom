@@ -1,5 +1,8 @@
 FROM cleanroombuild.azurecr.io/mirror/docker/library/python:3.12 AS builder
 
+ARG UV_DEFAULT_INDEX=https://pypi.org/simple
+ENV UV_DEFAULT_INDEX=$UV_DEFAULT_INDEX
+
 WORKDIR /build
 
 RUN apt-get update && apt-get install -y curl build-essential && rm -rf /var/lib/apt/lists/*
@@ -26,6 +29,9 @@ COPY src/workloads/analytics/cleanroom-spark-frontend src/workloads/analytics/cl
 RUN uv build --package cleanroom-spark-frontend --wheel
 
 FROM cleanroombuild.azurecr.io/mirror/docker/library/python:3.12
+
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ENV PIP_INDEX_URL=$PIP_INDEX_URL
 
 WORKDIR /setup
 

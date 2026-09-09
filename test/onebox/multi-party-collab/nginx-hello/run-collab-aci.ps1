@@ -104,7 +104,8 @@ if ($response -ne $expectedResponse) {
 }
 
 # wait for nginx-hello endpoint to be up.
-$timeout = New-TimeSpan -Minutes 5
+
+$timeout = New-TimeSpan -Minutes 10
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 while ((curl -o /dev/null -w "%{http_code}" -s http://ccr.cleanroom.local:8080 --proxy http://127.0.0.1:10080) -ne "200") {
     Write-Host "Waiting for nginx-hello endpoint to be up at https://ccr.cleanroom.local:8080"

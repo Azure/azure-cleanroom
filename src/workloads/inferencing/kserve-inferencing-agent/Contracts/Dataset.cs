@@ -150,7 +150,7 @@ public record Identity(
 
 public record TokenIssuer(
     [property: JsonPropertyName("federatedIdentity")] FederatedIdentity? FederatedIdentity,
-    [property: JsonPropertyName("issuer")] Issuer Issuer,
+    [property: JsonPropertyName("issuer")] Issuer? Issuer,
     [property: JsonPropertyName("issuerType")] string IssuerType);
 
 public record FederatedIdentity(

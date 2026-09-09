@@ -73,6 +73,16 @@ _RED = "\033[91m"
 _YELLOW = "\033[93m"
 _RESET = "\033[0m"
 
+# Seconds to wait between data formats so the confidential-ACI executor groups
+# created by the previous format have time to fully deallocate and release
+# confidential-core/group quota before the next format's queries start. Without
+# this, large-SKU queries in the next format can be unable to place executors
+# (stuck-in-init timeout / FAILED) while the prior format's CACI groups are
+# still tearing down. Override via env TPCDS_FORMAT_COOLDOWN_SECONDS.
+DEFAULT_FORMAT_COOLDOWN_SECONDS = int(
+    os.environ.get("TPCDS_FORMAT_COOLDOWN_SECONDS", "300") or "300"
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -139,6 +149,19 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--format-cooldown-seconds",
+        type=int,
+        default=DEFAULT_FORMAT_COOLDOWN_SECONDS,
+        help=(
+            "Seconds to wait between data formats so confidential-ACI "
+            "executor groups from the previous format fully deallocate and "
+            "release confidential-core quota before the next format starts. "
+            "Set 0 to disable. Default: "
+            f"{DEFAULT_FORMAT_COOLDOWN_SECONDS} "
+            "(env TPCDS_FORMAT_COOLDOWN_SECONDS)."
+        ),
+    )
+    parser.add_argument(
         "--expect-failure",
         action="store_true",
         help="If set, expect jobs to fail (for policy violation tests).",
@@ -159,6 +182,17 @@ def parse_args() -> argparse.Namespace:
             "Path to thresholds JSON file or thresholds directory. "
             "When provided (or auto-detected), allow_failure query/format pairs "
             "are treated as non-blocking in submit exit status."
+        ),
+    )
+    parser.add_argument(
+        "--scale-sku",
+        default="",
+        choices=["", "small", "medium", "large"],
+        help=(
+            "Spark scaleSku override (small|medium|large). Blank (default) "
+            "auto-derives from --scale-factor via SCALE_SKU_BY_SCALE_FACTOR "
+            "(sf<=700 -> small, sf1000 -> large, sf2000 -> large). Set to "
+            "force a non-default tier, e.g. sf700 on medium or sf1000 on medium."
         ),
     )
     return parser.parse_args()
@@ -215,17 +249,49 @@ def validate_driver_pod_termination(
 
 SUBMIT_MAX_ATTEMPTS = 3
 SUBMIT_COLD_START_BACKOFF_SECONDS = 120
+SCALE_SKU_BY_SCALE_FACTOR = {
+    10: "small",
+    100: "small",
+    300: "small",
+    700: "small",
+    # sf1000 uses `large` (not medium): on medium (10 executors) the spill-heavy
+    # queries (query64/query14a) exhaust the ~50 GB/executor ephemeral disk and
+    # fail with `No space left on device` (validated live, run 33733399639). `large`
+    # (20 executors) halves per-executor shuffle/spill and clears it — and since
+    # sf1000 is half the sf2000 dataset on the same SKU it has more headroom than
+    # the sanctioned sf2000/`large` slots.
+    1000: "large",
+    # sf2000 uses `large` — it is the max SKU (20 executors). Watch the ~50 GB/executor
+    # ephemeral cap on the spill-heavy queries (query14a/query64); lower --parallel if
+    # they evict.
+    2000: "large",
+}
+
+
+def resolve_scale_sku(scale_factor: int) -> str:
+    try:
+        return SCALE_SKU_BY_SCALE_FACTOR[scale_factor]
+    except KeyError as e:
+        supported = ", ".join(str(value) for value in SCALE_SKU_BY_SCALE_FACTOR)
+        raise ValueError(
+            f"Unsupported scaleFactor '{scale_factor}'. Expected one of: {supported}."
+        ) from e
 
 
 def submit_query_with_logging(
     query_id: str,
+    scale_sku: str,
     run_id_prefix: str = "",
-) -> str:
+) -> dict[str, Any]:
     ensure_kubectl_proxy_alive()
     last_err: RuntimeError | None = None
     for attempt in range(1, SUBMIT_MAX_ATTEMPTS + 1):
         try:
-            return submit_query(query_id, run_id_prefix=run_id_prefix)
+            return submit_query(
+                query_id,
+                run_id_prefix=run_id_prefix,
+                scale_sku=scale_sku,
+            )
         except RuntimeError as e:
             last_err = e
             msg = str(e)
@@ -266,6 +332,90 @@ def submit_query_with_logging(
                 )
                 time.sleep(SUBMIT_COLD_START_BACKOFF_SECONDS)
     raise last_err  # unreachable; satisfies type-checkers
+
+
+def validate_scale_sku_applied(
+    submission_result: dict[str, Any],
+    kube_config: str,
+    scale_sku: str,
+) -> None:
+    try:
+        sku_settings = submission_result["skuSettings"]
+        expected = {
+            "driver_memory": sku_settings["driver"]["memory"],
+            "executor_memory": sku_settings["executor"]["memory"],
+            "max_executors": sku_settings["executor"]["instances"]["max"],
+        }
+    except KeyError as e:
+        raise RuntimeError(
+            f"Submission response is missing expected SKU settings field: {e}"
+        ) from e
+
+    job_id = submission_result["id"]
+    deadline = time.time() + 60
+    last_error: object = "SparkApplication not found"
+    print(
+        f"{get_timestamp()} Validating scaleSku '{scale_sku}' "
+        f"on SparkApplication '{job_id}'..."
+    )
+
+    while time.time() < deadline:
+        result = subprocess.run(
+            [
+                "kubectl",
+                "get",
+                "sparkapplications.sparkoperator.k8s.io",
+                job_id,
+                "-n",
+                ANALYTICS_NAMESPACE,
+                "--kubeconfig",
+                kube_config,
+                "-o",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            last_error = result.stderr.strip() or result.stdout.strip()
+            time.sleep(2)
+            continue
+
+        try:
+            spec = json.loads(result.stdout)["spec"]
+            actual = {
+                "driver_memory": spec["driver"]["memory"],
+                "executor_memory": spec["executor"]["memory"],
+                "max_executors": spec["dynamicAllocation"]["maxExecutors"],
+            }
+        except (json.JSONDecodeError, KeyError) as e:
+            last_error = e
+            time.sleep(2)
+            continue
+
+        mismatches = [
+            f"{key}: expected {expected[key]}, got {actual[key]}"
+            for key in expected
+            if actual[key] != expected[key]
+        ]
+        if mismatches:
+            raise RuntimeError(
+                f"scaleSku '{scale_sku}' was not applied to {job_id}: "
+                + "; ".join(mismatches)
+            )
+
+        print(
+            f"{_GREEN}scaleSku '{scale_sku}' validated: "
+            f"driver={actual['driver_memory']}, "
+            f"executor={actual['executor_memory']}, "
+            f"maxExecutors={actual['max_executors']}{_RESET}"
+        )
+        return
+
+    raise TimeoutError(
+        f"Timed out waiting to validate scaleSku '{scale_sku}' on "
+        f"SparkApplication '{job_id}'. Last error: {last_error}"
+    )
 
 
 def validate_operational_events(
@@ -748,7 +898,18 @@ def run_single_query(
     attempt = 0
     run_id_prefix = _stresstest_run_id_prefix(query_id, config)
     while True:
-        job_id = submit_query_with_logging(query_id, run_id_prefix=run_id_prefix)
+        scale_sku = config["_scale_sku"]
+        submission_result = submit_query_with_logging(
+            query_id,
+            run_id_prefix=run_id_prefix,
+            scale_sku=scale_sku,
+        )
+        job_id = submission_result["id"]
+        validate_scale_sku_applied(
+            submission_result,
+            kube_config=_kc,
+            scale_sku=scale_sku,
+        )
         prime_sparkapp_cores(job_id, kube_config=_kc)
         try:
             result = wait_for_completion(
@@ -897,6 +1058,16 @@ def _run_format_queries(
     on_result: Callable[[dict[str, Any]], None] | None = None,
 ) -> tuple[list[dict[str, Any]], float]:
     work_items = [(qid, i) for i in range(1, iterations + 1) for qid in resolved_ids]
+
+    # When the requested parallelism exceeds the number of jobs to run, cycle
+    # through the distinct queries so `parallel` jobs actually run concurrently
+    # (e.g. parallel=15 with 5 distinct queries and iterations=1 => each query
+    # runs 3x). Each cycled submission reuses the (query, iteration) key but
+    # still gets a unique job id, so verification scores it too.
+    if work_items and parallel > len(work_items):
+        base = list(work_items)
+        while len(work_items) < parallel:
+            work_items.append(base[(len(work_items) - len(base)) % len(base)])
 
     config["_iterations_total"] = iterations
 
@@ -1064,6 +1235,37 @@ def _build_run_outcomes(all_results: list[dict[str, Any]]) -> list[dict[str, Any
     return outcomes
 
 
+# Relative scheduling weight per TPC-DS query number (higher = heavier, so it is
+# submitted first and claims executor pod slots while the VN2 pool is emptiest,
+# instead of being starved at the tail once the POD_COUNT ceiling is saturated).
+# Largest-first scheduling: ranks reflect measured sf1000 behaviour — query64 /
+# query14 are the wide multi-fact joins that request the most executors and run
+# longest; query1 is the lightest. Queries not listed default to weight 0 (kept
+# in their given order, scheduled after the ranked heavies).
+_QUERY_SCHEDULING_WEIGHT: dict[int, int] = {
+    64: 100,  # widest joins / most executors - the pod-ceiling starvation victim
+    14: 90,  # longest wall-clock (multi-fact)
+    24: 60,
+    72: 40,
+    1: 10,  # lightest
+}
+
+
+def _query_schedule_weight(friendly_id: str) -> int:
+    """Scheduling weight for a query; higher is submitted earlier. Unknown => 0."""
+    m = re.search(r"query(\d+)", friendly_id or "", re.IGNORECASE)
+    if not m:
+        return 0
+    return _QUERY_SCHEDULING_WEIGHT.get(int(m.group(1)), 0)
+
+
+def _order_queries_heaviest_first(friendly_ids: list[str]) -> list[str]:
+    """Order queries heaviest-first for submission so the most pod-hungry queries
+    grab executor slots before the pool saturates (largest-first scheduling). A
+    stable sort keeps queries of equal/unknown weight in their original order."""
+    return sorted(friendly_ids, key=lambda q: -_query_schedule_weight(q))
+
+
 def _execute_all_formats(
     *,
     args: argparse.Namespace,
@@ -1072,7 +1274,16 @@ def _execute_all_formats(
     formats: list[str],
     all_results: list[dict[str, Any]],
 ) -> dict[str, float]:
+    # Submit heaviest queries first so they claim executor pod slots while the
+    # VN2 pool is emptiest, rather than being starved at the tail when the
+    # per-node POD_COUNT ceiling saturates under high parallelism.
+    friendly_ids = _order_queries_heaviest_first(friendly_ids)
+    print(
+        f"{get_timestamp()} Submitting queries heaviest-first: {' '.join(friendly_ids)}"
+    )
     wall_clock_by_format: dict[str, float] = {}
+    cooldown_seconds = max(0, int(getattr(args, "format_cooldown_seconds", 0) or 0))
+    last_format = formats[-1] if formats else None
 
     def _on_iteration(fmt: str, r: dict[str, Any]) -> None:
         _tag_result(r, fmt, friendly_ids)
@@ -1102,6 +1313,15 @@ def _execute_all_formats(
             on_result=lambda r, fmt=fmt: _on_iteration(fmt, r),
         )
         wall_clock_by_format[fmt] = fmt_wall
+
+        if cooldown_seconds > 0 and fmt != last_format:
+            print(
+                f"{get_timestamp()} Cooling down {cooldown_seconds}s after "
+                f"format '{fmt}' so its confidential-ACI executor groups "
+                f"deallocate and release confidential-core quota before the "
+                f"next format starts..."
+            )
+            time.sleep(cooldown_seconds)
 
     return wall_clock_by_format
 
@@ -1273,6 +1493,12 @@ def main() -> None:
         sys.exit(1)
 
     formats = [f.strip() for f in args.data_format.split(",") if f.strip()]
+    # Always run parquet before csv. parquet is the denser/heavier format, so
+    # running it first (against a freshly-provisioned, fully-drained
+    # confidential-ACI pool) avoids it competing with the CACI groups left
+    # deallocating from a prior csv batch. csv then runs after the inter-format
+    # cool-down. Stable-sort keeps any other formats in their original order.
+    formats.sort(key=lambda f: 0 if f.lower() == "parquet" else 1)
 
     scale_factor = None
     sf_raw = config.get("scaleFactor")
@@ -1300,6 +1526,22 @@ def main() -> None:
 
     if args.kube_config:
         config["_kube_config"] = args.kube_config
+    if args.scale_sku:
+        config["_scale_sku"] = args.scale_sku
+        print(
+            f"{get_timestamp()} [info] Using scaleSku={config['_scale_sku']} "
+            f"(override) for scaleFactor={scale_factor}."
+        )
+    else:
+        try:
+            config["_scale_sku"] = resolve_scale_sku(scale_factor)
+        except ValueError as e:
+            print(f"{get_timestamp()} [error] {e}")
+            sys.exit(2)
+        print(
+            f"{get_timestamp()} [info] Using scaleSku={config['_scale_sku']} "
+            f"(auto from scaleFactor) for scaleFactor={scale_factor}."
+        )
     if args.expected_events_json:
         config["_expected_events"] = json.loads(args.expected_events_json)
 

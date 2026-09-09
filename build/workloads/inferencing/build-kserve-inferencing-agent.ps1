@@ -35,7 +35,8 @@ else {
     $imageName = "workloads/kserve-inferencing-agent:$tag"
 }
 
-docker image build -t $imageName -f $buildRoot/docker/Dockerfile.kserve-inferencing-agent "$root"
+Build-DockerImage `
+    -t $imageName -f $buildRoot/docker/Dockerfile.kserve-inferencing-agent "$root"
 
 # Package the helm chart as well.
 Push-Location $root/src/workloads/inferencing/kserve-inferencing-agent/helm/chart

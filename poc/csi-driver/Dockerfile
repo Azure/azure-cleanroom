@@ -1,4 +1,4 @@
-FROM golang:1.25 AS go-builder
+FROM cleanroombuild.azurecr.io/mirror/docker/library/golang:1.25 AS go-builder
 WORKDIR /build
 COPY poc/csi-driver/go.mod poc/csi-driver/go.sum ./
 RUN go mod download
@@ -6,7 +6,9 @@ COPY poc/csi-driver/ .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /csi-driver .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /blobfuse-proxy ./proxy/
 
-FROM python:3.12 AS wheel-builder
+FROM cleanroombuild.azurecr.io/mirror/docker/library/python:3.12 AS wheel-builder
+ARG UV_DEFAULT_INDEX=https://pypi.org/simple
+ENV UV_DEFAULT_INDEX=$UV_DEFAULT_INDEX
 WORKDIR /build
 RUN apt-get update && apt-get install -y curl build-essential && rm -rf /var/lib/apt/lists/*
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -15,11 +17,11 @@ COPY src/blobfuse-launcher src/blobfuse-launcher
 COPY src/internal/cleanroom-internal src/internal/cleanroom-internal
 COPY pyproject.toml .
 COPY uv.lock .
-RUN uv sync --frozen
+RUN uv lock && uv sync --frozen
 RUN uv build --all-packages --wheel
 
 # Stage 3: Build blobfuse2 from source + encryptor plugin
-FROM ubuntu:24.04 AS blobfuse-builder
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:24.04 AS blobfuse-builder
 
 RUN apt-get update -y && \
     DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install \
@@ -38,7 +40,10 @@ COPY src/blobfuse-launcher/encryptor azure-storage-fuse/encryptor
 RUN cd azure-storage-fuse/encryptor && go build -buildmode=plugin -o encryptor.so
 
 # Stage 4: Runtime - combine Go binary + Python + custom blobfuse2 + encryptor
-FROM ubuntu:24.04
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:24.04
+
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ENV PIP_INDEX_URL=$PIP_INDEX_URL
 
 WORKDIR /app
 

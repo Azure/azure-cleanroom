@@ -156,8 +156,8 @@ const is_set_member_document = (element) =>
 export function resolve(proposal, proposerId, votes) {
   // Operators proposing operator changes can accept them without a vote.
   const resolution = operatorResolve(proposal, proposerId, votes);
-  if (resolution == "Accepted") {
-    return "Accepted";
+  if (resolution != "Open") {
+    return resolution;
   }
 
   // Custom logic.

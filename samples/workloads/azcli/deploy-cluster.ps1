@@ -395,6 +395,21 @@ if ($infraType -eq "aks") {
     $providerConfig.subscriptionId = $subscriptionId
     $providerConfig.resourceGroupName = $CL_CLUSTER_RESOURCE_GROUP
     $providerConfig.tenantId = $tenantId
+    # Optional agentpool VM-size override via env var. The analytics e2e (big-data)
+    # and TPC-DS stress pipelines set CLEANROOM_CLUSTER_NODE_VM_SIZE=Standard_D8ds_v5
+    # so the VN2 virtual-kubelet pods (~2 vCPU each) pack onto fewer agentpool nodes
+    # (D4ds_v5 fits only one VN2 pod/node). Unset => provider default (Standard_D4ds_v5).
+    if ($env:CLEANROOM_CLUSTER_NODE_VM_SIZE) {
+        $providerConfig.nodeVmSize = $env:CLEANROOM_CLUSTER_NODE_VM_SIZE
+    }
+    # Optional agentpool initial node-count override via env var. Seeds the AKS agent pool
+    # to this initial size (the TPC-DS stress pipeline sets this) so the VN2 kubelet pods land
+    # immediately, while the cluster autoscaler stays enabled: the provider sets Count to the
+    # initial count, keeps MinCount at the default floor and widens MaxCount to fit the initial
+    # count. Unset => provider default (2..5 autoscale).
+    if ($env:CLEANROOM_CLUSTER_INITIAL_NODE_COUNT) {
+        $providerConfig.initialNodeCount = [int]$env:CLEANROOM_CLUSTER_INITIAL_NODE_COUNT
+    }
 }
 
 $providerConfig | ConvertTo-Json -Depth 100 > $sandbox_common/providerConfig.json

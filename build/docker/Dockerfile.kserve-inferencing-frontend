@@ -1,5 +1,8 @@
 FROM cleanroombuild.azurecr.io/mirror/docker/library/python:3.12 AS builder
 
+ARG UV_DEFAULT_INDEX=https://pypi.org/simple
+ENV UV_DEFAULT_INDEX=$UV_DEFAULT_INDEX
+
 WORKDIR /build
 
 RUN apt-get update && apt-get install -y curl build-essential && rm -rf /var/lib/apt/lists/*
@@ -24,6 +27,9 @@ RUN uv build --package kserve-inferencing-frontend --wheel
 
 FROM cleanroombuild.azurecr.io/mirror/docker/library/python:3.12
 
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ENV PIP_INDEX_URL=$PIP_INDEX_URL
+
 WORKDIR /setup
 
 COPY --from=builder /build/dist/cleanroom_sdk*.whl /setup/
@@ -36,7 +42,8 @@ COPY --from=builder /build/dist/frontend_internal*.whl /setup/
 RUN pip install frontend_internal*.whl && rm -f frontend_internal*.whl
 
 COPY --from=builder /build/dist/kserve_inferencing_frontend*.whl /setup/
-RUN pip install kserve_inferencing_frontend*.whl && rm -f kserve_inferencing_frontend*.whl
+RUN pip install kserve_inferencing_frontend*.whl && \
+    rm -f kserve_inferencing_frontend*.whl
 
 EXPOSE 8000
 

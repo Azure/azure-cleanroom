@@ -22,6 +22,8 @@ internal class Startup : ApiStartup
 
     public override void OnConfigureServices(IServiceCollection services)
     {
+        ImageUtils.SetLogger(this.Logger);
+
         services.AddSingleton<CcfClientManager>();
         services.AddSingleton<RecoveryAgentClientManager>();
         services.AddSingleton<RecoveryServiceClientManager>();

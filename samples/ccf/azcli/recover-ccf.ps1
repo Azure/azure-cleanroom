@@ -43,6 +43,48 @@ $infraType = $ccf.infraType
 $ccfProviderProjectName = "ccf-provider"
 $operatorName = "ccf-operator"
 
+# Robust probe of a CCF node HTTP endpoint (e.g. /node/network, /node/state).
+# The recover/deploy commands report the endpoint as "up", but on CACI
+# (confidential ACI) the freshly-provisioned node's TLS listener can need a few
+# more seconds to warm — the first probe intermittently fails the TLS handshake
+# with `curl ... exit code 35` (SSL connect error). Under
+# $PSNativeCommandUseErrorActionPreference=$true that non-zero exit throws and
+# fails an otherwise-healthy recovery. Retry with a short backoff so a cold-TLS
+# first hit is tolerated. Returns the parsed JSON object.
+function Invoke-CcfNodeProbe {
+    param(
+        [Parameter(Mandatory = $true)][string] $Url,
+        [int] $MaxAttempts = 10,
+        [int] $DelaySeconds = 6,
+        # Optional JSON property that must be present/non-null for the response to
+        # be considered ready (e.g. 'service_certificate'). Empty = any valid JSON.
+        [string] $RequiredProperty = ""
+    )
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        # Disable native-cmd throw for the probe so a transient curl non-zero
+        # (e.g. 35 TLS handshake) is retried instead of aborting the script.
+        $PSNativeCommandUseErrorActionPreference = $false
+        $raw = curl "$Url" -k --silent --show-error 2>&1
+        $curlExit = $LASTEXITCODE
+        $PSNativeCommandUseErrorActionPreference = $true
+        if ($curlExit -eq 0 -and -not [string]::IsNullOrWhiteSpace($raw)) {
+            try {
+                $parsed = $raw | ConvertFrom-Json
+                if ([string]::IsNullOrEmpty($RequiredProperty) -or $null -ne $parsed.$RequiredProperty) {
+                    return $parsed
+                }
+            }
+            catch {
+                # fallthrough to retry on non-JSON (endpoint still warming)
+            }
+        }
+        Write-Output "Probe $Url attempt $attempt/$MaxAttempts not ready (curl exit $curlExit); retrying in ${DelaySeconds}s..."
+        Start-Sleep -Seconds $DelaySeconds
+    }
+    throw "Hit timeout waiting for $Url to respond after $MaxAttempts attempts."
+}
+
+
 $networkToRecover = $ccf.name
 $inplaceRecovery = $true
 if ($targetNetworkName -ne "" -and $targetNetworkName -ne $networkToRecover) {
@@ -114,7 +156,10 @@ if ($OneStepRecovery) {
     }
 
     $ccfEndpoint = ($response | ConvertFrom-Json).endpoint
-    $response = (curl "$ccfEndpoint/node/network" -k --silent | ConvertFrom-Json)
+    # Robustly probe the freshly-recovered endpoint (tolerates cold-TLS handshake
+    # flakes on CACI — see Invoke-CcfNodeProbe). Require the service_certificate so
+    # we don't proceed until the node is actually serving it.
+    $response = Invoke-CcfNodeProbe -Url "$ccfEndpoint/node/network" -RequiredProperty "service_certificate"
     # Trimming an extra new-line character added to the cert.
     $serviceCertStr = $response.service_certificate.TrimEnd("`n")
     mv "$sandbox_common/service_cert.pem" "$sandbox_common/service_cert_$attemptSuffix.pem"
@@ -204,7 +249,7 @@ else {
         --provider-config $sandbox_common/providerConfig.json
 
     $ccfEndpoint = ($response | ConvertFrom-Json).endpoint
-    $serviceStatus = (curl "$ccfEndpoint/node/network" -k --silent | ConvertFrom-Json).service_status
+    $serviceStatus = (Invoke-CcfNodeProbe -Url "$ccfEndpoint/node/network").service_status
 
     # For SNP (caci) deployments, configure the join policy before opening the network
     # so that nodes can join.
@@ -255,10 +300,10 @@ else {
         --provider-config $sandbox_common/providerConfig.json `
         --provider-client $ccfProviderProjectName
 
-    $serviceStatus = (curl "$ccfEndpoint/node/network" -k --silent | ConvertFrom-Json).service_status
+    $serviceStatus = (Invoke-CcfNodeProbe -Url "$ccfEndpoint/node/network").service_status
 
     # Submit the decrypted recovery share.
-    $nodeState = (curl "$ccfEndpoint/node/state" -k --silent | ConvertFrom-Json)
+    $nodeState = (Invoke-CcfNodeProbe -Url "$ccfEndpoint/node/state")
     Write-Output "Node state is: $nodeState. Service status is: $serviceStatus."
     if ($confidentialRecovery) {
         Write-Output "Requesting CCF recovery service for submitting recovery share for network $networkName."
@@ -299,7 +344,7 @@ else {
         }
     }
 
-    $response = (curl "$ccfEndpoint/node/network" -k --silent | ConvertFrom-Json)
+    $response = (Invoke-CcfNodeProbe -Url "$ccfEndpoint/node/network" -RequiredProperty "service_certificate")
     # Trimming an extra new-line character added to the cert.
     $serviceCertStr = $response.service_certificate.TrimEnd("`n")
     mv "$sandbox_common/service_cert.pem" "$sandbox_common/service_cert_$attemptSuffix.pem"

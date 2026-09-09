@@ -486,7 +486,6 @@ class CleanroomApplicationBuilder(
                                     "IdTokenEndpoint": "http://localhost:8300",
                                     "Subject": subject,
                                     "Audience": audience,
-                                    "Issuer": identity.tokenIssuer.issuer.url,
                                 },
                             },
                         }

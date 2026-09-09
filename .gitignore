@@ -452,3 +452,8 @@ cvm-attestation-verifier
 # actual bin/ Release folders elsewhere is unaffected).
 !.pipelines/Release/
 !.pipelines/Release/**
+
+.charts/
+
+# Developer-local environment overrides.
+.env.local

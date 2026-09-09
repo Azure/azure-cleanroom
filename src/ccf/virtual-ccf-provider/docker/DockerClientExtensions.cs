@@ -252,10 +252,10 @@ internal static class DockerClientEx
         string resourceNameTag,
         Dictionary<string, string> labels)
     {
+        string fromImage = await ImageUtils.CcrProxyImageReference();
         var imageParams = new ImagesCreateParameters
         {
-            FromImage = ImageUtils.CcrProxyImage(),
-            Tag = ImageUtils.CcrProxyTag(),
+            FromImage = fromImage,
         };
         await client.Images.CreateImageAsync(
             imageParams,
@@ -266,7 +266,7 @@ internal static class DockerClientEx
         {
             Labels = labels,
             Name = containerName,
-            Image = $"{imageParams.FromImage}:{imageParams.Tag}",
+            Image = imageParams.FromImage,
             Env = new List<string>
             {
                 $"CCR_ENVOY_DESTINATION_ENDPOINT={envoyDestinationEndpoint}",
@@ -393,10 +393,10 @@ internal static class DockerClientEx
         string serviceName,
         Dictionary<string, string> labels)
     {
+        string fromImage = await ImageUtils.LocalSkrImageReference();
         var imageParams = new ImagesCreateParameters
         {
-            FromImage = ImageUtils.LocalSkrImage(),
-            Tag = ImageUtils.LocalSkrTag(),
+            FromImage = fromImage,
         };
         await client.Images.CreateImageAsync(
             imageParams,
@@ -407,7 +407,7 @@ internal static class DockerClientEx
         {
             Labels = labels,
             Name = containerName,
-            Image = $"{imageParams.FromImage}:{imageParams.Tag}",
+            Image = imageParams.FromImage,
             ExposedPorts = new Dictionary<string, EmptyStruct>
             {
                 {

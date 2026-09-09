@@ -20,19 +20,15 @@
 // Main API types
 export * from "./frontend";
 export type {
-    paths as FrontendPaths,
-    components as FrontendComponents,
-    operations as FrontendOperations,
+  paths as FrontendPaths,
+  components as FrontendComponents,
+  operations as FrontendOperations
 } from "./frontend";
 
 // Dataset schema types
 export * from "./dataset";
-export type {
-    components as DatasetComponents,
-} from "./dataset";
+export type { components as DatasetComponents } from "./dataset";
 
 // Cleanroom schema types
 export * from "./cleanroom";
-export type {
-    components as CleanroomComponents,
-} from "./cleanroom";
+export type { components as CleanroomComponents } from "./cleanroom";

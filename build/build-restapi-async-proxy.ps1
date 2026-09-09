@@ -24,8 +24,10 @@ else {
 
 $root = git rev-parse --show-toplevel
 $buildRoot = "$root/build"
+. $buildRoot/helpers.ps1
 
-docker image build -t $imageName -f $buildRoot/docker/Dockerfile.restapi-async-proxy "$root"
+Build-DockerImage `
+    -t $imageName -f $buildRoot/docker/Dockerfile.restapi-async-proxy "$root"
 
 if ($push) {
     docker push $imageName

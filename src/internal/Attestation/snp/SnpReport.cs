@@ -188,13 +188,12 @@ pRb21iI1NlNCfOGUPIhVpWECAwEAAQ==
             this.ReportBuffer = reportBuffer;
             this.Endorsements = endorsements;
 
+            this.LeafCert = this.VerifyCertificateChain();
             this.VerifyReportSignature();
             this.VerifyUvmEndosement();
         }
 
-        public X509Certificate2? RootCert { get; private set; }
-
-        public X509Certificate2? LeafCert { get; private set; }
+        public X509Certificate2 LeafCert { get; private set; }
 
         public string CertificateChain { get; }
 
@@ -278,26 +277,6 @@ pRb21iI1NlNCfOGUPIhVpWECAwEAAQ==
 
         private void VerifyReportSignature()
         {
-            this.VerifyCertificateChain();
-
-            if (this.RootCert == null)
-            {
-                throw new Exception("AMD Root certificate was not found.");
-            }
-
-            if (TrustedAmdRootPublicKeys.FirstOrDefault(
-                (trustedKey) => ComparePublicKey(this.RootCert.PublicKey, trustedKey)) == null)
-            {
-                throw new Exception(
-                    "AMD RootKey did not match any expected value " +
-                    "(checked Milan, Genoa, and Turin root keys).");
-            }
-
-            if (this.LeafCert == null)
-            {
-                throw new Exception("Leaf cert cannot be null");
-            }
-
             var leafCertKey = this.LeafCert.GetECDsaPublicKey();
             if (leafCertKey == null)
             {
@@ -326,7 +305,7 @@ pRb21iI1NlNCfOGUPIhVpWECAwEAAQ==
             }
         }
 
-        private void VerifyCertificateChain()
+        private X509Certificate2 VerifyCertificateChain()
         {
             var certCollection = new X509Certificate2Collection();
             var regex = new Regex(
@@ -341,53 +320,57 @@ pRb21iI1NlNCfOGUPIhVpWECAwEAAQ==
                 certCollection.Add(cert);
             }
 
+            if (certCollection.Count < 2)
+            {
+                throw new Exception("VCEK certificate chain must contain a leaf and root.");
+            }
+
             // Example certCollection:
             // [0] SEV-VCEK->SEV-Milan
             // [1] SEV-Milan->ARK-Milan
             // [2] ARK-Milan->ARK-Milan
+            var parsedRootCert = certCollection[certCollection.Count - 1];
+            var parsedLeafCert = certCollection[0];
+            if (TrustedAmdRootPublicKeys.FirstOrDefault(
+                trustedKey => ComparePublicKey(parsedRootCert.PublicKey, trustedKey)) == null)
+            {
+                throw new Exception(
+                    "AMD RootKey did not match any expected value " +
+                    "(checked Milan, Genoa, and Turin root keys).");
+            }
+
             using (var chain = new X509Chain())
             {
                 chain.ChainPolicy.DisableCertificateDownloads = true;
                 chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
                 chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-                chain.ChainPolicy.VerificationFlags =
-                    X509VerificationFlags.AllowUnknownCertificateAuthority;
-
-                var parsedRootCert = certCollection[certCollection.Count - 1];
-                var parsedLeafCert = certCollection[0];
-                foreach (var cert in certCollection.Reverse())
+                chain.ChainPolicy.VerificationFlags = X509VerificationFlags.NoFlag;
+                chain.ChainPolicy.CustomTrustStore.Add(parsedRootCert);
+                for (int i = 1; i < certCollection.Count - 1; i++)
                 {
-                    if (!chain.Build(cert))
-                    {
-                        throw new Exception($"'{cert.Subject}' certificate chain was not valid.");
-                    }
-
-                    chain.ChainPolicy.CustomTrustStore.Add(cert);
+                    chain.ChainPolicy.ExtraStore.Add(certCollection[i]);
                 }
 
-                if (chain.ChainStatus.Length > 0)
+                if (!chain.Build(parsedLeafCert))
                 {
                     StringBuilder sb = new("VCEK certificate chain was not valid.");
-                    foreach (var cert in chain.ChainStatus)
+                    for (int i = 0; i < chain.ChainStatus.Length; i++)
                     {
-                        sb.Append(cert.ToString());
+                        var status = chain.ChainStatus[i];
+                        sb.Append(
+                            $" ChainStatus[{i}]: {status.Status} - " +
+                            status.StatusInformation.Trim());
                     }
 
                     throw new Exception(sb.ToString());
                 }
             }
 
-            this.LeafCert = certCollection[0];
-            this.RootCert = certCollection[certCollection.Count - 1];
+            return parsedLeafCert;
         }
 
         private bool IsReportSignatureValid(byte[] rawReportData, byte[] expectedSignature)
         {
-            if (this.LeafCert == null)
-            {
-                throw new Exception("Leaf cert cannot be null");
-            }
-
             var ecdsa = this.LeafCert.GetECDsaPublicKey();
             if (ecdsa == null)
             {

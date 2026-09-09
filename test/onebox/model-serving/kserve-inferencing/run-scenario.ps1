@@ -12,6 +12,10 @@ param
     [string]
     $ownerClient,
 
+    [Parameter(Mandatory)]
+    [string]
+    $ownerName,
+
     [string]
     $deploymentConfigDir = "$PSScriptRoot/../../workloads/generated",
 
@@ -328,15 +332,40 @@ az cleanroom governance proposal vote `
     --governance-client $ownerClient
 
 # Section: Publisher publishes the model datasets.
+
 $identity = $(az resource show --ids $publisherMiResult.mi.id --query "properties") | ConvertFrom-Json
 
-# Create identity entry in the configuration.
+# TEST ONLY: This is a single tenant scenario masquerading as a multi-tenant scenario.
+# We will assert that the actual tenant where the resources exist is the same for all the involved parties.
+$ownerTenantId = az account show --query "tenantId" --output tsv
+if ($identity.tenantId -ne $ownerTenantId) {
+    throw "Publisher's access identity tenant Id $($identity.tenantId) does not match owner's tenant Id $ownerTenantId."
+}
+
+$proposalId = (az cleanroom governance member set-tenant-id `
+        --identifier $ownerName `
+        --tenant-id $ownerTenantId `
+        --query "proposalId" `
+        --output tsv `
+        --governance-client $ownerClient)
+az cleanroom governance proposal vote `
+    --proposal-id $proposalId `
+    --action accept `
+    --governance-client $ownerClient
+
+# Set the tenant level OIDC value. This is also used later to setup federation to the publisher's and
+# consumer's resources.
 pwsh $PSScriptRoot/setup-oidc-issuer-for-user.ps1 `
     -oidcContainerName $publisherResourceGroup `
     -outDir "$outDir/$publisherResourceGroup" `
-    -governanceClient $publisherProjectName
+    -governanceClient $ownerClient
 
-$publisherIssuerUrl = Get-Content "$outDir/$publisherResourceGroup/issuer-url.txt"
+$issuerUrl = Get-Content "$outDir/$publisherResourceGroup/issuer-url.txt"
+
+# Store the same issuer under the publisher user.
+az cleanroom governance oidc-issuer set-issuer-url `
+    --governance-client $publisherProjectName `
+    --url $issuerUrl
 
 az cleanroom collaboration context set `
     --collaboration-name $publisherProjectName
@@ -345,7 +374,6 @@ az cleanroom collaboration identity add az-federated `
     --identity-name publisher-identity `
     --client-id $identity.clientId `
     --tenant-id $identity.tenantId `
-    --token-issuer-url $publisherIssuerUrl `
     --backing-identity cleanroom_cgs_oidc
 
 $publisherInputSseDatasetName = "publisher-input-sse-$runId"
@@ -438,7 +466,7 @@ pwsh $PSScriptRoot/setup-access.ps1 `
     -storageAccountResourceGroup $publisherResult.sa.resourceGroup `
     -governanceClient $publisherProjectName `
     -subject $subject `
-    -issuerUrl $publisherIssuerUrl `
+    -issuerUrl $issuerUrl `
     -outDir $outDir
 
 Write-Output "Enabling flex node on the cluster..."

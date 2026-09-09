@@ -1,5 +1,6 @@
 # Use the official .NET Core SDK as the base image
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG RestoreSources=https://api.nuget.org/v3/index.json
 
 # Set the working directory
 WORKDIR /app
@@ -13,7 +14,8 @@ COPY src/workloads/frontend/*.csproj /app/src/workloads/frontend/
 COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
 COPY src/internal/Cose/*.csproj /app/src/internal/Cose/
-RUN dotnet restore /app/src/workloads/frontend/frontend-service.sln
+RUN dotnet restore --source "$RestoreSources" \
+    /app/src/workloads/frontend/frontend-service.sln
 
 # copy everything else and build app
 COPY stylecop.json /app

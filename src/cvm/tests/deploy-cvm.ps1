@@ -132,7 +132,7 @@ else {
         --admin-username $AdminUser `
         --size $VmSize `
         --enable-vtpm true `
-        --image "Canonical:ubuntu-24_04-lts:cvm:24.04.202604160" `
+        --image "Canonical:ubuntu-24_04-lts:cvm:24.04.202607310" `
         --public-ip-sku Standard `
         --security-type ConfidentialVM `
         --os-disk-security-encryption-type DiskWithVMGuestState `

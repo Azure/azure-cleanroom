@@ -906,6 +906,72 @@ jobs:
       - name: Build cleanroom az cli extension
         run: pwsh ./build/build-azcliext-cleanroom.ps1 -tag ${{ github.run_id }} -repo ${{ vars.ACR_URL }} -push -skipInstall
 
+  publish-release-metadata-catalog:
+    # Run after whatever subset of builds ran (a CCF-only build still needs a catalog); publish
+    # as long as none of the builds that DID run failed. -skipMissing yields a valid partial
+    # catalog covering exactly the images that were built. Skipped needs don't block (the status
+    # function makes this if always-evaluated).
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
+    needs:
+      - build-ccr-governance-containers
+      - build-ccr-proxy-containers
+      - build-ccr-skr-containers
+      - build-ccr-tools-containers
+      - build-cvm-containers
+      - build-k8s-node-containers
+      - build-ccf-containers
+      - build-cgs-containers
+      - build-ccr-containers
+      - build-ccf-container-policies
+      - build-ccr-container-policies
+      - build-cleanroom-cluster-containers
+      - build-analytics-workload-containers
+      - build-analytics-workload-container-policies
+      - build-kserve-inferencing-workload-containers
+      - build-kserve-inferencing-workload-container-policies
+      - build-frontend-service-containers
+      - build-frontend-service-container-policies
+      - build-azcliext-cleanroom
+    runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=publish-release-metadata-catalog-${{ github.run_id }}-${{ github.run_attempt }}"]
+    environment: pr
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RUN_ID: ${{ github.run_id }}
+      JOB_ID: ${{ github.job }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      USE_PREPROVISIONED_OIDC: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-docker-on-data-disk
+
+      - name: Login to Azure and refresh token
+        uses: ./.github/actions/login-to-azure
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        shell: pwsh
+        run: az acr login -n ${{ vars.ACR_URL }}
+
+      - name: Install powershell-yaml
+        shell: pwsh
+        run: Install-Module -Name powershell-yaml -Force
+
+      # All images/policies are now pushed; publish the release-metadata catalog once as an OCI
+      # artifact (oci://<acr>/release-metadata). Refs point at the ACR (-publishRepo), not MCR,
+      # since these images aren't mirrored to MCR. The chart version is derived from the tag
+      # (Get-SemanticVersionFromTag). -skipMissing tolerates any image not built in this run.
+      - name: Publish release-metadata catalog
+        shell: pwsh
+        run: pwsh ./build/build-release-metadata-chart.ps1 -repo ${{ vars.ACR_URL }} -publishRepo ${{ vars.ACR_URL }} -tag ${{ github.run_id }} -push -skipMissing -includeDevImages
+
   generate-dev-up-env:
     if: ${{ inputs.build-groups != '' }}
     runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=generate-dev-up-env-${{ github.run_id }}-${{ github.run_attempt }}"]

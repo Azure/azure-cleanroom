@@ -39,3 +39,12 @@ if ($script:bucketExists) {
         $awsCliImage `
         s3 rb s3://$bucketName --force
 }
+else {
+    Write-Output "Bucket $bucketName does not exist; nothing to delete."
+}
+
+# The head-bucket existence probe above leaves a non-zero $LASTEXITCODE when the
+# bucket does not exist. That is a valid no-op for this delete helper, so reset
+# the exit code to avoid failing the calling task (e.g. the ADO PowerShell task
+# treats a non-zero $LASTEXITCODE at script end as a failure).
+$global:LASTEXITCODE = 0

@@ -33,9 +33,14 @@ internal class EntraTokenValidator
 
     private readonly ILogger logger;
     private readonly bool authRequired;
+    private readonly bool validateAudience;
+    private readonly string[] allowedAudiences;
     private readonly ConfigurationManager<OpenIdConnectConfiguration>? openIdConfigManager;
 
-    public EntraTokenValidator(ILogger logger, IHostEnvironment hostEnvironment)
+    public EntraTokenValidator(
+        ILogger logger,
+        IHostEnvironment hostEnvironment,
+        IConfiguration configuration)
     {
         this.logger = logger;
 
@@ -43,6 +48,30 @@ internal class EntraTokenValidator
         // in the insecure-virtual mode (no real Entra to validate against) and in the
         // Development environment, where integration/BVT tests use fake token issuers.
         this.authRequired = Attestation.IsSnpCACI() && !hostEnvironment.IsDevelopment();
+
+        // Audience validation. The allowed audience is the ACCR managed-frontend Entra
+        // application id (per region - e.g. the AnalyticsFrontendConfiguration.Audience the
+        // RP supplies), passed in CR_FRONTEND_ALLOWED_AUDIENCES (comma-separated). This
+        // rejects off-audience token replay (the confused-deputy AuthZ bypass). Validation
+        // is on exactly when auth is required (confidential SNP/CACI, non-Development); it is
+        // disabled only in the insecure-virtual / Development environments. There is no
+        // runtime/env switch to turn it off.
+        this.allowedAudiences =
+            (configuration.GetValue<string>("CR_FRONTEND_ALLOWED_AUDIENCES") ?? string.Empty)
+                .Split(
+                    ',',
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        this.validateAudience = this.authRequired;
+
+        // Fail closed: in confidential production the audience must not be silently
+        // unchecked. A deployment must configure CR_FRONTEND_ALLOWED_AUDIENCES (the ACCR
+        // frontend app id).
+        if (this.validateAudience && this.allowedAudiences.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "Audience validation is enabled but no allowed audiences are configured. " +
+                "Set CR_FRONTEND_ALLOWED_AUDIENCES to the ACCR frontend application id(s).");
+        }
 
         if (this.authRequired)
         {
@@ -96,11 +125,17 @@ internal class EntraTokenValidator
             ValidateLifetime = true,
             RequireExpirationTime = true,
 
-            // Issuer/tenant trust and audience are delegated to CCF/CGS (trusted
-            // issuers) and the membership manager, so the frontend accepts any
-            // genuinely Entra-signed token (v1 or v2, work or personal).
+            // Audience: reject tokens not minted for the ACCR managed frontend. This is
+            // the fix for off-audience token replay (confused-deputy AuthZ bypass) - a
+            // valid Entra token issued for an unrelated application no longer passes.
+            // Disabled only in the insecure-virtual / Development environments (in code).
+            ValidateAudience = this.validateAudience,
+            ValidAudiences = this.validateAudience ? this.allowedAudiences : null,
+
+            // Issuer/tenant trust is delegated to CCF/CGS (trusted issuers) and the
+            // membership manager, so the frontend accepts any genuinely Entra-signed
+            // token (v1 or v2, work or personal) from an accepted audience.
             ValidateIssuer = false,
-            ValidateAudience = false,
         };
 
         TokenValidationResult result =

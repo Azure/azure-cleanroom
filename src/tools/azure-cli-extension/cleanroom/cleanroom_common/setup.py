@@ -53,7 +53,7 @@ DEPENDENCIES = [
     "pycryptodome==3.19.1",
     "pydantic==2.8.2",
     "rich==13.8.0",
-    "cryptography==43.0.1",
+    "cryptography==50.0.0",
 ]
 
 with open("README.rst", "r", encoding="utf-8") as f:

@@ -176,10 +176,10 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
         EnvoyEndpoint envoyEndpoint)
     {
         string containerName = "recovery-service-" + instanceName;
+        string fromImage = await ImageUtils.CcfRecoveryServiceImageReference();
         var imageParams = new ImagesCreateParameters
         {
-            FromImage = ImageUtils.CcfRecoveryServiceImage(),
-            Tag = ImageUtils.CcfRecoveryServiceTag(),
+            FromImage = fromImage,
         };
         await this.client.Images.CreateImageAsync(
             imageParams,
@@ -222,7 +222,7 @@ public class DockerRecoveryServiceInstanceProvider : ICcfRecoveryServiceInstance
                 }
             },
             Name = containerName,
-            Image = $"{imageParams.FromImage}:{imageParams.Tag}",
+            Image = imageParams.FromImage,
             Env = new List<string>
             {
                 $"ASPNETCORE_URLS=http://+:{Ports.RecoveryServicePort}",

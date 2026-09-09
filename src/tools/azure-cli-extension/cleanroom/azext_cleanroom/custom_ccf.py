@@ -1411,6 +1411,10 @@ def set_docker_compose_env_params():
         ] = ""
     if "AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL" not in os.environ:
         os.environ["AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL"] = ""
+    if "AZCLI_CCF_PROVIDER_RELEASE_VERSION" not in os.environ:
+        os.environ["AZCLI_CCF_PROVIDER_RELEASE_VERSION"] = ""
+    if "AZCLI_CCF_PROVIDER_RELEASE_METADATA_CHART_URL" not in os.environ:
+        os.environ["AZCLI_CCF_PROVIDER_RELEASE_METADATA_CHART_URL"] = ""
 
 
 def requires_provider_config(infra_type):

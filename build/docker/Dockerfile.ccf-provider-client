@@ -1,5 +1,6 @@
 # Use the official .NET Core SDK as the base image
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG RestoreSources=https://api.nuget.org/v3/index.json
 
 # Set the working directory
 WORKDIR /app
@@ -26,7 +27,7 @@ COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
 COPY src/internal/Cose/*.csproj /app/src/internal/Cose/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
 COPY src/internal/clientauth-common/*.csproj /app/src/internal/clientauth-common/
-RUN dotnet restore /app/src/ccf/ccf.sln
+RUN dotnet restore --source "$RestoreSources" /app/src/ccf/ccf.sln
 
 # copy everything else and build app
 COPY stylecop.json /app
@@ -57,6 +58,13 @@ RUN VERSION="1.2.0" && \
     tar -zxf oras_${VERSION}_*.tar.gz -C oras-install/ && \
     mv oras-install/oras /usr/local/bin/ && \
     rm -rf oras_${VERSION}_*.tar.gz oras-install/
+
+RUN VERSION="v3.18.4" && \
+    curl -LO "https://get.helm.sh/helm-${VERSION}-linux-amd64.tar.gz" && \
+    mkdir -p helm-install/ && \
+    tar -zxf helm-${VERSION}-linux-amd64.tar.gz -C helm-install/ && \
+    mv helm-install/linux-amd64/helm /usr/local/bin/ && \
+    rm -rf helm-${VERSION}-linux-amd64.tar.gz helm-install/
 
 # Set the working directory
 WORKDIR /app

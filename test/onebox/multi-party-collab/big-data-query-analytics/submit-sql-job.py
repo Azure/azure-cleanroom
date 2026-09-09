@@ -42,6 +42,14 @@ ANALYTICS_ENDPOINT_READY_TIMEOUT_SECONDS = 60
 MAX_RETRIES = 3
 RETRY_DELAY_SECONDS = 5
 RUN_HISTORY_MIN_EXPECTED_RUNS = 2
+# Max concurrent Spark SQL apps on the AKS (--parallel) path. Each query submits a
+# full Spark app whose executors run as confidential flex-node pods on a
+# fixed-capacity cluster (scaleSku=small caps executors at 5). Running more than
+# one at a time makes the apps contend for too few executor slots and time out
+# (verified: parallel=4 starved one query to the 30-min timeout, build 176373058).
+# Serialising conserves total executor-seconds, so it adds no real wall-clock while
+# guaranteeing each app gets the whole cluster and completes.
+MAX_PARALLEL_SQL_JOBS = 1
 SPARK_APPLICATION_NAMESPACE = "analytics"
 SPARK_APPLICATION_API_RESOURCE = "sparkapplications.sparkoperator.k8s.io"
 SPARK_APPLICATION_LOOKUP_TIMEOUT_SECONDS = 60
@@ -1845,10 +1853,12 @@ def main():
             },
             "dry_run": args.dry_run,
             "use_optimizer": args.use_optimizer,
-            # AKS nodes have enough memory for a medium executor. Virtual Kind
-            # workers share the CI host's memory, and the executor must fit on
-            # one worker, so use small there to avoid an unschedulable pod.
-            "scale_sku": "medium" if infra_type == "aks" else "small",
+            # Use just small in this e2e test: the medium executor (5 CPU / 27.9 GB
+            # group) fails to schedule in several regions (CACI capacity -> the job
+            # hangs in RUNNING until the status-check timeout), and Virtual Kind
+            # workers can't fit a medium executor on one worker either. The
+            # scale/stress suite exercises all SKUs (small/medium/large).
+            "scale_sku": "small",
         }
     ]
 
@@ -1901,7 +1911,7 @@ def main():
         # Execute tests in parallel
         print(f"Executing {len(test_cases)} SQL job tests in parallel...")
 
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        with ThreadPoolExecutor(max_workers=MAX_PARALLEL_SQL_JOBS) as executor:
             futures = []
             for test_case in test_cases:
                 future = executor.submit(

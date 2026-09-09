@@ -1,0 +1,69 @@
+# Release metadata template. Placeholders are filled by build-release-metadata-chart.ps1
+# at release time (which regenerates this file from its in-script catalog and validates the
+# result against values.schema.json); this committed template carries no real references.
+apiVersion: metadata.cleanroom.azure.com/v1
+kind: ReleaseMetadata
+metadata:
+  release: __RELEASE_VERSION__
+  published: __PUBLISHED__
+# Logical image name -> DIGEST-pinned container reference.
+images:
+  ccf-run-js-app-virtual: __IMAGE_CCF_RUN_JS_APP_VIRTUAL__
+  ccf-run-js-app-snp: __IMAGE_CCF_RUN_JS_APP_SNP__
+  ccf-recovery-agent: __IMAGE_CCF_RECOVERY_AGENT__
+  ccf-recovery-service: __IMAGE_CCF_RECOVERY_SERVICE__
+  ccf-consortium-manager: __IMAGE_CCF_CONSORTIUM_MANAGER__
+  cvm-attestation-verifier: __IMAGE_CVM_ATTESTATION_VERIFIER__
+  ccr-proxy: __IMAGE_CCR_PROXY__
+  skr: __IMAGE_SKR__
+  cgs-client: __IMAGE_CGS_CLIENT__
+  cgs-ui: __IMAGE_CGS_UI__
+  ccr-init: __IMAGE_CCR_INIT__
+  identity: __IMAGE_IDENTITY__
+  blobfuse-launcher: __IMAGE_BLOBFUSE_LAUNCHER__
+  s3fs-launcher: __IMAGE_S3FS_LAUNCHER__
+  code-launcher: __IMAGE_CODE_LAUNCHER__
+  otel-collector: __IMAGE_OTEL_COLLECTOR__
+  ccr-secrets: __IMAGE_CCR_SECRETS__
+  ccr-governance: __IMAGE_CCR_GOVERNANCE__
+  cleanroom-client: __IMAGE_CLEANROOM_CLIENT__
+  ccr-proxy-ext-processor: __IMAGE_CCR_PROXY_EXT_PROCESSOR__
+  cvm-attestation-agent: __IMAGE_CVM_ATTESTATION_AGENT__
+  cleanroom-spark-analytics-agent: __IMAGE_CLEANROOM_SPARK_ANALYTICS_AGENT__
+  cleanroom-spark-frontend: __IMAGE_CLEANROOM_SPARK_FRONTEND__
+  cleanroom-spark-analytics-app: __IMAGE_CLEANROOM_SPARK_ANALYTICS_APP__
+  frontend-service: __IMAGE_FRONTEND_SERVICE__
+  ccf-provider-client: __IMAGE_CCF_PROVIDER_CLIENT__
+  cleanroom-cluster-provider-client: __IMAGE_CLEANROOM_CLUSTER_PROVIDER_CLIENT__
+# Logical chart name -> OCI TAG reference.
+helm-charts:
+  cleanroom-spark-analytics-agent: __CHART_CLEANROOM_SPARK_ANALYTICS_AGENT__
+  cleanroom-spark-frontend: __CHART_CLEANROOM_SPARK_FRONTEND__
+  frontend-service: __CHART_FRONTEND_SERVICE__
+# Logical artefact name -> TAG reference (security-policy docs, js apps, constitutions, wheels).
+artefacts:
+  ccf-network-security-policy: __ARTEFACT_CCF_NETWORK_SECURITY_POLICY__
+  ccf-recovery-service-security-policy: __ARTEFACT_CCF_RECOVERY_SERVICE_SECURITY_POLICY__
+  ccf-consortium-manager-security-policy: __ARTEFACT_CCF_CONSORTIUM_MANAGER_SECURITY_POLICY__
+  ccf-consortium-manager-security-policy-vn2: __ARTEFACT_CCF_CONSORTIUM_MANAGER_SECURITY_POLICY_VN2__
+  blobfuse-launcher-policy: __ARTEFACT_BLOBFUSE_LAUNCHER_POLICY__
+  s3fs-launcher-policy: __ARTEFACT_S3FS_LAUNCHER_POLICY__
+  ccr-governance-policy: __ARTEFACT_CCR_GOVERNANCE_POLICY__
+  ccr-init-policy: __ARTEFACT_CCR_INIT_POLICY__
+  ccr-secrets-policy: __ARTEFACT_CCR_SECRETS_POLICY__
+  ccr-proxy-policy: __ARTEFACT_CCR_PROXY_POLICY__
+  ccr-proxy-ext-processor-policy: __ARTEFACT_CCR_PROXY_EXT_PROCESSOR_POLICY__
+  code-launcher-policy: __ARTEFACT_CODE_LAUNCHER_POLICY__
+  identity-policy: __ARTEFACT_IDENTITY_POLICY__
+  otel-collector-policy: __ARTEFACT_OTEL_COLLECTOR_POLICY__
+  skr-policy: __ARTEFACT_SKR_POLICY__
+  ccr-governance-opa-policy: __ARTEFACT_CCR_GOVERNANCE_OPA_POLICY__
+  cleanroom-spark-analytics-agent-security-policy: __ARTEFACT_CLEANROOM_SPARK_ANALYTICS_AGENT_SECURITY_POLICY__
+  cleanroom-spark-frontend-security-policy: __ARTEFACT_CLEANROOM_SPARK_FRONTEND_SECURITY_POLICY__
+  cleanroom-spark-analytics-app-security-policy: __ARTEFACT_CLEANROOM_SPARK_ANALYTICS_APP_SECURITY_POLICY__
+  cleanroom-kserve-inferencing-agent-security-policy: __ARTEFACT_CLEANROOM_KSERVE_INFERENCING_AGENT_SECURITY_POLICY__
+  cleanroom-kserve-inferencing-frontend-security-policy: __ARTEFACT_CLEANROOM_KSERVE_INFERENCING_FRONTEND_SECURITY_POLICY__
+  frontend-service-security-policy: __ARTEFACT_FRONTEND_SERVICE_SECURITY_POLICY__
+  cgs-js-app: __ARTEFACT_CGS_JS_APP__
+  cgs-constitution: __ARTEFACT_CGS_CONSTITUTION__
+  cleanroom-cli-wheel: __ARTEFACT_CLEANROOM_CLI_WHEEL__

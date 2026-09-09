@@ -7,10 +7,55 @@ runs:
     - name: Docker footprint
       shell: bash
       run: |
-        docker info | grep "Docker Root Dir"
+        # Storage Driver should be "overlay2" (classic graphdriver that honors data-root), NOT
+        # "overlayfs" (containerd image store, which ignores data-root and stores layers/snapshots
+        # on the OS disk). Docker Root Dir should be /mnt/storage/docker.
+        docker info | grep -E "Docker Root Dir|Storage Driver"
         docker system df
         docker image ls
         docker ps -a
+
+    - name: Free up OS disk space
+      shell: bash
+      run: |
+        # The 1ES base image's OS disk (/dev/root, ~73G) has crept close to full over time while
+        # the data disk (/mnt) sits mostly idle. Heavy jobs -- container builds (e.g. the
+        # otel-collector ocb Go compile) and test-cgs -- write several GB of scratch to the OS disk
+        # (the containerd image store lives there and ignores docker's data-root) and hit "no space
+        # left on device". This step is the common entry point for every disk-heavy job, so do a
+        # one-time OS-disk reclaim here and all of them get the headroom automatically. Removing the
+        # preinstalled toolchains below is a one-time reclaim -- they do not regrow during the job.
+        echo "===== df -h / BEFORE ====="
+        df -h /
+        echo "===== removable toolchain dir sizes ====="
+        sudo du -sh /usr/local/lib/android /usr/lib/jvm /usr/share/swift /opt/ghc \
+          /usr/lib/google-cloud-sdk /usr/share/miniconda 2>/dev/null || true
+
+        # Remove large preinstalled toolchains that NO build/test step in this repo uses on the host
+        # (Spark/Scala, Android, etc. are all built inside Docker). This is a one-time reclaim; the
+        # dirs do not regrow during the job. Guarded so a missing path is a no-op.
+        #
+        # DO NOT remove things the pipeline needs on the host:
+        #   - Go: /opt/hostedtoolcache/go and /usr/local/go -- official_build.yml builds
+        #     external/azure-storage-fuse (blobfuse), proxy-ext-processor, otel, operator, k8s-node
+        #     via the pre-installed go. Removing /opt/hostedtoolcache/go makes `go` fall off PATH
+        #     and blobfuse build fails with "go: command not found".
+        #   - The rest of /opt/hostedtoolcache (node, Python, CodeQL) -- used by GH actions / builds.
+        #   - Host dotnet (/usr/share/dotnet), powershell (/opt/microsoft/powershell), az CLI.
+        # So we do NOT touch /opt/hostedtoolcache or docker or the data disk here.
+        sudo rm -rf /usr/local/lib/android || true                 # Android SDK/NDK (~11G)
+        sudo rm -rf /usr/share/swift /usr/local/lib/swift || true   # Swift (~3.3G)
+        sudo rm -rf /opt/ghc /usr/local/.ghcup || true             # Haskell
+        sudo rm -rf /usr/lib/jvm || true                           # Java (~1.5G, Spark builds in Docker)
+        sudo rm -rf /usr/lib/google-cloud-sdk || true              # gcloud (~851M)
+        sudo rm -rf /usr/share/miniconda /opt/conda || true        # conda (~972M)
+        sudo rm -rf /opt/google /usr/lib/firefox /opt/microsoft/msedge || true   # browsers
+        sudo rm -rf /usr/local/share/vcpkg /usr/local/share/chromium 2>/dev/null || true
+        sudo rm -rf /var/log/* /var/cache/* || true                # logs / caches
+        sudo apt-get clean || true
+        sudo rm -rf /var/lib/apt/lists/* || true
+        echo "===== df -h / AFTER ====="
+        df -h /
 
     - name: Assign permissions for the docker directory on the data disk
       shell: bash

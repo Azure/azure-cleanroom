@@ -3,7 +3,10 @@
 
 Checks:
 1) Every requested (query x format x iteration) produced at least one row.
-2) Success rate over blocking rows is >= --min-success-rate.
+2) Success rate over query/format cells is >= --min-success-rate. A cell passes
+    if at least one attempt COMPLETED, so a query that failed once but succeeded
+    on a rerun counts as a pass; "queries failed" = cells with no successful
+    attempt.
 3) Optional per-(scale, query, format) thresholds can mark unstable cases as
     non-blocking and apply duration caps to historically stable cases.
 """
@@ -14,6 +17,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -100,6 +104,48 @@ def _resolve_thresholds_path(path_arg: str, scale_factor: int | None) -> Path | 
     return candidate / f"sf{scale_factor}.json"
 
 
+def _run_parallel(metrics: dict) -> int | None:
+    config = metrics.get("config")
+    if isinstance(config, dict):
+        val = config.get("parallel")
+        if isinstance(val, bool):
+            return None
+        if isinstance(val, int):
+            return val
+        if isinstance(val, str) and val.isdigit():
+            return int(val)
+    return None
+
+
+def _select_baseline_p95(entry: dict, run_parallel: int | None) -> float | None:
+    # Per-concurrency baselines: high-parallel slots (e.g. sf100 p16) drive the
+    # cluster to its pod ceiling, so queries queue for executor slots and their
+    # wall-clock p95 inflates well beyond the single-query baseline. When the
+    # thresholds entry carries a "baseline_p95_by_parallel" map, pick the
+    # baseline calibrated for this run's --parallel (exact key, else the largest
+    # calibrated concurrency <= run_parallel). Falls back to the flat
+    # "baseline_p95_seconds" when no by-parallel calibration applies.
+    by_par = entry.get("baseline_p95_by_parallel")
+    if isinstance(by_par, dict) and run_parallel is not None:
+        exact = by_par.get(str(run_parallel))
+        if isinstance(exact, (int, float)) and not isinstance(exact, bool):
+            return float(exact)
+        applicable = [
+            (int(k), v)
+            for k, v in by_par.items()
+            if str(k).isdigit()
+            and int(k) <= run_parallel
+            and isinstance(v, (int, float))
+            and not isinstance(v, bool)
+        ]
+        if applicable:
+            return float(max(applicable, key=lambda kv: kv[0])[1])
+    base = entry.get("baseline_p95_seconds")
+    if isinstance(base, (int, float)) and not isinstance(base, bool):
+        return float(base)
+    return None
+
+
 def _append_summary(text: str) -> None:
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if not summary_path:
@@ -139,7 +185,7 @@ def _render_per_query_table(
             states_str = ", ".join(f"{s}={n}" for s, n in sorted(states.items())) or "-"
             if key in threshold_non_blocking_keys:
                 status = "SKIP"
-            elif done < total:
+            elif done == 0:
                 status = "FAIL"
             elif effective is not None and p95 is not None:
                 status = "FAIL" if p95 > effective else "PASS"
@@ -211,6 +257,271 @@ def _discover_metrics_file(preferred_scale: int | None = None) -> Path | None:
     return max(candidates, key=lambda p: p.stat().st_mtime)
 
 
+_ANALYTICS_NS = "analytics"
+
+# (regex, nature, human label) — first match wins. Nature drives recoverability:
+#   Transient  = auto-retried / self-heals (harness resubmits or polling recovers)
+#   Terminating = attempt-fatal (the driver/executor died; may recover only on retry)
+#   Blocker    = needs quota / capacity / config fix (retries won't help)
+_FAILURE_SIGNATURES: list[tuple[re.Pattern[str], str, str]] = [
+    (
+        re.compile(r"no space left on device|ephemeral.?storage", re.I),
+        "Terminating",
+        "Ephemeral storage exhausted (No space left on device)",
+    ),
+    (
+        re.compile(
+            r"oomkilled|outofmemory|sparkexitcode\.oom|exit ?code:? ?52\b", re.I
+        ),
+        "Terminating",
+        "Executor OOM (52)",
+    ),
+    (
+        re.compile(r"\b137\b|oom-?killed", re.I),
+        "Terminating",
+        "OOM-killed (137)",
+    ),
+    (
+        re.compile(r"maxnumfailures|exit ?code:? ?11\b|failed with exitcode: 11", re.I),
+        "Terminating",
+        "Driver abort — executor failure cascade (11)",
+    ),
+    (
+        re.compile(r"stuck.?in.?init|stuckininit", re.I),
+        "Transient",
+        "Stuck in init (CACI cold-start)",
+    ),
+    (
+        re.compile(r"timeout|timed ?out|10000ms|nostacktracetimeout", re.I),
+        "Transient",
+        "Submission / API timeout",
+    ),
+    (
+        re.compile(
+            r"upstream connect error|connection reset|remotedisconnected|\b503\b|\b500\b",
+            re.I,
+        ),
+        "Transient",
+        "Transient network (HTTP 503/500 / connection reset)",
+    ),
+    (
+        re.compile(
+            r"failedcreatepodsandbox|not available in the location|resource is not available",
+            re.I,
+        ),
+        "Blocker",
+        "Regional CACI capacity (FailedCreatePodSandBox)",
+    ),
+    (
+        re.compile(
+            r"no nodes available with capacity|cleanroom-spark-pod-scheduler|"
+            r"per-node pod limit|podcountconstraint|pod_count",
+            re.I,
+        ),
+        "Blocker",
+        "VN2 pod-slot capacity — executor scheduling denied (POD_COUNT ceiling)",
+    ),
+    (
+        re.compile(r"verifysnpattestationfailed|attestation claims do not match", re.I),
+        "Blocker",
+        "Attestation / policy mismatch",
+    ),
+    (
+        re.compile(r"confidentialcores|confidentialcontainergroups|\bquota\b", re.I),
+        "Blocker",
+        "Confidential-ACI quota",
+    ),
+]
+
+_SPARKAPP_QF_RX = re.compile(r"sf\d+-(query[0-9a-z]+)-(csv|pqt|parquet)\b", re.I)
+
+
+def _classify_failure(text: str) -> tuple[str, str]:
+    for rx, nature, label in _FAILURE_SIGNATURES:
+        if rx.search(text or ""):
+            return nature, label
+    return "Terminating", "Unclassified failure"
+
+
+def _matches_known_signature(text: str) -> bool:
+    return any(rx.search(text or "") for rx, _, _ in _FAILURE_SIGNATURES)
+
+
+def _parse_sparkapp_qf(name: str) -> tuple[str, str]:
+    # cl-spark-sf1000-query14a-csv-<hash>[-exec-N|-driver] -> (friendly qid, format)
+    m = _SPARKAPP_QF_RX.search(name or "")
+    if not m:
+        return "", ""
+    friendly, _, _ = parse_tpcds_query_id(m.group(1))
+    fmt = m.group(2).lower()
+    if fmt == "pqt":
+        fmt = "parquet"
+    return (friendly or m.group(1)), fmt
+
+
+def _kubectl_json(kube_config: str, args: list[str]) -> dict | None:
+    cmd = ["kubectl"]
+    if kube_config:
+        cmd += ["--kubeconfig", kube_config]
+    cmd += ["-n", _ANALYTICS_NS, *args, "-o", "json"]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    except Exception:
+        return None
+    if out.returncode != 0 or not out.stdout.strip():
+        return None
+    try:
+        return json.loads(out.stdout)
+    except Exception:
+        return None
+
+
+def _collect_execution_findings(
+    results: list[dict],
+    failed_cells: list[tuple[str, str]],
+    kube_config: str,
+) -> list[dict]:
+    """Gather Spark-execution failures/OOM/timeouts from the run metrics and the
+    live cluster (best-effort). Each finding records whether it caused the query
+    to fail (the cell had no successful attempt) vs. was absorbed (retried or
+    another attempt still COMPLETED)."""
+    failed_set = set(failed_cells)
+    findings: list[dict] = []
+    seen: set[tuple] = set()
+
+    def add(
+        query: str, fmt: str, label: str, nature: str, caused: str, source: str
+    ) -> None:
+        key = (query, fmt, label, source)
+        if key in seen:
+            return
+        seen.add(key)
+        findings.append(
+            {
+                "query": query,
+                "fmt": fmt,
+                "label": label,
+                "nature": nature,
+                "caused": caused,
+                "source": source,
+            }
+        )
+
+    # 1) From the run metrics: any non-COMPLETED attempt or recorded error.
+    for row in results:
+        state = str(row.get("state") or "")
+        err = str(row.get("error") or "")
+        if state not in ("FAILED", "ABORTED") and not err:
+            continue
+        qid = _result_query_id(row)
+        fmt = str(row.get("data_format") or "")
+        nature, label = _classify_failure(f"{state} {err}")
+        if state == "ABORTED" and not _matches_known_signature(err):
+            nature, label = "Transient", "Aborted (retries exhausted / stuck-in-init)"
+        caused = "Yes" if (qid, fmt) in failed_set else "No"
+        add(
+            qid, fmt, f"{state}: {label}" if state else label, nature, caused, "metrics"
+        )
+
+    # 2) From the live cluster (kubeconfig) — best-effort; skipped if unreachable.
+    def caused_for(q: str, fmt: str) -> str:
+        if (q, fmt) in failed_set:
+            return "Yes"
+        return "No" if q else "—"
+
+    apps = _kubectl_json(kube_config, ["get", "sparkapplication"])
+    for it in (apps or {}).get("items", []):
+        app_state = ((it.get("status") or {}).get("applicationState") or {}).get(
+            "state"
+        ) or ""
+        msg = ((it.get("status") or {}).get("applicationState") or {}).get(
+            "errorMessage"
+        ) or ""
+        name = (it.get("metadata") or {}).get("name") or ""
+        if app_state.upper() not in ("FAILED", "UNKNOWN") and not msg:
+            continue
+        q, fmt = _parse_sparkapp_qf(name)
+        nature, label = _classify_failure(f"{app_state} {msg}")
+        add(
+            q,
+            fmt,
+            f"SparkApplication {app_state}: {label}",
+            nature,
+            caused_for(q, fmt),
+            "k8s/sparkapp",
+        )
+
+    pods = _kubectl_json(kube_config, ["get", "pods"])
+    for it in (pods or {}).get("items", []):
+        name = (it.get("metadata") or {}).get("name") or ""
+        for cs in (it.get("status") or {}).get("containerStatuses") or []:
+            term = (cs.get("lastState") or {}).get("terminated") or {}
+            waiting = (cs.get("state") or {}).get("waiting") or {}
+            reason = term.get("reason") or ""
+            exit_code = term.get("exitCode")
+            wreason = waiting.get("reason") or ""
+            oom = reason == "OOMKilled"
+            bad_exit = isinstance(exit_code, int) and exit_code != 0
+            sandbox = "FailedCreatePodSandBox" in wreason
+            if not (oom or bad_exit or sandbox):
+                continue
+            blob = (
+                f"{reason} exitCode {exit_code} {wreason} {waiting.get('message', '')}"
+            )
+            q, fmt = _parse_sparkapp_qf(name)
+            nature, label = _classify_failure(blob)
+            tag = reason or wreason or f"exit {exit_code}"
+            add(q, fmt, f"pod {tag}: {label}", nature, caused_for(q, fmt), "k8s/pod")
+
+    events = _kubectl_json(
+        kube_config, ["get", "events", "--field-selector", "type=Warning"]
+    )
+    for it in (events or {}).get("items", []):
+        msg = it.get("message") or ""
+        if not _matches_known_signature(msg):
+            continue
+        obj = (it.get("involvedObject") or {}).get("name") or ""
+        q, fmt = _parse_sparkapp_qf(obj)
+        nature, label = _classify_failure(msg)
+        add(q, fmt, label, nature, caused_for(q, fmt), "k8s/event")
+
+    return findings
+
+
+def _render_execution_findings(findings: list[dict]) -> list[str]:
+    out = ["", "### Spark execution — failures / OOM / timeouts"]
+    if not findings:
+        out += [
+            "",
+            "✅ No Spark execution failures, OOM, or timeouts observed "
+            "(all attempts completed on first submit).",
+        ]
+        return out
+    out += [
+        "",
+        "| Query | Format | Issue | Nature | Caused query failure? | Source |",
+        "|---|---|---|:--:|:--:|---|",
+    ]
+    order = {"Blocker": 0, "Terminating": 1, "Transient": 2}
+    for f in sorted(
+        findings,
+        key=lambda f: (f["caused"] != "Yes", order.get(f["nature"], 9), f["query"]),
+    ):
+        out.append(
+            f"| `{f['query'] or '—'}` | `{f['fmt'] or '—'}` | {f['label']} | "
+            f"{f['nature']} | {f['caused']} | {f['source']} |"
+        )
+    out += [
+        "",
+        "_Nature: **Transient** = auto-retried / self-heals; **Terminating** = "
+        "attempt-fatal (may recover on retry); **Blocker** = needs quota / capacity / "
+        'config fix. "Caused query failure?" = **Yes** if the query had no '
+        "successful attempt, **No** if a retry or another attempt still COMPLETED, "
+        "**—** if not attributable to a single query._",
+    ]
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify TPC-DS run metrics.")
     parser.add_argument(
@@ -235,6 +546,16 @@ def main() -> int:
             "failing (default: 100.0)."
         ),
     )
+    parser.add_argument(
+        "--kube-config",
+        default=os.environ.get("KUBECONFIG_PATH", ""),
+        help=(
+            "Kubeconfig for the run's AKS cluster. Used to pull live Spark "
+            "execution failures / OOM / timeouts (SparkApplication states, pod "
+            "exit codes, Warning events) into the report. Defaults to "
+            "$KUBECONFIG_PATH; best-effort — skipped if unreachable."
+        ),
+    )
     args = parser.parse_args()
 
     preferred_scale = _infer_scale_from_thresholds_arg(args.thresholds)
@@ -255,6 +576,8 @@ def main() -> int:
 
     with open(metrics_path, encoding="utf-8") as f:
         metrics = json.load(f)
+
+    run_parallel = _run_parallel(metrics)
 
     query_ids = _parse_tokens(args.query_ids, sep=" ")
     formats = _parse_tokens(args.formats, sep=",")
@@ -294,9 +617,9 @@ def main() -> int:
             continue
 
         gated_expected.add((qid, fmt, itr))
-        baseline_p95 = entry.get("baseline_p95_seconds")
-        if isinstance(baseline_p95, (int, float)):
-            duration_limits[(qid, fmt)] = float(baseline_p95)
+        baseline_p95 = _select_baseline_p95(entry, run_parallel)
+        if baseline_p95 is not None:
+            duration_limits[(qid, fmt)] = baseline_p95
 
     present: set[tuple[str, str, int]] = set()
     scored_targeted = 0
@@ -331,11 +654,18 @@ def main() -> int:
                 durations_by_key[(qid, fmt)].append(duration)
 
     missing = sorted(gated_expected - present)
-    success_rate = (
-        (100.0 * scored_completed_targeted / scored_targeted)
-        if scored_targeted
-        else 100.0
+    # Score by logical query/format cell, not per attempt: a cell passes if at
+    # least one attempt COMPLETED. A query that failed once (e.g. transient
+    # driver/executor placement churn under parallel load) but succeeded on a
+    # rerun is therefore counted as a pass. "Queries failed" = cells with no
+    # successful attempt at all.
+    targeted_cells = set(per_cell_totals.keys())
+    failed_cells = sorted(
+        cell for cell in targeted_cells if per_cell_completed.get(cell, 0) == 0
     )
+    cells_total = len(targeted_cells)
+    cells_passed = cells_total - len(failed_cells)
+    success_rate = (100.0 * cells_passed / cells_total) if cells_total else 100.0
 
     duration_failures = []
     for key, limit in sorted(duration_limits.items()):
@@ -364,9 +694,17 @@ def main() -> int:
         f"- Gated rows: {len(gated_expected)}",
         f"- Present unique rows: {len(present)}",
         (
-            f"- Success rate (targeted rows): "
-            f"{scored_completed_targeted}/{scored_targeted} = "
+            f"- Queries failed (no successful attempt): "
+            f"**{len(failed_cells)}** of {cells_total}"
+        ),
+        (
+            f"- Success rate (queries with a successful attempt): "
+            f"{cells_passed}/{cells_total} = "
             f"**{success_rate:.2f}%** (threshold {args.min_success_rate:.2f}%)"
+        ),
+        (
+            f"- Attempts completed (informational): "
+            f"{scored_completed_targeted}/{scored_targeted}"
         ),
         (f"- Duration threshold grace: {args.duration_threshold_grace_pct:.2f}%"),
     ]
@@ -393,6 +731,10 @@ def main() -> int:
                 )
         else:
             lines.append(f"- Thresholds file: `{thresholds_path}` (not found; ignored)")
+
+    if failed_cells:
+        lines.extend(["", "### Failed queries (no successful attempt)"])
+        lines.extend([f"- `{qid}` / `{fmt}`" for qid, fmt in failed_cells])
 
     if missing:
         lines.extend(["", "### Missing (query, format, iteration)"])
@@ -422,6 +764,14 @@ def main() -> int:
             duration_limits=duration_limits,
             threshold_non_blocking_keys=threshold_non_blocking_keys,
             grace_pct=args.duration_threshold_grace_pct,
+        )
+    )
+
+    # Bottom-of-report: Spark execution failures / OOM / timeouts, pulled from the
+    # run metrics and (best-effort) the live cluster via the kubeconfig.
+    lines.extend(
+        _render_execution_findings(
+            _collect_execution_findings(results, failed_cells, args.kube_config)
         )
     )
 

@@ -933,6 +933,12 @@ components:
         isOwner:
           type: boolean
           description: Whether this collaborator is the owner of the collaboration.
+        objectId:
+          type: string
+          description: The Entra object ID (oid) of the collaborator, when known.
+        tenantId:
+          type: string
+          description: The Entra tenant ID (tid) of the collaborator, when known.
       title: CollaboratorOutput
     ListCollaboratorsResponse:
       type: object
@@ -1273,13 +1279,16 @@ components:
           type: string
         issuerUrl:
           type: string
+          deprecated: true
+          description: >-
+            No longer supported. Requests that set this property are rejected;
+            configure issuer URLs through governance.
         tenantId:
           type: string
         name:
           type: string
       required:
         - clientId
-        - issuerUrl
         - tenantId
         - name
     DatasetEncryptionSecret:

@@ -174,7 +174,11 @@ check_min_size /data/publisher/csv/catalog_sales.csv catalog_sales $((SF_RATIO *
 check_min_size /data/publisher/csv/web_sales.csv web_sales $((SF_RATIO * 15 * 1024 * 1024))
 check_min_size /data/consumer/csv/customer.csv customer $((SF_RATIO * 2 * 1024 * 1024))
 check_min_size /data/consumer/csv/customer_address.csv customer_address $((SF_RATIO * 1 * 1024 * 1024))
-check_min_size /data/consumer/csv/customer_demographics.csv customer_demographics $((SF_RATIO * 500 * 1024))
+# customer_demographics is a FIXED-cardinality dimension in TPC-DS (1,920,800 rows,
+# ~75 MB) - it does NOT scale with the scale factor, so use a fixed floor rather than
+# an SF_RATIO-scaled one (the scaled floor false-fails at large SF, e.g. sf2000 where
+# SF_RATIO*500KB = 100 MB > the real ~75 MB file).
+check_min_size /data/consumer/csv/customer_demographics.csv customer_demographics $((50 * 1024 * 1024))
 
 if [ "$VALIDATION_FAILED" -eq 1 ]; then
     echo "ERROR: File size validation failed. Data may be corrupted."

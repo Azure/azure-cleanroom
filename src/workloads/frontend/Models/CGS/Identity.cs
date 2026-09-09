@@ -27,7 +27,7 @@ public class Identity
     {
         if (datasetIdentity != null)
         {
-            var federatedIdentity = JsonSerializer.SerializeToNode(
+            JsonNode? federatedIdentity = JsonSerializer.SerializeToNode(
                 GetDefaultIdentity());
 
             return new Identity
@@ -42,16 +42,13 @@ public class Identity
                     {
                         ["configuration"] = string.Empty,
                         ["protocol"] = ProtocolType.AzureAD_Federated.ToString(),
-                        ["url"] = datasetIdentity.IssuerUrl,
                     },
                     ["issuerType"] = IssuerType.FederatedIdentityBasedTokenIssuer.ToString(),
                 }
             };
         }
-        else
-        {
-            return GetDefaultIdentity();
-        }
+
+        return null;
     }
 
     private static Identity GetDefaultIdentity()

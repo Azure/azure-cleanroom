@@ -76,7 +76,7 @@ public class CAciNodeProvider : ICcfNodeProvider
         var fqdn = $"{dnsNameLabel}.{location}.azurecontainer.io";
 
         string instanceId = Guid.NewGuid().ToString();
-        this.AddInfraProviderData(nodeData, instanceId);
+        await this.AddInfraProviderData(nodeData, instanceId);
 
         cchostConfig.SetPublishedAddress(fqdn);
         cchostConfig.SetNodeLogLevel(nodeLogLevel);
@@ -225,7 +225,7 @@ public class CAciNodeProvider : ICcfNodeProvider
         var fqdn = $"{dnsNameLabel}.{location}.azurecontainer.io";
 
         string instanceId = Guid.NewGuid().ToString();
-        this.AddInfraProviderData(nodeData, instanceId);
+        await this.AddInfraProviderData(nodeData, instanceId);
 
         cchostConfig.SetPublishedAddress(fqdn);
         cchostConfig.SetNodeLogLevel(nodeLogLevel);
@@ -383,7 +383,7 @@ public class CAciNodeProvider : ICcfNodeProvider
         var fqdn = $"{dnsNameLabel}.{location}.azurecontainer.io";
 
         string instanceId = Guid.NewGuid().ToString();
-        this.AddInfraProviderData(nodeData, instanceId);
+        await this.AddInfraProviderData(nodeData, instanceId);
 
         cchostConfig.SetPublishedAddress(fqdn);
         cchostConfig.SetNodeLogLevel(nodeLogLevel);
@@ -859,24 +859,23 @@ public class CAciNodeProvider : ICcfNodeProvider
                 {
                     {
                         AciConstants.ContainerName.CcHost,
-                        $"{ImageUtils.CcfRunJsAppSnpImage()}:{ImageUtils.CcfRunJsAppSnpTag()}"
+                        await ImageUtils.CcfRunJsAppSnpImageReference()
                     },
                     {
                         AciConstants.ContainerName.Skr,
-                        $"{ImageUtils.SkrImage()}:{ImageUtils.SkrTag()}"
+                        await ImageUtils.SkrImageReference()
                     },
                     {
                         AciConstants.ContainerName.CcfRecoveryAgent,
-                        $"{ImageUtils.CcfRecoveryAgentImage()}:{ImageUtils.CcfRecoveryAgentTag()}"
+                        await ImageUtils.CcfRecoveryAgentImageReference()
                     },
                     {
                         AciConstants.ContainerName.CvmAttestationVerifier,
-                        $"{ImageUtils.CvmAttestationVerifierImage()}:" +
-                        $"{ImageUtils.CvmAttestationVerifierTag()}"
+                        await ImageUtils.CvmAttestationVerifierImageReference()
                     },
                     {
                         AciConstants.ContainerName.CcrProxy,
-                        $"{ImageUtils.CcrProxyImage()}:{ImageUtils.CcrProxyTag()}"
+                        await ImageUtils.CcrProxyImageReference()
                     }
                 }
             };
@@ -1080,7 +1079,7 @@ public class CAciNodeProvider : ICcfNodeProvider
                 {
                     AciConstants.CcfNetworkInstanceIdTag,
                     instanceId
-                }
+                },
             },
             IPAddress = new ContainerGroupIPAddress(
                 new ContainerGroupPort[]
@@ -1135,11 +1134,13 @@ public class CAciNodeProvider : ICcfNodeProvider
         return dnsName;
     }
 
-    private void AddInfraProviderData(NodeData nodeData, string instanceId)
+    private async Task AddInfraProviderData(
+        NodeData nodeData, string instanceId)
     {
         nodeData.InfraProviderData = new InfraProviderNodeData
         {
-            SecurityPolicyUrl = ImageUtils.CcfNetworkSecurityPolicyDocumentUrl(),
+            SecurityPolicyUrl =
+                await ImageUtils.CcfNetworkSecurityPolicyDocumentUrl(),
             InstanceId = instanceId
         }.AsObject();
     }
@@ -1147,7 +1148,8 @@ public class CAciNodeProvider : ICcfNodeProvider
     private async Task<(string, SecurityPolicyDocument)> DownloadAndExpandPolicy(
         SecurityPolicyCreationOption policyCreationOption)
     {
-        var policyDocument = await ImageUtils.GetNetworkSecurityPolicyDocument(this.logger);
+        var policyDocument =
+            await ImageUtils.GetNetworkSecurityPolicyDocument(this.logger);
 
         foreach (var container in policyDocument.Containers)
         {

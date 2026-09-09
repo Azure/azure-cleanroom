@@ -63,11 +63,7 @@ def validate_datasinks(ns):
 
 default_security_policy_creation_option = "cached"
 
-# TODO (gsinha): Change to "cached" once an end-to-end CI test deploys
-# workloads with the strict "cached" rego (not "cached-debug") and the
-# workload agent's pod-policy delegation chain succeeds under it. Current
-# CI only exercises "cached-debug" on AKS and "allow-all" on virtual.
-default_workloads_security_policy_creation_option = "allow-all"
+default_workloads_security_policy_creation_option = "cached"
 
 
 def load_arguments(self, _):
@@ -1339,6 +1335,13 @@ def load_arguments(self, _):
             "node_vm_size",
             help="The VM size for AKS agent pool nodes. Defaults to Standard_D4ds_v5 if not specified. Size selected for AKS must be at least 4 CPU and 16 GB RAM to accommodate virtual nodes being run on them.",
             options_list=["--node-vm-size"],
+            required=False,
+        )
+        c.argument(
+            "initial_node_count",
+            type=int,
+            help="The initial number of nodes in the AKS agent pool. When not specified the cluster provider defaults the pool to a 2..5 autoscaling range.",
+            options_list=["--initial-node-count"],
             required=False,
         )
         c.argument(

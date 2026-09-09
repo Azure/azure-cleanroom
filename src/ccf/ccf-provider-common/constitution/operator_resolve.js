@@ -1,6 +1,9 @@
 function getMemberInfo(memberId) {
   const key = ccf.strToBuf(memberId);
   const value = ccf.kv["public:ccf.gov.members.info"].get(key);
+  if (value === undefined) {
+    return undefined;
+  }
   const info = ccf.bufToJsonCompatible(value);
   return info;
 }
@@ -8,7 +11,7 @@ function getMemberInfo(memberId) {
 // Defines which of the members are operators.
 function isOperator(memberId) {
   const info = getMemberInfo(memberId);
-  return info.member_data && info.member_data.isOperator;
+  return info !== undefined && info.member_data && info.member_data.isOperator;
 }
 
 function isRecoveryOperator(memberId) {
@@ -75,14 +78,20 @@ function canOperatorPass(action) {
   if (allowedOperatorActions.includes(action.name)) {
     return true;
   }
-  // Additionally, operators can add or retire other operators.
+  // Additionally, operators can add new operators or retire other operators.
   if (action.name === "set_member") {
     const memberData = action.args["member_data"];
-    if (memberData && memberData.isOperator) {
-      return true;
-    }
-  } else if (action.name === "remove_member") {
     const memberId = ccf.pemToId(action.args.cert);
+    // Only allow the operator shortcut until the operator member becomes Active.
+    const memberInfo = getMemberInfo(memberId);
+    return (
+      memberData &&
+      memberData.isOperator &&
+      (memberInfo === undefined ||
+        (memberInfo.status !== "Active" && isOperator(memberId)))
+    );
+  } else if (action.name === "remove_member") {
+    const memberId = action.args["member_id"];
     if (isOperator(memberId)) {
       return true;
     }

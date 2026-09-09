@@ -22,13 +22,12 @@ else {
 
 $root = git rev-parse --show-toplevel
 $buildRoot = "$root/build"
-
-docker image build `
+Build-DockerImage `
     -t $imageName `
     -f $buildRoot/docker/Dockerfile.local-idp "$root/src/tools/local-idp"
 
 # Extract the open-api spec.
-docker image build `
+Build-DockerImage `
     --output="$root/src/tools/local-idp/app/schema" `
     --target=openapi-dist `
     -f $buildRoot/docker/Dockerfile.local-idp "$root/src/tools/local-idp"

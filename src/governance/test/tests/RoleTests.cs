@@ -378,6 +378,183 @@ public class RoleTests : TestBase
         Assert.AreEqual("true", proposalResponse["finalVotes"]![member2Id]!.ToString());
     }
 
+    // Exercises the operator/member authorization matrix for set_member and remove_member.
+    // Consortium: member0, member1 ordinary; member2 is promoted to operator during the test.
+    // Operators may add/remove operators, and re-apply to a not-yet-Active operator, without
+    // a member vote; changing an already-Active member needs one. finally restores member2.
+    [TestMethod]
+    public async Task CheckOperatorMemberLifecycleAuthorization()
+    {
+        const string TemporaryOperatorIdentifier = "constitution-test-operator";
+        string member1Certificate = await this.ReadRoleMemberCertificate(Members.Member1);
+        string member2Certificate = await this.ReadRoleMemberCertificate(Members.Member2);
+        var member2Info =
+            (await this.CgsClients[Members.Member2].GetFromJsonAsync<JsonObject>("/show"))!;
+        var originalMemberData = member2Info["memberData"]!.DeepClone();
+        string? temporaryOperatorId = null;
+        bool member2IsOperator = false;
+
+        try
+        {
+            // Promoting an ordinary member (member2) to operator is NOT auto-approved: the
+            // proposal stays Open until every active member votes, then member2 re-activates.
+            var operatorMemberData = new JsonObject
+            {
+                ["identifier"] = "member2",
+                ["isOperator"] = true
+            };
+            string proposalId = await this.ProposeSetMember(
+                member2Certificate,
+                operatorMemberData,
+                Members.Member2);
+            await this.AssertProposalState(proposalId, "Open");
+            await this.AllMembersAcceptProposal(proposalId);
+            member2IsOperator = true;
+            await this.ActivateMember(Members.Member2);
+
+            // member2 is now an Active operator; editing its OWN Active membership still requires
+            // a full member vote - being an operator is no self-service shortcut once Active.
+            proposalId = await this.ProposeSetMember(
+                member2Certificate,
+                operatorMemberData,
+                Members.Member2);
+            await this.AssertProposalState(proposalId, "Open");
+            await this.MemberAcceptProposal(
+                this.CgsClients[Members.Member0],
+                proposalId);
+            await this.AssertProposalState(proposalId, "Open");
+            await this.MemberAcceptProposal(
+                this.CgsClients[Members.Member1],
+                proposalId);
+            await this.AssertProposalState(proposalId, "Accepted");
+            await this.ActivateMember(Members.Member2);
+
+            // an operator cannot unilaterally promote an existing Active member
+            // (member1) to operator - it stays Open and requires the full member vote.
+            proposalId = await this.ProposeSetMember(
+                member1Certificate,
+                new JsonObject
+                {
+                    ["identifier"] = "member1",
+                    ["isOperator"] = true
+                },
+                Members.Member2);
+            await this.AssertProposalState(proposalId, "Open");
+
+            // Test setup: mint a brand-new operator identity not yet present in the consortium.
+            using var temporaryOperatorKey =
+                System.Security.Cryptography.ECDsa.Create(
+                    System.Security.Cryptography.ECCurve.NamedCurves.nistP384);
+            var certificateRequest = new System.Security.Cryptography.X509Certificates
+                .CertificateRequest(
+                    $"CN={TemporaryOperatorIdentifier}",
+                    temporaryOperatorKey,
+                    System.Security.Cryptography.HashAlgorithmName.SHA384);
+            using var temporaryOperatorCertificate = certificateRequest.CreateSelfSigned(
+                new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero),
+                new DateTimeOffset(2040, 1, 1, 0, 0, 0, TimeSpan.Zero));
+            string temporaryOperatorCertificatePem =
+                temporaryOperatorCertificate.ExportCertificatePem();
+            var temporaryOperatorData = new JsonObject
+            {
+                ["identifier"] = TemporaryOperatorIdentifier,
+                ["isOperator"] = true
+            };
+
+            // An ordinary member (member1) adding a brand-new operator gets NO shortcut: the add
+            // is Open until all members vote - only operator proposers skip voting.
+            proposalId = await this.ProposeSetMember(
+                temporaryOperatorCertificatePem,
+                temporaryOperatorData,
+                Members.Member1);
+            await this.AssertProposalState(proposalId, "Open");
+            await this.MemberAcceptProposal(
+                this.CgsClients[Members.Member0],
+                proposalId);
+            await this.AssertProposalState(proposalId, "Open");
+            await this.MemberAcceptProposal(
+                this.CgsClients[Members.Member1],
+                proposalId);
+            await this.AssertProposalState(proposalId, "Accepted");
+            temporaryOperatorId = await this.GetMemberId(TemporaryOperatorIdentifier);
+
+            // Re-applying to that operator while it is only Accepted, proposed by an ordinary
+            // member (member1), still needs the full vote - the shortcut is operator-only.
+            proposalId = await this.ProposeSetMember(
+                temporaryOperatorCertificatePem,
+                temporaryOperatorData,
+                Members.Member1);
+            await this.AssertProposalState(proposalId, "Open");
+            await this.MemberAcceptProposal(
+                this.CgsClients[Members.Member0],
+                proposalId);
+            await this.AssertProposalState(proposalId, "Open");
+            await this.MemberAcceptProposal(
+                this.CgsClients[Members.Member1],
+                proposalId);
+            await this.AssertProposalState(proposalId, "Accepted");
+
+            // An operator (member2) may unilaterally REMOVE another operator - Accepted, no vote.
+            proposalId = await this.ProposeRemoveMember(
+                temporaryOperatorId,
+                Members.Member2);
+            await this.AssertProposalState(proposalId, "Accepted");
+            temporaryOperatorId = null;
+
+            // An operator may unilaterally ADD a brand-new operator - Accepted, no vote.
+            proposalId = await this.ProposeSetMember(
+                temporaryOperatorCertificatePem,
+                temporaryOperatorData,
+                Members.Member2);
+            await this.AssertProposalState(proposalId, "Accepted");
+            temporaryOperatorId = await this.GetMemberId(TemporaryOperatorIdentifier);
+
+            // The shortcut still applies while that operator is only Accepted (not yet Active):
+            // an operator may re-apply set_member to it without a member vote.
+            proposalId = await this.ProposeSetMember(
+                temporaryOperatorCertificatePem,
+                temporaryOperatorData,
+                Members.Member2);
+            await this.AssertProposalState(proposalId, "Accepted");
+
+            // An operator may unilaterally remove that operator again - Accepted, no vote.
+            proposalId = await this.ProposeRemoveMember(
+                temporaryOperatorId,
+                Members.Member2);
+            await this.AssertProposalState(proposalId, "Accepted");
+            temporaryOperatorId = null;
+        }
+        finally
+        {
+            // Cleanup: remove the temporary operator if a scenario above threw before doing so.
+            if (temporaryOperatorId != null)
+            {
+                string proposalId = await this.ProposeRemoveMember(
+                    temporaryOperatorId,
+                    Members.Member2);
+                await this.AssertProposalState(proposalId, "Accepted");
+            }
+
+            // Restore member2 to its original (non-operator) data so the consortium is unchanged
+            // for other tests (a normal change to an Active member, hence a full vote).
+            if (member2IsOperator)
+            {
+                string proposalId = await this.ProposeSetMember(
+                    member2Certificate,
+                    originalMemberData,
+                    Members.Member2);
+                await this.AssertProposalState(proposalId, "Open");
+                await this.MemberAcceptProposal(
+                    this.CgsClients[Members.Member0],
+                    proposalId);
+                await this.MemberAcceptProposal(
+                    this.CgsClients[Members.Member1],
+                    proposalId);
+                await this.ActivateMember(Members.Member2);
+            }
+        }
+    }
+
     protected override async Task AllMembersAcceptProposal(string proposalId)
     {
         // Get the members needed to vote upfront so that any member state changes while
@@ -447,6 +624,101 @@ public class RoleTests : TestBase
                 value,
                 info!["memberData"]!["cgsRoles"]![roleName]!.ToString());
         }
+    }
+
+    private async Task<string> ProposeSetMember(
+        string certificate,
+        JsonNode memberData,
+        int asMember)
+    {
+        return await this.CreateMemberProposal(
+            "set_member",
+            new JsonObject
+            {
+                ["cert"] = certificate,
+                ["member_data"] = memberData.DeepClone()
+            },
+            asMember);
+    }
+
+    private async Task<string> ProposeRemoveMember(string memberId, int asMember)
+    {
+        return await this.CreateMemberProposal(
+            "remove_member",
+            new JsonObject
+            {
+                ["member_id"] = memberId
+            },
+            asMember);
+    }
+
+    private async Task<string> CreateMemberProposal(
+        string actionName,
+        JsonObject args,
+        int asMember)
+    {
+        using HttpRequestMessage request = new(HttpMethod.Post, "proposals/create")
+        {
+            Content = JsonContent.Create(new JsonObject
+            {
+                ["actions"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["name"] = actionName,
+                        ["args"] = args
+                    }
+                }
+            })
+        };
+        using HttpResponseMessage response = await this.CgsClients[asMember].SendAsync(request);
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        var responseBody = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+        return responseBody[ProposalIdKey]!.ToString();
+    }
+
+    private async Task AssertProposalState(string proposalId, string expectedState)
+    {
+        var proposal = (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>(
+            $"proposals/{proposalId}"))!;
+        Assert.AreEqual(expectedState, proposal["proposalState"]!.ToString());
+    }
+
+    private async Task ActivateMember(int member)
+    {
+        using HttpResponseMessage response = await this.CgsClients[member].PostAsync(
+            "members/statedigests/ack",
+            content: null);
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private async Task<string> GetMemberId(string identifier)
+    {
+        var members = (await this.CgsClient_Member0.GetFromJsonAsync<JsonObject>("members"))!;
+        foreach (JsonNode? member in members["value"]!.AsArray())
+        {
+            if (member!["memberData"]?["identifier"]?.ToString() == identifier)
+            {
+                return member["memberId"]!.ToString();
+            }
+        }
+
+        Assert.Fail($"Could not find member ID for {identifier}.");
+        return string.Empty;
+    }
+
+    private async Task<string> ReadRoleMemberCertificate(int member)
+    {
+        string certificatePath = Path.GetFullPath(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "..",
+                "..",
+                "..",
+                "roles",
+                "sandbox_common",
+                $"member{member}_cert.pem"));
+        return await File.ReadAllTextAsync(certificatePath);
     }
 
     private async Task<List<int>> GetMembersNeededToVote()

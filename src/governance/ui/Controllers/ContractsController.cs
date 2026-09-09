@@ -114,6 +114,8 @@ public class ContractsController : Controller
         }
     }
 
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     [Route("Contracts/{id}/Proposal/{proposalId}/VoteAccept")]
     public async Task<IActionResult> VoteAccept(string id, string proposalId)
     {
@@ -146,6 +148,8 @@ public class ContractsController : Controller
         }
     }
 
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     [Route("Contracts/{id}/Proposal/{proposalId}/VoteReject")]
     public async Task<IActionResult> VoteReject(string id, string proposalId)
     {

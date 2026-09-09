@@ -34,7 +34,8 @@ else {
     $imageName = "workloads/cleanroom-spark-frontend:$tag"
 }
 
-docker image build -t $imageName -f $buildRoot/docker/Dockerfile.cleanroom-spark-frontend "$root"
+Build-DockerImage `
+    -t $imageName -f $buildRoot/docker/Dockerfile.cleanroom-spark-frontend "$root"
 
 # Package the helm chart as well.
 Push-Location $root/src/workloads/analytics/cleanroom-spark-frontend/helm/chart

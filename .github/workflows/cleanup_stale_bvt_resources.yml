@@ -3,7 +3,7 @@ name: Cleanup stale resources created by BVTs
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 2 * * 0"
+    - cron: "45 18 * * *"  # 00:15 IST daily (18:45 UTC prev day)
 
 permissions:
   id-token: write

@@ -152,31 +152,10 @@ $envVars["AZCLI_CLEANROOM_INFERENCING_DIGESTS_DOCUMENT_URL"] = `
 $ccfEnvVars = [ordered]@{}
 $ccfEnvVars["AZCLI_CCF_PROVIDER_CLIENT_IMAGE"] = `
     "$repo/ccf/ccf-provider-client:$tag"
-$ccfEnvVars["AZCLI_CCF_PROVIDER_PROXY_IMAGE"] = `
-    "$repo/ccr-proxy:$tag"
-$ccfEnvVars["AZCLI_CCF_PROVIDER_SKR_IMAGE"] = `
-    "$repo/skr:$tag"
-$ccfEnvVars["AZCLI_CCF_PROVIDER_LOCAL_SKR_IMAGE"] = `
-    "$repo/local-skr:$tag"
-$ccfEnvVars["AZCLI_CCF_PROVIDER_RUN_JS_APP_VIRTUAL_IMAGE"] = `
-    "$repo/ccf/app/run-js/virtual:$tag"
-$ccfEnvVars["AZCLI_CCF_PROVIDER_RUN_JS_APP_SNP_IMAGE"] = `
-    "$repo/ccf/app/run-js/snp:$tag"
-$ccfEnvVars["AZCLI_CCF_PROVIDER_RECOVERY_AGENT_IMAGE"] = `
-    "$repo/ccf/ccf-recovery-agent:$tag"
-$ccfEnvVars["AZCLI_CCF_PROVIDER_CVM_ATTESTATION_VERIFIER_IMAGE"] = `
-    "$repo/cvm/cvm-attestation-verifier:$tag"
-$ccfEnvVars["AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_IMAGE"] = `
-    "$repo/ccf/ccf-recovery-service:$tag"
-$ccfEnvVars["AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_IMAGE"] = `
-    "$repo/ccf/ccf-consortium-manager:$tag"
 $ccfEnvVars["AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL"] = "$repo"
-$ccfEnvVars["AZCLI_CCF_PROVIDER_NETWORK_SECURITY_POLICY_DOCUMENT_URL"] = `
-    "$repo/policies/ccf/ccf-network-security-policy:$tag"
-$ccfEnvVars["AZCLI_CCF_PROVIDER_RECOVERY_SERVICE_SECURITY_POLICY_DOCUMENT_URL"] = `
-    "$repo/policies/ccf/ccf-recovery-service-security-policy:$tag"
-$ccfEnvVars["AZCLI_CCF_PROVIDER_CONSORTIUM_MANAGER_SECURITY_POLICY_DOCUMENT_URL"] = `
-    "$repo/policies/ccf/ccf-consortium-manager-security-policy:$tag"
+$ccfEnvVars["AZCLI_CCF_PROVIDER_RELEASE_METADATA_CHART_URL"] = `
+    "oci://$ociEndpoint/release-metadata"
+$ccfEnvVars["AZCLI_CCF_PROVIDER_RELEASE_VERSION"] = $semanticVersion
 
 # ---------------------------------------------------------------------------
 # Governance client variables (CGS client/UI image overrides)

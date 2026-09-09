@@ -58,6 +58,8 @@ $PSNativeCommandUseErrorActionPreference = $true
 $root = git rev-parse --show-toplevel
 mkdir -p $outDir
 
+$frontendApiVersion = "2026-03-01-preview"
+
 $ccfOutDir = "$deploymentConfigDir/ccf"
 $clClusterOutDir = "$deploymentConfigDir/cl-cluster"
 
@@ -104,21 +106,6 @@ $consumerDatastoreConfig = "$datastoreOutdir/big-data-query-consumer-datastore-c
 
 $consumerSecretStoreConfig = "$datastoreOutdir/secrets/big-data-query-consumer-secretstore-config"
 $consumerLocalSecretStore = "$datastoreOutdir/secrets/big-data-query-consumer-secretstore-local"
-
-# Set tenant Id as a part of the owner's member data.
-# This is required to enable OIDC provider in the later steps.
-$ownerTenantId = az account show --query "tenantId" --output tsv
-$proposalId = (az cleanroom governance member set-tenant-id `
-        --identifier $ownerName `
-        --tenant-id $ownerTenantId `
-        --query "proposalId" `
-        --output tsv `
-        --governance-client $ownerClient)
-
-az cleanroom governance proposal vote `
-    --proposal-id $proposalId `
-    --action accept `
-    --governance-client $ownerClient
 
 # Start a local IDP server that can provide token to local users.
 $idpPort = "8399"
@@ -615,16 +602,40 @@ az cleanroom governance proposal vote `
 # Section: Publisher publishes datasets.
 $identity = $(az resource show --ids $publisherResult.mi.id --query "properties") | ConvertFrom-Json
 
-# Create identity entry in the configuration.
+# TEST ONLY: This is a single tenant scenario masquerading as a multi-tenant scenario.
+# We will assert that the actual tenant where the resources exist is the same for all the involved parties.
+$ownerTenantId = az account show --query "tenantId" --output tsv
+if ($identity.tenantId -ne $ownerTenantId) {
+    throw "Publisher's access identity tenant Id $($identity.tenantId) does not match owner's tenant Id $ownerTenantId."
+}
+
+$proposalId = (az cleanroom governance member set-tenant-id `
+        --identifier $ownerName `
+        --tenant-id $ownerTenantId `
+        --query "proposalId" `
+        --output tsv `
+        --governance-client $ownerClient)
+az cleanroom governance proposal vote `
+    --proposal-id $proposalId `
+    --action accept `
+    --governance-client $ownerClient
+
+# Set the tenant level OIDC value. This is also used later to setup federation to the publisher's and
+# consumer's resources.
 pwsh $PSScriptRoot/../setup-oidc-issuer.ps1 `
     -resourceGroup $publisherResourceGroup `
     -outDir $outDir `
-    -oidcIssuerLevel "user" `
-    -governanceClient $publisherProjectName `
-    -useFrontendService:$useFrontendService `
+    -oidcIssuerLevel "member-tenant" `
+    -governanceClient $ownerClient `
+    -useFrontendService:$false `
     -frontendServiceEndpoint $frontendServiceEndpoint
 
-$publisherIssuerUrl = Get-Content $outDir/$publisherResourceGroup/issuer-url.txt
+$issuerUrl = Get-Content $outDir/$publisherResourceGroup/issuer-url.txt
+
+# Store the same issuer under the publisher user.
+az cleanroom governance oidc-issuer set-issuer-url `
+    --governance-client $publisherProjectName `
+    --url $issuerUrl
 
 az cleanroom collaboration context set `
     --collaboration-name $publisherProjectName
@@ -633,7 +644,6 @@ az cleanroom collaboration identity add az-federated `
     --identity-name publisher-identity `
     --client-id $identity.clientId `
     --tenant-id $identity.tenantId `
-    --token-issuer-url $publisherIssuerUrl `
     --backing-identity cleanroom_cgs_oidc
 
 $publisherDatasets = @{}
@@ -678,7 +688,6 @@ foreach ($format in $formats) {
             --identity-name "publisher-identity" `
             --client-id $identity.clientId `
             --tenant-id $identity.tenantId `
-            --issuer-url $publisherIssuerUrl `
             --dek-secret-id $dekName `
             --dek-kv-url $publisherResult.dek.kv.properties.vaultUri `
             --kek-secret-id $kekName `
@@ -692,7 +701,7 @@ foreach ($format in $formats) {
         foreach ($attempt in 1..2) {
             Write-Host "🔄 Attempt #$attempt Publishing dataset $publisherInputDatasetName via frontend service..." -ForegroundColor Yellow
 
-            curl --fail-with-body -sS -X POST http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${publisherInputDatasetName}/publish?api-version=2026-03-01-preview `
+            curl --fail-with-body -sS -X POST http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${publisherInputDatasetName}/publish?api-version=${frontendApiVersion} `
                 -H "content-type: application/json" `
                 -H "Authorization: Bearer $publisherUserToken" `
                 -d ($datasetInputDetails | ConvertTo-Json -Depth 10 -Compress)
@@ -701,12 +710,11 @@ foreach ($format in $formats) {
 
         Write-Output "Getting publisher dataset details..."
         $publisherDatasetJson = curl --fail-with-body -sS -X GET `
-            "http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${publisherInputDatasetName}?api-version=2026-03-01-preview" `
+            "http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${publisherInputDatasetName}?api-version=${frontendApiVersion}" `
             -H "content-type: application/json" `
             -H "Authorization: Bearer $publisherUserToken"
 
         $publisherDataset = $publisherDatasetJson | ConvertFrom-Json
-
         if ($publisherDataset -and $publisherDataset.id -eq $publisherInputDatasetName) {
             if ($publisherDataset.state -eq "Accepted") {
                 Write-Host "Successfully verified dataset '$($publisherDataset.id)' is published (State: $($publisherDataset.state))" -ForegroundColor Green
@@ -783,7 +791,6 @@ foreach ($format in $formats) {
             --identity-name "publisher-identity" `
             --client-id $identity.clientId `
             --tenant-id $identity.tenantId `
-            --issuer-url $publisherIssuerUrl `
             --subdirectory "2025-09-01"
         
         $datasetInputDetails = $datasetSpecJson | ConvertFrom-Json
@@ -798,7 +805,7 @@ foreach ($format in $formats) {
                 "Authorization" = "Bearer $publisherUserToken";
                 "content-type"  = "application/json";
             }
-            Invoke-RestMethod -Method Post -Uri "http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${publisherInputSseDatasetName}/publish?api-version=2026-03-01-preview" `
+            Invoke-RestMethod -Method Post -Uri "http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${publisherInputSseDatasetName}/publish?api-version=${frontendApiVersion}" `
                 -Headers $headers -Body ($datasetInputDetailsCopy | ConvertTo-Json -Depth 10 -Compress)
 
             # If we reach here, the request succeeded when it shouldn't have.
@@ -818,19 +825,42 @@ foreach ($format in $formats) {
             }
         }
 
-        curl --fail-with-body -sS -X POST http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${publisherInputSseDatasetName}/publish?api-version=2026-03-01-preview `
+        # Issuer URLs must be configured through governance, not dataset publication.
+        try {
+            $datasetInputDetailsCopy = $datasetInputDetails |
+            ConvertTo-Json -Depth 10 |
+            ConvertFrom-Json
+            $datasetInputDetailsCopy.identity |
+            Add-Member -NotePropertyName "issuerUrl" -NotePropertyValue $issuerUrl
+
+            Invoke-RestMethod -Method Post -Uri "http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${publisherInputSseDatasetName}/publish?api-version=${frontendApiVersion}" `
+                -Headers $headers -Body ($datasetInputDetailsCopy | ConvertTo-Json -Depth 10 -Compress)
+
+            throw "Expected dataset publish with issuerUrl to fail with 400, but it succeeded."
+        }
+        catch {
+            $httpStatusMessage = $_.Exception.Message
+            if ($httpStatusMessage -like "*400*") {
+                Write-Host "Dataset publish with issuerUrl was rejected as expected." `
+                    -ForegroundColor "Green"
+            }
+            else {
+                throw "Unexpected error during issuerUrl validation: $httpStatusMessage"
+            }
+        }
+
+        curl --fail-with-body -sS -X POST http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${publisherInputSseDatasetName}/publish?api-version=${frontendApiVersion} `
             -H "content-type: application/json" `
             -H "Authorization: Bearer $publisherUserToken" `
             -d ($datasetInputDetails | ConvertTo-Json -Depth 10 -Compress)
 
         Write-Output "Getting publisher dataset details..."
         $publisherDatasetJson = curl --fail-with-body -sS -X GET `
-            "http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${publisherInputSseDatasetName}?api-version=2026-03-01-preview" `
+            "http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${publisherInputSseDatasetName}?api-version=${frontendApiVersion}" `
             -H "content-type: application/json" `
             -H "Authorization: Bearer $publisherUserToken"
 
         $publisherDataset = $publisherDatasetJson | ConvertFrom-Json
-
         if ($publisherDataset -and $publisherDataset.id -eq $publisherInputSseDatasetName) {
             if ($publisherDataset.state -eq "Accepted") {
                 Write-Host "Successfully verified dataset '$($publisherDataset.id)' is published (State: $($publisherDataset.state))" -ForegroundColor Green
@@ -899,17 +929,14 @@ foreach ($format in $formats) {
 
 # Section: Consumer publishes datasets and queries.
 $identity = $(az resource show --ids $consumerResult.mi.id --query "properties") | ConvertFrom-Json
+if ($identity.tenantId -ne $ownerTenantId) {
+    throw "Consumer's access identity tenant Id $($identity.tenantId) does not match owner's tenant Id $ownerTenantId."
+}
 
-# Create identity entry in the configuration.
-pwsh $PSScriptRoot/../setup-oidc-issuer.ps1 `
-    -resourceGroup $consumerResourceGroup `
-    -outDir $outDir `
-    -oidcIssuerLevel "user" `
-    -governanceClient $consumerProjectName `
-    -useFrontendService:$useFrontendService `
-    -frontendServiceEndpoint $frontendServiceEndpoint
-
-$consumerIssuerUrl = Get-Content $outDir/$consumerResourceGroup/issuer-url.txt
+# Store the previously set issuer url under the consumer user.
+az cleanroom governance oidc-issuer set-issuer-url `
+    --governance-client $consumerProjectName `
+    --url $issuerUrl
 
 az cleanroom collaboration context set `
     --collaboration-name $consumerProjectName
@@ -918,7 +945,6 @@ az cleanroom collaboration identity add az-federated `
     --identity-name consumer-identity `
     --client-id $identity.clientId `
     --tenant-id $identity.tenantId `
-    --token-issuer-url $consumerIssuerUrl `
     --backing-identity cleanroom_cgs_oidc
 
 $consumerDatasets = @{}
@@ -954,7 +980,6 @@ foreach ($format in $formats) {
             --identity-name "consumer-identity" `
             --client-id $identity.clientId `
             --tenant-id $identity.tenantId `
-            --issuer-url $consumerIssuerUrl `
             --dek-secret-id $dekName `
             --dek-kv-url $consumerResult.dek.kv.properties.vaultUri `
             --kek-secret-id $kekName `
@@ -963,19 +988,18 @@ foreach ($format in $formats) {
         
         $datasetInputDetails = $datasetSpecJson | ConvertFrom-Json
 
-        curl --fail-with-body -sS -X POST http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerInputDatasetName}/publish?api-version=2026-03-01-preview `
+        curl --fail-with-body -sS -X POST http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerInputDatasetName}/publish?api-version=${frontendApiVersion} `
             -H "content-type: application/json" `
             -H "Authorization: Bearer $userToken" `
             -d ($datasetInputDetails | ConvertTo-Json -Depth 10 -Compress)
 
         Write-Output "Getting ${consumerInputDatasetName} dataset details..."
         $consumerDatasetJson = curl --fail-with-body -sS -X GET `
-            "http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerInputDatasetName}?api-version=2026-03-01-preview" `
+            "http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerInputDatasetName}?api-version=${frontendApiVersion}" `
             -H "content-type: application/json" `
             -H "Authorization: Bearer $userToken"
 
         $consumerDataset = $consumerDatasetJson | ConvertFrom-Json
-
         if ($consumerDataset -and $consumerDataset.id -eq $consumerInputDatasetName) {
             if ($consumerDataset.state -eq "Accepted") {
                 Write-Host "Successfully verified dataset '$($consumerDataset.id)' is published (State: $($consumerDataset.state))" -ForegroundColor Green
@@ -1053,7 +1077,6 @@ foreach ($format in $formats) {
             --identity-name "consumer-identity" `
             --client-id $identity.clientId `
             --tenant-id $identity.tenantId `
-            --issuer-url $consumerIssuerUrl `
             --dek-secret-id $dekName `
             --dek-kv-url $consumerResult.dek.kv.properties.vaultUri `
             --kek-secret-id $kekName `
@@ -1062,19 +1085,18 @@ foreach ($format in $formats) {
         
         $datasetInputDetails = $datasetSpecJson | ConvertFrom-Json
 
-        curl --fail-with-body -sS -X POST http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerOutputDatasetName}/publish?api-version=2026-03-01-preview `
+        curl --fail-with-body -sS -X POST http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerOutputDatasetName}/publish?api-version=${frontendApiVersion} `
             -H "content-type: application/json" `
             -H "Authorization: Bearer $userToken" `
             -d ($datasetInputDetails | ConvertTo-Json -Depth 10 -Compress)
 
         Write-Output "Getting ${consumerOutputDatasetName} dataset details..."
         $consumerDatasetJson = curl --fail-with-body -sS -X GET `
-            "http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerOutputDatasetName}?api-version=2026-03-01-preview" `
+            "http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerOutputDatasetName}?api-version=${frontendApiVersion}" `
             -H "content-type: application/json" `
             -H "Authorization: Bearer $userToken"
 
         $consumerDataset = $consumerDatasetJson | ConvertFrom-Json
-
         if ($consumerDataset -and $consumerDataset.id -eq $consumerOutputDatasetName) {
             if ($consumerDataset.state -eq "Accepted") {
                 Write-Host "Successfully verified dataset '$($consumerDataset.id)' is published (State: $($consumerDataset.state))" -ForegroundColor Green
@@ -1147,19 +1169,18 @@ foreach ($format in $formats) {
         
         $datasetInputDetails = $datasetSpecJson | ConvertFrom-Json
 
-        curl --fail-with-body -sS -X POST http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerInputS3DatasetName}/publish?api-version=2026-03-01-preview `
+        curl --fail-with-body -sS -X POST http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerInputS3DatasetName}/publish?api-version=${frontendApiVersion} `
             -H "content-type: application/json" `
             -H "Authorization: Bearer $userToken" `
             -d ($datasetInputDetails | ConvertTo-Json -Depth 10 -Compress)
 
         Write-Output "Getting ${consumerInputS3DatasetName} dataset details..."
         $consumerDatasetJson = curl --fail-with-body -sS -X GET `
-            "http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerInputS3DatasetName}?api-version=2026-03-01-preview" `
+            "http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerInputS3DatasetName}?api-version=${frontendApiVersion}" `
             -H "content-type: application/json" `
             -H "Authorization: Bearer $userToken"
 
         $consumerDataset = $consumerDatasetJson | ConvertFrom-Json
-
         if ($consumerDataset -and $consumerDataset.id -eq $consumerInputS3DatasetName) {
             if ($consumerDataset.state -eq "Accepted") {
                 Write-Host "Successfully verified dataset '$($consumerDataset.id)' is published (State: $($consumerDataset.state))" -ForegroundColor Green
@@ -1199,19 +1220,18 @@ foreach ($format in $formats) {
         
         $datasetInputDetails = $datasetSpecJson | ConvertFrom-Json
 
-        curl --fail-with-body -sS -X POST http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerOutputS3DatasetName}/publish?api-version=2026-03-01-preview `
+        curl --fail-with-body -sS -X POST http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerOutputS3DatasetName}/publish?api-version=${frontendApiVersion} `
             -H "content-type: application/json" `
             -H "Authorization: Bearer $userToken" `
             -d ($datasetInputDetails | ConvertTo-Json -Depth 10 -Compress)
 
         Write-Output "Getting ${consumerOutputS3DatasetName} dataset details..."
         $consumerDatasetJson = curl --fail-with-body -sS -X GET `
-            "http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerOutputS3DatasetName}?api-version=2026-03-01-preview" `
+            "http://${frontendServiceEndpoint}/collaborations/${consumerProjectName}/analytics/datasets/${consumerOutputS3DatasetName}?api-version=${frontendApiVersion}" `
             -H "content-type: application/json" `
             -H "Authorization: Bearer $userToken"
 
         $consumerDataset = $consumerDatasetJson | ConvertFrom-Json
-
         if ($consumerDataset -and $consumerDataset.id -eq $consumerOutputS3DatasetName) {
             if ($consumerDataset.state -eq "Accepted") {
                 Write-Host "Successfully verified dataset '$($consumerDataset.id)' is published (State: $($consumerDataset.state))" -ForegroundColor Green
@@ -1224,6 +1244,7 @@ foreach ($format in $formats) {
             throw "Failed to verify dataset '$consumerOutputS3DatasetName'"
         }
     }
+
 }
 
 # Define segment data for a query
@@ -1806,7 +1827,7 @@ $subject = $contractId + "-" + $publisherUserId
 pwsh $PSScriptRoot/../setup-access.ps1 `
     -resourceGroup $publisherResourceGroup `
     -subject $subject `
-    -issuerUrl $publisherIssuerUrl `
+    -issuerUrl $issuerUrl `
     -outDir $outDir `
     -kvType akvpremium
 
@@ -1815,7 +1836,7 @@ $subject = $contractId + "-" + $consumerUserId
 pwsh $PSScriptRoot/../setup-access.ps1 `
     -resourceGroup $consumerResourceGroup `
     -subject $subject `
-    -issuerUrl $consumerIssuerUrl `
+    -issuerUrl $issuerUrl `
     -outDir $outDir `
     -kvType akvpremium
 

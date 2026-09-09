@@ -34,7 +34,8 @@ else {
     $imageName = "workloads/cleanroom-spark-analytics-app:$tag"
 }
 
-docker image build -t $imageName -f $buildRoot/docker/Dockerfile.cleanroom-spark-analytics-app "$root"
+Build-DockerImage `
+    -t $imageName -f $buildRoot/docker/Dockerfile.cleanroom-spark-analytics-app "$root"
 
 if ($push) {
     docker push $imageName

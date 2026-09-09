@@ -93,7 +93,15 @@
                 const jsonText = membersDataElement.textContent;
                 const parsed = JSON.parse(jsonText);
                 const formatted = JSON.stringify(parsed, null, 2);
-                membersDataElement.innerHTML = `<code class="language-json">${formatted}</code>`;
+
+                // Rebuild via DOM APIs (textContent) instead of innerHTML so that
+                // untrusted governance data (e.g. member identifiers) cannot be
+                // parsed as markup and executed as script.
+                membersDataElement.textContent = "";
+                const code = document.createElement("code");
+                code.className = "language-json";
+                code.textContent = formatted;
+                membersDataElement.appendChild(code);
 
                 if (window.CleanroomUI) {
                     window.CleanroomUI.showToast('JSON formatted successfully', 'success');

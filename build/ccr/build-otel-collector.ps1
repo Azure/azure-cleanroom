@@ -21,8 +21,8 @@ else {
 }
 
 $root = git rev-parse --show-toplevel
-
-docker image build -t $imageName `
+Build-DockerImage `
+  -t $imageName `
   -f $PSScriptRoot/../docker/Dockerfile.otel-collector $root
 
 if ($push) {

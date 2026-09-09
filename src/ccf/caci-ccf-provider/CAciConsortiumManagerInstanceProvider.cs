@@ -200,16 +200,15 @@ public class CAciConsortiumManagerInstanceProvider : ICcfConsortiumManagerInstan
                     {
                         {
                             AciConstants.ContainerName.CcfConsortiumManager,
-                            $"{ImageUtils.CcfConsortiumManagerImage()}:" +
-                            $"{ImageUtils.CcfConsortiumManagerTag()}"
+                            await ImageUtils.CcfConsortiumManagerImageReference()
                         },
                         {
                             AciConstants.ContainerName.Skr,
-                            $"{ImageUtils.SkrImage()}:{ImageUtils.SkrTag()}"
+                            await ImageUtils.SkrImageReference()
                         },
                         {
                             AciConstants.ContainerName.CcrProxy,
-                            $"{ImageUtils.CcrProxyImage()}:{ImageUtils.CcrProxyTag()}"
+                            await ImageUtils.CcrProxyImageReference()
                         }
                     }
                 };
@@ -410,7 +409,7 @@ public class CAciConsortiumManagerInstanceProvider : ICcfConsortiumManagerInstan
                     {
                         AciConstants.CcfConsortiumManagerTypeTag,
                         "consortium-manager"
-                    }
+                    },
                 },
                 IPAddress = new ContainerGroupIPAddress(
                     new ContainerGroupPort[]

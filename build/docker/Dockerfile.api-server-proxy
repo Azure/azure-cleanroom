@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.26-alpine AS builder
+FROM cleanroombuild.azurecr.io/mirror/docker/library/golang:1.26-alpine AS builder
 
 RUN apk --no-cache add curl
 RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.11.0

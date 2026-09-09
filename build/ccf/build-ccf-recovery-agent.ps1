@@ -36,7 +36,8 @@ else {
 $root = git rev-parse --show-toplevel
 $buildRoot = "$root/build"
 
-docker image build -t $imageName -f $buildRoot/docker/Dockerfile.ccf-recovery-agent "$root"
+Build-DockerImage `
+    -t $imageName -f $buildRoot/docker/Dockerfile.ccf-recovery-agent "$root"
 
 if ($push) {
     docker push $imageName

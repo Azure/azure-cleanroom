@@ -1,5 +1,8 @@
 FROM mcr.microsoft.com/mirror/docker/library/python:3.11 AS build-image
 
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ENV PIP_INDEX_URL=$PIP_INDEX_URL
+
 # set the working directory in the container
 WORKDIR /app
 
@@ -7,7 +10,7 @@ WORKDIR /app
 WORKDIR /app/azure-cli-extension/cleanroom
 COPY src/tools/azure-cli-extension/cleanroom/requirements.txt requirements.txt
 
-RUN pip install --no-cache-dir -r requirements.txt 
+RUN pip install --no-cache-dir -r requirements.txt
 
 # copy everything else and build app
 WORKDIR /app

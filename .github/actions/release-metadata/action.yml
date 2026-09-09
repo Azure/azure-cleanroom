@@ -1,0 +1,60 @@
+name: Release metadata chart
+description: >-
+  Publish the versioned release-metadata Helm chart: resolve image digests from the
+  release ACR, upload the chart .tgz as a GitHub Release asset, and open a PR (via
+  chart-releaser) updating index.yaml on the default branch. A human reviews/merges
+  the PR to make the catalog live for external consumers.
+inputs:
+  tag:
+    description: The release tag (used as the chart version)
+    required: true
+  environment:
+    description: The environment being released to (e.g. unlisted)
+    required: true
+  registry-name:
+    description: The ACR to resolve image digests from
+    required: true
+  pages-branch:
+    description: Branch hosting index.yaml (GitHub Pages source), typically the default branch
+    required: true
+  client-id:
+    description: The client ID to connect to the registry
+    required: true
+  tenant-id:
+    description: The tenant ID of the registry
+    required: true
+  subscription-id:
+    description: The subscription ID of the registry
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+
+    - uses: azure/setup-helm@v4
+
+    - name: Install powershell-yaml
+      shell: pwsh
+      run: Install-Module -Name powershell-yaml -Force
+
+    - shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: >-
+        ./.github/scripts/release-metadata.ps1
+        -tag ${{ inputs.tag }}
+        -environment ${{ inputs.environment }}
+        -registryName ${{ inputs.registry-name }}
+        -pagesBranch ${{ inputs.pages-branch }}
+
+    # Provenance for the published catalog: binds the immutable .tgz digest to this
+    # workflow/commit. Verifiable via 'gh attestation verify'. The .tgz persists in
+    # the runner temp from the packaging step above.
+    - uses: actions/attest-build-provenance@v1
+      with:
+        subject-path: ${{ runner.temp }}/cr-release-packages/release-metadata-${{ inputs.tag }}.tgz

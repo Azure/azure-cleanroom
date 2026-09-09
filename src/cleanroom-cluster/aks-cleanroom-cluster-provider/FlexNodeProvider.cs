@@ -627,7 +627,7 @@ write_files:
                         Publisher = "Canonical",
                         Offer = "ubuntu-24_04-lts",
                         Sku = "cvm",
-                        Version = "24.04.202604160"
+                        Version = "24.04.202607310"
                     },
                     OSDisk = new VirtualMachineOSDisk(
                         DiskCreateOptionType.FromImage)

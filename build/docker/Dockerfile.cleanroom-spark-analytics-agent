@@ -1,5 +1,6 @@
 # Use the official .NET Core SDK as the base image
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG RestoreSources=https://api.nuget.org/v3/index.json
 
 # Set the working directory
 WORKDIR /app
@@ -15,7 +16,8 @@ COPY src/internal/Attestation/*.csproj /app/src/internal/Attestation/
 COPY src/internal/restapi-common/*.csproj /app/src/internal/restapi-common/
 COPY src/internal/governance-common/*.csproj /app/src/internal/governance-common/
 COPY src/internal/workload-agent-common/*.csproj /app/src/internal/workload-agent-common/
-RUN dotnet restore /app/src/workloads/analytics/analytics-workload.sln
+RUN dotnet restore --source "$RestoreSources" \
+    /app/src/workloads/analytics/analytics-workload.sln
 
 # copy everything else and build app
 COPY stylecop.json /app

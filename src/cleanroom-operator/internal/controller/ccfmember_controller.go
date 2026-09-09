@@ -27,8 +27,8 @@ import (
 
 const (
 	ccfMemberFinalizerName = "cleanroom.azure.com/ccfmember-finalizer"
-	defaultCgsImage        = "mcr.microsoft.com/azurecleanroom/cgs-client:6.0.0"
-	defaultCgsUIImage      = "mcr.microsoft.com/azurecleanroom/cgs-ui:6.0.0"
+	defaultCgsImage        = "mcr.microsoft.com/azurecleanroom/cgs-client:11.0.0"
+	defaultCgsUIImage      = "mcr.microsoft.com/azurecleanroom/cgs-ui:11.0.0"
 	cgsClientPort          = 8080
 	cgsUIPort              = 6300
 	memberReadyTimeout     = 5 * time.Minute

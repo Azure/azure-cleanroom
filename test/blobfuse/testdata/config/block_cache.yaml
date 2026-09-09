@@ -33,6 +33,6 @@ azstorage:
   type: { ACCOUNT_TYPE }
   endpoint: { ACCOUNT_ENDPOINT }
   account-name: { STO_ACC_NAME }
-  mode: msi
+  mode: azcli
   appid: { AZURE_CLIENT_ID }
   container: { 0 }
