@@ -1,0 +1,15 @@
+apiVersion: v1
+entries:
+  release-metadata:
+  - apiVersion: v2
+    created: "2026-09-10T08:17:54.448031685Z"
+    description: Versioned cleanroom release metadata, read via 'helm show values'.
+      Not deployable; a library chart so 'helm install'/'helm template' are refused
+      by Helm.
+    digest: 9632fe9bf99e5f82c2f2ca9aa428800dd926cbd72d49c1c6c88f8395e457c76c
+    name: release-metadata
+    type: library
+    urls:
+    - https://github.com/Azure/azure-cleanroom/releases/download/release-metadata-11.0.0-bootstrap/release-metadata-11.0.0.tgz
+    version: 11.0.0
+generated: "2026-09-10T08:17:54.44640669Z"
