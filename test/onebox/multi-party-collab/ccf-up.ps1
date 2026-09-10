@@ -30,12 +30,7 @@ if ($outDir -eq "") {
 $env:AZCLI_CCF_PROVIDER_CLIENT_IMAGE = "$repo/ccf/ccf-provider-client:$tag"
 $env:AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL = "$repo"
 
-if ($registry -eq "mcr") {
-    # Catalog URL and version are a pair: use neither override for published MCR artifacts.
-    $env:AZCLI_CCF_PROVIDER_RELEASE_METADATA_CHART_URL = ""
-    $env:AZCLI_CCF_PROVIDER_RELEASE_VERSION = ""
-}
-else {
+if ($registry -ne "mcr") {
     # The release-metadata catalog is resolved by the ccf-provider-client CONTAINER via
     # 'helm show values oci://...', so it must use a container-reachable endpoint, not the
     # host-side localhost:5000 (which resolves to the container itself).
