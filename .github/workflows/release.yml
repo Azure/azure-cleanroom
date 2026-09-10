@@ -404,7 +404,7 @@ jobs:
           $outDir = "${{ runner.temp }}/release-metadata"
           $acrRepo = "${{ secrets.RELEASE_ACR_NAME }}.azurecr.io/unlisted/azurecleanroom"
           ./build/build-release-metadata-chart.ps1 `
-            -repo mcr.microsoft.com/azurecleanroom `
+            -repo $acrRepo `
             -publishRepo mcr.microsoft.com/azurecleanroom `
             -tag ${{ inputs.tag }} `
             -outDir $outDir
