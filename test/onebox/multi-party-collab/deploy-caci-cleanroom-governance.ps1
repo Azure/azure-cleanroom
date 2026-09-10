@@ -81,6 +81,7 @@ pwsh $PSScriptRoot/ccf-up.ps1 `
     -memberCertPath "$outDir/${initialMemberName}_cert.pem" `
     -repo $repo `
     -tag $tag `
+    -registry $registry `
     -allowAll:$allowAll `
     -outDir $outDir `
     -ccfProviderProjectName $ccfProviderProjectName

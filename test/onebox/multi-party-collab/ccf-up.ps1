@@ -7,6 +7,8 @@ param (
     [string]$memberCertPath,
     [string]$repo,
     [string]$tag,
+    [ValidateSet('mcr', 'local', 'acr')]
+    [string]$registry = "local",
     [switch]$allowAll,
     [string]$ccfProviderProjectName = "ccf-provider",
     [string]$outDir = ""
@@ -27,27 +29,37 @@ if ($outDir -eq "") {
 # gets started via the ccf up command below.
 $env:AZCLI_CCF_PROVIDER_CLIENT_IMAGE = "$repo/ccf/ccf-provider-client:$tag"
 $env:AZCLI_CCF_PROVIDER_CONTAINER_REGISTRY_URL = "$repo"
-# The release-metadata catalog is resolved by the ccf-provider-client CONTAINER via
-# 'helm show values oci://...', so it must use a container-reachable endpoint, not the
-# host-side localhost:5000 (which resolves to the container itself).
-$ociEndpoint = $repo
-if ($repo.StartsWith("localhost:5000")) {
-    if ($env:CODESPACES -ne "true" -and $env:GITHUB_ACTIONS -ne "true") {
-        $ociEndpoint = "host.docker.internal:5000"
-    }
-    elseif ($env:CODESPACES -eq "true") {
-        $ociEndpoint = "ccr-registry:5000"
-    }
-    else {
-        # 172.17.0.1: https://stackoverflow.com/questions/48546124/what-is-the-linux-equivalent-of-host-docker-internal
-        $ociEndpoint = "172.17.0.1:5000"
-    }
+
+if ($registry -eq "mcr") {
+    # Catalog URL and version are a pair: use neither override for published MCR artifacts.
+    $env:AZCLI_CCF_PROVIDER_RELEASE_METADATA_CHART_URL = ""
+    $env:AZCLI_CCF_PROVIDER_RELEASE_VERSION = ""
 }
-$env:AZCLI_CCF_PROVIDER_RELEASE_METADATA_CHART_URL = "oci://$ociEndpoint/release-metadata"
-# The catalog is a Helm chart; its version derives from the image tag via the same helper the
-# publisher uses (Get-SemanticVersionFromTag), so consumer and producer agree.
-$catalogVersion = Get-SemanticVersionFromTag $tag
-$env:AZCLI_CCF_PROVIDER_RELEASE_VERSION = $catalogVersion
+else {
+    # The release-metadata catalog is resolved by the ccf-provider-client CONTAINER via
+    # 'helm show values oci://...', so it must use a container-reachable endpoint, not the
+    # host-side localhost:5000 (which resolves to the container itself).
+    $ociEndpoint = $repo
+    if ($repo.StartsWith("localhost:5000")) {
+        if ($env:CODESPACES -ne "true" -and $env:GITHUB_ACTIONS -ne "true") {
+            $ociEndpoint = "host.docker.internal:5000"
+        }
+        elseif ($env:CODESPACES -eq "true") {
+            $ociEndpoint = "ccr-registry:5000"
+        }
+        else {
+            # 172.17.0.1 is the Linux equivalent of host.docker.internal.
+            $ociEndpoint = "172.17.0.1:5000"
+        }
+    }
+    $env:AZCLI_CCF_PROVIDER_RELEASE_METADATA_CHART_URL =
+        "oci://$ociEndpoint/release-metadata"
+
+    # The catalog is a Helm chart; its version derives from the image tag via the same helper the
+    # publisher uses (Get-SemanticVersionFromTag), so consumer and producer agree.
+    $catalogVersion = Get-SemanticVersionFromTag $tag
+    $env:AZCLI_CCF_PROVIDER_RELEASE_VERSION = $catalogVersion
+}
 
 $env:AZCLI_CGS_CLIENT_IMAGE = "$repo/cgs-client:$tag"
 $env:AZCLI_CGS_UI_IMAGE = "$repo/cgs-ui:$tag"

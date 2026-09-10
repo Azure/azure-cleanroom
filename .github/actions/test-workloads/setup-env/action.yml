@@ -7,6 +7,10 @@ inputs:
   tag:
     description: The tag for the built image
     required: true
+  registry:
+    description: Container registry type
+    required: false
+    default: acr
   infraType:
     description: Infrastructure type (virtual or aks)
     required: false
@@ -42,7 +46,7 @@ runs:
       shell: pwsh
       run: ./test/onebox/workloads/setup-env.ps1 `
           -infraType ${{ inputs.infraType }} `
-          -registry acr `
+          -registry ${{ inputs.registry }} `
           -repo ${{ inputs.repo }} `
           -tag ${{ inputs.tag }} `
           -location ${{ inputs.location }} `

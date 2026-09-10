@@ -192,6 +192,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/test-workloads/setup-env
         with:
+          registry: mcr
           repo: mcr.microsoft.com/azurecleanroom
           tag: ${{ env.MCR_RELEASE_VERSION }}
           infraType: aks
