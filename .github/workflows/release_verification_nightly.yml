@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MCR_RELEASE_VERSION: "11.0.0" # Bump this for each release.
+  MCR_RELEASE_VERSION: "12.0.0" # Bump this for each release.
   AZCLI_CCF_PROVIDER_RELEASE_METADATA_CHART_URL: >-
     ${{ secrets.release-metadata-chart-url || '' }}
   AZCLI_CCF_PROVIDER_RELEASE_VERSION: ${{ inputs.release-metadata-version || '' }}
