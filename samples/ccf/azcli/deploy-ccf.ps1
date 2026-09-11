@@ -356,8 +356,10 @@ if ($registry -ne "mcr") {
 else {
     # Empty values so that default azurecr.io paths baked in the AZCLI_CCF_PROVIDER_CLIENT_IMAGE get used.
     $envVars["AZCLI_CCF_PROVIDER_CLIENT_IMAGE"] = ""
-    $envVars["AZCLI_CCF_PROVIDER_RELEASE_VERSION"] = ""
-    $envVars["AZCLI_CCF_PROVIDER_RELEASE_METADATA_CHART_URL"] = ""
+    $envVars["AZCLI_CCF_PROVIDER_RELEASE_VERSION"] =
+        $env:AZCLI_CCF_PROVIDER_RELEASE_VERSION ?? ""
+    $envVars["AZCLI_CCF_PROVIDER_RELEASE_METADATA_CHART_URL"] =
+        $env:AZCLI_CCF_PROVIDER_RELEASE_METADATA_CHART_URL ?? ""
     $envVars["AZCLI_CCF_PROVIDER_PROXY_IMAGE"] = ""
     $envVars["AZCLI_CCF_PROVIDER_SKR_IMAGE"] = ""
     $envVars["AZCLI_CCF_PROVIDER_LOCAL_SKR_IMAGE"] = ""
