@@ -433,6 +433,9 @@ jobs:
 
   create-github-release:
     runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=create-github-release-${{ github.run_id }}-${{ github.run_attempt }}"]
+    # Bind to the production environment so the release-metadata action can resolve
+    # the environment-scoped RELEASE_* secrets for azure/login.
+    environment: production
     needs: ["release-to-prod", "post-release-validation"]
     # Permission and environment variables below are needed to create a GitHub release
     permissions:
