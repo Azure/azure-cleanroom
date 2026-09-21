@@ -394,7 +394,7 @@ jobs:
       # Stage the catalog in the release ACR for post-release validation. Its values
       # reference the production MCR artifacts, matching the final published catalog.
       - name: Setup Helm
-        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
 
       - name: Publish release-metadata catalog for validation
         shell: pwsh
