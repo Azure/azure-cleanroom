@@ -21,7 +21,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Run validation only for same-repository PRs or manual dispatches.
   lint:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ["self-hosted", "1ES.Pool=azure-cleanroom-public", "1ES.JobId=lint-${{ github.run_id }}-${{ github.run_attempt }}"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -31,6 +33,7 @@ jobs:
         run: ./scripts/ruff-check.sh
 
   detect-changes:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     needs: [lint]
     runs-on: ubuntu-latest
     outputs:
@@ -92,12 +95,12 @@ jobs:
     if: ${{ contains(needs.detect-changes.outputs.test-stages, 'test-flex-node') }}
     uses: ./.github/workflows/pr_flex_node.yml
 
-  # Single gate job for branch protection. Always runs and aggregates results
+  # Single gate job for branch protection. For eligible runs, always aggregates results
   # from all build/test jobs. Use this as the sole required status check to
   # avoid "Expected — Waiting for status" when the resolver skips test stages
   # (skipped reusable workflow jobs don't produce child check runs).
   ci-gate:
-    if: always()
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     needs:
       - lint
       - detect-changes
