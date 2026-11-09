@@ -46,7 +46,7 @@ jobs:
 
       - name: CGS test reporter
         if: always()
-        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+        uses: dorny/test-reporter@d1b5dff021aa968b288b02285a8bf47471c5928a # v3.2.0
         with:
           name: Test report-CGS  # Name of the check run which will be created
           path: ./src/governance/test/TestResults/TestRunResult-CGS.trx    # Path to test results
