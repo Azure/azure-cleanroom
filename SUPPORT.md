@@ -12,3 +12,5 @@ For help and questions about using this project, please reach out to accrsupport
 
 This product is in Gated preview. Support for this **PROJECT or PRODUCT** is limited to the resources listed below.
 1. Email contact: accrsupport@microsoft.com
+
+<!-- Maintainer-authorized fork workflow policy validation; no product changes. -->
