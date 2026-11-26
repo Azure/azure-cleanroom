@@ -70,6 +70,7 @@ runs:
         OUTPUT_KIND: ${{ inputs.kind }}
       run: |
         set -euo pipefail
+        mkdir -p "$GITHUB_WORKSPACE/handoff/sbom"
         args=(
           -pn "$OUTPUT_NAME" -pv "$GITHUB_SHA" -ps Microsoft
           -nsb "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

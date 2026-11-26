@@ -12,6 +12,8 @@ on:
       - .github/actions/package-build-only-output/**
       - build/Get-OfficialBuildPlan.ps1
       - build/Invoke-OfficialBuildOutput.ps1
+      - build/helpers.ps1
+      - Directory.Packages.props
 
 permissions:
   contents: read
@@ -59,6 +61,9 @@ jobs:
       - 1ES.Pool=azure-cleanroom-public
       - 1ES.JobId=poc-${{ matrix.name }}-${{ github.run_id }}-${{ github.run_attempt }}
     timeout-minutes: 120
+    env:
+      # Use the runner's resolver; the default Docker network cannot reach its loopback DNS.
+      DOCKER_BUILD_NETWORK: host
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -78,6 +83,18 @@ jobs:
           set -euo pipefail
           docker info --format '{{.DockerRootDir}}'
           df -h . /mnt
+      - name: Verify anonymous base pull and build DNS
+        if: matrix.kind == 'container' || matrix.kind == 'cgs' || matrix.kind == 'cli'
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe_dir=$(mktemp -d "$RUNNER_TEMP/build-dns.XXXXXX")
+          printf '%s\n' \
+            'FROM cleanroombuild.azurecr.io/mirror/docker/library/python:3.12' \
+            'RUN cat /etc/resolv.conf' \
+            'RUN python -c "import socket; hosts = [\"deb.debian.org\", \"archive.ubuntu.com\", \"api.nuget.org\", \"proxy.golang.org\", \"registry.npmjs.org\", \"pypi.org\"]; [print(h, socket.getaddrinfo(h, 443)) for h in hosts]"' \
+            > "$probe_dir/Dockerfile"
+          docker build --network "$DOCKER_BUILD_NETWORK" --progress plain "$probe_dir"
       - name: Setup Helm
         if: matrix.kind == 'helm'
         uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0

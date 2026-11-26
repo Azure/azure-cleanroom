@@ -17,6 +17,13 @@ function Get-BuildOverrides {
         $buildOverrides += "--build-arg=NPM_CONFIG_REGISTRY=$($env:NPM_CONFIG_REGISTRY)"
     }
 
+    if (-not [string]::IsNullOrWhiteSpace($env:DOCKER_BUILD_NETWORK)) {
+        if ($env:DOCKER_BUILD_NETWORK -notin @('default', 'host', 'none')) {
+            throw "Unsupported Docker build network: $env:DOCKER_BUILD_NETWORK"
+        }
+        $buildOverrides += "--network=$env:DOCKER_BUILD_NETWORK"
+    }
+
     Write-Host "Using build overrides: $($buildOverrides -join ' ')"
     return $buildOverrides
 }
