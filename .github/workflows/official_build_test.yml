@@ -3,12 +3,15 @@ name: Official Build Test (No Azure Auth)
 on:
   workflow_dispatch:
   workflow_call:
-  # Bootstrap branch testing before workflow_dispatch exists on the default branch.
+  # Bootstrap branch testing without pushing or merging to the default branch.
   push:
     branches:
       - users/yavohra/github-build-only-cgs
     paths:
       - .github/workflows/official_build_test.yml
+      - .github/actions/package-build-only-output/**
+      - build/Get-OfficialBuildPlan.ps1
+      - build/Invoke-OfficialBuildOutput.ps1
 
 permissions:
   contents: read
@@ -18,130 +21,157 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  plan:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Resolve full official output set
+        id: plan
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Install-Module -Name powershell-yaml -RequiredVersion 0.4.12 -Force -Scope CurrentUser
+          $Plan = ./build/Get-OfficialBuildPlan.ps1
+          "matrix=$Plan" >> $env:GITHUB_OUTPUT
+          $Plan | Set-Content build-plan.json -Encoding utf8NoBOM
+          $Outputs = ($Plan | ConvertFrom-Json).include
+          "## Official build plan: $($Outputs.Count) outputs" >> $env:GITHUB_STEP_SUMMARY
+          $Outputs | ForEach-Object {
+              "- $($_.name) ($($_.kind))" >> $env:GITHUB_STEP_SUMMARY
+          }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: official-build-plan
+          path: build-plan.json
+          if-no-files-found: error
+          retention-days: 14
+
+  build:
+    needs: plan
+    name: Build ${{ matrix.name }}
+    runs-on:
+      - self-hosted
+      - 1ES.Pool=azure-cleanroom-public
+      - 1ES.JobId=poc-${{ matrix.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     permissions:
       contents: read
       id-token: write # GitHub provenance signing only; no Azure authentication.
       attestations: write
-    defaults:
-      run:
-        shell: bash
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: Build CGS app and capture resolved dependencies
+          submodules: ${{ matrix.name == 'blobfuse-launcher' && 'recursive' || 'false' }}
+      - name: Check build storage
+        shell: bash
         run: |
           set -euo pipefail
-          mkdir -p handoff evidence
-          docker build \
-            --file build/docker/Dockerfile.governance.ccf-app \
-            --target build-image \
-            --tag "cgs-build:${GITHUB_SHA}" \
-            src/governance/ccf-app/js
-          container=$(docker create "cgs-build:${GITHUB_SHA}")
-          trap 'docker rm "$container" >/dev/null' EXIT
-          docker cp "$container:/home/node/app/dist/bundle.json" handoff/bundle.json
-          docker cp "$container:/home/node/app/package-lock.json" handoff/package-lock.json
-          cp src/governance/ccf-app/js/package.json handoff/package.json
-
-      - name: Build CGS constitution
+          docker info --format '{{.DockerRootDir}}'
+          df -h . /mnt
+      - name: Setup Helm
+        if: matrix.kind == 'helm'
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+      - name: Build constitution using existing action
+        if: matrix.kind == 'constitution'
         uses: ./.github/actions/build-cgs-constitution
         with:
           tag: ${{ github.sha }}
-
-      - name: Validate outputs and record source identity
-        run: |
-          set -euo pipefail
-          cp constitution.json handoff/constitution.json
-          jq -e 'type == "object" and has("modules") and has("metadata")' handoff/bundle.json
-          jq -e 'type == "string" and length > 0' handoff/constitution.json
-          jq -e '.packages | length > 0' handoff/package-lock.json
-          jq -n \
-            --arg repository "$GITHUB_REPOSITORY" \
-            --arg commit "$(git rev-parse HEAD)" \
-            --arg ref "$GITHUB_REF" \
-            --arg workflow_ref "$GITHUB_WORKFLOW_REF" \
-            --arg workflow_sha "$GITHUB_WORKFLOW_SHA" \
-            --arg run_url \
-              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            '{repository: $repository, commit: $commit, ref: $ref,
-              workflow_ref: $workflow_ref, workflow_sha: $workflow_sha, run_url: $run_url}' \
-            > handoff/source.json
-
-      - name: Generate SPDX SBOM
+      - name: Build official output without publishing
+        shell: pwsh
         env:
-          SBOM_TOOL_VERSION: v4.1.5
-          SBOM_TOOL_SHA256: bf5d4f99bc98c119d549d08fc02ae92598a7a42772f17317c01031a92632e05b
+          OUTPUT_NAME: ${{ matrix.name }}
+          OUTPUT_KIND: ${{ matrix.kind }}
+          BUILD_CONTEXT: ${{ matrix.path }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
+        run: |
+          ./build/Invoke-OfficialBuildOutput.ps1 -Name $env:OUTPUT_NAME `
+              -Kind $env:OUTPUT_KIND -Context $env:BUILD_CONTEXT -Dockerfile $env:DOCKERFILE
+      - name: Package per-output evidence
+        uses: ./.github/actions/package-build-only-output
+        with:
+          name: ${{ matrix.name }}
+          kind: ${{ matrix.kind }}
+          dockerfile: ${{ matrix.dockerfile }}
+
+  inventory:
+    needs: [plan, build]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Require every official output to succeed
+        shell: bash
+        env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
         run: |
           set -euo pipefail
-          tool="$RUNNER_TEMP/sbom-tool"
-          release="https://github.com/microsoft/sbom-tool/releases/download"
-          curl --fail --location --retry 3 \
-            "$release/$SBOM_TOOL_VERSION/sbom-tool-linux-x64" --output "$tool"
-          echo "$SBOM_TOOL_SHA256  $tool" | sha256sum --check -
-          chmod +x "$tool"
-          "$tool" generate \
-            -b "$GITHUB_WORKSPACE/handoff" \
-            -bc "$GITHUB_WORKSPACE/handoff" \
-            -pn azure-cleanroom-cgs \
-            -pv "$GITHUB_SHA" \
-            -ps Microsoft \
-            -nsb "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            -mi SPDX:2.2
-          jq -e '.spdxVersion == "SPDX-2.2" and (.packages | length > 1)' \
-            handoff/_manifest/spdx_2.2/manifest.spdx.json
-
-      - name: Checksum and package handoff
+          if [[ "$PLAN_RESULT" != success || "$BUILD_RESULT" != success ]]; then
+            echo "::error::Full build incomplete: plan=$PLAN_RESULT build=$BUILD_RESULT"
+            exit 1
+          fi
+      - name: Verify published artifact inventory
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_PLAN: ${{ needs.plan.outputs.matrix }}
         run: |
-          set -euo pipefail
-          (
-            cd handoff
-            find . -type f ! -name SHA256SUMS -print0 \
-              | sort -z | xargs -0 sha256sum > SHA256SUMS
-            sha256sum --check SHA256SUMS
-          )
-          tar -czf evidence/cgs-build.tar.gz -C handoff .
-
-      - name: Attest handoff archive
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $Response = gh api --paginate --slurp `
+              "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID/artifacts"
+          $Artifacts = @($Response | ConvertFrom-Json | ForEach-Object { $_.artifacts })
+          $Plan = $env:BUILD_PLAN | ConvertFrom-Json
+          $Inventory = foreach ($Output in $Plan.include) {
+              $Name = "handoff-$($Output.name)-$env:GITHUB_SHA"
+              $Artifact = @($Artifacts | Where-Object { $_.name -eq $Name -and -not $_.expired })
+              if ($Artifact.Count -ne 1 -or $Artifact[0].size_in_bytes -le 0) {
+                  throw "Expected one nonempty, unexpired artifact: $Name"
+              }
+              [ordered]@{ output = $Output; artifact = $Artifact[0] }
+          }
+          [ordered]@{
+              repository = $env:GITHUB_REPOSITORY
+              commit = $env:GITHUB_SHA
+              run_id = $env:GITHUB_RUN_ID
+              run_attempt = $env:GITHUB_RUN_ATTEMPT
+              outputs = @($Inventory)
+          } | ConvertTo-Json -Depth 20 | Set-Content build-inventory.json -Encoding utf8NoBOM
+          "## Full build complete: $($Inventory.Count) verified artifact entries" `
+              >> $env:GITHUB_STEP_SUMMARY
+      - name: Attest complete inventory
         id: provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: evidence/cgs-build.tar.gz
-
-      - name: Retain provenance bundle
+          subject-path: build-inventory.json
+      - name: Retain inventory provenance
+        shell: bash
         env:
           BUNDLE_PATH: ${{ steps.provenance.outputs.bundle-path }}
         run: |
           set -euo pipefail
           test -s "$BUNDLE_PATH"
-          cp "$BUNDLE_PATH" evidence/provenance.jsonl
-
-      - name: Upload verified build handoff
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+          cp "$BUNDLE_PATH" inventory-provenance.jsonl
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: cgs-build-${{ github.sha }}
-          path: evidence/
+          name: official-build-inventory-${{ github.sha }}
+          path: |
+            build-inventory.json
+            inventory-provenance.jsonl
           if-no-files-found: error
           retention-days: 14
-
-      - name: Publish handoff summary
-        run: |
-          set -euo pipefail
-          {
-            echo "## CGS build-only proof of concept"
-            echo "- Source commit: \`$GITHUB_SHA\`"
-            echo "- Artifact: \`cgs-build-$GITHUB_SHA\` (14-day retention)"
-            echo "- Includes app, constitution, resolved npm lockfile, SPDX SBOM and checksums."
-            echo "- Archive is signed with GitHub build provenance; bundle included."
-            echo "- No Azure login, registry push, deployment or Azure-dependent tests."
-            echo
-            echo '### Archive SHA-256'
-            echo '```'
-            sha256sum evidence/cgs-build.tar.gz
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"

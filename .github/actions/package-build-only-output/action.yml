@@ -1,0 +1,143 @@
+name: Package build-only output
+description: Generate per-output evidence and attest a portable handoff without Azure authentication
+
+inputs:
+  name:
+    description: Official output name
+    required: true
+  kind:
+    description: Output kind
+    required: true
+  dockerfile:
+    description: Original Dockerfile, when the output is a container
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install checksum-verified SBOM tool
+      shell: bash
+      env:
+        SBOM_TOOL_VERSION: v4.1.5
+        SBOM_TOOL_SHA256: bf5d4f99bc98c119d549d08fc02ae92598a7a42772f17317c01031a92632e05b
+      run: |
+        set -euo pipefail
+        tool="$RUNNER_TEMP/sbom-tool"
+        release="https://github.com/microsoft/sbom-tool/releases/download"
+        curl --fail --location --retry 3 \
+          "$release/$SBOM_TOOL_VERSION/sbom-tool-linux-x64" --output "$tool"
+        echo "$SBOM_TOOL_SHA256  $tool" | sha256sum --check -
+        chmod +x "$tool"
+
+    - name: Validate payload and record source identity
+      shell: bash
+      env:
+        OUTPUT_NAME: ${{ inputs.name }}
+        OUTPUT_KIND: ${{ inputs.kind }}
+        DOCKERFILE: ${{ inputs.dockerfile }}
+      run: |
+        set -euo pipefail
+        case "$OUTPUT_KIND" in
+          container)
+            test -s "handoff/payload/$OUTPUT_NAME.tar"
+            jq -e 'length == 1 and (.[0].Id | startswith("sha256:"))' \
+              handoff/payload/image.json
+            ;;
+          cgs)
+            jq -e 'type == "object" and has("modules") and has("metadata")' \
+              handoff/payload/bundle.json
+            jq -e '.packages | length > 0' handoff/payload/package-lock.json
+            ;;
+          constitution)
+            jq -e 'type == "string" and length > 0' handoff/payload/constitution.json
+            ;;
+        esac
+        jq -n \
+          --arg name "$OUTPUT_NAME" --arg kind "$OUTPUT_KIND" \
+          --arg repository "$GITHUB_REPOSITORY" --arg commit "$(git rev-parse HEAD)" \
+          --arg ref "$GITHUB_REF" --arg workflow_ref "$GITHUB_WORKFLOW_REF" \
+          --arg workflow_sha "$GITHUB_WORKFLOW_SHA" --arg dockerfile "$DOCKERFILE" \
+          --arg run_id "$GITHUB_RUN_ID" --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+          '{name: $name, kind: $kind, repository: $repository, commit: $commit, ref: $ref,
+            workflow_ref: $workflow_ref, workflow_sha: $workflow_sha, dockerfile: $dockerfile,
+            run_id: $run_id, run_attempt: $run_attempt, platform: "linux/amd64"}' \
+          > handoff/source.json
+
+    - name: Generate per-output SPDX SBOM
+      shell: bash
+      env:
+        OUTPUT_NAME: ${{ inputs.name }}
+        OUTPUT_KIND: ${{ inputs.kind }}
+      run: |
+        set -euo pipefail
+        args=(
+          -pn "$OUTPUT_NAME" -pv "$GITHUB_SHA" -ps Microsoft
+          -nsb "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          -mi SPDX:2.2
+        )
+        if [[ "$OUTPUT_KIND" == container ]]; then
+          "$RUNNER_TEMP/sbom-tool" generate "${args[@]}" \
+            -di "$OUTPUT_NAME:$GITHUB_SHA" -m "$GITHUB_WORKSPACE/handoff/sbom"
+        else
+          "$RUNNER_TEMP/sbom-tool" generate "${args[@]}" \
+            -b "$GITHUB_WORKSPACE/handoff/payload" \
+            -bc "$GITHUB_WORKSPACE/handoff/payload" \
+            -m "$GITHUB_WORKSPACE/handoff/sbom"
+        fi
+        jq -e '.spdxVersion == "SPDX-2.2" and (.packages | length > 0)' \
+          handoff/sbom/_manifest/spdx_2.2/manifest.spdx.json
+
+    - name: Checksum and archive output
+      shell: bash
+      env:
+        OUTPUT_NAME: ${{ inputs.name }}
+      run: |
+        set -euo pipefail
+        (
+          cd handoff
+          find . -type f ! -name SHA256SUMS -print0 \
+            | sort -z | xargs -0 sha256sum > SHA256SUMS
+          sha256sum --check SHA256SUMS
+        )
+        mkdir -p evidence
+        tar -cf - -C handoff . | gzip -1 > "evidence/$OUTPUT_NAME.tar.gz"
+
+    - name: Attest output archive
+      id: provenance
+      uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      with:
+        subject-path: evidence/${{ inputs.name }}.tar.gz
+
+    - name: Retain provenance bundle
+      shell: bash
+      env:
+        BUNDLE_PATH: ${{ steps.provenance.outputs.bundle-path }}
+      run: |
+        set -euo pipefail
+        test -s "$BUNDLE_PATH"
+        cp "$BUNDLE_PATH" evidence/provenance.jsonl
+
+    - name: Upload output and evidence
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: handoff-${{ inputs.name }}-${{ github.sha }}
+        path: evidence/
+        if-no-files-found: error
+        compression-level: 0
+        retention-days: 14
+
+    - name: Publish output summary
+      shell: bash
+      env:
+        OUTPUT_NAME: ${{ inputs.name }}
+      run: |
+        set -euo pipefail
+        {
+          echo "## $OUTPUT_NAME"
+          echo "- Source: \`$GITHUB_SHA\`"
+          echo "- Artifact: \`handoff-$OUTPUT_NAME-$GITHUB_SHA\`"
+          echo "- Includes payload, SPDX SBOM, source metadata, checksums and signed provenance."
+          echo '```'
+          sha256sum "evidence/$OUTPUT_NAME.tar.gz"
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
