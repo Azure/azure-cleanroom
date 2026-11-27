@@ -27,13 +27,14 @@ build fails explicitly: this workflow does not acquire Azure credentials or sile
 substitute a different base image. No Azure environment secrets are requested.
 
 Builds use Docker's default build network, as the original workflow does. On the current
-1ES runner image, root `RUN` steps (NuGet, npm, pip) resolve DNS but unprivileged ones,
-such as apt's `_apt` download user and non-root Go builders, fall back to loopback DNS and
-fail. Before product compilation, a preflight Docker build checks an anonymous mirror pull,
-an unprivileged lookup, and `apt-get update`, and prints the resolver file permissions and
-dockerd umask. If the check fails while dockerd has a restrictive umask, the step sets
-`UMask=0022` for the Docker service on that ephemeral single-job runner, restarts Docker,
-and checks again; otherwise it fails before the long build. No custom DNS server or Azure
+1ES runner image, the Docker storage directory carries inherited default ACLs, so the
+`resolv.conf` and `hosts` files BuildKit generates for `RUN` steps are `0640` plus ACL and
+unreadable by non-root users. Root steps (NuGet, npm, pip) resolve DNS, but apt's `_apt`
+download user and non-root Go builders cannot. Before product compilation, a preflight
+Docker build checks an anonymous mirror pull, an unprivileged lookup, and
+`apt-get update`. If that fails, the step clears the inherited ACLs from Docker's storage
+on that ephemeral single-job runner, resets the generated resolver files to `0644`, and
+checks again; otherwise it fails before the long build. No custom DNS server or Azure
 login is used.
 
 ## Running
