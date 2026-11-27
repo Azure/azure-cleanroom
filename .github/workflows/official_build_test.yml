@@ -61,9 +61,6 @@ jobs:
       - 1ES.Pool=azure-cleanroom-public
       - 1ES.JobId=poc-${{ matrix.name }}-${{ github.run_id }}-${{ github.run_attempt }}
     timeout-minutes: 120
-    env:
-      # Use the runner's resolver; the default Docker network cannot reach its loopback DNS.
-      DOCKER_BUILD_NETWORK: host
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -83,18 +80,45 @@ jobs:
           set -euo pipefail
           docker info --format '{{.DockerRootDir}}'
           df -h . /mnt
-      - name: Verify anonymous base pull and build DNS
+      # Root build steps resolve DNS but unprivileged ones (apt's _apt sandbox user,
+      # non-root Go builders) fall back to loopback DNS. That happens when dockerd's
+      # restrictive umask makes the generated resolv.conf root-only, so normalize the
+      # umask on this single-job runner and prove an unprivileged lookup and apt work.
+      - name: Verify anonymous base pull and unprivileged build DNS
         if: matrix.kind == 'container' || matrix.kind == 'cgs' || matrix.kind == 'cli'
         shell: bash
         run: |
           set -euo pipefail
+          dockerd_umask() {
+            awk '/^Umask:/ { print $2 }' "/proc/$(pgrep -xo dockerd)/status"
+          }
           probe_dir=$(mktemp -d "$RUNNER_TEMP/build-dns.XXXXXX")
           printf '%s\n' \
             'FROM cleanroombuild.azurecr.io/mirror/docker/library/python:3.12' \
-            'RUN cat /etc/resolv.conf' \
-            'RUN python -c "import socket; hosts = [\"deb.debian.org\", \"archive.ubuntu.com\", \"api.nuget.org\", \"proxy.golang.org\", \"registry.npmjs.org\", \"pypi.org\"]; [print(h, socket.getaddrinfo(h, 443)) for h in hosts]"' \
+            'RUN ls -ln /etc/resolv.conf /etc/hosts && cat /etc/resolv.conf' \
+            'RUN getent hosts deb.debian.org' \
+            'RUN su -s /bin/sh nobody -c "getent hosts deb.debian.org"' \
+            'RUN apt-get update' \
             > "$probe_dir/Dockerfile"
-          docker build --network "$DOCKER_BUILD_NETWORK" --progress plain "$probe_dir"
+          probe() { docker build --no-cache --progress plain "$probe_dir"; }
+
+          echo "dockerd umask: $(dockerd_umask)"
+          if probe; then
+            exit 0
+          fi
+          if [[ "$(dockerd_umask)" == 0022 ]]; then
+            echo "::error::Unprivileged build DNS failed with dockerd umask 0022."
+            exit 1
+          fi
+          echo "::warning::Restarting dockerd with UMask=0022 for readable build resolver files."
+          sudo mkdir -p /etc/systemd/system/docker.service.d
+          printf '[Service]\nUMask=0022\n' \
+            | sudo tee /etc/systemd/system/docker.service.d/10-build-umask.conf
+          sudo systemctl daemon-reload
+          sudo systemctl restart docker
+          timeout 120 bash -c 'until docker info >/dev/null 2>&1; do sleep 2; done'
+          echo "dockerd umask: $(dockerd_umask)"
+          probe
       - name: Setup Helm
         if: matrix.kind == 'helm'
         uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0

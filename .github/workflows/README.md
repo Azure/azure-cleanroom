@@ -2,8 +2,7 @@
 
 `official_build_test.yml` builds the default output set of `official_build.yml` without
 Azure authentication, registry publishing, or deployment. Existing workflows and Dockerfiles
-are unchanged. Shared build helpers accept an optional network override, enabled only by
-this workflow. Cryptography package pins are patched and the SDK explicitly references
+are unchanged. Cryptography package pins are patched and the SDK explicitly references
 patched ASP.NET Core WebUtilities on the POC branch to address restore-blocking advisories;
 vulnerability auditing and warnings-as-errors remain enabled.
 All remote changes stay on the POC branch; no default-branch merge is needed.
@@ -27,13 +26,15 @@ Those references are not rewritten. If an anonymous pull is unavailable, the aff
 build fails explicitly: this workflow does not acquire Azure credentials or silently
 substitute a different base image. No Azure environment secrets are requested.
 
-The POC sets `DOCKER_BUILD_NETWORK=host` so Dockerfile `RUN` steps can use the ephemeral
-runner's resolver. The default Docker build network in the first run tried loopback DNS
-inside its own network namespace and failed resolving Debian/Ubuntu and Go package hosts.
-A preflight Docker build verifies an anonymous mirror pull and dependency-host DNS
-resolution using the selected network before product compilation. No custom DNS server,
-daemon-wide configuration change, or Azure login is used. Workflows that leave the
-network override unset preserve their existing build behavior.
+Builds use Docker's default build network, as the original workflow does. On the current
+1ES runner image, root `RUN` steps (NuGet, npm, pip) resolve DNS but unprivileged ones,
+such as apt's `_apt` download user and non-root Go builders, fall back to loopback DNS and
+fail. Before product compilation, a preflight Docker build checks an anonymous mirror pull,
+an unprivileged lookup, and `apt-get update`, and prints the resolver file permissions and
+dockerd umask. If the check fails while dockerd has a restrictive umask, the step sets
+`UMask=0022` for the Docker service on that ephemeral single-job runner, restarts Docker,
+and checks again; otherwise it fails before the long build. No custom DNS server or Azure
+login is used.
 
 ## Running
 
